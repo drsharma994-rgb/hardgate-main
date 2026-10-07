@@ -225,9 +225,12 @@ console.log('== 4) one home: written in the ranker, carried by the two seams, re
 {
   const gi = strip(read('goldind.js')), gs = strip(read('goldscalp.js')), gf = strip(read('gold-forward-read.js'));
   const writes = (gi.match(/freeMark\(/g) || []).length;
-  /* hg-v1158: the indicator-stack loop is the eighth call site — it hands the
-     `ind:` marks through the SAME helper, which is the point */
-  assert(writes === 9, 'the ranker writes its marks through one helper at eight sites (freeLeg marks silver, ratio, VIX and USDJPY through one; the hg-v1158 ind: loop is the eighth) — ' + (writes - 1) + ' call sites + the definition');
+  /* hg-v1158: the indicator-stack loop hands the `ind:` marks through the
+     SAME helper, which is the point. hg-v1162: the eight free-feed legs mark
+     through ONE loop over the one home's verdicts (hgGoldFreeFeedVerdicts),
+     so the sites are: that loop, the two PERFECT legs, the ind: loop. */
+  assert(writes === 5, 'the ranker writes its marks through one helper at four sites (the free-feed verdict loop, structure4h, leverageExtended, the ind: loop) — ' + (writes - 1) + ' call sites + the definition');
+  assert(/var fv = hgGoldFreeFeedVerdicts\(ctx, c\.dir\)/.test(gi), 'hg-v1162: the free-feed verdicts come from the one home');
   assert(/rc\.freeReads = freeReads;/.test(gi) && /rc\.fundingPct = fundRate;/.test(gi), 'the ranked row carries freeReads and the funding rate');
   assert(!/c\.freeReads|rc\.freeReads\s*[^=]/.test(gi.replace('rc.freeReads = freeReads;', '')), 'goldind READS freeReads nowhere — the marks gate nothing in the ranker');
   assert(/freeReads: \(c\.freeReads && typeof c\.freeReads === 'object'\) \? c\.freeReads : undefined,/.test(gs), 'GOLD SCALP publish copy carries freeReads (the hg-v955 seam)');
@@ -235,8 +238,11 @@ console.log('== 4) one home: written in the ranker, carried by the two seams, re
   assert(/reads: c\.freeReads,\s*fundingPct: c\.fundingPct,/.test(gs), 'the record map hands both to the ledger by property access (the lifted-map test stays self-contained)');
   assert(/hgFwdReadSplitHtml\(rdPools\[ri\]\)/.test(gf) && /FREE-FEED LEGS/.test(gf), 'the gold note renders the read split per pool');
   const files = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f));
-  const readers = files.filter(f => f !== 'goldind.js' && f !== 'goldscalp.js' && /freeReads/.test(strip(read(f))));
-  assert(readers.length === 0, 'no other file reads freeReads (' + readers.join(', ') + ')');
+  /* hg-v1162: GOLD PINE and 80PERCENT CARRY and RENDER the marks (their
+     own guard proves neither gates on them); no other file touches them */
+  const CARRIERS = ['goldpine.js', 'eightypercent.js'];
+  const readers = files.filter(f => f !== 'goldind.js' && f !== 'goldscalp.js' && CARRIERS.indexOf(f) < 0 && /freeReads/.test(strip(read(f))));
+  assert(readers.length === 0, 'no file beyond the two hg-v1162 carriers reads freeReads (' + readers.join(', ') + ')');
   for (const g of ['hg-gates.js', 'cryptogates.js', 'gold-formation.js', 'hg-solidity.js', 'conviction-lock.js', 'hg-forward.js'])
     assert(!/free:(silver|gsRatio|vix|usdjpy|fearGreed|perpFunding|paxgBasis|macroTilt|structure4h|leverageExtended)/.test(strip(read(g))), g + ' names none of the free-feed marks');
 }

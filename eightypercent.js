@@ -239,7 +239,7 @@ var P80_LADDER = [
    and three panels of caveats, and somewhere in there stopped answering
    "what is the trade". Everything still exists; it is one click away instead
    of first. */
-var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null, view: 'simple',
+var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null, view: 'simple', feeds: null,
             autoTimer: null, autoEl: null, riskCash: null, autoTick: 0, feedLagBars: NaN };
 
 /* the focus as an array, whatever it is stored as */
@@ -2589,6 +2589,149 @@ function hg80ScanTf(rows, def, venue){
    record for two strategies, which is the exact mistake hg-v770 un-pooled
    SPRING and UTAD to stop making.
    --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   hg-v1162: THE FREE FEEDS AND THE INDICATOR STACK, AS MARKS
+
+   This desk is a literal spec (EMA50/200 · RSI14 · ATR14 · the 13:00-18:00
+   UTC session) and its firing rule is deliberately untouched -- see the note
+   on hg80InSession. What it never did was RECORD what the rest of the gold
+   stack read at the moment it fired: the eight free internet feeds the gold
+   ranker scores by (the real-rate tilt, PAXG basis and funding, Fear &
+   Greed, silver, the gold/silver ratio, VIX, USDJPY) and the bar-computed
+   indicator stack the catalog calls CORE (ADX / DMI, SMA 20/50/200,
+   Bollinger, HV20, Parkinson, volume/MA, TSMOM, the hourly range p80,
+   RSI, KER, ATR regime, linreg, daily Hurst and ACF). Every firing this
+   desk records now carries them, three states each, through the ONE home
+   each lives in (hgGoldFreeFeedVerdicts in goldind.js; hgGoldIndicatorReads
+   / hgGoldIndicatorMarks in gold-catalog.js) -- so the ledger can ask, out
+   of sample, which of them separates on this desk. Nothing here moves a
+   signal, a plan or a level: the spec fires exactly as before, and the guard
+   asserts the signal set is byte-identical with and without the feeds.
+
+   The feeds are read ONCE per run and only the signal on the LAST CLOSED BAR
+   is marked: a firing N bars old would be marked with a feed read now, not
+   at fire time, and that is not a record of anything. A card for an older
+   firing prints UNREAD, which is what it is.
+   --------------------------------------------------------------------- */
+function hg80FreeFeeds(){
+  var out = { macro: null, spot: null, fng: undefined, fundingRate: undefined, cot: undefined };
+  var waits = [];
+  try{ var fg = W.S && W.S.fng; if (fg && typeof fg === 'object' && isFinite(+fg.v)) out.fng = fg; }catch(eF){}
+  try{ if (W.__hgGoldCot && typeof W.__hgGoldCot === 'object') out.cot = W.__hgGoldCot; }catch(eC){}
+  try{ var gs = gfn('goldspotState'); if (gs) out.spot = gs() || null; }catch(eS){ out.spot = null; }
+  try{
+    var mg = gfn('getGoldMacro'), mc = gfn('getGoldMacroCached');
+    if (mg) waits.push(Promise.resolve().then(function(){ return mg(); }).then(function(m){ if (m && typeof m === 'object') out.macro = m; }).catch(function(){}));
+    if (mc){ try{ var cached = mc(); if (cached && typeof cached === 'object' && !out.macro) out.macro = cached; }catch(eMc){} }
+  }catch(eM){}
+  try{
+    var bf = gfn('binanceFunding');
+    if (bf) waits.push(Promise.resolve().then(function(){ return bf('PAXGUSDT'); })
+      .then(function(fr){ if (fr && typeof fr.fundingPct === 'number' && isFinite(fr.fundingPct)) out.fundingRate = fr.fundingPct; }).catch(function(){}));
+  }catch(eB){}
+  if (!waits.length) return Promise.resolve(out);
+  return Promise.race([
+    Promise.all(waits),
+    new Promise(function(r){ setTimeout(r, 8000); })
+  ]).then(function(){ return out; }, function(){ return out; });
+}
+
+/* the marks on ONE signal: the free-feed verdicts on the feeds this run read
+   and the indicator stack off THIS rung's own closed tape up to the signal
+   bar (the daily rung beside it for Hurst / ACF). Booleans only; absent
+   helper, absent rows or a throw marks nothing. */
+function hg80SignalReads(sig, rows, rows1d, feeds){
+  try{
+    if (!sig || (sig.dir !== 'long' && sig.dir !== 'short')) return false;
+    var fvFn = gfn('hgGoldFreeFeedVerdicts'), fpFn = gfn('hgGoldFreeFeedFunding');
+    var irFn = gfn('hgGoldIndicatorReads'), imFn = gfn('hgGoldIndicatorMarks');
+    var m = {}, any = false, k;
+    if (fvFn && feeds){
+      var fv = fvFn(feeds, sig.dir);
+      for (k in fv){ if (Object.prototype.hasOwnProperty.call(fv, k) && (fv[k] === true || fv[k] === false)){ m[k] = fv[k]; any = true; } }
+    }
+    if (irFn && imFn && rows && rows.length && isFinite(sig.i)){
+      var upTo = rows.slice(0, sig.i + 1);
+      var ir = irFn(upTo, { rows1d: rows1d });
+      if (ir && ir.ok === true){
+        var im = imFn(ir, sig.dir);
+        for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } }
+        sig.indReads = ir;
+      }
+    }
+    if (any) sig.freeReads = m;
+    var fp = fpFn ? fpFn(feeds) : NaN;
+    if (typeof fp === 'number' && isFinite(fp)) sig.fundingPct = fp;
+    return any;
+  }catch(e){ return false; }
+}
+
+/* every rung's signals on its last closed bar, marked; the daily rung's
+   closed bars are the daily leg of every rung's stack (Hurst / ACF read
+   daily sessions). Returns how many signals were marked. */
+function hg80MarkLive(rungs, feeds){
+  var marked = 0;
+  try{
+    if (!Array.isArray(rungs)) return 0;
+    var rows1d = null, i, r, li;
+    for (i = 0; i < rungs.length; i++){
+      r = rungs[i];
+      if (r && r.ok && r.def && r.def.tf === '1d' && r.rows && r.rows.length){ rows1d = r.rows; break; }
+    }
+    for (i = 0; i < rungs.length; i++){
+      r = rungs[i];
+      if (!r || !r.ok || !Array.isArray(r.live)) continue;
+      for (li = 0; li < r.live.length; li++) if (hg80SignalReads(r.live[li], r.rows, rows1d, feeds)) marked++;
+    }
+  }catch(e){}
+  return marked;
+}
+
+/* the directional funding verdict the ledger derives for hgFwdRecordScan
+   callers and not for the direct door this desk writes through: the ONE
+   SWING/SCALP G4 rule (hg-setup-core.js), asked rather than restated */
+function hg80FundAgainst(fundingPct, dir){
+  try{
+    if (typeof fundingPct !== 'number' || !isFinite(fundingPct)) return undefined;
+    var fn = gfn('hgFundingAgainstMark');
+    if (!fn) return undefined;
+    var fm = fn(fundingPct, dir);
+    return (fm && (fm.against === true || fm.against === false)) ? fm.against : undefined;
+  }catch(e){ return undefined; }
+}
+
+/* the two read lines on a card -- the renderers live with the rules */
+function hg80ReadsHtml(sig){
+  try{
+    if (!sig) return '';
+    var h = '';
+    var ff = gfn('hgGoldFreeFeedLineHtml');
+    if (ff && sig.freeReads && typeof sig.freeReads === 'object') h += ff(sig.freeReads, { fundingPct: sig.fundingPct }) || '';
+    var st = gfn('hgGoldIndicatorStackHtml');
+    if (st && sig.indReads) h += st(sig.indReads, sig.freeReads) || '';
+    return h;
+  }catch(e){ return ''; }
+}
+
+/* the Gold Master Catalog census, ONCE on the full view: the context this run
+   read and the finest fired rung's indicator reads, so USED means read this
+   run (hg-v1158). Nothing without the catalog or without a rung. */
+function hg80CatalogHtml(rungs, feeds){
+  try{
+    var cFn = gfn('hgGoldCatalogHtml'), cEn = gfn('hgGoldCatalogEngine');
+    if (!cFn || !cEn || !Array.isArray(rungs)) return '';
+    var rows = null, lead = null, i, r;
+    for (i = 0; i < rungs.length; i++){
+      r = rungs[i];
+      if (!r || !r.ok || !r.rows || !r.rows.length) continue;
+      if (!rows) rows = r.rows;
+      if (!lead && r.live && r.live.length && r.live[0].indReads) lead = r.live[0];
+    }
+    if (!rows) return '';
+    return cFn(cEn(rows, { ctx: feeds || null, ind: (lead && lead.indReads) || null, killzone: '' })) || '';
+  }catch(e){ return ''; }
+}
+
 function hg80Record(sig, cfg, feed){
   try {
     if (typeof W.hgFwdRecord !== 'function') return { ok: false, why: 'forward log not loaded' };
@@ -2615,6 +2758,11 @@ function hg80Record(sig, cfg, feed){
       /* hg-v980: the signal bar's close is the mark the plan was composed at */
       mark: (isFinite(fin(sig.close)) && fin(sig.close) > 0) ? fin(sig.close) : undefined,
       horizonBars: P80_HORIZON_BARS,
+      /* hg-v1162: the free-feed + indicator-stack marks, the PAXG funding
+         print and the one G4 rule's verdict on it */
+      reads: (sig.freeReads && typeof sig.freeReads === 'object') ? sig.freeReads : undefined,
+      fundingPct: (typeof sig.fundingPct === 'number' && isFinite(sig.fundingPct)) ? sig.fundingPct : undefined,
+      fundAgainst: hg80FundAgainst(sig.fundingPct, sig.dir),
       ticket: false,
       gateClear: false,
       shown: true
@@ -2780,7 +2928,14 @@ function forwardPanelHtml(){
                          title: 'FORWARD — what this tab has actually recorded' }) || '';
   } catch (e){ body = ''; }
   if (!body) return '';
+  /* hg-v1162: the read split of the marks every recorded firing carries --
+     silent until a settled record carries a mark (an empty split is not a
+     clean bill) */
+  var rdHtml = '';
+  try{ var rs = gfn('hgFwdReadSplitHtml'); if (rs) rdHtml = rs(P80_TAB) || ''; }catch(eRd){ rdHtml = ''; }
+  if (rdHtml) rdHtml = '<div class="note" style="margin:6px 0;font-size:11px"><b>FREE-FEED LEGS &amp; INDICATOR STACK</b> — the free internet feeds and the bar-computed indicator reads marked on every firing this desk records (hg-v1162), WITH / AGAINST or by named state at fire time; counted on settled records, gates nothing.</div>' + rdHtml;
   return '<div class="panel" style="margin-top:10px">' + body
+    + rdHtml
     + familyBarHtml()
     + '<div class="note" style="margin-top:6px">Recorded under <b>' + esc(P80_TAB) + '</b>, one '
     + 'mechanic per rung per direction, judged at this strategy\'s own T1 of '
@@ -3451,6 +3606,7 @@ function simpleCardHtml(sig, rung, state){
      figures are what differ, and they all survive. */
   if (rung) h += costLineHtml(hg80CardBe(sig, rung), __p.venue ? __p.venue.venue : null, true);
 
+  h += hg80ReadsHtml(sig);   /* hg-v1162 */
   h += watchLineHtml(sig);
   return h + '</div>';
 }
@@ -5097,6 +5253,7 @@ function setupCardHtml(sig, be, cfg, kind){
      setup could appear twice on one page: once reading what the forward
      log holds, and once flatly denying it holds anything. One
      implementation now, which is what hg-v789 meant. */
+  h += hg80ReadsHtml(sig);   /* hg-v1162 */
   h += watchLineHtml(sig);
   return h + '</div>';
 }
@@ -5323,6 +5480,7 @@ function render(rungs, venue, recNotes, basis){
   h += armedHtml(rungs, gradePx);
   h += whyNothingHtml(shown, gradePx);
   h += forwardPanelHtml();
+  h += hg80CatalogHtml(rungs, __p.feeds);   /* hg-v1162: one census */
   h += mathPanelHtml(shown, venue, basis);
   /* directly under the geometry it is about: the required rate, then what
      the window says that rate was paid for */
@@ -5599,6 +5757,11 @@ function run(){
     });
   })
   .then(function(live){
+    /* hg-v1162: the free feeds, once, after the bars; bounded, non-fatal */
+    if (ui && ui.stat) ui.stat.textContent = 'reading free feeds…';
+    return hg80FreeFeeds().then(function(f){ __p.feeds = f; return live; }, function(){ __p.feeds = null; return live; });
+  })
+  .then(function(live){
     __p.spot = fin(live.spot);
     __p.spotHint = fin(live.hint);
     __p.feedLive = live.feedLive ? fin(live.feedLive.px) : NaN;
@@ -5611,6 +5774,9 @@ function run(){
        was looking at 1d. A record that exists or not according to a view
        setting is not evidence of anything. */
     var recNotes = {}, i, fired = [];
+    /* hg-v1162: every signal on a last closed bar is marked BEFORE the
+       recording loop, so the card and the record carry the same marks */
+    hg80MarkLive(rungs, __p.feeds);
     for (i = 0; i < rungs.length; i++){
       var r = rungs[i];
       if (!r.ok || !r.live.length) continue;

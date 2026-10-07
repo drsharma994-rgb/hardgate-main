@@ -124,6 +124,30 @@ async function fetchGoldBars(){
   return out;
 }
 
+/* hg-v1162: THE FREE FEEDS, ONCE PER SCAN. The crypto Fear & Greed index the
+   shell keeps (S.fng), the Binance PAXGUSDT perp funding print, the Delta
+   gold-perp payload the live feed already loaded (the PERFECT predicate's
+   leverage cycle) and the COT snapshot beside the window -- the same reads
+   GOLD SCALP hands its ranker (hg-v1155). Each leg fails open to absent;
+   the funding request is bounded so no scan waits on it. */
+async function gpFreeFeeds(bars){
+  var out = { fng: undefined, fundingRate: undefined, perpNative: undefined, cot: undefined };
+  try{ var fg = W.S && W.S.fng; if (fg && typeof fg === 'object' && isFinite(+fg.v)) out.fng = fg; }catch(eF){}
+  try{ if (bars && bars.live && bars.live.perp) out.perpNative = bars.live.perp; }catch(eP){}
+  try{ if (W.__hgGoldCot && typeof W.__hgGoldCot === 'object') out.cot = W.__hgGoldCot; }catch(eC){}
+  try{
+    var bf = gfn('binanceFunding');
+    if (bf){
+      var fr = await Promise.race([
+        Promise.resolve().then(function(){ return bf('PAXGUSDT'); }).catch(function(){ return null; }),
+        new Promise(function(r){ setTimeout(function(){ r(null); }, 6000); })
+      ]);
+      if (fr && typeof fr.fundingPct === 'number' && isFinite(fr.fundingPct)) out.fundingRate = fr.fundingPct;
+    }
+  }catch(eB){}
+  return out;
+}
+
 function setupFromEval(evalRes, mode, source){
   if (!evalRes || !evalRes.display) return null;
   return {
@@ -210,8 +234,67 @@ function setupFromNative(c, mode, source, forming){
     mintDemotedWhy: c.demoted
       ? (c.demotedWhy || (Array.isArray(c.stamps) && c.stamps.length ? c.stamps.join(' \u00b7 ') : 'demoted by the borrowed mint'))
       : null,
-    mintNotes: Array.isArray(c.notes) ? c.notes.filter(Boolean).map(String) : []
+    mintNotes: Array.isArray(c.notes) ? c.notes.filter(Boolean).map(String) : [],
+    /* hg-v1162: the free-feed and indicator-stack marks the borrowed ranker
+       made on this row (hg-v1155 / v1158) and the PAXG funding print it read
+       -- this adapter dropped them with everything else it did not name.
+       Absent stays absent; a row the ranker never marked is marked by the
+       desk seam below (gpMarkReads), through the same one home. */
+    freeReads: (c.freeReads && typeof c.freeReads === 'object') ? c.freeReads : undefined,
+    indReads: (c.indReads && typeof c.indReads === 'object') ? c.indReads : undefined,
+    fundingPct: (typeof c.fundingPct === 'number' && isFinite(c.fundingPct)) ? c.fundingPct : undefined
   };
+}
+
+/* hg-v1162: THE MARKS, ON EVERY ROW THIS DESK FORMS.
+
+   GOLD PINE forms three kinds of row and only one of them passed through
+   goldRankSetups: the native scalp lane is re-ranked there (and the cached
+   GOLD SCALP cands already carry its marks), the native swing lane is ranked
+   inside the swing mint, and the ten Pine ports (pinegoldmath.js) are scored
+   by their own confluence and never see the ranker at all -- so a Pine row
+   recorded nothing about what the free feeds or the indicator stack said at
+   fire time, and the ledger could not ask whether any of them separates on
+   this desk (hg-v955). Every row that reaches the record carries them now:
+   a row the ranker already marked keeps its marks (one home, read once); a
+   row without them is marked here through the SAME home -- the eight
+   free-feed verdicts (hgGoldFreeFeedVerdicts, goldind.js) on the scan
+   context this desk fetched, and the indicator stack (gold-catalog.js) off
+   the lane's own execution tape (15m scalp, 4h swing, the daily leg beside
+   it). Three states, booleans only; absent helper or absent rows mark
+   nothing. Marks only: score, tier, sort order, the leader and every gate
+   are untouched (asserted). */
+function gpMarkReads(list, mode, bars, ctx){
+  try{
+    if (!Array.isArray(list) || !list.length) return 0;
+    var fvFn = gfn('hgGoldFreeFeedVerdicts'), fpFn = gfn('hgGoldFreeFeedFunding');
+    var irFn = gfn('hgGoldIndicatorReads'), imFn = gfn('hgGoldIndicatorMarks');
+    var rows = bars ? ((mode === 'swing') ? bars.rows4h : bars.rows15m) : null;
+    var ir = null;
+    if (irFn && imFn && rows && rows.length){
+      try{ var got = irFn(rows, { rows1d: bars.rows1d }); if (got && got.ok === true) ir = got; }catch(eIr){ ir = null; }
+    }
+    var fp = fpFn ? fpFn(ctx) : NaN;
+    var marked = 0, i, s, k, m, any;
+    for (i = 0; i < list.length; i++){
+      s = list[i];
+      if (!s || (s.dir !== 'long' && s.dir !== 'short')) continue;
+      if (s.freeReads && typeof s.freeReads === 'object') continue;   /* the ranker's own marks win */
+      m = {}; any = false;
+      if (fvFn){
+        var fv = fvFn(ctx, s.dir);
+        for (k in fv){ if (Object.prototype.hasOwnProperty.call(fv, k) && (fv[k] === true || fv[k] === false)){ m[k] = fv[k]; any = true; } }
+      }
+      if (ir){
+        var im = imFn(ir, s.dir);
+        for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } }
+        s.indReads = ir;
+      }
+      if (any){ s.freeReads = m; marked++; }
+      if (typeof fp === 'number' && isFinite(fp) && s.fundingPct === undefined) s.fundingPct = fp;
+    }
+    return marked;
+  }catch(e){ return 0; }
 }
 
 function tierRank(t){
@@ -406,6 +489,10 @@ function hgGpRecord(list, mode, bars){
            judged at; absent stays absent */
         mark: (fin(+s.price) && +s.price > 0) ? +s.price : undefined,
         barT: barT,   /* hg-v979: the lane's own signal bar */
+        /* hg-v1162: the free-feed + indicator-stack marks and the funding
+           print, for the ledger's read split and funding split */
+        reads: (s.freeReads && typeof s.freeReads === 'object') ? s.freeReads : undefined,
+        fundingPct: (typeof s.fundingPct === 'number' && isFinite(s.fundingPct)) ? s.fundingPct : undefined,
         sol: (s.solidity && fin(+s.solidity.score)) ? +s.solidity.score : undefined,
         solTier: (s.solidity && s.solidity.grade) ? s.solidity.grade : undefined
       });
@@ -507,7 +594,11 @@ function collectNativeSwing(bars, ctx, source){
        DIRECTION's swing lane is: the desk's own news + macro, the shared
        live feed where the input carries nothing, and the 4h signal bar. */
     var swCtx = Object.assign({}, ctx, { now: gpMintBarMs(bars.rows4h, ctx.now || Date.now()),
-      news: ctx.news || null, macro: ctx.macro || null });
+      news: ctx.news || null, macro: ctx.macro || null,
+      /* hg-v1162: the ranker reads the indicator stack off rows15m || rows;
+         the swing lane's execution tape is the 4h leg, so the 15m one is
+         withheld here and the 4h one named */
+      rows15m: undefined, rows: bars.rows4h });
     try{ var apW = gfn('hgGoldApplyLiveFeed'); if (apW && bars.live) apW(swCtx, bars.live); }catch(eAp){}
     got = fn(leg, swCtx);
   }catch(e){ return out; }
@@ -591,7 +682,19 @@ function runGoldPineScan(bars, ctx){
   swing = swing.concat(collectPineUniverse(bars, 'swing', scanOpts, source));
   scalp = scalp.concat(collectPineUniverse(bars, 'scalp', scanOpts, source));
 
-  var scanCtx = { macro: macro, spot: spot, now: Date.now(), news: null };
+  /* hg-v1162: the free feeds this desk fetches ride the scan context, so the
+     borrowed ranker (native scalp lane) scores by them exactly as GOLD SCALP
+     does -- the hg-v972 shape: parity with the home desk's mint, not a new
+     rule -- and the desk seam marks the Pine rows with the same verdicts.
+     The tapes ride too: the ranker computes the indicator stack off
+     rows15m (the daily leg beside it) and the PERFECT predicate reads
+     rows4h + perpNative. Absent stays absent. */
+  var scanCtx = { macro: macro, spot: spot, now: Date.now(), news: null,
+    fng: (ctx.fng && typeof ctx.fng === 'object') ? ctx.fng : undefined,
+    fundingRate: (typeof ctx.fundingRate === 'number' && isFinite(ctx.fundingRate)) ? ctx.fundingRate : undefined,
+    perpNative: ctx.perpNative || undefined,
+    cot: (ctx.cot && typeof ctx.cot === 'object') ? ctx.cot : undefined,
+    rows15m: bars.rows15m, rows1h: bars.rows1h, rows4h: bars.rows4h, rows1d: bars.rows1d };
   try{
     var ns = gfn('hgNewsState');
     if (ns) scanCtx.news = ns();
@@ -601,6 +704,10 @@ function runGoldPineScan(bars, ctx){
 
   swing = sortSetups(dedupeSetups(swing.filter(Boolean)));
   scalp = sortSetups(dedupeSetups(scalp.filter(Boolean)));
+
+  /* hg-v1162: every row carries the marks before it is recorded */
+  gpMarkReads(swing, 'swing', bars, scanCtx);
+  gpMarkReads(scalp, 'scalp', bars, scanCtx);
 
   /* v694: stamp solidity, record fires, then reorder so proven-winning
      kinds lead and proven-losing kinds are vetoed/killed. The reordered
@@ -683,7 +790,41 @@ function runGoldPineScan(bars, ctx){
   }catch(eFS){}
   return { swing: swing, scalp: scalp, levels: levels, source: source,
            goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
-           tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now() };
+           tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now(),
+           /* hg-v1162: the context the marks were read on, for the one
+              catalog census the board paints */
+           catalogCtx: scanCtx };
+}
+
+/* hg-v1162: the two read lines on a card -- gold-catalog.js owns the
+   indicator-stack renderer, goldind.js the free-feed one; this desk hands
+   each the row's own fields. A row with no reads prints nothing. */
+function gpReadsHtml(s){
+  try{
+    if (!s) return '';
+    var h = '';
+    var ff = gfn('hgGoldFreeFeedLineHtml');
+    if (ff && s.freeReads && typeof s.freeReads === 'object') h += ff(s.freeReads, { fundingPct: s.fundingPct }) || '';
+    var st = gfn('hgGoldIndicatorStackHtml');
+    if (st && s.indReads) h += st(s.indReads, s.freeReads) || '';
+    return h;
+  }catch(e){ return ''; }
+}
+/* hg-v1162: the Gold Master Catalog census, ONCE on the board, handed the
+   scan context the marks were read on (COT from the window beside it, as
+   GOLD SCALP does) and the leader's indicator reads -- so USED means read
+   this scan. The first GOLD SCALP cut painted two censuses with two USED
+   numbers (hg-v1158); this desk paints exactly one. */
+function gpCatalogHtml(result, bars){
+  try{
+    var cFn = gfn('hgGoldCatalogHtml'), cEn = gfn('hgGoldCatalogEngine');
+    if (!cFn || !cEn || !result) return '';
+    var cx = result.catalogCtx || null;
+    if (cx && !cx.cot && W.__hgGoldCot) cx = Object.assign({}, cx, { cot: W.__hgGoldCot });
+    var lead = (result.scalp && result.scalp[0]) || (result.swing && result.swing[0]) || null;
+    var rows = (bars && bars.rows15m && bars.rows15m.length) ? bars.rows15m : ((bars && bars.rows4h) || []);
+    return cFn(cEn(rows, { ctx: cx, ind: (lead && lead.indReads) || null, killzone: '' })) || '';
+  }catch(e){ return ''; }
 }
 
 function factorsHTML(factors){
@@ -821,6 +962,9 @@ function cardHTML(s, rank){
     }catch(eSmcP){}
     var tapeHead = gpTapeChipHtml(s);
     if (tapeHead) html = html.replace('</h2>', ' ' + tapeHead + '</h2>');
+    /* hg-v1162: the read lines, inside the shared panel */
+    var sharedReads = gpReadsHtml(s);
+    if (sharedReads) html = html.replace(/<\/div>\s*$/, sharedReads + '</div>');
     return html;
   }
   var cls = s.dir === 'long' ? 'long' : 'short';
@@ -929,6 +1073,11 @@ function gpHandoffBlock(s){
       ? W.planBlock(s.dir, s.entry, s.stop, s.t1, s.t2, s.planSrc || 'Gold Pine')
       : ('ENTRY ' + pxF(s.entry) + ' · SL ' + pxF(s.stop) + ' · T1 ' + pxF(s.t1))) + '</div>'
     + actions
+    /* hg-v1162: the two read lines close the card, BELOW the plan and the
+       handoff -- the house guard reads the R:R that belongs to a handoff
+       button a bounded distance behind it, and eighteen indicator cells
+       between the two would push it out of reach */
+    + gpReadsHtml(s)
     + '</div>';
 }
 
@@ -1014,6 +1163,8 @@ function mount(el){
         var mg = gfn('getGoldMacro');
         if (mg) macro = await mg();
       }catch(eM){}
+      /* hg-v1162: the free internet feeds the ranker scores by, fetched once */
+      var feeds = await gpFreeFeeds(bars);
       setProg(0.35);
       if (!bars.rows4h.length && !bars.rows15m.length){
         if (out) out.innerHTML = '<div class="empty">No gold candle data — check network / macro.js feeds.</div>';
@@ -1021,7 +1172,8 @@ function mount(el){
         return 'failed';
       }
       if (stat) stat.textContent = 'Scoring Pine + gold confluence…';
-      var result = runGoldPineScan(bars, { macro: macro });
+      var result = runGoldPineScan(bars, { macro: macro, fng: feeds.fng, fundingRate: feeds.fundingRate,
+                                           perpNative: feeds.perpNative, cot: feeds.cot });
       setProg(0.9);
       /* v694: the lists are already reordered by solidity in
          runGoldPineScan, so slice directly instead of re-sorting via
@@ -1088,7 +1240,8 @@ function mount(el){
           { total: result.swing.length })
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
           'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
-          { total: result.scalp.length });
+          { total: result.scalp.length })
+        + gpCatalogHtml(result, bars);   /* hg-v1162: one census */
 
       if (out) out.innerHTML = html;
       try { if (typeof W.hgMpPin === 'function') W.hgMpPin('goldpine', mpList, null, out); } catch (eMp) {}
