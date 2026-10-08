@@ -300,7 +300,921 @@ function trendmxSetupGrade(r, dir){
     if (volDiv === 'bull') reasons.push('OBV diverging');
     if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct <= -0.04) reasons.push('funding crowded');
   }
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf };
+  var value = tmValueState(r, dir);
+  for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
+  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+}
+function tmValueState(row, dir){
+  var out = { reasons: [], distAtr: null, adx4: null, touched: null };
+  var rows4 = tmClosedRows(row && row.rows4h, 14400);
+  if (!rows4 || rows4.length < 50 || typeof ema !== 'function') return out;
+  var closes = rows4.map(function(bar){ return bar ? bar.c : NaN; });
+  var px = closes[closes.length - 1];
+  var e21 = tmEmaLast(closes, 21);
+  var atr = tmAtrLast(rows4);
+  if (isFinite(px) && isFinite(e21) && atr > 0){
+    out.distAtr = Math.abs(px - e21) / atr;
+    if (out.distAtr > 2.2) out.reasons.push('extended ' + out.distAtr.toFixed(1) + 'x ATR from the 4h EMA21');
+  }
+  if (typeof adx === 'function'){
+    try {
+      var ax = adx(rows4, 14);
+      var adx4 = ax && ax.adx && ax.adx.length ? ax.adx[ax.adx.length - 1] : NaN;
+      if (isFinite(adx4)){
+        out.adx4 = adx4;
+        if (adx4 > 44) out.reasons.push('4h ADX ' + adx4.toFixed(0) + ' is exhaustion, not an entry');
+        else if (adx4 < 22) out.reasons.push('4h ADX ' + adx4.toFixed(0) + ' is chop, not a trend entry');
+      }
+    } catch (eAdx) {}
+  }
+  var rows1 = tmClosedRows(row && row.rows1h, 3600);
+  if (rows1 && rows1.length >= 30){
+    var c1 = rows1.map(function(bar){ return bar ? bar.c : NaN; });
+    var series = ema(c1, 21);
+    var level = series && series.length ? series[series.length - 1] : NaN;
+    var touched = false;
+    if (isFinite(level)){
+      var slice = rows1.slice(-3), i, bar;
+      for (i = 0; i < slice.length; i++){
+        bar = slice[i];
+        if (!bar) continue;
+        if (dir === 'long' && bar.l <= level) touched = true;
+        if (dir === 'short' && bar.h >= level) touched = true;
+      }
+    }
+    out.touched = touched;
+    if (!touched && isFinite(out.distAtr) && out.distAtr > 0.6) out.reasons.push('no pullback into the 1h EMA21');
+    else if (touched){
+      var pull = tmPullbackRvol(rows1, dir, level);
+      if (pull === 'unread') out.reasons.push('pullback volume unread');
+      else if (pull >= 0.85) out.reasons.push('pullback volume ' + pull.toFixed(2) + 'x is distribution, not a quiet retest');
+    }
+    if (rows1.length >= 52 && typeof ichimoku === 'function'){
+      try {
+        var ic = ichimoku(rows1);
+        var i1 = rows1.length - 1;
+        var spanA = ic && ic.senkouA ? ic.senkouA[i1] : NaN;
+        var spanB = ic && ic.senkouB ? ic.senkouB[i1] : NaN;
+        var cloudPx = rows1[i1] && rows1[i1].c;
+        if (!(isFinite(spanA) && isFinite(spanB) && isFinite(cloudPx))) out.reasons.push('1h cloud unread');
+        else {
+          var top = Math.max(spanA, spanB), bot = Math.min(spanA, spanB);
+          if (dir === 'long' && cloudPx < bot) out.reasons.push('1h price is below the cloud');
+          else if (dir === 'long' && cloudPx <= top) out.reasons.push('1h price is inside the cloud');
+          else if (dir === 'short' && cloudPx > top) out.reasons.push('1h price is above the cloud');
+          else if (dir === 'short' && cloudPx >= bot) out.reasons.push('1h price is inside the cloud');
+        }
+      } catch (eIc) { out.reasons.push('1h cloud unread'); }
+    }
+    var va = (typeof tmVolumeProfile === 'function') ? tmVolumeProfile(rows1) : null;
+    var px1 = rows1[rows1.length - 1] && rows1[rows1.length - 1].c;
+    if (!va || !isFinite(px1)) out.reasons.push('1h value area unread');
+    else if (dir === 'long' && px1 < va.poc) out.reasons.push('1h price lost the point of control');
+    else if (dir === 'long' && px1 < va.vah) out.reasons.push('1h price is under the value area high');
+    else if (dir === 'short' && px1 > va.poc) out.reasons.push('1h price lost the point of control');
+    else if (dir === 'short' && px1 > va.val) out.reasons.push('1h price is over the value area low');
+  }
+  var hurst = tmHurst(rows4);
+  if (hurst == null) out.reasons.push('hurst unread');
+  else if (hurst < 0.48) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is mean-reverting');
+  else if (hurst <= 0.55) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is not a trend');
+  var poc = tmPocShift(rows4, dir);
+  if (poc == null) out.reasons.push('point of control unread');
+  else if (!poc) out.reasons.push('point of control did not migrate with the trend');
+  if (typeof ttmSqueeze === 'function'){
+    try {
+      var sq = ttmSqueeze(rows4);
+      var i4 = rows4.length - 1;
+      if (sq && sq.on && sq.on[i4]) out.reasons.push('4h squeeze still coiled');
+      else if (sq && sq.fired && sq.fired[i4] && sq.momentum && isFinite(sq.momentum[i4])){
+        if (dir === 'long' && sq.momentum[i4] < 0) out.reasons.push('4h squeeze fired against the long');
+        if (dir === 'short' && sq.momentum[i4] > 0) out.reasons.push('4h squeeze fired against the short');
+      }
+    } catch (eSq) {}
+  }
+  if (typeof rsi === 'function'){
+    try {
+      var rsiSeries = rsi(closes, 14);
+      var rsiNow = rsiSeries && rsiSeries.length ? rsiSeries[rsiSeries.length - 1] : NaN;
+      if (isFinite(rsiNow)){
+        if (dir === 'long' && rsiNow > 52) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is above the bull floor');
+        if (dir === 'short' && rsiNow < 50) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is below the bear ceiling');
+      }
+    } catch (eRsi) {}
+  }
+  var swing = tmSwingAnchor(rows4, dir);
+  if (!swing) out.reasons.push('anchored VWAP unread');
+  else {
+    var avwap = tmAnchoredVwap(rows4, swing.i);
+    if (!isFinite(avwap)) out.reasons.push('anchored VWAP unread');
+    else if (atr > 0){
+      var taggedAv = false, ak, abar;
+      var atail = rows4.slice(-3);
+      for (ak = 0; ak < atail.length; ak++){
+        abar = atail[ak];
+        if (!abar) continue;
+        if (dir === 'long' && abar.l <= avwap) taggedAv = true;
+        if (dir === 'short' && abar.h >= avwap) taggedAv = true;
+      }
+      if (!taggedAv && Math.abs(px - avwap) > atr * 0.8) out.reasons.push('not at the 4h anchored VWAP');
+    }
+  }
+  return out;
+}
+function tmSwingAnchor(rows, dir){
+  if (typeof hgStructure !== 'function' || !rows) return null;
+  try {
+    var hs = hgStructure(rows);
+    if (!hs || !hs.swings) return null;
+    var best = null, i;
+    for (i = 0; i < hs.swings.length; i++){
+      var kind = hs.swings[i].kind;
+      var type = hs.swings[i].type;
+      var isLow = kind === 'low' || type === 'HL' || type === 'LL';
+      var isHigh = kind === 'high' || type === 'HH' || type === 'LH';
+      if (dir === 'long' && isLow) best = hs.swings[i];
+      if (dir === 'short' && isHigh) best = hs.swings[i];
+    }
+    return best && isFinite(best.i) ? best : null;
+  } catch (e) { return null; }
+}
+function tmAnchoredVwap(rows, from){
+  if (!rows || !(from >= 0) || from >= rows.length) return NaN;
+  var pv = 0, vv = 0, i, bar, vol, typ;
+  for (i = from; i < rows.length; i++){
+    bar = rows[i];
+    vol = tmBarVol(bar);
+    if (!isFinite(vol)) return NaN;
+    typ = (bar.h + bar.l + bar.c) / 3;
+    if (!isFinite(typ)) return NaN;
+    pv += typ * vol;
+    vv += vol;
+  }
+  return vv > 0 ? pv / vv : NaN;
+}
+function tmBodyCommit(rows, dir){
+  if (!rows || rows.length < 8 || typeof atr !== 'function') return null;
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var cur = rows[rows.length - 1];
+  var recent = rows.slice(-8, -1);
+  var buf = atrNow * 0.25;
+  if (dir === 'long'){
+    var pivotH = Math.max.apply(null, recent.map(function(bar){ return bar.h; }));
+    return cur.c > cur.o && cur.c > pivotH + buf;
+  }
+  var pivotL = Math.min.apply(null, recent.map(function(bar){ return bar.l; }));
+  return cur.c < cur.o && cur.c < pivotL - buf;
+}
+function tmAltBtcLowerLow(coinRows, btcRows){
+  var n = Math.min(coinRows ? coinRows.length : 0, btcRows ? btcRows.length : 0);
+  if (n < 12) return null;
+  var ratio = [], i, c, b;
+  for (i = 0; i < n; i++){
+    c = coinRows[coinRows.length - n + i].c;
+    b = btcRows[btcRows.length - n + i].c;
+    if (!(c > 0) || !(b > 0)) return null;
+    ratio.push(c / b);
+  }
+  var last = ratio.slice(-6), prev = ratio.slice(-12, -6);
+  var minL = Math.min.apply(null, last), minP = Math.min.apply(null, prev);
+  var maxL = Math.max.apply(null, last), maxP = Math.max.apply(null, prev);
+  return { lowerLow: minL < minP, higherHigh: maxL > maxP };
+}
+function tmExampleSize(entry, stop){
+  var dist = Math.abs(+entry - +stop);
+  if (!(+entry > 0) || !(dist > 0)) return null;
+  var units = 100 / dist;
+  return { units: units, notional: units * +entry };
+}
+function tmParkinson(rows, period){
+  period = period || 14;
+  if (!rows || rows.length < period) return NaN;
+  var factor = 1 / (4 * Math.log(2) * period);
+  var sum = 0, i, h, l, slice = rows.slice(-period);
+  for (i = 0; i < slice.length; i++){
+    h = slice[i].h; l = slice[i].l;
+    if (!(l > 0) || !(h >= l)) return NaN;
+    sum += Math.pow(Math.log(h / l), 2);
+  }
+  return Math.sqrt(factor * sum);
+}
+function tmParkinsonHot(rows){
+  if (!rows || rows.length < 42) return null;
+  var now = tmParkinson(rows, 14);
+  if (!isFinite(now)) return null;
+  var hist = [], end, w;
+  for (end = 14; end < rows.length - 1; end++){
+    w = tmParkinson(rows.slice(end - 14, end), 14);
+    if (isFinite(w)) hist.push(w);
+  }
+  if (hist.length < 10) return null;
+  hist.sort(function(a, b){ return a - b; });
+  return { now: now, hot: now > hist[Math.floor(0.8 * (hist.length - 1))] };
+}
+function tmRs(closes){
+  if (!closes || closes.length < 8) return NaN;
+  var rets = [], i, mean = 0;
+  for (i = 1; i < closes.length; i++) rets.push(closes[i] - closes[i - 1]);
+  for (i = 0; i < rets.length; i++) mean += rets[i];
+  mean /= rets.length;
+  var cum = 0, mx = -Infinity, mn = Infinity, v = 0;
+  for (i = 0; i < rets.length; i++){
+    cum += rets[i] - mean;
+    if (cum > mx) mx = cum;
+    if (cum < mn) mn = cum;
+    v += (rets[i] - mean) * (rets[i] - mean);
+  }
+  var sd = Math.sqrt(v / rets.length);
+  if (!(sd > 0) || !(mx > mn)) return NaN;
+  return (mx - mn) / sd;
+}
+function tmHurst(rows){
+  if (!rows || rows.length < 80) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  function avgRs(scale){
+    var logs = [], start;
+    for (start = 0; start + scale <= closes.length; start += scale){
+      var rs = tmRs(closes.slice(start, start + scale));
+      if (isFinite(rs) && rs > 0) logs.push(Math.log(rs));
+    }
+    if (logs.length < 2) return NaN;
+    var sum = 0;
+    for (start = 0; start < logs.length; start++) sum += logs[start];
+    return Math.exp(sum / logs.length);
+  }
+  var small = avgRs(16), large = avgRs(64);
+  if (!(small > 0) || !(large > 0)) return null;
+  var h = Math.log(large / small) / Math.log(64 / 16);
+  return isFinite(h) ? h : null;
+}
+function tmPocShift(rows, dir){
+  if (!rows || rows.length < 80 || typeof tmVolumeProfile !== 'function') return null;
+  var mid = Math.floor(rows.length / 2);
+  var prior = tmVolumeProfile(rows.slice(0, mid));
+  var recent = tmVolumeProfile(rows.slice(mid));
+  if (!prior || !recent || !isFinite(prior.poc) || !isFinite(recent.poc)) return null;
+  if (dir === 'long') return recent.poc > prior.poc;
+  return recent.poc < prior.poc;
+}
+function tmFundingSpike(prev, cur, dir){
+  if (!isFinite(prev) || !isFinite(cur)) return null;
+  var delta = cur - prev;
+  var vel = prev === 0 ? null : (delta / Math.abs(prev)) * 100;
+  if (dir === 'long') return delta > 0.0003 && (vel == null || vel > 250);
+  return delta < -0.0003 && (vel == null || vel < -250);
+}
+function tmSettlementFreeze(now){
+  now = now || new Date();
+  var mins = now.getUTCHours() * 60 + now.getUTCMinutes();
+  var marks = [0, 8 * 60, 16 * 60], i, d;
+  for (i = 0; i < marks.length; i++){
+    d = Math.abs(mins - marks[i]);
+    if (d <= 15 || d >= 24 * 60 - 15) return true;
+  }
+  return false;
+}
+function tmLiquidityRoom(rows, dir, entry, risk){
+  if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return null;
+  if (!(entry > 0) || !(risk > 0)) return null;
+  var hs;
+  try { hs = hgStructure(rows); } catch (e) { return null; }
+  if (!hs || !hs.swings || hs.swings.length < 2) return null;
+  var levels = [], i, s;
+  for (i = 0; i < hs.swings.length; i++){
+    s = hs.swings[i];
+    if (dir === 'long' && (s.type === 'HH' || s.type === 'LH') && s.px > entry) levels.push(s.px);
+    if (dir === 'short' && (s.type === 'HL' || s.type === 'LL') && s.px < entry) levels.push(s.px);
+  }
+  var pools = [], a, b, mid;
+  for (a = 0; a < levels.length; a++){
+    for (b = a + 1; b < levels.length; b++){
+      mid = (levels[a] + levels[b]) / 2;
+      if (!(mid > 0)) continue;
+      if (Math.abs(levels[a] - levels[b]) / mid <= 0.0025) pools.push(mid);
+    }
+  }
+  if (!pools.length) return { open: true, room: null };
+  pools.sort(function(x, y){ return dir === 'long' ? x - y : y - x; });
+  var room = Math.abs(pools[0] - entry) / risk;
+  return { open: room >= 2, room: room };
+}
+function tmEffortTrap(candle, atrNow, share, dir){
+  if (!candle || !(atrNow > 0) || share == null || !isFinite(share)) return null;
+  var body = Math.abs(candle.c - candle.o);
+  if (dir === 'long') return share >= 0.65 && body < atrNow * 0.35 && (candle.h - candle.c) > body;
+  return share <= 0.35 && body < atrNow * 0.35 && (candle.c - candle.l) > body;
+}
+function tmStalled(rows, dir){
+  if (!rows || rows.length < 5 || typeof atr !== 'function') return null;
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var base = rows[rows.length - 4];
+  var last = rows[rows.length - 1];
+  var moved = dir === 'long' ? last.c - base.c : base.c - last.c;
+  return moved < 0.3 * atrNow;
+}
+function tmRunnerR(rows){
+  var pk = tmParkinsonHot(rows);
+  if (!pk) return null;
+  return pk.hot ? 4 : 2.2;
+}
+function tmAsiaChop(now){
+  now = now || new Date();
+  var t = now.getUTCHours() + now.getUTCMinutes() / 60;
+  return t >= 0 && t < 6.5;
+}
+function tmChandelier(rows, dir, entry){
+  if (!rows || rows.length < 8 || typeof atr !== 'function') return null;
+  if (!(entry > 0)) return null;
+  var series = atr(rows, 14);
+  var a = series && series.length ? series[series.length - 1] : NaN;
+  if (!(a > 0)) return null;
+  var look = rows.slice(-8), i, px;
+  if (dir === 'long'){
+    px = look[0].h;
+    for (i = 1; i < look.length; i++) if (look[i].h > px) px = look[i].h;
+    px = px - 2 * a;
+    if (!(px < entry)) return null;
+  } else {
+    px = look[0].l;
+    for (i = 1; i < look.length; i++) if (look[i].l < px) px = look[i].l;
+    px = px + 2 * a;
+    if (!(px > entry)) return null;
+  }
+  return isFinite(px) ? px : null;
+}
+function tmEmaSeries(values, period){
+  if (!values || values.length <= period) return null;
+  var out = new Array(values.length);
+  var i, sum = 0, k = 2 / (period + 1), seed;
+  for (i = 0; i < period; i++) sum += values[i];
+  seed = sum / period;
+  out[period - 1] = seed;
+  for (i = 0; i < period - 1; i++) out[i] = NaN;
+  for (i = period; i < values.length; i++) out[i] = values[i] * k + out[i - 1] * (1 - k);
+  return out;
+}
+function tmWaveOk(rows, dir){
+  if (!rows || rows.length < 40) return null;
+  var i, ap = [];
+  for (i = 0; i < rows.length; i++) ap.push((rows[i].h + rows[i].l + rows[i].c) / 3);
+  var esa = tmEmaSeries(ap, 10);
+  if (!esa) return null;
+  var diff = [];
+  for (i = 0; i < ap.length; i++) diff.push(Math.abs(ap[i] - (isFinite(esa[i]) ? esa[i] : ap[i])));
+  var d = tmEmaSeries(diff, 10);
+  if (!d) return null;
+  var ci = [];
+  for (i = 0; i < ap.length; i++){
+    var den = 0.015 * d[i];
+    ci.push(den > 0 && isFinite(esa[i]) ? (ap[i] - esa[i]) / den : 0);
+  }
+  var wt1 = tmEmaSeries(ci, 21);
+  if (!wt1) return null;
+  var n = wt1.length - 1;
+  if (!isFinite(wt1[n]) || !isFinite(wt1[n - 1])) return null;
+  function sma4(idx){
+    var s = 0, k;
+    for (k = idx - 3; k <= idx; k++){
+      if (!isFinite(wt1[k])) return NaN;
+      s += wt1[k];
+    }
+    return s / 4;
+  }
+  var wt2 = sma4(n), prev2 = sma4(n - 1);
+  if (!isFinite(wt2) || !isFinite(prev2)) return null;
+  var green = wt1[n - 1] <= prev2 && wt1[n] > wt2;
+  var red = wt1[n - 1] >= prev2 && wt1[n] < wt2;
+  if (dir === 'long') return green && wt1[n - 1] <= -30;
+  return red && wt1[n - 1] >= 30;
+}
+function tmKernel(rows, lookback, bandwidth){
+  lookback = lookback || 24;
+  bandwidth = bandwidth || 8;
+  if (!rows || rows.length < lookback + 1) return null;
+  function at(end){
+    var sumW = 0, sum = 0, j, w;
+    for (j = 0; j < lookback; j++){
+      w = Math.pow(1 + (j * j) / (2 * bandwidth * bandwidth), -1);
+      sumW += w;
+      sum += rows[end - j].c * w;
+    }
+    return sumW > 0 ? sum / sumW : NaN;
+  }
+  var cur = at(rows.length - 1);
+  var prev = at(rows.length - 2);
+  if (!isFinite(cur) || !isFinite(prev)) return null;
+  return { slopeUp: cur >= prev, above: rows[rows.length - 1].c >= cur };
+}
+function tmSuperTrend(rows, period, mult){
+  if (!rows || rows.length < period + 5 || typeof atr !== 'function') return null;
+  var a = atr(rows, period);
+  if (!a || a.length < rows.length) return null;
+  var i, up, dn, trend = null, prevUp = NaN, prevDn = NaN, prevClose, hl2, c;
+  for (i = period; i < rows.length; i++){
+    if (!(a[i] > 0)) return null;
+    hl2 = (rows[i].h + rows[i].l) / 2;
+    if (!isFinite(prevUp)) up = hl2 + mult * a[i];
+    else up = ((hl2 + mult * a[i]) < prevUp || prevClose > prevUp) ? hl2 + mult * a[i] : prevUp;
+    if (!isFinite(prevDn)) dn = hl2 - mult * a[i];
+    else dn = ((hl2 - mult * a[i]) > prevDn || prevClose < prevDn) ? hl2 - mult * a[i] : prevDn;
+    c = rows[i].c;
+    if (trend == null) trend = c >= hl2;
+    else if (trend && c < dn) trend = false;
+    else if (!trend && c > up) trend = true;
+    prevUp = up;
+    prevDn = dn;
+    prevClose = c;
+  }
+  if (trend == null) return null;
+  return { up: trend };
+}
+function tmCmf(rows, period){
+  period = period || 20;
+  if (!rows || rows.length < period) return null;
+  var slice = rows.slice(-period);
+  var mfv = 0, vol = 0, i, k, range, mfm;
+  for (i = 0; i < slice.length; i++){
+    k = slice[i];
+    if (!(k.v > 0)) return null;
+    range = k.h - k.l;
+    mfm = range > 0 ? ((k.c - k.l) - (k.h - k.c)) / range : 0;
+    mfv += mfm * k.v;
+    vol += k.v;
+  }
+  if (!(vol > 0)) return null;
+  return mfv / vol;
+}
+function tmSqueezeHigh(rows){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var a = atr(rows, 20);
+  var atrNow = a && a.length ? a[a.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var slice = rows.slice(-20), i, sum = 0;
+  for (i = 0; i < slice.length; i++) sum += slice[i].c;
+  var sma = sum / slice.length, varr = 0;
+  for (i = 0; i < slice.length; i++) varr += Math.pow(slice[i].c - sma, 2);
+  var sd = Math.sqrt(varr / slice.length);
+  return (sma + 2 * sd) < (sma + atrNow) && (sma - 2 * sd) > (sma - atrNow);
+}
+function tmWilderRsi(closes, period){
+  if (!closes || closes.length < period + 2) return null;
+  var i, gains = 0, losses = 0, d, out = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) out[i] = NaN;
+  for (i = 1; i <= period; i++){
+    d = closes[i] - closes[i - 1];
+    if (d >= 0) gains += d; else losses -= d;
+  }
+  var avgGain = gains / period, avgLoss = losses / period;
+  out[period] = (avgGain === 0 && avgLoss === 0) ? 50 : (avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)));
+  for (i = period + 1; i < closes.length; i++){
+    d = closes[i] - closes[i - 1];
+    avgGain = ((avgGain * (period - 1)) + (d > 0 ? d : 0)) / period;
+    avgLoss = ((avgLoss * (period - 1)) + (d < 0 ? -d : 0)) / period;
+    if (avgGain === 0 && avgLoss === 0) out[i] = 50;
+    else if (avgLoss === 0) out[i] = 100;
+    else out[i] = 100 - (100 / (1 + avgGain / avgLoss));
+  }
+  return out;
+}
+function tmQqe(rows, dir){
+  if (!rows || rows.length < 40) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++) closes.push(rows[i].c);
+  var rsi = tmWilderRsi(closes, 14);
+  if (!rsi) return null;
+  var smooth = tmEmaSeries(rsi.map(function(v){ return isFinite(v) ? v : 50; }), 5);
+  if (!smooth) return null;
+  var last = smooth[smooth.length - 1];
+  if (!isFinite(last)) return null;
+  if (dir === 'long') return last > 55;
+  return last < 45;
+}
+function tmWmaAt(values, end, period){
+  if (!values || end < period - 1 || end >= values.length) return NaN;
+  var w = period * (period + 1) / 2, s = 0, i;
+  for (i = 0; i < period; i++) s += values[end - period + 1 + i] * (i + 1);
+  return s / w;
+}
+function tmHullRising(rows, period){
+  period = period || 21;
+  var half = Math.floor(period / 2);
+  var root = Math.floor(Math.sqrt(period));
+  if (!rows || rows.length < period + root + 2 || half < 2) return null;
+  var closes = [], i, raw = [], a, b;
+  for (i = 0; i < rows.length; i++) closes.push(rows[i].c);
+  for (i = period - 1; i < closes.length; i++){
+    a = tmWmaAt(closes, i, half);
+    b = tmWmaAt(closes, i, period);
+    if (!isFinite(a) || !isFinite(b)) return null;
+    raw.push(2 * a - b);
+  }
+  if (raw.length < root + 1) return null;
+  var cur = tmWmaAt(raw, raw.length - 1, root);
+  var prev = tmWmaAt(raw, raw.length - 2, root);
+  if (!isFinite(cur) || !isFinite(prev)) return null;
+  return cur >= prev;
+}
+function tmVfi(rows, period, coef){
+  period = period || 20;
+  coef = (coef == null) ? 0.2 : coef;
+  if (!rows || rows.length < period + 2) return null;
+  var start = rows.length - period, mf = 0, vol = 0, i, tp, prev, tr, diff, cut;
+  for (i = start; i < rows.length; i++){
+    if (!(rows[i].v > 0)) return null;
+    tp = (rows[i].h + rows[i].l + rows[i].c) / 3;
+    prev = (rows[i - 1].h + rows[i - 1].l + rows[i - 1].c) / 3;
+    tr = Math.max(rows[i].h - rows[i].l, Math.abs(rows[i].h - rows[i - 1].c), Math.abs(rows[i].l - rows[i - 1].c));
+    cut = coef * tr;
+    diff = tp - prev;
+    vol += rows[i].v;
+    if (diff > cut) mf += rows[i].v;
+    else if (diff < -cut) mf -= rows[i].v;
+  }
+  if (!(vol > 0)) return null;
+  return mf / vol;
+}
+function tmWt1Series(rows){
+  if (!rows || rows.length < 40) return null;
+  var i, ap = [];
+  for (i = 0; i < rows.length; i++) ap.push((rows[i].h + rows[i].l + rows[i].c) / 3);
+  var esa = tmEmaSeries(ap, 10);
+  if (!esa) return null;
+  var diff = [];
+  for (i = 0; i < ap.length; i++) diff.push(Math.abs(ap[i] - (isFinite(esa[i]) ? esa[i] : ap[i])));
+  var d = tmEmaSeries(diff, 10);
+  if (!d) return null;
+  var ci = [];
+  for (i = 0; i < ap.length; i++){
+    var den = 0.015 * d[i];
+    ci.push(den > 0 && isFinite(esa[i]) ? (ap[i] - esa[i]) / den : 0);
+  }
+  return tmEmaSeries(ci, 21);
+}
+function tmWtDiverging(rows, dir){
+  var wt = tmWt1Series(rows);
+  if (!wt || rows.length < 40) return null;
+  var n = rows.length - 1;
+  function extreme(from, to, high){
+    var idx = from, i;
+    for (i = from + 1; i <= to; i++){
+      if (high ? rows[i].h > rows[idx].h : rows[i].l < rows[idx].l) idx = i;
+    }
+    return idx;
+  }
+  var recent = extreme(n - 14, n, dir === 'long');
+  var prior = extreme(n - 29, n - 15, dir === 'long');
+  if (!isFinite(wt[recent]) || !isFinite(wt[prior])) return null;
+  if (dir === 'long') return rows[recent].h > rows[prior].h && (wt[prior] - wt[recent]) > 10;
+  return rows[recent].l < rows[prior].l && (wt[recent] - wt[prior]) > 10;
+}
+function tmFreshOb(rows, dir){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var a = atr(rows, 14);
+  var atrNow = a && a.length ? a[a.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var last = rows.length - 1;
+  var px = rows[last].c;
+  var i, j, o, up, dn, top, bot, hit;
+  for (i = 3; i < last - 2; i++){
+    o = rows[i];
+    up = rows[i + 1];
+    dn = rows[i + 2];
+    if (dir === 'long'){
+      if (!(o.c < o.o && up.c > up.o && dn.c > dn.o && (dn.c - o.c) >= 1.5 * atrNow)) continue;
+    } else if (!(o.c > o.o && up.c < up.o && dn.c < dn.o && (o.c - dn.c) >= 1.5 * atrNow)) continue;
+    top = o.h;
+    bot = o.l;
+    hit = false;
+    for (j = i + 3; j < last; j++){
+      if (dir === 'long' && rows[j].l <= top) { hit = true; break; }
+      if (dir === 'short' && rows[j].h >= bot) { hit = true; break; }
+    }
+    if (hit) continue;
+    if (px >= bot && px <= top) return true;
+  }
+  return false;
+}
+function tmUtBot(rows, key){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  key = key || 2;
+  var a = atr(rows, 10);
+  if (!a || a.length < rows.length) return null;
+  var stop = rows[0].c, i, c, prev, loss;
+  for (i = 1; i < rows.length; i++){
+    if (!(a[i] > 0)) return null;
+    loss = key * a[i];
+    c = rows[i].c;
+    prev = rows[i - 1].c;
+    if (c > stop && prev > stop) stop = Math.max(stop, c - loss);
+    else if (c < stop && prev < stop) stop = Math.min(stop, c + loss);
+    else stop = c > stop ? c - loss : c + loss;
+  }
+  return rows[rows.length - 1].c > stop ? 'buy' : 'sell';
+}
+function tmTrendMagic(rows, dir){
+  if (!rows || rows.length < 55) return null;
+  var tp = [], i, sum = 0;
+  for (i = 0; i < rows.length; i++) tp.push((rows[i].h + rows[i].l + rows[i].c) / 3);
+  var slice = tp.slice(-50);
+  for (i = 0; i < slice.length; i++) sum += slice[i];
+  var sma = sum / slice.length, dev = 0;
+  for (i = 0; i < slice.length; i++) dev += Math.abs(slice[i] - sma);
+  dev = dev / slice.length;
+  if (!(dev > 0)) return null;
+  var cci = (tp[tp.length - 1] - sma) / (0.015 * dev);
+  if (dir === 'long') return cci > 0;
+  return cci < 0;
+}
+function tmAlpha(rows, dir){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var start = rows.length - 14, pos = 0, neg = 0, i, tp, prev, money;
+  for (i = start + 1; i < rows.length; i++){
+    if (!(rows[i].v > 0)) return null;
+    tp = (rows[i].h + rows[i].l + rows[i].c) / 3;
+    prev = (rows[i - 1].h + rows[i - 1].l + rows[i - 1].c) / 3;
+    money = tp * rows[i].v;
+    if (tp > prev) pos += money;
+    else if (tp < prev) neg += money;
+  }
+  if (!(pos + neg > 0)) return null;
+  var mfi = neg === 0 ? 100 : (pos === 0 ? 0 : 100 - (100 / (1 + pos / neg)));
+  var a = atr(rows, 14);
+  var atrNow = a && a.length ? a[a.length - 1] : NaN;
+  if (!(atrNow > 0) || rows.length < 4) return null;
+  var up = rows[rows.length - 1].l - atrNow;
+  var prevUp = rows[rows.length - 3].l - atrNow;
+  var dn = rows[rows.length - 1].h + atrNow;
+  var prevDn = rows[rows.length - 3].h + atrNow;
+  if (dir === 'long') return mfi > 50 && up >= prevUp;
+  return mfi < 50 && dn <= prevDn;
+}
+function tmRangeFilter(rows, dir){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var a = atr(rows, 14);
+  if (!a || a.length < rows.length) return null;
+  var filter = rows[0].c, way = 0, i, c, range;
+  for (i = 1; i < rows.length; i++){
+    if (!(a[i] > 0)) return null;
+    range = 2 * a[i];
+    c = rows[i].c;
+    if (c > filter + range){ filter = c - range; way = 1; }
+    else if (c < filter - range){ filter = c + range; way = -1; }
+  }
+  if (way === 0) return null;
+  var px = rows[rows.length - 1].c;
+  if (dir === 'long') return way === 1 && px > filter;
+  return way === -1 && px < filter;
+}
+function tmLorentz(rows, dir){
+  if (!rows || rows.length < 40) return null;
+  function feat(i){
+    if (i < 4 || !(rows[i].c > 0) || !(rows[i - 1].c > 0) || !(rows[i - 4].c > 0)) return null;
+    var range = rows[i].h - rows[i].l;
+    if (!(range > 0)) return null;
+    return [
+      (rows[i].c - rows[i - 4].c) / rows[i - 4].c,
+      range / rows[i].c,
+      (rows[i].c - rows[i - 1].c) / rows[i - 1].c,
+      Math.abs(rows[i].c - rows[i].o) / range
+    ];
+  }
+  var now = feat(rows.length - 1);
+  if (!now) return null;
+  var mem = [], i, f, dist, j, future;
+  for (i = 10; i < rows.length - 4; i++){
+    f = feat(i);
+    if (!f) continue;
+    dist = 0;
+    for (j = 0; j < 4; j++) dist += Math.log(1 + Math.abs(now[j] - f[j]));
+    future = rows[i + 3].c - rows[i].c;
+    if (future === 0) continue;
+    mem.push({ dist: dist, label: future > 0 ? 1 : -1 });
+  }
+  if (mem.length < 7) return null;
+  mem.sort(function(a, b){ return a.dist - b.dist; });
+  var votes = 0, k;
+  for (k = 0; k < 7; k++) votes += mem[k].label;
+  if (votes === 0) return false;
+  if (dir === 'long') return votes > 0;
+  return votes < 0;
+}
+function tmHalfTrend(rows, dir){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var a = atr(rows, 10);
+  if (!a || a.length < rows.length) return null;
+  var trend = 0, stop = rows[0].c, i, c, dev;
+  for (i = 1; i < rows.length; i++){
+    if (!(a[i] > 0)) return null;
+    dev = a[i];
+    c = rows[i];
+    if (trend === 0){
+      if (c.c > rows[i - 1].h){ trend = 1; stop = c.l - dev; }
+      else if (c.c < rows[i - 1].l){ trend = -1; stop = c.h + dev; }
+      continue;
+    }
+    if (trend === 1){
+      stop = Math.max(stop, c.l - dev);
+      if (c.c < stop){ trend = -1; stop = c.h + dev; }
+    } else {
+      stop = Math.min(stop, c.h + dev);
+      if (c.c > stop){ trend = 1; stop = c.l - dev; }
+    }
+  }
+  if (trend === 0) return null;
+  if (dir === 'long') return trend === 1;
+  return trend === -1;
+}
+function tmWae(rows, dir){
+  if (!rows || rows.length < 50 || typeof atr !== 'function') return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++) closes.push(rows[i].c);
+  var fast = tmEmaSeries(closes, 20);
+  var slow = tmEmaSeries(closes, 40);
+  if (!fast || !slow) return null;
+  var n = closes.length - 1;
+  if (!isFinite(fast[n]) || !isFinite(slow[n]) || !isFinite(fast[n - 1]) || !isFinite(slow[n - 1])) return null;
+  var diff = ((fast[n] - slow[n]) - (fast[n - 1] - slow[n - 1])) * 150;
+  var slice = closes.slice(-20), sum = 0;
+  for (i = 0; i < slice.length; i++) sum += slice[i];
+  var sma = sum / slice.length, varr = 0;
+  for (i = 0; i < slice.length; i++) varr += Math.pow(slice[i] - sma, 2);
+  var width = 4 * Math.sqrt(varr / slice.length);
+  var a = atr(rows, 14);
+  var dead = a && a.length ? a[a.length - 1] * 3.7 : NaN;
+  if (!(dead > 0) || !(width >= 0)) return null;
+  var power = Math.abs(diff);
+  if (!(power > width && power > dead)) return false;
+  if (dir === 'long') return diff > 0;
+  return diff < 0;
+}
+function tmMomBar(rows, end, length){
+  if (end < length - 1) return NaN;
+  var slice = rows.slice(end - length + 1, end + 1);
+  var hh = slice[0].h, ll = slice[0].l, sum = 0, i;
+  for (i = 0; i < slice.length; i++){
+    if (slice[i].h > hh) hh = slice[i].h;
+    if (slice[i].l < ll) ll = slice[i].l;
+    sum += slice[i].c;
+  }
+  var mid = ((hh + ll) / 2 + sum / slice.length) / 2;
+  return rows[end].c - mid;
+}
+function tmSqueezeMom(rows, dir){
+  if (!rows || rows.length < 22) return null;
+  var n = rows.length - 1;
+  var cur = tmMomBar(rows, n, 20);
+  var prev = tmMomBar(rows, n - 1, 20);
+  if (!isFinite(cur) || !isFinite(prev)) return null;
+  if (dir === 'long') return cur > 0 && cur > prev;
+  return cur < 0 && cur < prev;
+}
+function tmDamiani(rows){
+  if (!rows || rows.length < 45 || typeof atr !== 'function') return null;
+  function last(period){
+    var a = atr(rows, period);
+    return a && a.length ? a[a.length - 1] : NaN;
+  }
+  var v13 = last(13), v20 = last(20), v40 = last(40);
+  if (!(v13 > 0) || !(v20 > 0) || !(v40 > 0)) return null;
+  var slice = rows.slice(-13), i, sum = 0;
+  for (i = 0; i < slice.length; i++) sum += slice[i].c;
+  var mean = sum / slice.length, varr = 0;
+  for (i = 0; i < slice.length; i++) varr += Math.pow(slice[i].c - mean, 2);
+  var sd = Math.sqrt(varr / slice.length);
+  return (v13 / v20) > ((v40 / v20) + (sd / v20));
+}
+function tmTurtleReclaim(rows, dir){
+  if (!rows || rows.length < 8) return null;
+  var current = rows[rows.length - 1];
+  var prev = rows[rows.length - 2];
+  var look = rows.slice(-8, -2);
+  if (dir === 'long'){
+    var recentLow = Math.min.apply(null, look.map(function(bar){ return bar.l; }));
+    var swept = prev.l < recentLow || current.l < recentLow;
+    return !!(swept && current.c > recentLow && current.c > current.o);
+  }
+  var recentHigh = Math.max.apply(null, look.map(function(bar){ return bar.h; }));
+  var sweptH = prev.h > recentHigh || current.h > recentHigh;
+  return !!(sweptH && current.c < recentHigh && current.c < current.o);
+}
+function tmDisplacementFvg(rows, dir){
+  if (!rows || rows.length < 4 || typeof atr !== 'function') return null;
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var c0 = rows[rows.length - 3], c1 = rows[rows.length - 2], c2 = rows[rows.length - 1];
+  if (!c0 || !c1 || !c2) return null;
+  var body = Math.abs(c1.c - c1.o);
+  if (!(body > 1.4 * atrNow)) return false;
+  if (dir === 'long') return c1.c > c1.o && c2.l > c0.h;
+  return c1.c < c1.o && c0.l > c2.h;
+}
+function tmSynergy(row, dir, extras){
+  var score = 0;
+  var c = (row && row.comps) || {};
+  if (dir === 'long' && c.d1Trend > 0) score += 25;
+  else if (dir === 'short' && c.d1Trend < 0) score += 25;
+  if (dir === 'long' && c.h4Cascade > 0) score += 25;
+  else if (dir === 'short' && c.h4Cascade < 0) score += 25;
+  var rows1 = tmClosedRows(row && row.rows1h, 3600);
+  if (rows1 && rows1.length >= 52 && typeof ichimoku === 'function'){
+    try {
+      var ic = ichimoku(rows1);
+      var i1 = rows1.length - 1;
+      var a = ic.senkouA[i1], b = ic.senkouB[i1], px = rows1[i1].c;
+      if (isFinite(a) && isFinite(b) && isFinite(px)){
+        var top = Math.max(a, b), bot = Math.min(a, b);
+        if (dir === 'long' && px > top) score += 25;
+        if (dir === 'short' && px < bot) score += 25;
+      }
+    } catch (e) {}
+  }
+  if (extras && extras.body && extras.takerOk) score += 25;
+  return score;
+}
+function tmBarVol(bar){
+  if (!bar) return NaN;
+  var v = bar.v != null ? bar.v : bar.volume;
+  return isFinite(+v) && +v > 0 ? +v : NaN;
+}
+function tmPullbackRvol(rows, dir, level){
+  if (!rows || rows.length < 24 || !isFinite(level)) return 'unread';
+  var start = rows.length - 3, touch = [], prior = [], i, v, tagged;
+  for (i = 0; i < rows.length; i++){
+    v = tmBarVol(rows[i]);
+    if (i >= start){
+      tagged = dir === 'long' ? rows[i].l <= level : rows[i].h >= level;
+      if (!tagged) continue;
+      if (!isFinite(v)) return 'unread';
+      touch.push(v);
+    } else if (i >= start - 20 && isFinite(v)) prior.push(v);
+  }
+  if (!touch.length || prior.length < 8) return 'unread';
+  var avg = prior.reduce(function(a, b){ return a + b; }, 0) / prior.length;
+  if (!(avg > 0)) return 'unread';
+  return touch.reduce(function(a, b){ return a + b; }, 0) / touch.length / avg;
+}
+function tmTriggerRvol(rows){
+  if (!rows || rows.length < 12) return null;
+  var last = tmBarVol(rows[rows.length - 1]);
+  var prior = [], i, v;
+  for (i = Math.max(0, rows.length - 21); i < rows.length - 1; i++){
+    v = tmBarVol(rows[i]);
+    if (isFinite(v)) prior.push(v);
+  }
+  if (!isFinite(last) || prior.length < 8) return null;
+  var avg = prior.reduce(function(a, b){ return a + b; }, 0) / prior.length;
+  if (!(avg > 0)) return null;
+  return last / avg;
+}
+async function tmFundingZ(row){
+  var fn = (typeof binanceFundingHist === 'function') ? binanceFundingHist : (W && W.binanceFundingHist);
+  if (typeof fn !== 'function' || typeof tmBaseOf !== 'function') return null;
+  try {
+    var hist = await fn(tmBaseOf(row) + 'USDT', 30);
+    if (!hist || hist.length < 12) return null;
+    var rates = [], i;
+    for (i = 0; i < hist.length; i++) if (isFinite(+hist[i].rate)) rates.push(+hist[i].rate);
+    if (rates.length < 12) return null;
+    var mean = rates.reduce(function(a, b){ return a + b; }, 0) / rates.length;
+    var varr = 0;
+    for (i = 0; i < rates.length; i++) varr += (rates[i] - mean) * (rates[i] - mean);
+    var sd = Math.sqrt(varr / rates.length);
+    if (!(sd > 0)) return null;
+    return (rates[rates.length - 1] - mean) / sd;
+  } catch (e) { return null; }
+}
+function tm15HeavyAgainst(rows, dir){
+  if (!rows || rows.length < 10) return false;
+  var last = rows[rows.length - 1], prev = rows[rows.length - 2];
+  if (!last || !prev || !(last.v > 0)) return false;
+  var sum = 0, n = 0, i;
+  for (i = Math.max(0, rows.length - 9); i < rows.length - 1; i++){
+    if (rows[i] && rows[i].v > 0){ sum += rows[i].v; n++; }
+  }
+  if (!(n >= 4) || !(last.v > (sum / n) * 1.4)) return false;
+  if (dir === 'long' && last.c < prev.l && last.c < last.o) return true;
+  if (dir === 'short' && last.c > prev.h && last.c > last.o) return true;
+  return false;
+}
+function trendmxValueChipHtml(r){
+  try {
+    var dir = tmDirOf(r);
+    var st = tmValueState(r, dir);
+    if (!st || !st.reasons.length){
+      if (st && isFinite(st.adx4) && isFinite(st.distAtr)) return '<span class="stamp pass" style="margin-left:6px">4h ADX ' + st.adx4.toFixed(0) + ' · ' + st.distAtr.toFixed(1) + 'x EMA21</span>';
+      return '';
+    }
+    return '<span class="stamp bad" style="margin-left:6px">' + escH(st.reasons[0]) + '</span>';
+  } catch (e) { return ''; }
 }
 function trendmxEmaTag(rows4h, dir){
   var rows = tmClosedRows(rows4h, 14400);
@@ -984,6 +1898,8 @@ function trendmxPlanLegacy(inp){
     if (!(risk > 0)) return null;
     var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
     var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
+    var runner = tmRunnerR(rows);
+    var t3 = runner == null ? NaN : ((dir === 'long') ? entry + runner * risk : entry - runner * risk);
     if (typeof hgStructureTargets === 'function'){
       try{
         var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
@@ -994,9 +1910,10 @@ function trendmxPlanLegacy(inp){
       }catch(eTg){}
     }
     var fb = {
-      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
+      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2, t3: t3,
       rr1: Math.abs(t1 - entry) / risk,
       rr2: Math.abs(t2 - entry) / risk,
+      trailBe: (dir === 'long') ? entry + 0.35 * a : entry - 0.35 * a,
       riskPct: risk / entry * 100,
       confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
     };
@@ -1015,6 +1932,9 @@ function trendmxPlanHTML(s){
   return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
     + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
     + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
+    + (isFinite(s.t3) ? (' · T3 <b>' + pxFmt(s.t3) + '</b> (' + (Math.abs(s.t3 - s.entry) / Math.abs(s.entry - s.stop)).toFixed(1) + 'R)') : '')
+    + (isFinite(s.trailBe) ? (' · after T1, example stop <b>' + pxFmt(s.trailBe) + '</b>') : '')
+    + (function(){ var ex = tmExampleSize(s.entry, s.stop); return ex ? (' · example 1% of $10,000 is ' + ex.units.toFixed(4) + ' units ($' + ex.notional.toFixed(0) + '), not an order') : ''; })()
     + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
     + (s.note ? ' — ' + escH(s.note) : '')
@@ -1965,8 +2885,7 @@ function tm15Confirm(rows, dir){
   if (!hs) return false;
   var want = dir === 'long' ? 'up' : 'down';
   var n = rows.length - 1;
-  var shifted = (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12)
-    || (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12);
+  var shifted = hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12;
   var sweep = false;
   for (var i = Math.max(10, rows.length - 12); i < rows.length; i++){
     var prior = rows.slice(i - 10, i);
@@ -1976,10 +2895,8 @@ function tm15Confirm(rows, dir){
     if (dir === 'short' && rows[i].h > hi && rows[i].c < hi) sweep = true;
   }
   if (!(sweep && shifted)) return false;
-  var shiftI = -1, level = null;
-  if (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12){ shiftI = hs.lastCHoCH.i; level = hs.lastCHoCH.level; }
-  if (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12 && hs.lastBOS.i >= shiftI){ shiftI = hs.lastBOS.i; level = hs.lastBOS.level; }
-  if (!(level > 0) || shiftI < 0) return false;
+  var shiftI = hs.lastCHoCH.i, level = hs.lastCHoCH.level;
+  if (!(level > 0) || !(shiftI >= 0)) return false;
   for (var j = shiftI; j < rows.length; j++){
     if (dir === 'long' && rows[j].l <= level && rows[j].c > level) return true;
     if (dir === 'short' && rows[j].h >= level && rows[j].c < level) return true;
@@ -2186,6 +3103,107 @@ async function tmCvdVerdict(row, dir){
   if (p2 < p1 && r2 > r1 && r2 > 1) return 'against';
   return r2 < 1 ? 'with' : 'against';
 }
+async function tmTakerShare(row){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '15m', 3);
+    var series = tk && tk.series;
+    if (!series || !series.length) return null;
+    var ratio = +series[series.length - 1].buySellRatio;
+    if (!(ratio > 0)) return null;
+    return ratio / (1 + ratio);
+  } catch (e) { return null; }
+}
+async function tmOiPercentile(row){
+  if (typeof W.binanceOIHistory !== 'function') return null;
+  try {
+    var hist = await W.binanceOIHistory(tmBaseOf(row) + 'USDT', '4h', 30);
+    if (!hist || !hist.series || hist.series.length < 12) return null;
+    var vals = [], i, v;
+    for (i = 0; i < hist.series.length; i++){
+      v = +hist.series[i].oi;
+      if (v > 0) vals.push(v);
+    }
+    if (vals.length < 12) return null;
+    var now = vals[vals.length - 1], below = 0;
+    for (i = 0; i < vals.length; i++) if (vals[i] <= now) below++;
+    return below / vals.length;
+  } catch (e) { return null; }
+}
+async function tmPerpPremium(row){
+  if (typeof W.binanceBasis !== 'function') return null;
+  try {
+    var b = await W.binanceBasis(tmBaseOf(row) + 'USDT', 'PERPETUAL', '15m', 1);
+    var last = b && (b.latest || (b.series && b.series[b.series.length - 1]));
+    if (!last || !(last.indexPrice > 0) || !isFinite(last.futuresPrice)) return null;
+    return (last.futuresPrice - last.indexPrice) / last.indexPrice;
+  } catch (e) { return null; }
+}
+async function tmBookRatio(row, dir){
+  if (typeof W.binanceDepth !== 'function') return null;
+  try {
+    var book = await W.binanceDepth(tmBaseOf(row) + 'USDT', 20);
+    if (!book || !(book.bidUsd > 0) || !(book.askUsd > 0)) return null;
+    return dir === 'long' ? book.bidUsd / book.askUsd : book.askUsd / book.bidUsd;
+  } catch (e) { return null; }
+}
+async function tmFundingVelocity(row, dir){
+  if (typeof W.binanceFundingHist !== 'function') return null;
+  try {
+    var hist = await W.binanceFundingHist(tmBaseOf(row) + 'USDT', 12);
+    if (!hist || hist.length < 2) return null;
+    var prev = +hist[hist.length - 2].rate;
+    var cur = +hist[hist.length - 1].rate;
+    return tmFundingSpike(prev, cur, dir);
+  } catch (e) { return null; }
+}
+async function tmAbsorption(row, dir){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '1h', 12);
+    var series = tk && tk.series;
+    var bars = tmClosedRows(row.rows1h, 3600);
+    if (!series || series.length < 6 || !bars || bars.length < 6) return null;
+    function ratioAt(ts){
+      var best = null, i, dt, r;
+      for (i = 0; i < series.length; i++){
+        r = +series[i].buySellRatio;
+        dt = Math.abs((+series[i].t) - ts);
+        if (!isFinite(r)) continue;
+        if (best == null || dt < best.dt) best = { dt: dt, r: r };
+      }
+      if (!best || best.dt > 3600) return NaN;
+      return best.r;
+    }
+    var win = bars.slice(-6);
+    var dip = win[0], i;
+    for (i = 1; i < win.length; i++){
+      if (dir === 'long' && win[i].l < dip.l) dip = win[i];
+      if (dir === 'short' && win[i].h > dip.h) dip = win[i];
+    }
+    var before = null;
+    for (i = 0; i < bars.length; i++) if (bars[i] === dip && i > 0) before = bars[i - 1];
+    if (!before) return null;
+    var atDip = ratioAt(dip.t);
+    var atBefore = ratioAt(before.t);
+    if (!isFinite(atDip) || !isFinite(atBefore)) return null;
+    if (dir === 'long') return atDip > atBefore;
+    return atDip < atBefore;
+  } catch (e) { return null; }
+}
+async function tmCvdSlope(row, dir){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '15m', 8);
+    var series = tk && tk.series;
+    if (!series || series.length < 6) return null;
+    var first = +series[series.length - 6].buySellRatio;
+    var last = +series[series.length - 1].buySellRatio;
+    if (!isFinite(first) || !isFinite(last)) return null;
+    var slope = last - first;
+    return dir === 'long' ? slope >= 0 : slope <= 0;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
@@ -2309,6 +3327,10 @@ async function trendmxFormOne(ticket, row, ctx){
   var rows1 = tmClosedRows(row && row.rows1h, 3600);
   var rowsD = tmClosedRows(row && row.rows1d, 86400);
   if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
+  var valueGate = tmValueState(row, dir);
+  if (valueGate && valueGate.reasons){
+    for (var vg = 0; vg < valueGate.reasons.length; vg++) hard.push(valueGate.reasons[vg]);
+  }
   var px = rows4[rows4.length - 1].c;
   var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
   var want = dir === 'long' ? 'up' : 'down';
@@ -2336,6 +3358,64 @@ async function trendmxFormOne(ticket, row, ctx){
   if (!isFinite(vwap)) hard.push('VWAP unread');
   else if (dir === 'long' && !(px > vwap)) hard.push('below VWAP');
   else if (dir === 'short' && !(px < vwap)) hard.push('above VWAP');
+  var wave1 = rows1 ? tmWaveOk(rows1, dir) : null;
+  var st4 = tmSuperTrend(rows4, 10, 3);
+  var st1 = rows1 ? tmSuperTrend(rows1, 10, 3) : null;
+  if (!st4 || !st1) hard.push('supertrend unread');
+  else if (dir === 'long' && !(st4.up && st1.up)) hard.push('supertrend against');
+  else if (dir === 'short' && (st4.up || st1.up)) hard.push('supertrend against');
+  var cmf = rows1 ? tmCmf(rows1, 20) : null;
+  if (cmf == null) hard.push('money flow unread');
+  else if (dir === 'long' && cmf < 0.05) hard.push('money flow ' + cmf.toFixed(2) + ' is under 0.05');
+  else if (dir === 'short' && cmf > -0.05) hard.push('money flow ' + cmf.toFixed(2) + ' is above -0.05');
+  var ker = rows1 ? tmKernel(rows1, 24, 8) : null;
+  if (!ker) hard.push('kernel unread');
+  else if (dir === 'long' && !(ker.slopeUp && ker.above)) hard.push('kernel is not rising under price');
+  else if (dir === 'short' && !(!ker.slopeUp && !ker.above)) hard.push('kernel is not falling over price');
+  var coiled = rows1 ? tmSqueezeHigh(rows1) : null;
+  if (coiled == null) hard.push('squeeze unread');
+  else if (coiled) hard.push('still inside the high squeeze');
+  var qqe = rows1 ? tmQqe(rows1, dir) : null;
+  if (qqe == null) hard.push('qqe unread');
+  else if (!qqe) hard.push('qqe is not with the trade');
+  var hull = rows1 ? tmHullRising(rows1, 21) : null;
+  if (hull == null) hard.push('hull unread');
+  else if (dir === 'long' && !hull) hard.push('hull slope is down');
+  else if (dir === 'short' && hull) hard.push('hull slope is up');
+  var vfi = rows1 ? tmVfi(rows1, 20, 0.2) : null;
+  if (vfi == null) hard.push('volume flow unread');
+  else if (dir === 'long' && !(vfi > 0)) hard.push('volume flow is not in');
+  else if (dir === 'short' && !(vfi < 0)) hard.push('volume flow is not out');
+  var diverged = rows1 ? tmWtDiverging(rows1, dir) : null;
+  if (diverged == null) hard.push('wavetrend divergence unread');
+  else if (diverged) hard.push('wavetrend is diverging');
+  var block = rows1 ? tmFreshOb(rows1, dir) : null;
+  if (block == null) hard.push('order block unread');
+  else if (!block) hard.push('not at a fresh order block');
+  var magic = rows1 ? tmTrendMagic(rows1, dir) : null;
+  if (magic == null) hard.push('trend magic unread');
+  else if (!magic) hard.push('trend magic is against the trade');
+  var alpha = rows1 ? tmAlpha(rows1, dir) : null;
+  if (alpha == null) hard.push('alphatrend unread');
+  else if (!alpha) hard.push('alphatrend is against the trade');
+  var band = rows1 ? tmRangeFilter(rows1, dir) : null;
+  if (band == null) hard.push('range filter unread');
+  else if (!band) hard.push('range filter is against the trade');
+  var ml = rows1 ? tmLorentz(rows1, dir) : null;
+  if (ml == null) hard.push('lorentz unread');
+  else if (!ml) hard.push('lorentz is not with the trade');
+  var half = rows1 ? tmHalfTrend(rows1, dir) : null;
+  if (half == null) hard.push('halftrend unread');
+  else if (!half) hard.push('halftrend is against the trade');
+  var boom = rows1 ? tmWae(rows1, dir) : null;
+  if (boom == null) hard.push('explosion unread');
+  else if (!boom) hard.push('no explosion above the dead zone');
+  var mom = rows1 ? tmSqueezeMom(rows1, dir) : null;
+  if (mom == null) hard.push('squeeze momentum unread');
+  else if (!mom) hard.push('momentum is not accelerating with the trade');
+  var noise = rows1 ? tmDamiani(rows1) : null;
+  if (noise == null) hard.push('volatility unread');
+  else if (!noise) hard.push('chop, volatility is not above the noise');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -2343,14 +3423,23 @@ async function trendmxFormOne(ticket, row, ctx){
   var a = tmAtrLast(rows4);
   var risk = Math.abs(+ticket.entry - +ticket.stop);
   if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) hard.push('stop outside ATR');
+  var hot = tmParkinsonHot(rows4);
+  if (!hot) hard.push('volatility unread');
+  else if (hot.hot && risk < 1.45 * a) hard.push('stop is inside 1.45 ATR while volatility is elevated');
   if (typeof row.fundingPct !== 'number' || !isFinite(row.fundingPct)) hard.push('funding unread');
   else if (dir === 'long' && row.fundingPct >= 0.04) hard.push('funding crowded long');
   else if (dir === 'short' && row.fundingPct <= -0.04) hard.push('funding crowded short');
   if (tmBaseOf(row) !== 'BTC'){
     var coinRet = tmFourHourReturn(row.rows4h);
     if (coinRet == null || !ctx || ctx.btcRet == null) hard.push('relative strength unread');
-    else if (dir === 'long' && (coinRet - ctx.btcRet) < -0.01) hard.push('weaker than BTC');
-    else if (dir === 'short' && (coinRet - ctx.btcRet) > 0.01) hard.push('stronger than BTC');
+    else if (dir === 'long' && (coinRet - ctx.btcRet) < 0.015) hard.push('not leading BTC');
+    else if (dir === 'short' && (ctx.btcRet - coinRet) < 0.015) hard.push('not lagging BTC');
+    if (ctx && ctx.btcRows){
+      var ratio = tmAltBtcLowerLow(rows4, ctx.btcRows);
+      if (!ratio) hard.push('ALT/BTC unread');
+      else if (dir === 'long' && ratio.lowerLow) hard.push('ALT/BTC made a lower low');
+      else if (dir === 'short' && ratio.higherHigh) hard.push('ALT/BTC made a higher high');
+    }
   }
   if (row.mark > 0 && px > 0){
     var basis = (row.mark - px) / px;
@@ -2375,6 +3464,11 @@ async function trendmxFormOne(ticket, row, ctx){
   if (ctx && ctx.totalOk === true && dir === 'long' && (ctx.totalFalling || ctx.altsFalling) && tmBaseOf(row) !== 'BTC') hard.push('TOTAL / alts falling');
   if (ctx && ctx.macroOk === true && dir === 'long' && ctx.riskOff) hard.push('macro risk-off');
   if (ctx && ctx.macroOk === true && dir === 'short' && ctx.riskOn) hard.push('macro risk-on');
+  if (tmSettlementFreeze()) hard.push('funding settlement window');
+  if (tmAsiaChop()) hard.push('asian session');
+  var room = tmLiquidityRoom(rows4, dir, +ticket.entry, risk);
+  if (room == null) hard.push('liquidity map unread');
+  else if (!room.open) hard.push('next pool is only ' + room.room.toFixed(1) + 'R away');
   if (hard.length) return hard;
 
   var weeks = tmWeeklyRows(row.rows1d || rowsD);
@@ -2421,9 +3515,17 @@ async function trendmxFormOne(ticket, row, ctx){
     tm5mVolumeOk(row, dir),
     tmMicroOk(row, dir),
     tmTradingView(row),
-    tmTopTrader(row)
+    tmTopTrader(row),
+    tmFundingZ(row),
+    tmTakerShare(row),
+    tmOiPercentile(row),
+    tmPerpPremium(row),
+    tmBookRatio(row, dir),
+    tmFundingVelocity(row, dir),
+    tmAbsorption(row, dir),
+    tmCvdSlope(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15], slope = net[16];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -2431,6 +3533,69 @@ async function trendmxFormOne(ticket, row, ctx){
   else if (dir === 'short' && !(oi.priceDown && oi.oiUp)) hard.push('OI not confirming the drop');
   if (!m15) hard.push('15m unread');
   else if (!tm15Confirm(m15, dir)) hard.push('15m no sweep and CHOCH');
+  else if (tm15HeavyAgainst(m15, dir)) hard.push('15m breaking against on volume');
+  if (m15){
+    var trig = tmTriggerRvol(m15);
+    if (trig == null) hard.push('15m trigger volume unread');
+    else if (trig < 1.6) hard.push('15m trigger volume ' + trig.toFixed(2) + 'x is under 1.6x');
+    var body = tmBodyCommit(m15, dir);
+    if (body == null) hard.push('15m body commit unread');
+    else if (!body) hard.push('15m body did not close past the swing');
+    var gap = tmDisplacementFvg(m15, dir);
+    if (gap == null) hard.push('15m displacement unread');
+    else if (!gap) hard.push('15m displacement gap missing');
+    var soup = tmTurtleReclaim(m15, dir);
+    if (soup == null) hard.push('sweep unread');
+    else if (!soup) hard.push('no sweep and reclaim on the close');
+    var stalled = tmStalled(m15, dir);
+    if (stalled == null) hard.push('15m progress unread');
+    else if (stalled) hard.push('15m has not expanded in 3 bars');
+    var wave15 = tmWaveOk(m15, dir);
+    if (wave1 !== true && wave15 !== true){
+      if (wave1 == null && wave15 == null) hard.push('wavetrend unread');
+      else hard.push('no wavetrend cross from the extreme');
+    }
+    var ut = tmUtBot(m15, 2);
+    if (ut == null) hard.push('ut bot unread');
+    else if (dir === 'long' && ut !== 'buy') hard.push('ut bot is not long');
+    else if (dir === 'short' && ut !== 'sell') hard.push('ut bot is not short');
+  }
+  if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (takerShare == null) hard.push('taker share unread');
+  else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
+  else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  if (m15 && takerShare != null && typeof atr === 'function'){
+    var a15 = atr(m15, 14);
+    var atr15 = a15 && a15.length ? a15[a15.length - 1] : NaN;
+    var trap = tmEffortTrap(m15[m15.length - 1], atr15, takerShare, dir);
+    if (trap == null) hard.push('effort unread');
+    else if (trap) hard.push('effort without result');
+  }
+  if (fundZ == null || oiPct == null) hard.push('crowding density unread');
+  else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
+  else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');
+  if (prem == null) hard.push('perp premium unread');
+  else if (dir === 'long' && prem > 0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is rich');
+  else if (dir === 'short' && prem < -0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is cheap');
+  if (book == null) hard.push('book unread');
+  else if (book < 1.35) hard.push('book ' + book.toFixed(2) + 'x is under 1.35x');
+  if (fundVel == null) hard.push('funding velocity unread');
+  else if (fundVel) hard.push('funding is accelerating against the trade');
+  if (absorb == null) hard.push('absorption unread');
+  else if (!absorb) hard.push('the pullback was not absorbed');
+  if (slope == null) hard.push('delta slope unread');
+  else if (!slope) hard.push('5-bar delta is against the trade');
+  if (m15){
+    var chand = tmChandelier(m15, dir, +ticket.entry);
+    if (chand != null) ticket.chandelier = chand;
+  }
+  var syn = tmSynergy(row, dir, {
+    body: m15 ? tmBodyCommit(m15, dir) === true : false,
+    takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
+  });
+  row.tmSynergy = syn;
+  if (syn < 85) hard.push('synergy ' + syn + '% is under 85%');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);
@@ -2475,6 +3640,9 @@ async function trendmxFormOne(ticket, row, ctx){
   var got = votes.filter(function(v){ return v.v > 0; }).length;
   if (got < 8) return ['confluence ' + got + '/' + votes.length + ', need 8'];
   ticket.confluence = got + '/' + votes.length;
+  ticket.synergy = row.tmSynergy;
+  var atr4 = tmAtrLast(rows4);
+  if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
   return [];
 }
 
@@ -2564,9 +3732,11 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
   var ctx = ctxReady || await trendmxLoadContext(rows);
   if (!ctx.ethOk) tmStampEth(ctx, rows);
   ctx.btcRet = null;
+  ctx.btcRows = null;
   if (Array.isArray(rows)){
     for (var bi = 0; bi < rows.length; bi++){
       if (tmBaseOf(rows[bi]) !== 'BTC') continue;
+      ctx.btcRows = tmClosedRows(rows[bi].rows4h, 14400);
       ctx.btcRet = tmFourHourReturn(rows[bi].rows4h);
       if (ctx.btcRet != null) break;
     }
@@ -2589,6 +3759,9 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
         if (bad.length) out.held.stack.push({ sym: ticket.sym, reasons: bad });
         else {
           ticket.note = (ticket.note || '') + (ticket.confluence ? (' · confluence ' + ticket.confluence) : ' · full stack');
+          if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
+          if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
+          if (isFinite(ticket.chandelier)) ticket.note += ' · chandelier ' + ticket.chandelier;
           out.push(ticket);
         }
       }
@@ -2791,7 +3964,7 @@ function trendmxGoldenDeskHTML(golden){
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade, then the crypto formation: structure, relative strength versus BTC, open interest, CVD, the 15m sweep, and at least 8 confluence votes with none against.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade. The 4h RSI has to sit on the bull floor for a long or the bear ceiling for a short, the pullback has to tag the anchored VWAP from the last 4h swing, and an alt long has to be leading Bitcoin by at least 1.5 percent with no lower low in ALT/BTC. The 15m body has to close past the swing by a quarter of its own ATR, and the real 15m taker share has to be at least 60 percent on that side. Open interest has to rise with the break. The four reads have to add to at least 85 percent. A missing taker print is not 50 percent, and missing open interest is not new buying. Then structure, relative strength versus BTC, open interest, CVD, and at least 8 confluence votes with none against.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
@@ -3246,10 +4419,8 @@ function trendmxLimitClasses(rows){
       out.clean.push(item);
     } else {
       /* the conviction class orders on its OWN claim: trend strength.
-         Composite first, the ADX strength indicator breaking ties (a ±4 at
-         ADX 38 is a stronger trend than a ±4 at 25); the gate count is the
-         other class's evidence and does not order this desk. */
-      item.rank = Math.abs(r.score) * 10 + (fin(r.adx) ? r.adx / 10 : 0);
+         Composite first. ADX breaks ties only inside 22-38. Above 44 is exhaustion and does not outrank a healthy trend. */
+      item.rank = Math.abs(r.score) * 10 + (fin(r.adx) ? (r.adx > 44 ? 0 : Math.min(r.adx, 38) / 10) : 0);
       item.conv = conv;
       out.conv.push(item);
     }
@@ -3572,7 +4743,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxFundChipHtml(r) + trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan) + trendmxChopChipHtml(r) + trendmxPillarHtml(r)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxValueChipHtml(r) + trendmxFundChipHtml(r) + trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan) + trendmxChopChipHtml(r) + trendmxPillarHtml(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
@@ -3944,6 +5115,15 @@ function trendmxCrownPanelHTML(state){
     if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
     if (isFinite(+pfR.dvolVal)) tech.push('DVOL ' + (+pfR.dvolVal).toFixed(1) + (pfR.dvolRegime ? ' ' + String(pfR.dvolRegime) : ''));
+    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb){
+      var pineBits = [];
+      if (pfR.pineLorKnn) pineBits.push('LorKNN ' + pfR.pineLorKnn);
+      if (pfR.pineHalfTrend) pineBits.push('half-trend ' + pfR.pineHalfTrend);
+      if (pfR.pineSqueeze) pineBits.push('squeeze ' + pfR.pineSqueeze);
+      if (pfR.pineSmf) pineBits.push('SMF ' + pfR.pineSmf);
+      if (pfR.pineMsb) pineBits.push('MSB ' + pfR.pineMsb);
+      tech.push('PINE ' + pineBits.join(' | '));
+    }
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
     html += dim('TECHNICAL', Math.abs(+crown.score || 0) >= 2 ? 'ALIGNED' : 'NEUTRAL', '', tech);
     var sent = [];
@@ -4100,6 +5280,24 @@ function tmStructureDir(rows){
     if (!isFinite(a) || !isFinite(b) || a === b) return null;
     return a > b ? 'up' : 'down';
   }catch(e){ return null; }
+}
+
+/* hg-v1187: THE CRYPTO PINE PORTS — five bar-only Pine strategies read off
+   the row's own 4h tape, returned as a light mark bag. Record-only: the
+   perfect predicate ignores them and the forward ledger decides whether
+   any of them separates. Each unreadable signal is null (the honest
+   third state). */
+function trendmxPineMarks(rows){
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null };
+  try{
+    if (!Array.isArray(rows) || rows.length < 30) return out;
+    if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
+    if (typeof W.pineHalfTrend === 'function'){ var h = W.pineHalfTrend(rows, {}); if (h && h.dir) out.ht = String(h.dir).toLowerCase(); }
+    if (typeof W.pineSqueezeMomentum === 'function'){ var s = W.pineSqueezeMomentum(rows, {}); if (s && s.dir) out.sqz = String(s.dir).toLowerCase(); }
+    if (typeof W.pineSmartMoneyFlow === 'function'){ var f = W.pineSmartMoneyFlow(rows, {}); if (f && f.dir) out.smf = String(f.dir).toLowerCase(); }
+    if (typeof W.pineMsbOb === 'function'){ var m = W.pineMsbOb(rows, {}); if (m && m.dir) out.msb = String(m.dir).toLowerCase(); }
+  }catch(e){ }
+  return out;
 }
 
 async function trendmxPerfectEvidencePass(rows){
@@ -4275,6 +5473,19 @@ async function trendmxPerfectEvidencePass(rows){
           }
         }
       }catch(eNf2){ }
+      /* hg-v1187: the crypto Pine ports ride the reads bag as record-only
+         evidence, read off the row's own 4h tape. */
+      try{
+        var pm = trendmxPineMarks(r.rows4h);
+        if (pm){
+          reads.pineLorKnn = pm.lor;
+          reads.pineHalfTrend = pm.ht;
+          reads.pineSqueeze = pm.sqz;
+          reads.pineSmf = pm.smf;
+          reads.pineMsb = pm.msb;
+          r.pineMarks = pm;
+        }
+      }catch(ePine){ }
       try{
         if (typeof W.hgObtcPerfectFormation === 'function'){
           var pick = { row: Object.assign({}, r, { entry: plan.entry, stop: plan.stop, t1: plan.t1, dir: dir }), tier: 'clean' };
@@ -4871,6 +6082,45 @@ function mountTrendMatrix(el){
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxSetupGrade = trendmxSetupGrade;
+W.tmValueState = tmValueState;
+W.tmBodyCommit = tmBodyCommit;
+W.tmExampleSize = tmExampleSize;
+W.tmSynergy = tmSynergy;
+W.tmDisplacementFvg = tmDisplacementFvg;
+W.tmParkinsonHot = tmParkinsonHot;
+W.tmHurst = tmHurst;
+W.tmTurtleReclaim = tmTurtleReclaim;
+W.tmPocShift = tmPocShift;
+W.tmFundingSpike = tmFundingSpike;
+W.tmSettlementFreeze = tmSettlementFreeze;
+W.tmLiquidityRoom = tmLiquidityRoom;
+W.tmEffortTrap = tmEffortTrap;
+W.tmStalled = tmStalled;
+W.tmRunnerR = tmRunnerR;
+W.tmAsiaChop = tmAsiaChop;
+W.tmChandelier = tmChandelier;
+W.tmWaveOk = tmWaveOk;
+W.tmKernel = tmKernel;
+W.tmSuperTrend = tmSuperTrend;
+W.tmCmf = tmCmf;
+W.tmSqueezeHigh = tmSqueezeHigh;
+W.tmQqe = tmQqe;
+W.tmHullRising = tmHullRising;
+W.tmVfi = tmVfi;
+W.tmWtDiverging = tmWtDiverging;
+W.tmFreshOb = tmFreshOb;
+W.tmUtBot = tmUtBot;
+W.tmTrendMagic = tmTrendMagic;
+W.tmAlpha = tmAlpha;
+W.tmRangeFilter = tmRangeFilter;
+W.tmLorentz = tmLorentz;
+W.tmHalfTrend = tmHalfTrend;
+W.tmWae = tmWae;
+W.tmSqueezeMom = tmSqueezeMom;
+W.tmDamiani = tmDamiani;
+W.tmCvdSlope = tmCvdSlope;
+W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

@@ -334,6 +334,45 @@
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxSetupGrade = trendmxSetupGrade;
+W.tmValueState = tmValueState;
+W.tmBodyCommit = tmBodyCommit;
+W.tmExampleSize = tmExampleSize;
+W.tmSynergy = tmSynergy;
+W.tmDisplacementFvg = tmDisplacementFvg;
+W.tmParkinsonHot = tmParkinsonHot;
+W.tmHurst = tmHurst;
+W.tmTurtleReclaim = tmTurtleReclaim;
+W.tmPocShift = tmPocShift;
+W.tmFundingSpike = tmFundingSpike;
+W.tmSettlementFreeze = tmSettlementFreeze;
+W.tmLiquidityRoom = tmLiquidityRoom;
+W.tmEffortTrap = tmEffortTrap;
+W.tmStalled = tmStalled;
+W.tmRunnerR = tmRunnerR;
+W.tmAsiaChop = tmAsiaChop;
+W.tmChandelier = tmChandelier;
+W.tmWaveOk = tmWaveOk;
+W.tmKernel = tmKernel;
+W.tmSuperTrend = tmSuperTrend;
+W.tmCmf = tmCmf;
+W.tmSqueezeHigh = tmSqueezeHigh;
+W.tmQqe = tmQqe;
+W.tmHullRising = tmHullRising;
+W.tmVfi = tmVfi;
+W.tmWtDiverging = tmWtDiverging;
+W.tmFreshOb = tmFreshOb;
+W.tmUtBot = tmUtBot;
+W.tmTrendMagic = tmTrendMagic;
+W.tmAlpha = tmAlpha;
+W.tmRangeFilter = tmRangeFilter;
+W.tmLorentz = tmLorentz;
+W.tmHalfTrend = tmHalfTrend;
+W.tmWae = tmWae;
+W.tmSqueezeMom = tmSqueezeMom;
+W.tmDamiani = tmDamiani;
+W.tmCvdSlope = tmCvdSlope;
+W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

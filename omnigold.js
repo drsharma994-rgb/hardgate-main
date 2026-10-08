@@ -13903,6 +13903,16 @@ terse status, and never launches a first-time scan on a global refresh.
          buttons already say WATCH ONLY (hg-v1003), and it can never be the
          pick. Unstamped rows (other callers' lists) are untouched. */
       if (c.fundGate && (c.fundGate.refuse === true || c.fundGate.demote === true)) continue;
+      if (c.pineBlock) continue;
+      try {
+        var instFn = gfn('hgGoldInstBlocks');
+        if (instFn){
+          var ogRows = (__og && __og.lastRows) ? (__og.lastRows.m15 || __og.lastRows.scalp || []) : [];
+          var ogMacro = (__og && __og.shared && __og.shared.macro) || null;
+          var whyI = instFn(c.dir, ogRows, ogMacro, { desk: 'omnigold', horizon: horizon });
+          if (whyI){ c.instBlock = whyI; continue; }
+        }
+      } catch (eInst) {}
       if (!hgOgLeadMeasOk(c)) continue;
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
@@ -14735,7 +14745,10 @@ terse status, and never launches a first-time scan on a global refresh.
             var m = {}, any = false, k, fv, im;
             if (ogRdFv && ogRdCtx){ fv = ogRdFv(ogRdCtx, c.dir); for (k in fv){ if (Object.prototype.hasOwnProperty.call(fv, k) && (fv[k] === true || fv[k] === false)){ m[k] = fv[k]; any = true; } } }
             if (ogRdIr){ im = ogRdIm(ogRdIr, c.dir); for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } } c.indReads = ogRdIr; }
-            if (ogRdPs){ var pm = ogRdPm(ogRdPs, c.dir); for (k in pm){ if (Object.prototype.hasOwnProperty.call(pm, k) && (pm[k] === true || pm[k] === false)){ m[k] = pm[k]; any = true; } } c.pineStates = ogRdPs; }
+            if (ogRdPs){ var pm = ogRdPm(ogRdPs, c.dir); for (k in pm){ if (Object.prototype.hasOwnProperty.call(pm, k) && (pm[k] === true || pm[k] === false)){ m[k] = pm[k]; any = true; } } c.pineStates = ogRdPs;
+              var blk = gfn('pineGoldBlocksLead');
+              if (blk){ var whyP = blk(ogRdPs, c.dir); if (whyP) c.pineBlock = whyP; }
+            }
             return any ? m : undefined;
           } catch (eRo) { return undefined; }
         }

@@ -84,8 +84,7 @@ function tm15Confirm(rows, dir){
   if (!hs) return false;
   var want = dir === 'long' ? 'up' : 'down';
   var n = rows.length - 1;
-  var shifted = (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12)
-    || (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12);
+  var shifted = hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12;
   var sweep = false;
   for (var i = Math.max(10, rows.length - 12); i < rows.length; i++){
     var prior = rows.slice(i - 10, i);
@@ -95,10 +94,8 @@ function tm15Confirm(rows, dir){
     if (dir === 'short' && rows[i].h > hi && rows[i].c < hi) sweep = true;
   }
   if (!(sweep && shifted)) return false;
-  var shiftI = -1, level = null;
-  if (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12){ shiftI = hs.lastCHoCH.i; level = hs.lastCHoCH.level; }
-  if (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12 && hs.lastBOS.i >= shiftI){ shiftI = hs.lastBOS.i; level = hs.lastBOS.level; }
-  if (!(level > 0) || shiftI < 0) return false;
+  var shiftI = hs.lastCHoCH.i, level = hs.lastCHoCH.level;
+  if (!(level > 0) || !(shiftI >= 0)) return false;
   for (var j = shiftI; j < rows.length; j++){
     if (dir === 'long' && rows[j].l <= level && rows[j].c > level) return true;
     if (dir === 'short' && rows[j].h >= level && rows[j].c < level) return true;
@@ -305,6 +302,107 @@ async function tmCvdVerdict(row, dir){
   if (p2 < p1 && r2 > r1 && r2 > 1) return 'against';
   return r2 < 1 ? 'with' : 'against';
 }
+async function tmTakerShare(row){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '15m', 3);
+    var series = tk && tk.series;
+    if (!series || !series.length) return null;
+    var ratio = +series[series.length - 1].buySellRatio;
+    if (!(ratio > 0)) return null;
+    return ratio / (1 + ratio);
+  } catch (e) { return null; }
+}
+async function tmOiPercentile(row){
+  if (typeof W.binanceOIHistory !== 'function') return null;
+  try {
+    var hist = await W.binanceOIHistory(tmBaseOf(row) + 'USDT', '4h', 30);
+    if (!hist || !hist.series || hist.series.length < 12) return null;
+    var vals = [], i, v;
+    for (i = 0; i < hist.series.length; i++){
+      v = +hist.series[i].oi;
+      if (v > 0) vals.push(v);
+    }
+    if (vals.length < 12) return null;
+    var now = vals[vals.length - 1], below = 0;
+    for (i = 0; i < vals.length; i++) if (vals[i] <= now) below++;
+    return below / vals.length;
+  } catch (e) { return null; }
+}
+async function tmPerpPremium(row){
+  if (typeof W.binanceBasis !== 'function') return null;
+  try {
+    var b = await W.binanceBasis(tmBaseOf(row) + 'USDT', 'PERPETUAL', '15m', 1);
+    var last = b && (b.latest || (b.series && b.series[b.series.length - 1]));
+    if (!last || !(last.indexPrice > 0) || !isFinite(last.futuresPrice)) return null;
+    return (last.futuresPrice - last.indexPrice) / last.indexPrice;
+  } catch (e) { return null; }
+}
+async function tmBookRatio(row, dir){
+  if (typeof W.binanceDepth !== 'function') return null;
+  try {
+    var book = await W.binanceDepth(tmBaseOf(row) + 'USDT', 20);
+    if (!book || !(book.bidUsd > 0) || !(book.askUsd > 0)) return null;
+    return dir === 'long' ? book.bidUsd / book.askUsd : book.askUsd / book.bidUsd;
+  } catch (e) { return null; }
+}
+async function tmFundingVelocity(row, dir){
+  if (typeof W.binanceFundingHist !== 'function') return null;
+  try {
+    var hist = await W.binanceFundingHist(tmBaseOf(row) + 'USDT', 12);
+    if (!hist || hist.length < 2) return null;
+    var prev = +hist[hist.length - 2].rate;
+    var cur = +hist[hist.length - 1].rate;
+    return tmFundingSpike(prev, cur, dir);
+  } catch (e) { return null; }
+}
+async function tmAbsorption(row, dir){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '1h', 12);
+    var series = tk && tk.series;
+    var bars = tmClosedRows(row.rows1h, 3600);
+    if (!series || series.length < 6 || !bars || bars.length < 6) return null;
+    function ratioAt(ts){
+      var best = null, i, dt, r;
+      for (i = 0; i < series.length; i++){
+        r = +series[i].buySellRatio;
+        dt = Math.abs((+series[i].t) - ts);
+        if (!isFinite(r)) continue;
+        if (best == null || dt < best.dt) best = { dt: dt, r: r };
+      }
+      if (!best || best.dt > 3600) return NaN;
+      return best.r;
+    }
+    var win = bars.slice(-6);
+    var dip = win[0], i;
+    for (i = 1; i < win.length; i++){
+      if (dir === 'long' && win[i].l < dip.l) dip = win[i];
+      if (dir === 'short' && win[i].h > dip.h) dip = win[i];
+    }
+    var before = null;
+    for (i = 0; i < bars.length; i++) if (bars[i] === dip && i > 0) before = bars[i - 1];
+    if (!before) return null;
+    var atDip = ratioAt(dip.t);
+    var atBefore = ratioAt(before.t);
+    if (!isFinite(atDip) || !isFinite(atBefore)) return null;
+    if (dir === 'long') return atDip > atBefore;
+    return atDip < atBefore;
+  } catch (e) { return null; }
+}
+async function tmCvdSlope(row, dir){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '15m', 8);
+    var series = tk && tk.series;
+    if (!series || series.length < 6) return null;
+    var first = +series[series.length - 6].buySellRatio;
+    var last = +series[series.length - 1].buySellRatio;
+    if (!isFinite(first) || !isFinite(last)) return null;
+    var slope = last - first;
+    return dir === 'long' ? slope >= 0 : slope <= 0;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
@@ -428,6 +526,10 @@ async function trendmxFormOne(ticket, row, ctx){
   var rows1 = tmClosedRows(row && row.rows1h, 3600);
   var rowsD = tmClosedRows(row && row.rows1d, 86400);
   if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
+  var valueGate = tmValueState(row, dir);
+  if (valueGate && valueGate.reasons){
+    for (var vg = 0; vg < valueGate.reasons.length; vg++) hard.push(valueGate.reasons[vg]);
+  }
   var px = rows4[rows4.length - 1].c;
   var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
   var want = dir === 'long' ? 'up' : 'down';

@@ -15,6 +15,64 @@
   if (!isFinite(vwap)) hard.push('VWAP unread');
   else if (dir === 'long' && !(px > vwap)) hard.push('below VWAP');
   else if (dir === 'short' && !(px < vwap)) hard.push('above VWAP');
+  var wave1 = rows1 ? tmWaveOk(rows1, dir) : null;
+  var st4 = tmSuperTrend(rows4, 10, 3);
+  var st1 = rows1 ? tmSuperTrend(rows1, 10, 3) : null;
+  if (!st4 || !st1) hard.push('supertrend unread');
+  else if (dir === 'long' && !(st4.up && st1.up)) hard.push('supertrend against');
+  else if (dir === 'short' && (st4.up || st1.up)) hard.push('supertrend against');
+  var cmf = rows1 ? tmCmf(rows1, 20) : null;
+  if (cmf == null) hard.push('money flow unread');
+  else if (dir === 'long' && cmf < 0.05) hard.push('money flow ' + cmf.toFixed(2) + ' is under 0.05');
+  else if (dir === 'short' && cmf > -0.05) hard.push('money flow ' + cmf.toFixed(2) + ' is above -0.05');
+  var ker = rows1 ? tmKernel(rows1, 24, 8) : null;
+  if (!ker) hard.push('kernel unread');
+  else if (dir === 'long' && !(ker.slopeUp && ker.above)) hard.push('kernel is not rising under price');
+  else if (dir === 'short' && !(!ker.slopeUp && !ker.above)) hard.push('kernel is not falling over price');
+  var coiled = rows1 ? tmSqueezeHigh(rows1) : null;
+  if (coiled == null) hard.push('squeeze unread');
+  else if (coiled) hard.push('still inside the high squeeze');
+  var qqe = rows1 ? tmQqe(rows1, dir) : null;
+  if (qqe == null) hard.push('qqe unread');
+  else if (!qqe) hard.push('qqe is not with the trade');
+  var hull = rows1 ? tmHullRising(rows1, 21) : null;
+  if (hull == null) hard.push('hull unread');
+  else if (dir === 'long' && !hull) hard.push('hull slope is down');
+  else if (dir === 'short' && hull) hard.push('hull slope is up');
+  var vfi = rows1 ? tmVfi(rows1, 20, 0.2) : null;
+  if (vfi == null) hard.push('volume flow unread');
+  else if (dir === 'long' && !(vfi > 0)) hard.push('volume flow is not in');
+  else if (dir === 'short' && !(vfi < 0)) hard.push('volume flow is not out');
+  var diverged = rows1 ? tmWtDiverging(rows1, dir) : null;
+  if (diverged == null) hard.push('wavetrend divergence unread');
+  else if (diverged) hard.push('wavetrend is diverging');
+  var block = rows1 ? tmFreshOb(rows1, dir) : null;
+  if (block == null) hard.push('order block unread');
+  else if (!block) hard.push('not at a fresh order block');
+  var magic = rows1 ? tmTrendMagic(rows1, dir) : null;
+  if (magic == null) hard.push('trend magic unread');
+  else if (!magic) hard.push('trend magic is against the trade');
+  var alpha = rows1 ? tmAlpha(rows1, dir) : null;
+  if (alpha == null) hard.push('alphatrend unread');
+  else if (!alpha) hard.push('alphatrend is against the trade');
+  var band = rows1 ? tmRangeFilter(rows1, dir) : null;
+  if (band == null) hard.push('range filter unread');
+  else if (!band) hard.push('range filter is against the trade');
+  var ml = rows1 ? tmLorentz(rows1, dir) : null;
+  if (ml == null) hard.push('lorentz unread');
+  else if (!ml) hard.push('lorentz is not with the trade');
+  var half = rows1 ? tmHalfTrend(rows1, dir) : null;
+  if (half == null) hard.push('halftrend unread');
+  else if (!half) hard.push('halftrend is against the trade');
+  var boom = rows1 ? tmWae(rows1, dir) : null;
+  if (boom == null) hard.push('explosion unread');
+  else if (!boom) hard.push('no explosion above the dead zone');
+  var mom = rows1 ? tmSqueezeMom(rows1, dir) : null;
+  if (mom == null) hard.push('squeeze momentum unread');
+  else if (!mom) hard.push('momentum is not accelerating with the trade');
+  var noise = rows1 ? tmDamiani(rows1) : null;
+  if (noise == null) hard.push('volatility unread');
+  else if (!noise) hard.push('chop, volatility is not above the noise');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -22,14 +80,23 @@
   var a = tmAtrLast(rows4);
   var risk = Math.abs(+ticket.entry - +ticket.stop);
   if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) hard.push('stop outside ATR');
+  var hot = tmParkinsonHot(rows4);
+  if (!hot) hard.push('volatility unread');
+  else if (hot.hot && risk < 1.45 * a) hard.push('stop is inside 1.45 ATR while volatility is elevated');
   if (typeof row.fundingPct !== 'number' || !isFinite(row.fundingPct)) hard.push('funding unread');
   else if (dir === 'long' && row.fundingPct >= 0.04) hard.push('funding crowded long');
   else if (dir === 'short' && row.fundingPct <= -0.04) hard.push('funding crowded short');
   if (tmBaseOf(row) !== 'BTC'){
     var coinRet = tmFourHourReturn(row.rows4h);
     if (coinRet == null || !ctx || ctx.btcRet == null) hard.push('relative strength unread');
-    else if (dir === 'long' && (coinRet - ctx.btcRet) < -0.01) hard.push('weaker than BTC');
-    else if (dir === 'short' && (coinRet - ctx.btcRet) > 0.01) hard.push('stronger than BTC');
+    else if (dir === 'long' && (coinRet - ctx.btcRet) < 0.015) hard.push('not leading BTC');
+    else if (dir === 'short' && (ctx.btcRet - coinRet) < 0.015) hard.push('not lagging BTC');
+    if (ctx && ctx.btcRows){
+      var ratio = tmAltBtcLowerLow(rows4, ctx.btcRows);
+      if (!ratio) hard.push('ALT/BTC unread');
+      else if (dir === 'long' && ratio.lowerLow) hard.push('ALT/BTC made a lower low');
+      else if (dir === 'short' && ratio.higherHigh) hard.push('ALT/BTC made a higher high');
+    }
   }
   if (row.mark > 0 && px > 0){
     var basis = (row.mark - px) / px;
@@ -54,6 +121,11 @@
   if (ctx && ctx.totalOk === true && dir === 'long' && (ctx.totalFalling || ctx.altsFalling) && tmBaseOf(row) !== 'BTC') hard.push('TOTAL / alts falling');
   if (ctx && ctx.macroOk === true && dir === 'long' && ctx.riskOff) hard.push('macro risk-off');
   if (ctx && ctx.macroOk === true && dir === 'short' && ctx.riskOn) hard.push('macro risk-on');
+  if (tmSettlementFreeze()) hard.push('funding settlement window');
+  if (tmAsiaChop()) hard.push('asian session');
+  var room = tmLiquidityRoom(rows4, dir, +ticket.entry, risk);
+  if (room == null) hard.push('liquidity map unread');
+  else if (!room.open) hard.push('next pool is only ' + room.room.toFixed(1) + 'R away');
   if (hard.length) return hard;
 
   var weeks = tmWeeklyRows(row.rows1d || rowsD);
@@ -100,9 +172,17 @@
     tm5mVolumeOk(row, dir),
     tmMicroOk(row, dir),
     tmTradingView(row),
-    tmTopTrader(row)
+    tmTopTrader(row),
+    tmFundingZ(row),
+    tmTakerShare(row),
+    tmOiPercentile(row),
+    tmPerpPremium(row),
+    tmBookRatio(row, dir),
+    tmFundingVelocity(row, dir),
+    tmAbsorption(row, dir),
+    tmCvdSlope(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15], slope = net[16];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -110,6 +190,69 @@
   else if (dir === 'short' && !(oi.priceDown && oi.oiUp)) hard.push('OI not confirming the drop');
   if (!m15) hard.push('15m unread');
   else if (!tm15Confirm(m15, dir)) hard.push('15m no sweep and CHOCH');
+  else if (tm15HeavyAgainst(m15, dir)) hard.push('15m breaking against on volume');
+  if (m15){
+    var trig = tmTriggerRvol(m15);
+    if (trig == null) hard.push('15m trigger volume unread');
+    else if (trig < 1.6) hard.push('15m trigger volume ' + trig.toFixed(2) + 'x is under 1.6x');
+    var body = tmBodyCommit(m15, dir);
+    if (body == null) hard.push('15m body commit unread');
+    else if (!body) hard.push('15m body did not close past the swing');
+    var gap = tmDisplacementFvg(m15, dir);
+    if (gap == null) hard.push('15m displacement unread');
+    else if (!gap) hard.push('15m displacement gap missing');
+    var soup = tmTurtleReclaim(m15, dir);
+    if (soup == null) hard.push('sweep unread');
+    else if (!soup) hard.push('no sweep and reclaim on the close');
+    var stalled = tmStalled(m15, dir);
+    if (stalled == null) hard.push('15m progress unread');
+    else if (stalled) hard.push('15m has not expanded in 3 bars');
+    var wave15 = tmWaveOk(m15, dir);
+    if (wave1 !== true && wave15 !== true){
+      if (wave1 == null && wave15 == null) hard.push('wavetrend unread');
+      else hard.push('no wavetrend cross from the extreme');
+    }
+    var ut = tmUtBot(m15, 2);
+    if (ut == null) hard.push('ut bot unread');
+    else if (dir === 'long' && ut !== 'buy') hard.push('ut bot is not long');
+    else if (dir === 'short' && ut !== 'sell') hard.push('ut bot is not short');
+  }
+  if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (takerShare == null) hard.push('taker share unread');
+  else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
+  else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  if (m15 && takerShare != null && typeof atr === 'function'){
+    var a15 = atr(m15, 14);
+    var atr15 = a15 && a15.length ? a15[a15.length - 1] : NaN;
+    var trap = tmEffortTrap(m15[m15.length - 1], atr15, takerShare, dir);
+    if (trap == null) hard.push('effort unread');
+    else if (trap) hard.push('effort without result');
+  }
+  if (fundZ == null || oiPct == null) hard.push('crowding density unread');
+  else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
+  else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');
+  if (prem == null) hard.push('perp premium unread');
+  else if (dir === 'long' && prem > 0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is rich');
+  else if (dir === 'short' && prem < -0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is cheap');
+  if (book == null) hard.push('book unread');
+  else if (book < 1.35) hard.push('book ' + book.toFixed(2) + 'x is under 1.35x');
+  if (fundVel == null) hard.push('funding velocity unread');
+  else if (fundVel) hard.push('funding is accelerating against the trade');
+  if (absorb == null) hard.push('absorption unread');
+  else if (!absorb) hard.push('the pullback was not absorbed');
+  if (slope == null) hard.push('delta slope unread');
+  else if (!slope) hard.push('5-bar delta is against the trade');
+  if (m15){
+    var chand = tmChandelier(m15, dir, +ticket.entry);
+    if (chand != null) ticket.chandelier = chand;
+  }
+  var syn = tmSynergy(row, dir, {
+    body: m15 ? tmBodyCommit(m15, dir) === true : false,
+    takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
+  });
+  row.tmSynergy = syn;
+  if (syn < 85) hard.push('synergy ' + syn + '% is under 85%');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);
@@ -154,6 +297,9 @@
   var got = votes.filter(function(v){ return v.v > 0; }).length;
   if (got < 8) return ['confluence ' + got + '/' + votes.length + ', need 8'];
   ticket.confluence = got + '/' + votes.length;
+  ticket.synergy = row.tmSynergy;
+  var atr4 = tmAtrLast(rows4);
+  if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
   return [];
 }
 
@@ -243,9 +389,11 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
   var ctx = ctxReady || await trendmxLoadContext(rows);
   if (!ctx.ethOk) tmStampEth(ctx, rows);
   ctx.btcRet = null;
+  ctx.btcRows = null;
   if (Array.isArray(rows)){
     for (var bi = 0; bi < rows.length; bi++){
       if (tmBaseOf(rows[bi]) !== 'BTC') continue;
+      ctx.btcRows = tmClosedRows(rows[bi].rows4h, 14400);
       ctx.btcRet = tmFourHourReturn(rows[bi].rows4h);
       if (ctx.btcRet != null) break;
     }
@@ -268,6 +416,9 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
         if (bad.length) out.held.stack.push({ sym: ticket.sym, reasons: bad });
         else {
           ticket.note = (ticket.note || '') + (ticket.confluence ? (' · confluence ' + ticket.confluence) : ' · full stack');
+          if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
+          if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
+          if (isFinite(ticket.chandelier)) ticket.note += ' · chandelier ' + ticket.chandelier;
           out.push(ticket);
         }
       }

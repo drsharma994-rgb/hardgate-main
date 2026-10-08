@@ -118,6 +118,10 @@ const CONNECT_SRC = [
   'wss://socket.india.delta.exchange',
   'wss://fstream.binance.com',                /* liqs.js — !forceOrder liquidation tape */
   'https://ntfy.sh',                          /* tabalerts.js push */
+  'https://api.telegram.org',                 /* alert-dispatcher.js */
+  'https://discord.com',                      /* alert-dispatcher.js webhook */
+  'https://discordapp.com',
+  'https://nfs.faireconomy.media',            /* macro-calendar.js USD high-impact */
 ].join(' ');
 
 /* vercel.json parity — security headers on every response */

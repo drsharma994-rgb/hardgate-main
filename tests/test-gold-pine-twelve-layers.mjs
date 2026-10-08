@@ -223,7 +223,7 @@ const firstWindow = (W, fn, opts, rows, from, want) => {
 {
   const W = boot(MATH_BASE.concat(['gold-extra-strategies.js']));
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 16 && T.slice(0, 8).map(l => l.id).join(',') === OLD8.join(',') && T.slice(8, 12).map(l => l.id).join(',') === NEW4.join(',') && T[15].id === 'bpr', 'the eight earlier layers lead the table, the four hg-v1167 ones follow (sixteen total since hg-v1172 appended BPR at position 15, Williams/TRIX/Fisher at 12-14) (' + T.map(l => l.id).join(' · ') + ')');
+  assert(T.length === 23 && T.slice(0, 8).map(l => l.id).join(',') === OLD8.join(',') && T.slice(8, 12).map(l => l.id).join(',') === NEW4.join(',') && T[22].id === 'bpr', 'the eight earlier layers lead the table, the four hg-v1167 ones follow (twenty-three total since hg-v1202 appended BPR at position 22, Williams/TRIX/Fisher at 12-14, hg-v1173 formation family at 15-21) (' + T.map(l => l.id).join(' · ') + ')');
   assert(NEW4.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function')), 'each of the four has its detector exported');
   assert(T.find(l => l.id === 'cci').twin === 'CCI-EXTREME' && ['chandelier', 'hullma', 'aroon'].every(id => T.find(l => l.id === id).twin === null) && T.filter(l => l.twin).length === 2, 'the CCI re-entry names its exact OMNIGOLD twin CCI-EXTREME; the other three name none (two twins in the table with ICHI-KUMO)');
   assert(!T.some(l => /squeeze/i.test(l.id)) && W.PINE_GOLD_LAYERS.some(l => l.id === 'squeeze'), 'no TTM squeeze in the record table: the ten-layer table already carries Squeeze Mom');
@@ -329,7 +329,7 @@ const firstWindow = (W, fn, opts, rows, from, want) => {
   const mo = W.pineGoldPineMarks(onlyNew, 'long');
   assert(Object.keys(mo).length === 4 && mo['pine:majorityWith'] === undefined, 'the four alone never move the majority mark (absent)');
   const html = W.pineGoldStackLineHtml(su, mL);
-  assert(/\d+ of 16 gold Pine layers readable/.test(html) && /Chandelier Exit<\/b> LONG/.test(html) && /Hull MA Turn<\/b> LONG/.test(html) && /CCI Re-entry<\/b> LONG/.test(html) && /Aroon Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the four new states and names the majority population (sixteen total since hg-v1172)');
+  assert(/\d+ of 23 gold Pine layers readable/.test(html) && /Chandelier Exit<\/b> LONG/.test(html) && /Hull MA Turn<\/b> LONG/.test(html) && /CCI Re-entry<\/b> LONG/.test(html) && /Aroon Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the four new states and names the majority population (twenty-three total since hg-v1202)');
   /* the twin record: quoted through the one home, not past the veto bar */
   const rec = W.hgGoldSiblingRecord('cci');
   assert(rec && rec.twin === 'CCI-EXTREME' && rec.settled === 322 && rec.n === 327 && typeof rec.zBreakeven === 'number' && rec.zBreakeven > -2 && W.hgGoldSiblingVetoed('cci') === false, 'hgGoldSiblingRecord(cci) quotes CCI-EXTREME: gate-clear n=327, 322 settled, z ' + (rec && rec.zBreakeven) + ' — inside the noise, not a measured failure, so the port is allowed (hg-v934)');
@@ -399,7 +399,7 @@ const cardOf = (html, label) => { const i = html.indexOf('· ' + label + ' · Gr
   assert(/OMNIGOLD CCI-EXTREME, gate-clear n=327, 322 settled, −0\.033R net at XM, z \+0\.20/.test(cciCard) && /OMNIGOLD’s gates and 1h horizon/.test(cciCard), 'the CCI card quotes its twin\'s gate-clear record through hgGoldSiblingRecord, attributed to OMNIGOLD\'s gates and horizon');
   assert(!/Nearest measured twin/.test(arCard) && !/Nearest OMNIGOLD mechanic/.test(arCard), 'the Aroon card, with no twin, quotes none');
   assert(/4 RECORD-ONLY Pine layers on this scan/.test(r.html), 'the board names the four record-only rows once');
-  assert(/\d+ of 16 gold Pine layers readable/.test(r.html), 'every GOLD PINE card prints the PINE STACK line over sixteen layers (hg-v1172)');
+  assert(/\d+ of 23 gold Pine layers readable/.test(r.html), 'every GOLD PINE card prints the PINE STACK line over twenty-three layers (hg-v1202)');
 }
 
 /* ------------------------------------------------------------------ 5 */

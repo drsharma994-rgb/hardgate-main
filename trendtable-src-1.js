@@ -600,6 +600,8 @@ function trendmxPlanLegacy(inp){
     if (!(risk > 0)) return null;
     var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
     var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
+    var runner = tmRunnerR(rows);
+    var t3 = runner == null ? NaN : ((dir === 'long') ? entry + runner * risk : entry - runner * risk);
     if (typeof hgStructureTargets === 'function'){
       try{
         var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
@@ -610,9 +612,10 @@ function trendmxPlanLegacy(inp){
       }catch(eTg){}
     }
     var fb = {
-      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
+      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2, t3: t3,
       rr1: Math.abs(t1 - entry) / risk,
       rr2: Math.abs(t2 - entry) / risk,
+      trailBe: (dir === 'long') ? entry + 0.35 * a : entry - 0.35 * a,
       riskPct: risk / entry * 100,
       confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
     };
@@ -631,6 +634,9 @@ function trendmxPlanHTML(s){
   return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
     + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
     + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
+    + (isFinite(s.t3) ? (' · T3 <b>' + pxFmt(s.t3) + '</b> (' + (Math.abs(s.t3 - s.entry) / Math.abs(s.entry - s.stop)).toFixed(1) + 'R)') : '')
+    + (isFinite(s.trailBe) ? (' · after T1, example stop <b>' + pxFmt(s.trailBe) + '</b>') : '')
+    + (function(){ var ex = tmExampleSize(s.entry, s.stop); return ex ? (' · example 1% of $10,000 is ' + ex.units.toFixed(4) + ' units ($' + ex.notional.toFixed(0) + '), not an order') : ''; })()
     + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
     + (s.note ? ' — ' + escH(s.note) : '')

@@ -73,7 +73,7 @@ function trendmxGoldenDeskHTML(golden){
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade, then the crypto formation: structure, relative strength versus BTC, open interest, CVD, the 15m sweep, and at least 8 confluence votes with none against.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade. The 4h RSI has to sit on the bull floor for a long or the bear ceiling for a short, the pullback has to tag the anchored VWAP from the last 4h swing, and an alt long has to be leading Bitcoin by at least 1.5 percent with no lower low in ALT/BTC. The 15m body has to close past the swing by a quarter of its own ATR, and the real 15m taker share has to be at least 60 percent on that side. Open interest has to rise with the break. The four reads have to add to at least 85 percent. A missing taker print is not 50 percent, and missing open interest is not new buying. Then structure, relative strength versus BTC, open interest, CVD, and at least 8 confluence votes with none against.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')

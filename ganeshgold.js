@@ -409,6 +409,52 @@ async function ganeshGoldScan(opts){
     var mL = modelGrade(ev, 'long'), mS = modelGrade(ev, 'short');
     var pL = planFor(ev, mL), pS = planFor(ev, mS);
     ggMarkPlan(pL, ev); ggMarkPlan(pS, ev);   /* hg-v1163 */
+    function ggPineHold(plan){
+      if (!plan || !ev.ps || typeof W.pineGoldBlocksLead !== 'function') return plan;
+      var why = W.pineGoldBlocksLead(ev.ps, plan.dir);
+      if (!why) return plan;
+      plan.pineBlock = why;
+      if (plan.tier === 'TICKET') plan.tier = 'WATCH';
+      return plan;
+    }
+    pL = ggPineHold(pL); pS = ggPineHold(pS);
+    var gsAudit = null;
+    try{
+      if (style === 'scalp' && typeof W.getSilverCandles === 'function'){
+        var sv = await W.getSilverCandles('15m', 120);
+        if (sv && sv.rows && sv.rows.length) W.__hgSilverRows = sv.rows;
+      }
+    }catch(eSv){}
+    try{
+      if (style === 'scalp' && typeof W.HG_GaneshGoldEngine === 'function' && ev.rows){
+        gsAudit = new W.HG_GaneshGoldEngine().auditSevenSteps(ev.rows, [], (ev.feeds && ev.feeds.macro) || null, W.__hgSilverRows);
+      }
+    }catch(eGs){ gsAudit = null; }
+    function ggInstHold(plan){
+      if (!plan) return plan;
+      var why = null;
+      try{
+        if (typeof W.hgGoldInstBlocks === 'function'){
+          why = W.hgGoldInstBlocks(plan.dir, ev.rows || [], (ev.feeds && ev.feeds.macro) || null, { desk: style === 'scalp' ? 'ganesh' : 'ganesh-swing', horizon: style });
+        }
+      }catch(eIb){ why = null; }
+      if (why){ plan.instBlock = why; plan.held = plan.held || why; if (plan.tier === 'TICKET') plan.tier = 'WATCH'; }
+      if (style === 'scalp' && gsAudit && !gsAudit.qualified && plan.tier === 'TICKET'){
+        plan.tier = 'WATCH';
+        plan.held = plan.held || ('GS1-GS7 ' + gsAudit.passedCount + '/' + gsAudit.totalSteps + ' — not a ticket');
+        plan.gsAudit = gsAudit;
+      } else if (gsAudit) plan.gsAudit = gsAudit;
+      return plan;
+    }
+    pL = ggInstHold(pL); pS = ggInstHold(pS);
+    try{
+      if (gsAudit && gsAudit.qualified && typeof W.HG_quantEmit === 'function'){
+        var gsSide = gsAudit.direction === 'BEAR' ? pS : pL;
+        if (gsSide && gsSide.tier === 'TICKET'){
+          W.HG_quantEmit(Object.assign({ status: 'ARMED', timeframe: '15m', targetPrice: gsAudit.takeProfit, gatesPassed: gsAudit.passedCount, totalGates: gsAudit.totalSteps }, gsAudit));
+        }
+      }
+    }catch(eEmit){}
     /* hg-v1154: both calendars on the LAST CLOSED execution bar, never the
        wall clock (hg-v952 / hg-v978) -- a Monday re-run over Friday's bars
        gives Friday's answer. */
@@ -420,7 +466,8 @@ async function ganeshGoldScan(opts){
     else if (pL && (pL.grade === 'A' || pL.grade === 'A+')){ pick = 'long'; plan = pL; alt = pS; }
     else if (pS && (pS.grade === 'A' || pS.grade === 'A+')){ pick = 'short'; plan = pS; alt = pL; }
     __gg.snap = { ok: true, at: Date.now(), style: style, ev: ev, mL: mL, mS: mS,
-      planL: pL, planS: pS, pick: pick, plan: plan, alt: alt, gate: gate };
+      planL: pL, planS: pS, pick: pick, plan: plan, alt: alt, gate: gate,
+      gsHtml: (gsAudit && typeof W.hgGaneshAuditHtml === 'function') ? W.hgGaneshAuditHtml(gsAudit) : '' };
     /* the forward record: one mint per closed bar, TICKET only -- and
        (hg-v1154) a ticket the calendar WITHHELD, written ticket:false with
        the weekend mark, so the weekend population is separable rather than
@@ -552,6 +599,7 @@ function paint(el, snap){
     return;
   }
   var html = (snap.ev && snap.ev.tapeNote ? snap.ev.tapeNote : '')   /* hg-v1154: the tape-sanity note leads */
+    + (snap.gsHtml || '')
     + callHtml(snap)
     + pipelineHtml(snap)
     + modelHtml('GOLD LONG MODEL', snap.mL, snap.planL)

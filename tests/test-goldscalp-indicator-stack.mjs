@@ -341,7 +341,7 @@ console.log('== 6) one home: nothing reads the marks back ==');
     assert(!/ind:(adx|dmi|bb|sma|hv|park|vol|tsmom|hour|rsi|ker|atr|linreg|hurst|ac)/.test(strip(read(g))), g + ' names no indicator mark');
   assert(/freeReads/.test(strip(read('goldswing.js'))) && /indReads/.test(strip(read('goldswing.js'))), 'GOLD SWING forwards both bags since hg-v1166 — the hg-v1155 swing gap is closed (its own guard drives the record)');
   const hf = strip(read('hg-forward.js'));
-  assert(/FWD_READS_MAX = 64/.test(hf), 'the ledger cap reads 64 (hg-v1165)');
+  assert(/FWD_READS_MAX = 96/.test(hf), 'the ledger cap reads 96 (hg-v1173)');
 }
 
 /* ------------------------------------------------------------------ 7 */

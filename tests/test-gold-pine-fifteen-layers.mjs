@@ -49,12 +49,14 @@ console.log('== 1) three series helpers + three ports + three table entries ==')
   assert(typeof W.pineGoldFisherSeries === 'function' && typeof W.pineGoldFisherZero === 'function',
     'Fisher Transform: series helper and port both exported');
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 16, 'sixteen record-only layers since hg-v1172 (' + T.length + ')');
+  assert(T.length === 23, 'twenty-three record-only layers since hg-v1202 — hg-v1173 formation family + BPR follow the hg-v1171 trio (' + T.length + ')');
   const OLD12 = ['supertrend','ichimoku','donchian','emacross','keltner','macd','psar','stoch','chandelier','hullma','cci','aroon'];
   const NEW3 = ['williams','trix','fisher'];
   assert(T.slice(0, 12).map(l => l.id).join(',') === OLD12.join(','), 'the twelve earlier layers lead the table');
   assert(T.slice(12, 15).map(l => l.id).join(',') === NEW3.join(','), 'the three hg-v1171 layers follow at positions 12/13/14');
-  assert(T[15] && T[15].id === 'bpr', 'the hg-v1172 BPR layer follows at position 15');
+  assert(T.slice(15, 18).map(l => l.id).join(',') === 'adx,heikin,sessvwap', 'hg-v1173 price-only confirmation ports follow at 15/16/17');
+  assert(T.slice(18, 22).map(l => l.id).join(',') === 'qqe,squeeze,wavwap,efficiency', 'hg-v1173 formation family follows at 18/19/20/21');
+  assert(T[22] && T[22].id === 'bpr', 'the hg-v1202 BPR layer follows at position 22');
   assert(NEW3.every(id => {
     const l = T.find(x => x.id === id);
     return l && typeof W[l.fn] === 'function';
@@ -384,10 +386,10 @@ console.log('== 10) no scoring branch added for the three new keys ==');
    -- hg-v1163 moved it 32→64 explicitly to give room; three new keys bring
    total to 26 free + 2 PERFECT + 18 ind + 16 pine = 62, inside by 2.
    ==================================================================== */
-console.log('== 11) FWD_READS_MAX stays at 64, three new keys fit ==');
+console.log('== 11) FWD_READS_MAX cap holds, three new keys fit ==');
 {
   const src = readFileSync('hg-forward.js', 'utf8');
-  assert(/FWD_READS_MAX\s*=\s*64/.test(src), 'the cap stays 64 (hg-v1163)');
+  assert(/FWD_READS_MAX\s*=\s*96/.test(src), 'cap is 96 since main raised it from the hg-v1163 64 to make room for the hg-v1173 formation family');
   /* arithmetic cap check: 26 free + 2 PERFECT + 18 ind + 16 pine = 62 */
   const FREE = 26, PERFECT = 2, IND = 18, PINE = 16;
   const TOTAL = FREE + PERFECT + IND + PINE;

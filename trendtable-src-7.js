@@ -166,10 +166,8 @@ function trendmxLimitClasses(rows){
       out.clean.push(item);
     } else {
       /* the conviction class orders on its OWN claim: trend strength.
-         Composite first, the ADX strength indicator breaking ties (a ±4 at
-         ADX 38 is a stronger trend than a ±4 at 25); the gate count is the
-         other class's evidence and does not order this desk. */
-      item.rank = Math.abs(r.score) * 10 + (fin(r.adx) ? r.adx / 10 : 0);
+         Composite first. ADX breaks ties only inside 22-38. Above 44 is exhaustion and does not outrank a healthy trend. */
+      item.rank = Math.abs(r.score) * 10 + (fin(r.adx) ? (r.adx > 44 ? 0 : Math.min(r.adx, 38) / 10) : 0);
       item.conv = conv;
       out.conv.push(item);
     }

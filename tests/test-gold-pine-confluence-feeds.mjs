@@ -202,7 +202,7 @@ console.log('== 3) the Pine stack: states, marks, the majority, the line ==');
   assert(Object.keys(W.pineGoldPineMarks(null, 'long')).length === 0 && Object.keys(W.pineGoldPineMarks({ ok: false }, 'long')).length === 0 && Object.keys(W.pineGoldPineMarks(su, 'x')).length === 0, 'no states, a failed read or no direction mark nothing');
   /* the line */
   const html = W.pineGoldStackLineHtml(mixed, mM);
-  assert(/data-hg-pine-stack="1"/.test(html) && /PINE STACK/.test(html) && /\d+ of 16 gold Pine layers readable/.test(html), 'the line carries its marker and the readable count (of sixteen since hg-v1172)');
+  assert(/data-hg-pine-stack="1"/.test(html) && /PINE STACK/.test(html) && /\d+ of 23 gold Pine layers readable/.test(html), 'the line carries its marker and the readable count (of twenty-three since hg-v1202)');
   assert(/Supertrend 10x3<\/b> LONG/.test(html) && /Ichimoku TK Cross<\/b> UNREAD/.test(html) && /MAJORITY<\/b> SPLIT 2L\/1S/.test(html) && /gates nothing/.test(html), 'each layer prints its state (UNREAD where neither), the majority prints SPLIT with the tally, and the line says it gates nothing');
   assert(/MAJORITY<\/b> WITH/.test(W.pineGoldStackLineHtml(su, mL)) && /MAJORITY<\/b> AGAINST/.test(W.pineGoldStackLineHtml(su, mS)), 'a majority prints WITH or AGAINST by the marks');
   assert(W.pineGoldStackLineHtml(null, mL) === '' && W.pineGoldStackLineHtml({ ok: false }, {}) === '', 'no states: no line');
@@ -379,13 +379,13 @@ async function ogRun(opts){
 console.log('== 5) the cap, nothing gated, the census, stamps ==');
 {
   const W = boot(['hg-forward.js']);
-  const many = {}; for (let i = 0; i < 70; i++) many['r' + String(i).padStart(2, '0')] = true;
+  const many = {}; for (let i = 0; i < 110; i++) many['r' + String(i).padStart(3, '0')] = true;
   const why = W.hgFwdRecord({ tab: 'CAPTEST', mechanic: 'x', sym: 'XAUUSD', tf: '15m', dir: 'long', entry: 2300, stop: 2290, t1: 2320, barT: Math.floor(WED / 1000), reads: many });
   const rec = (W.hgFwdRecords('CAPTEST') || [])[0];
-  assert(why === 'recorded' && rec && Object.keys(rec.reads).length === 64, 'the ledger keeps 64 reads per record now (a 70-key hand-in keeps 64, the store is still not a dumping ground)');
+  assert(why === 'recorded' && rec && Object.keys(rec.reads).length === 96, 'the ledger keeps 96 reads per record now (a 110-key hand-in keeps 96, the store is still not a dumping ground)');
   const Wr = boot(RANK_BASE.concat(PINE_MATH));
   const KEYS = Wr.HG_GOLD_FREE_KEYS.length + 2 + Object.keys(Wr.hgGoldIndicatorMarks(Wr.hgGoldIndicatorReads(tapeEnding(WED, 300, 900, 102, 24, 0), { rows1d: tapeEnding(WED, 280, 86400, 105, 60, 20) }), 'long')).length + PINE_KEYS.length;
-  assert(KEYS <= 64 && KEYS > 32, 'twenty-six free: + two PERFECT + the indicator stack + six of the sixteen pine: = ' + KEYS + ' keys: over the old cap of 32, inside 64 (hg-v1171)');
+  assert(KEYS <= 96 && KEYS > 32, 'twenty-six free: + two PERFECT + the indicator stack + six of the sixteen pine: = ' + KEYS + ' keys: over the old cap of 32, inside 64 (hg-v1171)');
   for (const f of ['hg-gates.js', 'cryptogates.js', 'engine.js', 'gold-best-levels.js', 'gold-formation.js', 'hg-solidity.js', 'plans.js']){
     assert(!/['"]pine:|pineStates|minersGold|goldCopper|goldOil|eurusdTrend/.test(strip(read(f))), f + ' names no hg-v1165 mark');
   }

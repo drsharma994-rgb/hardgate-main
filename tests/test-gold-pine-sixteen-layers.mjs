@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-/* HARDGATE hg-v1172: BPR Pine port — the sixteenth record-only gold layer.
+/* HARDGATE hg-v1202: BPR Pine port — the twenty-third record-only gold layer,
+   appended after the hg-v1173 formation family (QQE, Squeeze, Weekly AVWAP,
+   Kaufman Efficiency) that was ported ahead of it on main.
    Balanced Price Range = overlap of a bull three-bar FVG and a bear three-bar
    FVG within a lookback window. The overlap is a shelf (institutional pivot).
    The port fires ONLY on the last closed bar when the tape reclaims the
@@ -36,9 +38,9 @@ console.log('== 1) BPR port, series helper, table entry, state read ==');
   assert(typeof W.pineGoldBpr === 'function', 'pineGoldBpr is exported');
   assert(typeof W.pineGoldBprShelves === 'function', 'pineGoldBprShelves is exported');
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 16, 'sixteen record-only layers since hg-v1172 (' + T.length + ')');
-  const b = T[15];
-  assert(b && b.id === 'bpr', 'BPR follows at position 15');
+  assert(T.length === 23, 'twenty-three record-only layers since hg-v1202 — the hg-v1173 formation family (adx/heikin/sessvwap/qqe/squeeze/wavwap/efficiency) came between hg-v1171 and BPR on main (' + T.length + ')');
+  const b = T[22];
+  assert(b && b.id === 'bpr', 'BPR follows at the end at position 22');
   assert(b.fn === 'pineGoldBpr', 'the registry names the exported function');
   assert(b.twin === null, 'BPR names no OMNIGOLD twin — the Balanced Price Range mechanic is not a registered OMNIGOLD mechanic (hg-v943: no loose analogies)');
   assert(b.opts && b.opts.lookback === 20 && b.opts.minGapAtr === 0.10,
@@ -279,14 +281,14 @@ console.log('== 6) no gate names pine:bprWith, no threshold moves ==');
 /* ====================================================================
    § 7 ship stamps
    ==================================================================== */
-console.log('== 7) build stamps say hg-v1172 ==');
+console.log('== 7) build stamps say hg-v1202 ==');
 {
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1172'/.test(bs), 'build-stamp.js version is hg-v1172');
+  assert(/version:\s*'hg-v1202'/.test(bs), 'build-stamp.js version is hg-v1202');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1172'/.test(sw), 'sw.js HG_CACHE is hg-v1172');
+  assert(/HG_CACHE\s*=\s*'hg-v1202'/.test(sw), 'sw.js HG_CACHE is hg-v1202');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1172/.test(tt), 'trendtable.js header reads hg-v1172');
+  assert(/hg-v1202/.test(tt), 'trendtable.js header reads hg-v1202');
 }
 
-console.log('\nhg-v1172 BPR: all § passed');
+console.log('\nhg-v1202 BPR: all § passed');
