@@ -3243,7 +3243,13 @@ async function runScan(ui, scanSt){
     var instHtml = '';
     try{
       if (typeof W.hgGoldInstApply === 'function'){
-        var inst = W.hgGoldInstApply(ranked, gold.rows15m, ctx.macro, { desk: 'goldscalp', horizon: 'scalp' });
+        try{
+          if (typeof W.getSilverCandles === 'function'){
+            var sv = await W.getSilverCandles('15m', 120);
+            if (sv && sv.rows && sv.rows.length) W.__hgSilverRows = sv.rows;
+          }
+        }catch(eSv){}
+        var inst = W.hgGoldInstApply(ranked, gold.rows15m, ctx.macro, { desk: 'goldscalp', horizon: 'scalp', silverRows: W.__hgSilverRows });
         if (inst){
           instHtml = inst.html || '';
           if (inst.demoted) legs.push('INSTITUTIONAL — ' + inst.demoted + ' candidate' + (inst.demoted === 1 ? '' : 's') + ' cannot lead (' + (inst.lead || 'session, macro, or an unfinished sweep') + ')');

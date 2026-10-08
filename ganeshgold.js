@@ -420,8 +420,14 @@ async function ganeshGoldScan(opts){
     pL = ggPineHold(pL); pS = ggPineHold(pS);
     var gsAudit = null;
     try{
+      if (style === 'scalp' && typeof W.getSilverCandles === 'function'){
+        var sv = await W.getSilverCandles('15m', 120);
+        if (sv && sv.rows && sv.rows.length) W.__hgSilverRows = sv.rows;
+      }
+    }catch(eSv){}
+    try{
       if (style === 'scalp' && typeof W.HG_GaneshGoldEngine === 'function' && ev.rows){
-        gsAudit = new W.HG_GaneshGoldEngine().auditSevenSteps(ev.rows, [], (ev.feeds && ev.feeds.macro) || null);
+        gsAudit = new W.HG_GaneshGoldEngine().auditSevenSteps(ev.rows, [], (ev.feeds && ev.feeds.macro) || null, W.__hgSilverRows);
       }
     }catch(eGs){ gsAudit = null; }
     function ggInstHold(plan){

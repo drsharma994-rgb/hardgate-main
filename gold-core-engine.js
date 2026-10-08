@@ -61,18 +61,92 @@
      OFF_HOURS also covers 11:00-12:30 and 15:30-16:00, which are not the
      spread spike. Those hours are not a veto here. The scalp engine still
      idles outside London Open and NY Open. */
+  GoldCoreEngine.prototype.getInstitutionalSession = function(date){
+    date = date || new Date();
+    var timeVal = date.getUTCHours() + date.getUTCMinutes() / 60;
+    var isLondonApex = timeVal >= 7.25 && timeVal <= 8.75;
+    var isLondonOpen = timeVal >= 7.0 && timeVal < 10.0;
+    var isNyApex = timeVal >= 12.75 && timeVal <= 14.5;
+    var isNyExpansion = timeVal >= 12.5 && timeVal < 16.0;
+    var isFix = (timeVal >= 10.3 && timeVal <= 10.75) || (timeVal >= 14.85 && timeVal <= 15.2);
+    var name = 'OFF_HOURS';
+    if (isLondonApex) name = 'LONDON_APEX';
+    else if (isNyApex) name = 'NY_APEX';
+    else if (isLondonOpen) name = 'LONDON_OPEN';
+    else if (isNyExpansion) name = 'NY_EXPANSION';
+    else if (timeVal >= 0 && timeVal < 7) name = 'ASIA';
+    else if (timeVal >= 16 && timeVal < 20) name = 'NY_CLOSE';
+    return { sessionName: name, isApex: !!(isLondonApex || isNyApex), isKillzone: !!(isLondonOpen || isNyExpansion), isFixWindow: !!isFix };
+  };
   GoldCoreEngine.prototype.checkTimeVeto = function(date){
     date = date || new Date();
-    var utcHour = date.getUTCHours();
-    var utcMinute = date.getUTCMinutes();
-    if ((utcHour === 21 && utcMinute >= 30) || utcHour === 22 || utcHour === 23){
-      return { veto: true, reason: 'Off-hours rollover: high spread and low depth' };
-    }
-    if ((utcHour === 10 && utcMinute >= 25 && utcMinute <= 35) ||
-        (utcHour === 14 && utcMinute >= 55) || (utcHour === 15 && utcMinute <= 5)){
-      return { veto: true, reason: 'London Fix window (10:30/15:00 UTC benchmark rebalance)' };
-    }
+    var h = date.getUTCHours(), m = date.getUTCMinutes();
+    if (h >= 21 || (h === 20 && m >= 45)) return { veto: true, reason: 'Off-hours rollover: high spread and low depth' };
+    var sess = this.getInstitutionalSession(date);
+    if (sess.isFixWindow) return { veto: true, reason: 'London Fix window (10:30/15:00 UTC benchmark rebalance)' };
     return { veto: false, reason: 'Timing valid' };
+  };
+  GoldCoreEngine.prototype.classifyAsianRegime = function(dayKlines, currentPrice){
+    var rows = barsOf(dayKlines);
+    if (rows.length < 4) return { regime: 'UNKNOWN', rangeDollars: 0, rangePct: 0, drift: 'FLAT' };
+    var last = rows[rows.length - 1];
+    var px = currentPrice > 0 ? currentPrice : last.close;
+    var day = new Date(last.time);
+    var y = day.getUTCFullYear(), mo = day.getUTCMonth(), d = day.getUTCDate();
+    var ash = -Infinity, asl = Infinity, n = 0, firstOpen = NaN, lastClose = NaN, i, c, dt;
+    for (i = 0; i < rows.length; i++){
+      c = rows[i];
+      if (!fin(c.time)) continue;
+      dt = new Date(c.time);
+      if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo || dt.getUTCDate() !== d) continue;
+      if (dt.getUTCHours() >= 7) continue;
+      if (c.high > ash) ash = c.high;
+      if (c.low < asl) asl = c.low;
+      if (!fin(firstOpen)) firstOpen = c.open;
+      lastClose = c.close;
+      n++;
+    }
+    if (n < 4 || !(ash > asl) || !(px > 0)) return { regime: 'UNKNOWN', rangeDollars: 0, rangePct: 0, drift: 'FLAT' };
+    var rangeDollars = +(ash - asl).toFixed(2);
+    var rangePct = +((rangeDollars / px) * 100).toFixed(2);
+    var regime = 'CONSOLIDATION';
+    if (rangePct > 1.10) regime = 'EXPANSION_TREND';
+    else if (rangePct >= 0.65) regime = 'NORMAL_VARIANCE';
+    var drift = 'FLAT';
+    if (fin(firstOpen) && fin(lastClose)){
+      if (lastClose < firstOpen - rangeDollars * 0.25) drift = 'DOWN';
+      else if (lastClose > firstOpen + rangeDollars * 0.25) drift = 'UP';
+    }
+    return { regime: regime, ash: ash, asl: asl, mid: (ash + asl) / 2, rangeDollars: rangeDollars, rangePct: rangePct, drift: drift, bars: n };
+  };
+  GoldCoreEngine.prototype.evaluateTripleSmt = function(goldKlines, silverKlines){
+    var g = barsOf(goldKlines), s = barsOf(silverKlines);
+    var out = { tripleSmtBullish: false, tripleSmtBearish: false, silverConfirmed: false, unread: true };
+    if (g.length < 5 || s.length < 5) return out;
+    var g0 = g[g.length - 1], g1 = g[g.length - 3], s0 = s[s.length - 1], s1 = s[s.length - 3];
+    out.unread = false;
+    out.tripleSmtBullish = g0.low < g1.low && !(s0.low < s1.low);
+    out.tripleSmtBearish = g0.high > g1.high && !(s0.high > s1.high);
+    out.silverConfirmed = out.tripleSmtBullish || out.tripleSmtBearish;
+    return out;
+  };
+  GoldCoreEngine.prototype.detectBreakerBlock = function(klines){
+    var rows = barsOf(klines);
+    if (rows.length < 8) return null;
+    var atr = this.calculateAtr(rows, 14);
+    var found = null, i, origin, sweep, disp, body, start = Math.max(3, rows.length - 20);
+    for (i = start; i < rows.length; i++){
+      origin = rows[i - 3]; sweep = rows[i - 2]; disp = rows[i];
+      body = Math.abs(disp.close - disp.open);
+      if (origin.close < origin.open && sweep.low < origin.low && disp.close > origin.high && disp.close > disp.open && body >= atr * 1.2)
+        found = { type: 'BULLISH_BREAKER', levelHigh: origin.high, levelLow: origin.low, barIndex: i };
+      if (origin.close > origin.open && sweep.high > origin.high && disp.close < origin.low && disp.close < disp.open && body >= atr * 1.2)
+        found = { type: 'BEARISH_BREAKER', levelHigh: origin.high, levelLow: origin.low, barIndex: i };
+    }
+    if (!found) return null;
+    var last = rows[rows.length - 1];
+    found.retesting = last.low <= found.levelHigh && last.high >= found.levelLow;
+    return found;
   };
 
   GoldCoreEngine.prototype.calculateAsianRange = function(dayKlines){
@@ -202,10 +276,28 @@
     if (!aligned.pass) return aligned.reasons;
     var sw = sweepState(rows);
     if (sw.open === 'OUT') return 'Judas sweep still running: wait for the reclaim close';
-    var scalp = opts.horizon !== 'swing' && opts.horizon !== 'SWING' && String(opts.desk || '') !== 'ganesh-swing';
-    if (scalp && String(opts.horizon || '').toLowerCase().indexOf('swing') < 0){
-      var atr = core.calculateAtr(rows, 14);
-      if (atr < core.minAtrDollars) return '15m ATR $' + atr.toFixed(2) + ' is under the $2.50 gold floor';
+    if (!root.__hgSilverRows && typeof root.getSilverCandles === 'function' && !root.__hgSilverBusy){
+      root.__hgSilverBusy = true;
+      Promise.resolve(root.getSilverCandles('15m', 120)).then(function(s){
+        root.__hgSilverRows = (s && s.rows) || [];
+      }).catch(function(){}).then(function(){ root.__hgSilverBusy = false; });
+    }
+    var scalpDesk = opts.horizon !== 'swing' && opts.horizon !== 'SWING' && String(opts.desk || '') !== 'ganesh-swing'
+      && String(opts.horizon || '').toLowerCase().indexOf('swing') < 0;
+    if (scalpDesk){
+      var atrFloor = core.calculateAtr(rows, 14);
+      if (atrFloor < core.minAtrDollars) return '15m ATR $' + atrFloor.toFixed(2) + ' is under the $2.50 gold floor';
+      if (!core.getInstitutionalSession(when).isApex) return 'Outside the apex window (07:15-08:45 or 12:45-14:30 UTC)';
+      var lastPx = barsOf(rows);
+      lastPx = lastPx.length ? lastPx[lastPx.length - 1].close : 0;
+      var regime = core.classifyAsianRegime(rows, lastPx);
+      if (regime.regime === 'EXPANSION_TREND'){
+        if (regime.drift !== 'UP' && want === 'BULL') return 'Asian expansion ' + regime.rangePct + '% down: do not fade the low';
+        if (regime.drift !== 'DOWN' && want === 'BEAR') return 'Asian expansion ' + regime.rangePct + '% up: do not fade the high';
+      }
+      var smt = core.evaluateTripleSmt(rows, opts.silverRows || root.__hgSilverRows);
+      if (!smt.unread && want === 'BULL' && smt.tripleSmtBearish) return 'Silver confirmed the high: bearish SMT';
+      if (!smt.unread && want === 'BEAR' && smt.tripleSmtBullish) return 'Silver refused the low: bullish SMT';
     }
     return null;
   }
@@ -220,10 +312,24 @@
     var session = when ? core.getCurrentSession(when) : 'UNREAD';
     var veto = when ? core.checkTimeVeto(when) : { veto: false, reason: 'no bar time' };
     var view = macroView(macro);
+    var closed = barsOf(rows);
+    var px = closed.length ? closed[closed.length - 1].close : 0;
     var asia = core.calculateAsianRange(rows);
     var sw = sweepState(rows);
     var atr = core.calculateAtr(rows, 14);
-    return { session: session, veto: veto, view: view, asia: asia, sweep: sw, atr: atr, when: when };
+    var regime = core.classifyAsianRegime(rows, px);
+    var apex = when ? core.getInstitutionalSession(when) : null;
+    var smt = core.evaluateTripleSmt(rows, root.__hgSilverRows);
+    var breaker = core.detectBreakerBlock(rows);
+    var bprs = [], va = null;
+    try{
+      if (root.HG_PineGoldEngine){
+        var pine = new root.HG_PineGoldEngine();
+        if (pine.detectBalancedPriceRanges) bprs = pine.detectBalancedPriceRanges(rows, 2) || [];
+        if (pine.calculateValueArea) va = pine.calculateValueArea(rows);
+      }
+    }catch(eRep){}
+    return { session: session, veto: veto, view: view, asia: asia, sweep: sw, atr: atr, when: when, regime: regime, apex: apex, smt: smt, breaker: breaker, bprs: bprs, valueArea: va };
   }
 
   function hgGoldInstStrip(report, judas){
@@ -232,15 +338,26 @@
     var judasLine = 'no Asian-extreme reclaim on this bar';
     if (judas && judas.active && judas.setup){
       var s = judas.setup;
-      judasLine = s.direction + ' ' + s.type + ' entry $' + s.entryPrice + ' SL $' + s.stopLoss + ' TP $' + s.target;
+      judasLine = s.direction + ' ' + (s.model || s.type || '') + ' entry $' + s.entryPrice + ' SL $' + s.stopLoss + ' TP $' + s.target;
+      if (s.tripleSmtConfirmed) judasLine += ' · silver SMT';
+      if (s.breakerConfirmed) judasLine += ' · breaker';
     } else if (judas && judas.reason) judasLine = judas.reason;
-    return '<div class="panel" data-hg-gold-inst="1" style="margin-top:8px"><h3>INSTITUTIONAL <span>XAUUSD session, dollar, real yield</span></h3>'
-      + '<div class="note">Session <b>' + esc(report.session) + '</b>'
+    var rg = report.regime || {};
+    var sm = report.smt || {};
+    var va = report.valueArea;
+    var bpr = (report.bprs && report.bprs.length) ? (report.bprs.length + ' BPR') : 'no BPR';
+    var smtTxt = sm.unread ? 'silver unread' : (sm.tripleSmtBullish ? 'bullish SMT' : (sm.tripleSmtBearish ? 'bearish SMT' : 'no SMT'));
+    return '<div class="panel" data-hg-gold-inst="1" style="margin-top:8px"><h3>INSTITUTIONAL <span>apex, Asian regime, silver SMT, BPR</span></h3>'
+      + '<div class="note">Session <b>' + esc(report.apex ? report.apex.sessionName : report.session) + '</b>'
+      + (report.apex && report.apex.isApex ? ' APEX' : '')
       + ' · ' + (report.veto && report.veto.veto ? ('<b>SPREAD VETO</b> ' + esc(report.veto.reason)) : 'spread clean')
-      + ' · DXY ' + esc(report.view.dxyRaw) + (report.view.dxyTrend !== 'FLAT' ? (' ' + esc(report.view.dxyTrend)) : '')
-      + ' · real yield ' + esc(report.view.yieldRaw) + (report.view.us10yTrend !== 'FLAT' ? (' ' + esc(report.view.us10yTrend)) : '')
+      + ' · Asia ' + esc(rg.regime || 'UNKNOWN') + (fin(rg.rangePct) ? (' ' + rg.rangePct + '% ' + (rg.drift || '')) : '')
+      + ' · ' + esc(smtTxt)
+      + ' · ' + esc(bpr)
+      + (va && fin(va.poc) ? (' · POC $' + va.poc + ' VAH $' + va.vah + ' VAL $' + va.val) : '')
+      + ' · DXY ' + esc(report.view.dxyRaw)
       + ' · ATR $' + (fin(report.atr) ? report.atr.toFixed(2) : '—')
-      + ' · Asia ' + esc(asia)
+      + ' · box ' + esc(asia)
       + '<br>Judas: ' + esc(judasLine) + '</div></div>';
   }
 
@@ -251,14 +368,14 @@
     var judas = null;
     try{
       if (root.HG_GoldScalpEngine && String(opts.horizon || opts.desk || '').toLowerCase().indexOf('swing') < 0){
-        judas = new root.HG_GoldScalpEngine().evaluateScalp(rows, rows, macroView(macro));
+        judas = new root.HG_GoldScalpEngine().evaluateScalp(rows, rows, macroView(macro), opts.silverRows || root.__hgSilverRows);
       }
     }catch(eJ){ judas = null; }
     if (list && list.length){
       for (var i = 0; i < list.length; i++){
         var c = list[i];
         if (!c || c.demoted || c.vetoed) continue;
-        var why = hgGoldInstBlocks(c.dir, rows, macro, opts);
+        var why = hgGoldInstBlocks(c.dir, rows, macro, Object.assign({ silverRows: opts.silverRows || root.__hgSilverRows }, opts));
         if (!why){
           if (judas && judas.active && judas.setup && side(c.dir) === judas.setup.direction){
             if (!c.stamps) c.stamps = [];

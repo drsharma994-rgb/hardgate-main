@@ -49,5 +49,71 @@
     }
     return fvgs;
   };
+  PineGoldEngine.prototype.calculateSessionAvwapBands = function(klines){
+    var rows = rowsOf(klines);
+    var cumVol = 0, cumPx = 0, cumDev = 0, last = null, out = [], i, k, d, timeVal, session, typical, vol, avwap, sd;
+    for (i = 0; i < rows.length; i++){
+      k = rows[i];
+      d = new Date(k.time);
+      timeVal = d.getUTCHours() + d.getUTCMinutes() / 60;
+      session = 'ASIA';
+      if (timeVal >= 7.0 && timeVal < 12.5) session = 'LONDON';
+      else if (timeVal >= 12.5 && timeVal < 20.0) session = 'NY';
+      else if (timeVal >= 20.0) session = 'OFF';
+      if (session !== last){ cumVol = 0; cumPx = 0; cumDev = 0; last = session; }
+      typical = (k.high + k.low + k.close) / 3;
+      vol = k.volume > 0 ? k.volume : 1;
+      cumVol += vol;
+      cumPx += typical * vol;
+      avwap = cumPx / cumVol;
+      cumDev += vol * Math.pow(typical - avwap, 2);
+      sd = Math.sqrt(cumDev / cumVol);
+      out.push({ time: k.time, session: session, avwap: +avwap.toFixed(2), upperBand1: +(avwap + sd).toFixed(2), lowerBand1: +(avwap - sd).toFixed(2), upperBand2: +(avwap + 2 * sd).toFixed(2), lowerBand2: +(avwap - 2 * sd).toFixed(2) });
+    }
+    return out;
+  };
+  PineGoldEngine.prototype.detectBalancedPriceRanges = function(klines, minGapDollars){
+    if (minGapDollars == null) minGapDollars = 2;
+    var rows = rowsOf(klines), fvgs = [], bprs = [], i, c0, c1, c2, f1, f2, top, bot;
+    if (rows.length < 6) return bprs;
+    for (i = 2; i < rows.length; i++){
+      c0 = rows[i - 2]; c1 = rows[i - 1]; c2 = rows[i];
+      if (c2.low - c0.high >= minGapDollars && c1.close > c1.open) fvgs.push({ type: 'BULL', top: c2.low, bottom: c0.high, barIndex: i - 1 });
+      if (c0.low - c2.high >= minGapDollars && c1.close < c1.open) fvgs.push({ type: 'BEAR', top: c0.low, bottom: c2.high, barIndex: i - 1 });
+    }
+    for (i = 0; i < fvgs.length - 1; i++){
+      f1 = fvgs[i]; f2 = fvgs[i + 1];
+      if (f1.type === f2.type || Math.abs(f1.barIndex - f2.barIndex) > 12) continue;
+      top = Math.min(f1.top, f2.top);
+      bot = Math.max(f1.bottom, f2.bottom);
+      if (top > bot) bprs.push({ top: +top.toFixed(2), bottom: +bot.toFixed(2), mid: +((top + bot) / 2).toFixed(2), size: +(top - bot).toFixed(2) });
+    }
+    return bprs;
+  };
+  PineGoldEngine.prototype.calculateValueArea = function(dayKlines, valueAreaPct){
+    if (valueAreaPct == null) valueAreaPct = 0.70;
+    var rows = rowsOf(dayKlines);
+    if (rows.length < 15) return null;
+    var buckets = {}, total = 0, i, price, vol, key, poc = null, max = -1, target, got = 0, prices = [], list, p;
+    for (i = 0; i < rows.length; i++){
+      price = Math.round(rows[i].close * 2) / 2;
+      vol = rows[i].volume > 0 ? rows[i].volume : 1;
+      key = price.toFixed(2);
+      buckets[key] = (buckets[key] || 0) + vol;
+      total += vol;
+    }
+    list = Object.keys(buckets);
+    for (i = 0; i < list.length; i++){
+      if (buckets[list[i]] > max){ max = buckets[list[i]]; poc = +list[i]; }
+    }
+    target = total * valueAreaPct;
+    list.sort(function(a, b){ return buckets[b] - buckets[a]; });
+    for (i = 0; i < list.length; i++){
+      got += buckets[list[i]];
+      prices.push(+list[i]);
+      if (got >= target) break;
+    }
+    return { poc: poc, vah: +Math.max.apply(null, prices).toFixed(2), val: +Math.min.apply(null, prices).toFixed(2), totalVolume: total, equalWeight: rows.every(function(r){ return !(r.volume > 0); }) };
+  };
   root.HG_PineGoldEngine = PineGoldEngine;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

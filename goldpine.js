@@ -1299,6 +1299,13 @@ function mount(el){
         return 'failed';
       }
       if (stat) stat.textContent = 'Scoring Pine + gold confluence…';
+      try{
+        var gsv = gfn('getSilverCandles');
+        if (gsv){
+          var silverPack = await gsv('15m', 120);
+          if (silverPack && silverPack.rows && silverPack.rows.length) W.__hgSilverRows = silverPack.rows;
+        }
+      }catch(eSv){}
       var result = runGoldPineScan(bars, { macro: macro, fng: feeds.fng, fundingRate: feeds.fundingRate,
                                            perpNative: feeds.perpNative, cot: feeds.cot });
       setProg(0.9);

@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1176',
-  pack: 'QUANT desk. ARMED formation, a Judas reclaim, and a Ganesh GS7 ticket can alert Telegram or Discord while this tab is open. A high-impact USD print locks new leads for 15 minutes either side. Chime and voice stay off until you turn them on. No exchange order is sent from the browser.',
-  built: '2026-10-08T17:50:00Z'
+  version: 'hg-v1177',
+  pack: 'Gold v3. A scalp lead now needs the apex window, 07:15-08:45 or 12:45-14:30 UTC. An Asian range over 1.10% of spot is an expansion: the fade is vetoed and the trend is not. Silver must not contradict gold. Breaker blocks, balanced price ranges, and the value area are on the institutional strip.',
+  built: '2026-10-08T18:40:00Z'
 };
 
 function hgBuildLabel(b){
