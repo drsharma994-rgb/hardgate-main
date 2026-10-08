@@ -130,6 +130,19 @@
           }
         }
       }catch(eNf2){ }
+      /* hg-v1187: the crypto Pine ports ride the reads bag as record-only
+         evidence, read off the row's own 4h tape. */
+      try{
+        var pm = trendmxPineMarks(r.rows4h);
+        if (pm){
+          reads.pineLorKnn = pm.lor;
+          reads.pineHalfTrend = pm.ht;
+          reads.pineSqueeze = pm.sqz;
+          reads.pineSmf = pm.smf;
+          reads.pineMsb = pm.msb;
+          r.pineMarks = pm;
+        }
+      }catch(ePine){ }
       try{
         if (typeof W.hgObtcPerfectFormation === 'function'){
           var pick = { row: Object.assign({}, r, { entry: plan.entry, stop: plan.stop, t1: plan.t1, dir: dir }), tier: 'clean' };

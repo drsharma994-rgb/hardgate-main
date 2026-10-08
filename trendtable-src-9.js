@@ -129,6 +129,15 @@ function trendmxCrownPanelHTML(state){
     if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
     if (isFinite(+pfR.dvolVal)) tech.push('DVOL ' + (+pfR.dvolVal).toFixed(1) + (pfR.dvolRegime ? ' ' + String(pfR.dvolRegime) : ''));
+    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb){
+      var pineBits = [];
+      if (pfR.pineLorKnn) pineBits.push('LorKNN ' + pfR.pineLorKnn);
+      if (pfR.pineHalfTrend) pineBits.push('half-trend ' + pfR.pineHalfTrend);
+      if (pfR.pineSqueeze) pineBits.push('squeeze ' + pfR.pineSqueeze);
+      if (pfR.pineSmf) pineBits.push('SMF ' + pfR.pineSmf);
+      if (pfR.pineMsb) pineBits.push('MSB ' + pfR.pineMsb);
+      tech.push('PINE ' + pineBits.join(' | '));
+    }
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
     html += dim('TECHNICAL', Math.abs(+crown.score || 0) >= 2 ? 'ALIGNED' : 'NEUTRAL', '', tech);
     var sent = [];
@@ -285,6 +294,24 @@ function tmStructureDir(rows){
     if (!isFinite(a) || !isFinite(b) || a === b) return null;
     return a > b ? 'up' : 'down';
   }catch(e){ return null; }
+}
+
+/* hg-v1187: THE CRYPTO PINE PORTS — five bar-only Pine strategies read off
+   the row's own 4h tape, returned as a light mark bag. Record-only: the
+   perfect predicate ignores them and the forward ledger decides whether
+   any of them separates. Each unreadable signal is null (the honest
+   third state). */
+function trendmxPineMarks(rows){
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null };
+  try{
+    if (!Array.isArray(rows) || rows.length < 30) return out;
+    if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
+    if (typeof W.pineHalfTrend === 'function'){ var h = W.pineHalfTrend(rows, {}); if (h && h.dir) out.ht = String(h.dir).toLowerCase(); }
+    if (typeof W.pineSqueezeMomentum === 'function'){ var s = W.pineSqueezeMomentum(rows, {}); if (s && s.dir) out.sqz = String(s.dir).toLowerCase(); }
+    if (typeof W.pineSmartMoneyFlow === 'function'){ var f = W.pineSmartMoneyFlow(rows, {}); if (f && f.dir) out.smf = String(f.dir).toLowerCase(); }
+    if (typeof W.pineMsbOb === 'function'){ var m = W.pineMsbOb(rows, {}); if (m && m.dir) out.msb = String(m.dir).toLowerCase(); }
+  }catch(e){ }
+  return out;
 }
 
 async function trendmxPerfectEvidencePass(rows){
