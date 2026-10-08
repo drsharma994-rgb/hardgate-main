@@ -63,6 +63,10 @@
   if (ctx && ctx.totalOk === true && dir === 'long' && (ctx.totalFalling || ctx.altsFalling) && tmBaseOf(row) !== 'BTC') hard.push('TOTAL / alts falling');
   if (ctx && ctx.macroOk === true && dir === 'long' && ctx.riskOff) hard.push('macro risk-off');
   if (ctx && ctx.macroOk === true && dir === 'short' && ctx.riskOn) hard.push('macro risk-on');
+  if (tmSettlementFreeze()) hard.push('funding settlement window');
+  var room = tmLiquidityRoom(rows4, dir, +ticket.entry, risk);
+  if (room == null) hard.push('liquidity map unread');
+  else if (!room.open) hard.push('next pool is only ' + room.room.toFixed(1) + 'R away');
   if (hard.length) return hard;
 
   var weeks = tmWeeklyRows(row.rows1d || rowsD);
@@ -146,6 +150,13 @@
   if (takerShare == null) hard.push('taker share unread');
   else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
   else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  if (m15 && takerShare != null && typeof atr === 'function'){
+    var a15 = atr(m15, 14);
+    var atr15 = a15 && a15.length ? a15[a15.length - 1] : NaN;
+    var trap = tmEffortTrap(m15[m15.length - 1], atr15, takerShare, dir);
+    if (trap == null) hard.push('effort unread');
+    else if (trap) hard.push('effort without result');
+  }
   if (fundZ == null || oiPct == null) hard.push('crowding density unread');
   else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
   else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');

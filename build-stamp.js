@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1191',
-  pack: 'Trend Matrix value. The point of control has to migrate with the trend, and only bars with volume count. A funding jump of more than 0.03 percent that more than triples is a veto. On the pullback, the taker ratio has to turn with the trade. A missing print is not a pass. The card does not send an order.',
-  built: '2026-10-08T22:25:00Z'
+  version: 'hg-v1192',
+  pack: 'Trend Matrix room. A trigger with real taker flow and a body under 0.35 ATR plus a larger wick is effort without result. The next equal high or low has to be at least 2R away. No pool is not a made-up 3R. Setups freeze for 15 minutes around 00:00, 08:00 and 16:00 UTC. The card does not send an order.',
+  built: '2026-10-08T22:40:00Z'
 };
 
 function hgBuildLabel(b){

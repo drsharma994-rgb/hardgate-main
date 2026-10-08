@@ -569,6 +569,47 @@ function tmFundingSpike(prev, cur, dir){
   if (dir === 'long') return delta > 0.0003 && (vel == null || vel > 250);
   return delta < -0.0003 && (vel == null || vel < -250);
 }
+function tmSettlementFreeze(now){
+  now = now || new Date();
+  var mins = now.getUTCHours() * 60 + now.getUTCMinutes();
+  var marks = [0, 8 * 60, 16 * 60], i, d;
+  for (i = 0; i < marks.length; i++){
+    d = Math.abs(mins - marks[i]);
+    if (d <= 15 || d >= 24 * 60 - 15) return true;
+  }
+  return false;
+}
+function tmLiquidityRoom(rows, dir, entry, risk){
+  if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return null;
+  if (!(entry > 0) || !(risk > 0)) return null;
+  var hs;
+  try { hs = hgStructure(rows); } catch (e) { return null; }
+  if (!hs || !hs.swings || hs.swings.length < 2) return null;
+  var levels = [], i, s;
+  for (i = 0; i < hs.swings.length; i++){
+    s = hs.swings[i];
+    if (dir === 'long' && (s.type === 'HH' || s.type === 'LH') && s.px > entry) levels.push(s.px);
+    if (dir === 'short' && (s.type === 'HL' || s.type === 'LL') && s.px < entry) levels.push(s.px);
+  }
+  var pools = [], a, b, mid;
+  for (a = 0; a < levels.length; a++){
+    for (b = a + 1; b < levels.length; b++){
+      mid = (levels[a] + levels[b]) / 2;
+      if (!(mid > 0)) continue;
+      if (Math.abs(levels[a] - levels[b]) / mid <= 0.0025) pools.push(mid);
+    }
+  }
+  if (!pools.length) return { open: true, room: null };
+  pools.sort(function(x, y){ return dir === 'long' ? x - y : y - x; });
+  var room = Math.abs(pools[0] - entry) / risk;
+  return { open: room >= 2, room: room };
+}
+function tmEffortTrap(candle, atrNow, share, dir){
+  if (!candle || !(atrNow > 0) || share == null || !isFinite(share)) return null;
+  var body = Math.abs(candle.c - candle.o);
+  if (dir === 'long') return share >= 0.65 && body < atrNow * 0.35 && (candle.h - candle.c) > body;
+  return share <= 0.35 && body < atrNow * 0.35 && (candle.c - candle.l) > body;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

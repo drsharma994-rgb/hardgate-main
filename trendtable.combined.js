@@ -569,6 +569,47 @@ function tmFundingSpike(prev, cur, dir){
   if (dir === 'long') return delta > 0.0003 && (vel == null || vel > 250);
   return delta < -0.0003 && (vel == null || vel < -250);
 }
+function tmSettlementFreeze(now){
+  now = now || new Date();
+  var mins = now.getUTCHours() * 60 + now.getUTCMinutes();
+  var marks = [0, 8 * 60, 16 * 60], i, d;
+  for (i = 0; i < marks.length; i++){
+    d = Math.abs(mins - marks[i]);
+    if (d <= 15 || d >= 24 * 60 - 15) return true;
+  }
+  return false;
+}
+function tmLiquidityRoom(rows, dir, entry, risk){
+  if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return null;
+  if (!(entry > 0) || !(risk > 0)) return null;
+  var hs;
+  try { hs = hgStructure(rows); } catch (e) { return null; }
+  if (!hs || !hs.swings || hs.swings.length < 2) return null;
+  var levels = [], i, s;
+  for (i = 0; i < hs.swings.length; i++){
+    s = hs.swings[i];
+    if (dir === 'long' && (s.type === 'HH' || s.type === 'LH') && s.px > entry) levels.push(s.px);
+    if (dir === 'short' && (s.type === 'HL' || s.type === 'LL') && s.px < entry) levels.push(s.px);
+  }
+  var pools = [], a, b, mid;
+  for (a = 0; a < levels.length; a++){
+    for (b = a + 1; b < levels.length; b++){
+      mid = (levels[a] + levels[b]) / 2;
+      if (!(mid > 0)) continue;
+      if (Math.abs(levels[a] - levels[b]) / mid <= 0.0025) pools.push(mid);
+    }
+  }
+  if (!pools.length) return { open: true, room: null };
+  pools.sort(function(x, y){ return dir === 'long' ? x - y : y - x; });
+  var room = Math.abs(pools[0] - entry) / risk;
+  return { open: room >= 2, room: room };
+}
+function tmEffortTrap(candle, atrNow, share, dir){
+  if (!candle || !(atrNow > 0) || share == null || !isFinite(share)) return null;
+  var body = Math.abs(candle.c - candle.o);
+  if (dir === 'long') return share >= 0.65 && body < atrNow * 0.35 && (candle.h - candle.c) > body;
+  return share <= 0.35 && body < atrNow * 0.35 && (candle.c - candle.l) > body;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -2868,6 +2909,10 @@ async function trendmxFormOne(ticket, row, ctx){
   if (ctx && ctx.totalOk === true && dir === 'long' && (ctx.totalFalling || ctx.altsFalling) && tmBaseOf(row) !== 'BTC') hard.push('TOTAL / alts falling');
   if (ctx && ctx.macroOk === true && dir === 'long' && ctx.riskOff) hard.push('macro risk-off');
   if (ctx && ctx.macroOk === true && dir === 'short' && ctx.riskOn) hard.push('macro risk-on');
+  if (tmSettlementFreeze()) hard.push('funding settlement window');
+  var room = tmLiquidityRoom(rows4, dir, +ticket.entry, risk);
+  if (room == null) hard.push('liquidity map unread');
+  else if (!room.open) hard.push('next pool is only ' + room.room.toFixed(1) + 'R away');
   if (hard.length) return hard;
 
   var weeks = tmWeeklyRows(row.rows1d || rowsD);
@@ -2951,6 +2996,13 @@ async function trendmxFormOne(ticket, row, ctx){
   if (takerShare == null) hard.push('taker share unread');
   else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
   else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  if (m15 && takerShare != null && typeof atr === 'function'){
+    var a15 = atr(m15, 14);
+    var atr15 = a15 && a15.length ? a15[a15.length - 1] : NaN;
+    var trap = tmEffortTrap(m15[m15.length - 1], atr15, takerShare, dir);
+    if (trap == null) hard.push('effort unread');
+    else if (trap) hard.push('effort without result');
+  }
   if (fundZ == null || oiPct == null) hard.push('crowding density unread');
   else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
   else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');
@@ -5419,6 +5471,9 @@ W.tmHurst = tmHurst;
 W.tmTurtleReclaim = tmTurtleReclaim;
 W.tmPocShift = tmPocShift;
 W.tmFundingSpike = tmFundingSpike;
+W.tmSettlementFreeze = tmSettlementFreeze;
+W.tmLiquidityRoom = tmLiquidityRoom;
+W.tmEffortTrap = tmEffortTrap;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;
