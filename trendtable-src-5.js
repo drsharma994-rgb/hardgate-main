@@ -52,6 +52,12 @@
   var magic = rows1 ? tmTrendMagic(rows1, dir) : null;
   if (magic == null) hard.push('trend magic unread');
   else if (!magic) hard.push('trend magic is against the trade');
+  var alpha = rows1 ? tmAlpha(rows1, dir) : null;
+  if (alpha == null) hard.push('alphatrend unread');
+  else if (!alpha) hard.push('alphatrend is against the trade');
+  var band = rows1 ? tmRangeFilter(rows1, dir) : null;
+  if (band == null) hard.push('range filter unread');
+  else if (!band) hard.push('range filter is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

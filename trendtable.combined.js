@@ -933,6 +933,46 @@ function tmTrendMagic(rows, dir){
   if (dir === 'long') return cci > 0;
   return cci < 0;
 }
+function tmAlpha(rows, dir){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var start = rows.length - 14, pos = 0, neg = 0, i, tp, prev, money;
+  for (i = start + 1; i < rows.length; i++){
+    if (!(rows[i].v > 0)) return null;
+    tp = (rows[i].h + rows[i].l + rows[i].c) / 3;
+    prev = (rows[i - 1].h + rows[i - 1].l + rows[i - 1].c) / 3;
+    money = tp * rows[i].v;
+    if (tp > prev) pos += money;
+    else if (tp < prev) neg += money;
+  }
+  if (!(pos + neg > 0)) return null;
+  var mfi = neg === 0 ? 100 : (pos === 0 ? 0 : 100 - (100 / (1 + pos / neg)));
+  var a = atr(rows, 14);
+  var atrNow = a && a.length ? a[a.length - 1] : NaN;
+  if (!(atrNow > 0) || rows.length < 4) return null;
+  var up = rows[rows.length - 1].l - atrNow;
+  var prevUp = rows[rows.length - 3].l - atrNow;
+  var dn = rows[rows.length - 1].h + atrNow;
+  var prevDn = rows[rows.length - 3].h + atrNow;
+  if (dir === 'long') return mfi > 50 && up >= prevUp;
+  return mfi < 50 && dn <= prevDn;
+}
+function tmRangeFilter(rows, dir){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var a = atr(rows, 14);
+  if (!a || a.length < rows.length) return null;
+  var filter = rows[0].c, way = 0, i, c, range;
+  for (i = 1; i < rows.length; i++){
+    if (!(a[i] > 0)) return null;
+    range = 2 * a[i];
+    c = rows[i].c;
+    if (c > filter + range){ filter = c - range; way = 1; }
+    else if (c < filter - range){ filter = c + range; way = -1; }
+  }
+  if (way === 0) return null;
+  var px = rows[rows.length - 1].c;
+  if (dir === 'long') return way === 1 && px > filter;
+  return way === -1 && px < filter;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3232,6 +3272,12 @@ async function trendmxFormOne(ticket, row, ctx){
   var magic = rows1 ? tmTrendMagic(rows1, dir) : null;
   if (magic == null) hard.push('trend magic unread');
   else if (!magic) hard.push('trend magic is against the trade');
+  var alpha = rows1 ? tmAlpha(rows1, dir) : null;
+  if (alpha == null) hard.push('alphatrend unread');
+  else if (!alpha) hard.push('alphatrend is against the trade');
+  var band = rows1 ? tmRangeFilter(rows1, dir) : null;
+  if (band == null) hard.push('range filter unread');
+  else if (!band) hard.push('range filter is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -5882,6 +5928,8 @@ W.tmWtDiverging = tmWtDiverging;
 W.tmFreshOb = tmFreshOb;
 W.tmUtBot = tmUtBot;
 W.tmTrendMagic = tmTrendMagic;
+W.tmAlpha = tmAlpha;
+W.tmRangeFilter = tmRangeFilter;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

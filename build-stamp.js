@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1197',
-  pack: 'Trend Matrix citadel. A long has to be inside a fresh 1h order block that no earlier bar has touched. The 15m UT trail, two times ATR, has to be on the trade side. Trend magic is the 50-bar CCI, and a flat tape is unread rather than bullish. The card does not send an order.',
-  built: '2026-10-08T23:55:00Z'
+  version: 'hg-v1198',
+  pack: 'Trend Matrix pantheon. AlphaTrend needs real volume and a money-flow reading on the trade side, with the band moving that way. A flat tape is unread, not bullish. The range filter has to have actually stepped, and price has to be on that side of it. Neither line replaces the stop. The card does not send an order.',
+  built: '2026-10-09T00:10:00Z'
 };
 
 function hgBuildLabel(b){
