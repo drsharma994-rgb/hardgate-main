@@ -1186,6 +1186,41 @@ function tmBbSide(rows, dir){
   if (dir === 'long') return pct >= 0.5 && pct <= 0.95;
   return pct <= 0.5 && pct >= 0.05;
 }
+function tmHlMid(rows, end, len){
+  if (!rows || end < len - 1 || end >= rows.length) return NaN;
+  var hi = -Infinity, lo = Infinity, i, bar;
+  for (i = end - len + 1; i <= end; i++){
+    bar = rows[i];
+    if (!bar || !isFinite(bar.h) || !isFinite(bar.l)) return NaN;
+    if (bar.h > hi) hi = bar.h;
+    if (bar.l < lo) lo = bar.l;
+  }
+  if (!isFinite(hi) || !isFinite(lo)) return NaN;
+  return (hi + lo) / 2;
+}
+function tmIchiSignal(rows, dir){
+  if (!rows || rows.length < 52) return null;
+  var i = rows.length - 1;
+  var ten = tmHlMid(rows, i, 9);
+  var kij = tmHlMid(rows, i, 26);
+  var ago = rows[i - 26] && rows[i - 26].c;
+  var px = rows[i].c;
+  if (!isFinite(ten) || !isFinite(kij) || !(ago > 0) || !(px > 0)) return null;
+  if (ten === kij) return false;
+  if (dir === 'long') return ten > kij && px > ago;
+  return ten < kij && px < ago;
+}
+function tmVwapStretch(rows, dir){
+  if (!rows || rows.length < 14 || typeof tmSessionVwap !== 'function' || typeof atr !== 'function') return null;
+  var vwap = tmSessionVwap(rows);
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  var px = rows[rows.length - 1] && rows[rows.length - 1].c;
+  if (!isFinite(vwap) || !(atrNow > 0) || !(px > 0)) return null;
+  var dist = (px - vwap) / atrNow;
+  if (dir === 'long') return dist > 0 && dist <= 2;
+  return dist < 0 && dist >= -2;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

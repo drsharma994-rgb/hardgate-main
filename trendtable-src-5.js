@@ -88,6 +88,12 @@
   var bandPos = rows1 ? tmBbSide(rows1, dir) : null;
   if (bandPos == null) hard.push('bollinger unread');
   else if (!bandPos) hard.push('price is outside the band or on the wrong side of the midline');
+  var ichi = rows1 ? tmIchiSignal(rows1, dir) : null;
+  if (ichi == null) hard.push('ichimoku line unread');
+  else if (!ichi) hard.push('tenkan, kijun or chikou is against the trade');
+  var stretch = rows1 ? tmVwapStretch(rows1, dir) : null;
+  if (stretch == null) hard.push('vwap band unread');
+  else if (!stretch) hard.push('price is stretched more than 2 ATR from VWAP');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -315,7 +321,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'dmi is in the expansion band and price is inside the bollinger half';
+  ticket.pine = 'tenkan leads kijun, chikou agrees, and price is within 2 ATR of VWAP';
   return [];
 }
 

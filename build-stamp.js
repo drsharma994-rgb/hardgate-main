@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1205',
-  pack: 'Trend Matrix. DMI has to agree with the trade and ADX has to sit between 18 and 70. A dead tape and a one-way blow-off both fail. Bollinger %B has to be on the trade side of the midline and still inside the band. A close outside the band is a chase, not a setup. A short history is unread. The card does not send an order.',
-  built: '2026-10-14T23:30:00Z'
+  version: 'hg-v1206',
+  pack: 'Trend Matrix. Tenkan has to lead Kijun, and the close has to be beyond the close from 26 bars ago. A tie is not a pass. Price also has to stay within 2 ATR of the session VWAP. Further than that is a chase. No volume, or a short history, is unread. The card does not send an order.',
+  built: '2026-10-14T23:50:00Z'
 };
 
 function hgBuildLabel(b){

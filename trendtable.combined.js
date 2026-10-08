@@ -1186,6 +1186,41 @@ function tmBbSide(rows, dir){
   if (dir === 'long') return pct >= 0.5 && pct <= 0.95;
   return pct <= 0.5 && pct >= 0.05;
 }
+function tmHlMid(rows, end, len){
+  if (!rows || end < len - 1 || end >= rows.length) return NaN;
+  var hi = -Infinity, lo = Infinity, i, bar;
+  for (i = end - len + 1; i <= end; i++){
+    bar = rows[i];
+    if (!bar || !isFinite(bar.h) || !isFinite(bar.l)) return NaN;
+    if (bar.h > hi) hi = bar.h;
+    if (bar.l < lo) lo = bar.l;
+  }
+  if (!isFinite(hi) || !isFinite(lo)) return NaN;
+  return (hi + lo) / 2;
+}
+function tmIchiSignal(rows, dir){
+  if (!rows || rows.length < 52) return null;
+  var i = rows.length - 1;
+  var ten = tmHlMid(rows, i, 9);
+  var kij = tmHlMid(rows, i, 26);
+  var ago = rows[i - 26] && rows[i - 26].c;
+  var px = rows[i].c;
+  if (!isFinite(ten) || !isFinite(kij) || !(ago > 0) || !(px > 0)) return null;
+  if (ten === kij) return false;
+  if (dir === 'long') return ten > kij && px > ago;
+  return ten < kij && px < ago;
+}
+function tmVwapStretch(rows, dir){
+  if (!rows || rows.length < 14 || typeof tmSessionVwap !== 'function' || typeof atr !== 'function') return null;
+  var vwap = tmSessionVwap(rows);
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  var px = rows[rows.length - 1] && rows[rows.length - 1].c;
+  if (!isFinite(vwap) || !(atrNow > 0) || !(px > 0)) return null;
+  var dist = (px - vwap) / atrNow;
+  if (dir === 'long') return dist > 0 && dist <= 2;
+  return dist < 0 && dist >= -2;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3521,6 +3556,12 @@ async function trendmxFormOne(ticket, row, ctx){
   var bandPos = rows1 ? tmBbSide(rows1, dir) : null;
   if (bandPos == null) hard.push('bollinger unread');
   else if (!bandPos) hard.push('price is outside the band or on the wrong side of the midline');
+  var ichi = rows1 ? tmIchiSignal(rows1, dir) : null;
+  if (ichi == null) hard.push('ichimoku line unread');
+  else if (!ichi) hard.push('tenkan, kijun or chikou is against the trade');
+  var stretch = rows1 ? tmVwapStretch(rows1, dir) : null;
+  if (stretch == null) hard.push('vwap band unread');
+  else if (!stretch) hard.push('price is stretched more than 2 ATR from VWAP');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -3748,7 +3789,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'dmi is in the expansion band and price is inside the bollinger half';
+  ticket.pine = 'tenkan leads kijun, chikou agrees, and price is within 2 ATR of VWAP';
   return [];
 }
 
@@ -5779,7 +5820,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, and Bollinger %B on the trade side of the midline but still inside the band. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, and price within 2 ATR of the session VWAP. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6225,6 +6266,8 @@ W.tmElder = tmElder;
 W.tmVwmaSide = tmVwmaSide;
 W.tmDmi = tmDmi;
 W.tmBbSide = tmBbSide;
+W.tmIchiSignal = tmIchiSignal;
+W.tmVwapStretch = tmVwapStretch;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
