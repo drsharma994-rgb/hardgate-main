@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1173',
-  pack: 'GOLD PINE FORMATION. QQE, TTM Squeeze, weekly AVWAP and Kaufman efficiency join the gold Pine stack on Gold Scalp, OmniGold, GaneshGold and Gold Pine. A lead is held when that family reads against the trade, or when a squeeze is on, efficiency is dead and the five-layer majority is not with the trade. They do not invent a trade and they are not scored. The forward-read cap moves from 64 to 96 so the new pine marks are kept.',
-  built: '2026-10-08T17:10:00Z'
+  version: 'hg-v1174',
+  pack: 'FORMATION desk. A 4-stage displacement engine (STALKING, PRIMED, ARMED) audits BTC, ETH and SOL on 15m and 1h: ATR displacement, reclaim on close, funding crowding, CVD absorption when the print exists, and net 2.2R after fees. No zone, no card.',
+  built: '2026-10-08T17:20:00Z'
 };
 
 function hgBuildLabel(b){
