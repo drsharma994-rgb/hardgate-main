@@ -115,5 +115,35 @@
     }
     return { poc: poc, vah: +Math.max.apply(null, prices).toFixed(2), val: +Math.min.apply(null, prices).toFixed(2), totalVolume: total, equalWeight: rows.every(function(r){ return !(r.volume > 0); }) };
   };
+  PineGoldEngine.prototype.detectFreshFvgs = function(klines, minGapDollars){
+    if (minGapDollars == null) minGapDollars = 2.5;
+    var rows = rowsOf(klines), fvgs = [], i, c0, c1, c2, j, k, fvg, top, bottom;
+    if (rows.length < 5) return fvgs;
+    for (i = 2; i < rows.length; i++){
+      c0 = rows[i - 2]; c1 = rows[i - 1]; c2 = rows[i];
+      if (c2.low - c0.high >= minGapDollars && c1.close > c1.open){
+        top = c2.low; bottom = c0.high;
+        fvgs.push({ type: 'BULLISH_FVG', top: top, bottom: bottom, ce50: +((top + bottom) / 2).toFixed(2), barIndex: i - 1, state: 'FRESH' });
+      }
+      if (c0.low - c2.high >= minGapDollars && c1.close < c1.open){
+        top = c0.low; bottom = c2.high;
+        fvgs.push({ type: 'BEARISH_FVG', top: top, bottom: bottom, ce50: +((top + bottom) / 2).toFixed(2), barIndex: i - 1, state: 'FRESH' });
+      }
+    }
+    for (i = 0; i < fvgs.length; i++){
+      fvg = fvgs[i];
+      for (j = fvg.barIndex + 2; j < rows.length; j++){
+        k = rows[j];
+        if (fvg.type === 'BULLISH_FVG'){
+          if (k.low <= fvg.bottom){ fvg.state = 'EXHAUSTED'; break; }
+          if (k.low <= fvg.ce50) fvg.state = 'PARTIALLY_MITIGATED';
+        } else {
+          if (k.high >= fvg.top){ fvg.state = 'EXHAUSTED'; break; }
+          if (k.high >= fvg.ce50) fvg.state = 'PARTIALLY_MITIGATED';
+        }
+      }
+    }
+    return fvgs;
+  };
   root.HG_PineGoldEngine = PineGoldEngine;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

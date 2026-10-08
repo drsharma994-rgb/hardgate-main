@@ -64,19 +64,78 @@
   GoldCoreEngine.prototype.getInstitutionalSession = function(date){
     date = date || new Date();
     var timeVal = date.getUTCHours() + date.getUTCMinutes() / 60;
-    var isLondonApex = timeVal >= 7.25 && timeVal <= 8.75;
+    var isLondonIb = timeVal >= 7.0 && timeVal < 7.5;
+    var isLondonApex = timeVal >= 7.5 && timeVal <= 8.75;
     var isLondonOpen = timeVal >= 7.0 && timeVal < 10.0;
-    var isNyApex = timeVal >= 12.75 && timeVal <= 14.5;
+    var isNyIb = timeVal >= 13.5 && timeVal < 14.0;
+    var isNyApex = timeVal >= 14.0 && timeVal <= 15.25;
     var isNyExpansion = timeVal >= 12.5 && timeVal < 16.0;
     var isFix = (timeVal >= 10.3 && timeVal <= 10.75) || (timeVal >= 14.85 && timeVal <= 15.2);
     var name = 'OFF_HOURS';
-    if (isLondonApex) name = 'LONDON_APEX';
+    if (isLondonIb) name = 'LONDON_IB';
+    else if (isNyIb) name = 'NY_IB';
+    else if (isLondonApex) name = 'LONDON_APEX';
     else if (isNyApex) name = 'NY_APEX';
     else if (isLondonOpen) name = 'LONDON_OPEN';
     else if (isNyExpansion) name = 'NY_EXPANSION';
     else if (timeVal >= 0 && timeVal < 7) name = 'ASIA';
     else if (timeVal >= 16 && timeVal < 20) name = 'NY_CLOSE';
-    return { sessionName: name, isApex: !!(isLondonApex || isNyApex), isKillzone: !!(isLondonOpen || isNyExpansion), isFixWindow: !!isFix };
+    return {
+      sessionName: name,
+      isIbWindow: !!(isLondonIb || isNyIb),
+      isApex: !!(isLondonApex || isNyApex),
+      isKillzone: !!(isLondonOpen || isNyExpansion),
+      isFixWindow: !!isFix
+    };
+  };
+  GoldCoreEngine.prototype.calculateDealingRange = function(dayKlines, currentPrice){
+    var rows = barsOf(dayKlines);
+    if (rows.length < 15 || !(currentPrice > 0)) return { percentile: 0.5, zone: 'EQUILIBRIUM', unread: true };
+    var look = rows.slice(-48);
+    var hi = -Infinity, lo = Infinity, i;
+    for (i = 0; i < look.length; i++){ if (look[i].high > hi) hi = look[i].high; if (look[i].low < lo) lo = look[i].low; }
+    var dist = hi - lo;
+    if (!(dist > 0)) return { percentile: 0.5, zone: 'EQUILIBRIUM', eqPrice: currentPrice, rangeHigh: hi, rangeLow: lo };
+    var percentile = +((currentPrice - lo) / dist).toFixed(3);
+    var zone = 'EQUILIBRIUM';
+    if (percentile <= 0.40) zone = 'DEEP_DISCOUNT';
+    else if (percentile < 0.50) zone = 'DISCOUNT';
+    else if (percentile >= 0.60) zone = 'DEEP_PREMIUM';
+    else if (percentile > 0.50) zone = 'PREMIUM';
+    return { percentile: percentile, zone: zone, rangeHigh: hi, rangeLow: lo, eqPrice: +((hi + lo) / 2).toFixed(2), unread: false };
+  };
+  GoldCoreEngine.prototype.calculateInitialBalance = function(dayKlines){
+    var rows = barsOf(dayKlines);
+    if (!rows.length) return { londonIb: null, nyIb: null };
+    var last = new Date(rows[rows.length - 1].time);
+    var y = last.getUTCFullYear(), mo = last.getUTCMonth(), d = last.getUTCDate();
+    var lon = [], ny = [], i, c, dt, tv;
+    for (i = 0; i < rows.length; i++){
+      c = rows[i];
+      if (!fin(c.time)) continue;
+      dt = new Date(c.time);
+      if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo || dt.getUTCDate() !== d) continue;
+      tv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+      if (tv >= 7.0 && tv < 7.5) lon.push(c);
+      if (tv >= 13.5 && tv < 14.0) ny.push(c);
+    }
+    function box(list){
+      if (!list.length) return null;
+      var h = -Infinity, l = Infinity, j;
+      for (j = 0; j < list.length; j++){ if (list[j].high > h) h = list[j].high; if (list[j].low < l) l = list[j].low; }
+      return { ibh: h, ibl: l };
+    }
+    return { londonIb: box(lon), nyIb: box(ny) };
+  };
+  GoldCoreEngine.prototype.calculateFootprintAbsorption = function(candle, direction){
+    var c = barsOf([candle])[0] || candle;
+    var total = c.high - c.low;
+    if (!(total > 0)) return { absorbed: false, absorptionRatio: 0 };
+    var wick = direction === 'BULL' || direction === 'long'
+      ? (Math.min(c.open, c.close) - c.low)
+      : (c.high - Math.max(c.open, c.close));
+    var ratio = +(wick / total).toFixed(2);
+    return { absorbed: ratio >= 0.58, absorptionRatio: ratio };
   };
   GoldCoreEngine.prototype.checkTimeVeto = function(date){
     date = date || new Date();
@@ -287,7 +346,23 @@
     if (scalpDesk){
       var atrFloor = core.calculateAtr(rows, 14);
       if (atrFloor < core.minAtrDollars) return '15m ATR $' + atrFloor.toFixed(2) + ' is under the $2.50 gold floor';
-      if (!core.getInstitutionalSession(when).isApex) return 'Outside the apex window (07:15-08:45 or 12:45-14:30 UTC)';
+      var sessNow = core.getInstitutionalSession(when);
+      if (sessNow.isIbWindow) return 'Initial Balance is still forming (07:00-07:30 or 13:30-14:00 UTC)';
+      if (!sessNow.isApex) return 'Outside the apex window (07:30-08:45 or 14:00-15:15 UTC)';
+      var pxBars = barsOf(rows);
+      var pxNow = pxBars.length ? pxBars[pxBars.length - 1].close : 0;
+      var deal = core.calculateDealingRange(rows, pxNow);
+      if (!deal.unread && want === 'BULL' && deal.percentile > 0.50) return 'Premium dealing range (' + Math.round(deal.percentile * 100) + '%): do not buy expensive gold';
+      if (!deal.unread && want === 'BEAR' && deal.percentile < 0.50) return 'Discount dealing range (' + Math.round(deal.percentile * 100) + '%): do not sell cheap gold';
+      if (root.HG_PineGoldEngine){
+        try {
+          var fresh = new root.HG_PineGoldEngine().detectFreshFvgs(rows, 2.5) || [];
+          var dead = fresh.filter(function(f){
+            return f.state === 'EXHAUSTED' && pxNow >= f.bottom && pxNow <= f.top && ((want === 'BULL' && f.type === 'BULLISH_FVG') || (want === 'BEAR' && f.type === 'BEARISH_FVG'));
+          });
+          if (dead.length) return 'FVG exhausted past its 50% consequent encroachment';
+        } catch (eCe) {}
+      }
       var lastPx = barsOf(rows);
       lastPx = lastPx.length ? lastPx[lastPx.length - 1].close : 0;
       var regime = core.classifyAsianRegime(rows, lastPx);
@@ -319,6 +394,8 @@
     var atr = core.calculateAtr(rows, 14);
     var regime = core.classifyAsianRegime(rows, px);
     var apex = when ? core.getInstitutionalSession(when) : null;
+    var dealing = core.calculateDealingRange(rows, px);
+    var ib = core.calculateInitialBalance(rows);
     var smt = core.evaluateTripleSmt(rows, root.__hgSilverRows);
     var breaker = core.detectBreakerBlock(rows);
     var bprs = [], va = null;
@@ -329,7 +406,7 @@
         if (pine.calculateValueArea) va = pine.calculateValueArea(rows);
       }
     }catch(eRep){}
-    return { session: session, veto: veto, view: view, asia: asia, sweep: sw, atr: atr, when: when, regime: regime, apex: apex, smt: smt, breaker: breaker, bprs: bprs, valueArea: va };
+    return { session: session, veto: veto, view: view, asia: asia, sweep: sw, atr: atr, when: when, regime: regime, apex: apex, smt: smt, breaker: breaker, bprs: bprs, valueArea: va, dealing: dealing, ib: ib };
   }
 
   function hgGoldInstStrip(report, judas){
@@ -351,7 +428,7 @@
       + '<div class="note">Session <b>' + esc(report.apex ? report.apex.sessionName : report.session) + '</b>'
       + (report.apex && report.apex.isApex ? ' APEX' : '')
       + ' · ' + (report.veto && report.veto.veto ? ('<b>SPREAD VETO</b> ' + esc(report.veto.reason)) : 'spread clean')
-      + ' · Asia ' + esc(rg.regime || 'UNKNOWN') + (fin(rg.rangePct) ? (' ' + rg.rangePct + '% ' + (rg.drift || '')) : '')
+      + ' · range ' + esc((report.dealing && report.dealing.zone) || 'UNREAD') + (report.dealing && fin(report.dealing.percentile) ? (' ' + Math.round(report.dealing.percentile * 100) + '%') : '') + (report.apex && report.apex.isIbWindow ? ' · IB FORMING' : '') + ' · Asia ' + esc(rg.regime || 'UNKNOWN') + (fin(rg.rangePct) ? (' ' + rg.rangePct + '% ' + (rg.drift || '')) : '')
       + ' · ' + esc(smtTxt)
       + ' · ' + esc(bpr)
       + (va && fin(va.poc) ? (' · POC $' + va.poc + ' VAH $' + va.vah + ' VAL $' + va.val) : '')

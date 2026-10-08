@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1177',
-  pack: 'Gold v3. A scalp lead now needs the apex window, 07:15-08:45 or 12:45-14:30 UTC. An Asian range over 1.10% of spot is an expansion: the fade is vetoed and the trend is not. Silver must not contradict gold. Breaker blocks, balanced price ranges, and the value area are on the institutional strip.',
-  built: '2026-10-08T18:40:00Z'
+  version: 'hg-v1178',
+  pack: 'Gold v4. A long in the top half of the dealing range is blocked, and a short in the bottom half is blocked. The first 30 minutes of London and New York are the Initial Balance and are not a trade. A scalp reclaim needs a 58% rejection wick. A gap traded through its midpoint is exhausted. Ganesh can use a three-drive and prints TP1, TP2, and TP3.',
+  built: '2026-10-08T19:05:00Z'
 };
 
 function hgBuildLabel(b){

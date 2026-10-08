@@ -24,7 +24,7 @@
     ledger.push({ step: 'GS1_ACCUMULATION', name: 'Asian Sacred Accumulation', pass: gs1,
       evidence: 'Regime: ' + asia.regime + ' (' + (asia.rangePct || 0) + '% of spot, drift ' + (asia.drift || 'FLAT') + ')' });
     ledger.push({ step: 'GS2_KILLZONE', name: 'Apex Liquidity Window', pass: !!sess.isApex,
-      evidence: 'Session: ' + sess.sessionName + (sess.isApex ? ' APEX' : ' — outside 07:15-08:45 and 12:45-14:30 UTC') });
+      evidence: 'Session: ' + sess.sessionName + (sess.isApex ? ' APEX' : (sess.isIbWindow ? ' — Initial Balance still forming' : ' — outside 07:30-08:45 and 14:00-15:15 UTC')) });
     var direction = null, sweepEvidence = 'Price inside the Asian box and no breaker';
     if (asia.asl && current.low <= asia.asl){ direction = 'BULL'; sweepEvidence = 'Harvested sell stops below $' + asia.asl.toFixed(2); }
     else if (asia.ash && current.high >= asia.ash){ direction = 'BEAR'; sweepEvidence = 'Harvested buy stops above $' + asia.ash.toFixed(2); }
@@ -59,6 +59,28 @@
     var gs7 = reward >= 8.50;
     ledger.push({ step: 'GS7_GOLDEN_EXPANSION', name: '2.6R and at least $8.50', pass: gs7,
       evidence: 'Risk $' + risk.toFixed(2) + ' · target move $' + reward });
+    var last6 = rows.slice(-6);
+    var three = false;
+    if (last6.length === 6 && direction === 'BULL') three = last6[1].low > last6[3].low && last6[3].low > last6[5].low;
+    if (last6.length === 6 && direction === 'BEAR') three = last6[1].high < last6[3].high && last6[3].high < last6[5].high;
+    var gs3 = ledger.filter(function(s){ return s.step === 'GS3_LIQUIDITY_HARVEST'; })[0];
+    if (gs3){
+      gs3.pass = gs3.pass || three;
+      if (three) gs3.evidence = 'Three-drive exhaustion. ' + gs3.evidence;
+    }
+    var deal = this.core.calculateDealingRange(rows, current.close);
+    var zoneOk = !direction ? false : (direction === 'BULL' ? deal.percentile <= 0.48 : deal.percentile >= 0.52);
+    var gs1 = ledger.filter(function(s){ return s.step === 'GS1_ACCUMULATION'; })[0];
+    if (gs1){
+      gs1.pass = gs1.pass && zoneOk;
+      gs1.evidence += ' · ' + deal.zone + ' ' + Math.round(deal.percentile * 100) + '%';
+    }
+    var wick = this.core.calculateFootprintAbsorption(current, direction || 'BULL');
+    var gs5 = ledger.filter(function(s){ return s.step === 'GS5_DISPLACEMENT'; })[0];
+    if (gs5){
+      gs5.evidence += ' · wick ' + Math.round(wick.absorptionRatio * 100) + '%';
+      if (!gs5.pass && wick.absorptionRatio >= 0.65) gs5.pass = true;
+    }
     var failed = ledger.filter(function(s){ return !s.pass; });
     var ok = failed.length === 0 && !!direction;
     return {
@@ -67,6 +89,10 @@
       entryPrice: ok ? +current.close.toFixed(2) : null,
       stopLoss: ok ? +((direction === 'BULL' ? current.close - risk : current.close + risk).toFixed(2)) : null,
       takeProfit: ok ? +((direction === 'BULL' ? current.close + reward : current.close - reward).toFixed(2)) : null,
+      tp1_1_5R: ok ? +((direction === 'BULL' ? current.close + risk * 1.5 : current.close - risk * 1.5).toFixed(2)) : null,
+      tp2_2_6R: ok ? +((direction === 'BULL' ? current.close + reward : current.close - reward).toFixed(2)) : null,
+      tp3_3_5R: ok ? +((direction === 'BULL' ? current.close + risk * 3.5 : current.close - risk * 3.5).toFixed(2)) : null,
+      threeDrive: three,
       failedSteps: failed, ledger: ledger
     };
   };
@@ -76,9 +102,13 @@
       return '<div class="kv"><span class="k">' + step.step + ' ' + step.name + '</span><span class="v">'
         + (step.pass ? 'PASS' : 'VETO') + ' — ' + String(step.evidence) + '</span></div>';
     }).join('');
+    var plan = '';
+    if (audit.qualified && audit.tp1_1_5R != null){
+      plan = '<div class="note">Scale out · TP1 $' + audit.tp1_1_5R + ' (1.5R) · TP2 $' + audit.tp2_2_6R + ' (2.6R) · TP3 $' + audit.tp3_3_5R + ' (3.5R)</div>';
+    }
     return '<div class="panel" data-hg-gs7="1" style="margin-top:10px"><h3>GS1-GS7 <span>'
       + audit.passedCount + '/' + audit.totalSteps + (audit.qualified ? ' ARMED' : ' not a ticket')
-      + '</span></h3>' + rows + '</div>';
+      + '</span></h3>' + rows + plan + '</div>';
   }
   root.HG_GaneshGoldEngine = GaneshGoldEngine;
   root.hgGaneshAuditHtml = hgGaneshAuditHtml;
