@@ -1,4 +1,6 @@
-# HARDGATE — run the offline test gate on every push/PR to main.
+# HARDGATE — CI as the single test source of truth.
+# Every push/PR to main runs: cache-bump triad, the full offline test gate,
+# the two-tier lint, and a gitleaks secret scan over full repo history.
 name: HARDGATE Tests
 
 on:
@@ -6,6 +8,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -18,5 +24,41 @@ jobs:
         with:
           node-version: '20'
 
-      - name: npm test
+      - name: cache-bump triad (sw.js / build-stamp.js / index.html ?v=)
+        run: npm run check:cache
+
+      - name: npm test (full offline gate — no install needed, suite is dep-free)
         run: npm test
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # --ignore-scripts: skip puppeteer's Chromium download; lint needs no browser
+      - name: npm ci (dev tooling only)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: npm run lint (core: api/ lib/ scripts/ tests/ — blocking)
+        run: npm run lint
+
+      - name: npm run lint:legacy (root browser scripts — report-only)
+        run: npm run lint:legacy
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # scan full history, not just the latest commit
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

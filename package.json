@@ -21,6 +21,7 @@
     "lint:legacy": "eslint .",
     "lint:fix": "eslint api lib scripts tests --fix",
     "check:prod": "node scripts/check-production.mjs",
+    "check:cache": "node scripts/check-cache-bump.mjs",
     "sync:backtest-params": "node scripts/sync-backtest-tab-params.mjs",
     "test:data-layer": "node tests/test-data-layer.mjs",
     "og:walk": "node scripts/backtest-omnigold.mjs",
