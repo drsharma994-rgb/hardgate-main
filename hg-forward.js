@@ -156,11 +156,11 @@ localStorage. Never throws.
      indicator marks would ever have landed — twelve dropped silently on every
      record, the hg-v955 shape inside the cap meant to stop a dumping ground.
      Still bounded; the guard asserts the whole GOLD SCALP set fits with room. */
-  /* hg-v1165: 16 -> 32 (hg-v1158) -> 64: fourteen free: + two PERFECT +
-     eighteen ind: sat exactly at 32, and the four hg-v1165 free legs and the
-     six pine: marks need room -- the next mark moves the cap first, or it is
-     dropped silently in sorted order (the hg-v1158 trap) */
-  var FWD_READS_MAX = 64, FWD_READ_KEY = /^[A-Za-z0-9][A-Za-z0-9:_. -]{0,47}$/;
+  /* hg-v1165: 16 -> 32 (hg-v1158) -> 64. hg-v1173: 64 -> 96.
+     pine: sorts after free: and ind:. Twenty-two gold Pine layers plus the
+     majority mark need room past 64, or the last pine keys (weekly AVWAP
+     among them) are dropped silently in sorted order. */
+  var FWD_READS_MAX = 96, FWD_READ_KEY = /^[A-Za-z0-9][A-Za-z0-9:_. -]{0,47}$/;
   function hgFwdReadsNormalize(reads){
     if (!reads || typeof reads !== 'object' || Array.isArray(reads)) return undefined;
     var out = null, n = 0, k;

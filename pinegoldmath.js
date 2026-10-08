@@ -748,7 +748,21 @@ var PINE_GOLD_RECORD_LAYERS = [
   { id: 'heikin', label: 'Heikin Ashi Flip', fn: 'pineGoldHeikin', minBars: 20,
     opts: { swing: 5 }, twin: null },
   { id: 'sessvwap', label: 'Session VWAP', fn: 'pineGoldSessVwap', minBars: 20,
-    opts: { swing: 5 }, twin: null }
+    opts: { swing: 5 }, twin: null },
+  /* hg-v1173: four reads that are not another copy of the oscillators above.
+     QQE is a smoothed-RSI trail (not MACD, not Stochastic). TTM Squeeze is
+     the volatility regime (BB inside KC) plus its momentum. Weekly AVWAP is
+     location for the week, not the session. Kaufman efficiency votes only
+     when the move is actually efficient. Each fires only on the last closed
+     bar. None names an OMNIGOLD twin. */
+  { id: 'qqe', label: 'QQE', fn: 'pineGoldQqe', minBars: 80,
+    opts: { rsiLen: 14, sf: 5, qqe: 4.236, swing: 5 }, twin: null },
+  { id: 'squeeze', label: 'TTM Squeeze', fn: 'pineGoldSqueezeFire', minBars: 50,
+    opts: { len: 20, bbMult: 2, kcMult: 1.5, swing: 5 }, twin: null },
+  { id: 'wavwap', label: 'Weekly AVWAP', fn: 'pineGoldWeeklyAvwap', minBars: 30,
+    opts: { swing: 5 }, twin: null },
+  { id: 'efficiency', label: 'Kaufman Efficiency', fn: 'pineGoldEfficiency', minBars: 30,
+    opts: { len: 10, trend: 0.30, swing: 5 }, twin: null }
 ];
 /* hg-v1165's majority mark is the majority of the FIVE hg-v1164 layers --
    records written since then carry that meaning, so the three hg-v1166
@@ -1452,6 +1466,230 @@ function pineGoldSessVwap(rows, opts){
     return { dir: null, vwap: vwap };
   }catch(e){ return { dir: null }; }
 }
+function pgrEma(src, len){
+  var out = new Array(src.length).fill(NaN);
+  if (!(len >= 1) || src.length < len) return out;
+  var k = 2 / (len + 1), s = 0, seen = 0, seeded = -1, i;
+  for (i = 0; i < src.length; i++){
+    if (!isFinite(src[i])){ seen = 0; s = 0; continue; }
+    seen++; s += src[i];
+    if (seen === len){ out[i] = s / len; seeded = i; break; }
+  }
+  if (seeded < 0) return out;
+  for (i = seeded + 1; i < src.length; i++){
+    if (!isFinite(src[i]) || !isFinite(out[i - 1])) continue;
+    out[i] = src[i] * k + out[i - 1] * (1 - k);
+  }
+  return out;
+}
+function pgrRsi(closes, len){
+  var out = new Array(closes.length).fill(NaN);
+  if (closes.length <= len) return out;
+  var gain = 0, loss = 0, i;
+  for (i = 1; i <= len; i++){
+    var d = closes[i] - closes[i - 1];
+    if (!isFinite(d)) return out;
+    if (d >= 0) gain += d; else loss -= d;
+  }
+  gain /= len; loss /= len;
+  out[len] = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  for (i = len + 1; i < closes.length; i++){
+    var d2 = closes[i] - closes[i - 1];
+    if (!isFinite(d2)) return out;
+    var g = d2 > 0 ? d2 : 0, l = d2 < 0 ? -d2 : 0;
+    gain = (gain * (len - 1) + g) / len;
+    loss = (loss * (len - 1) + l) / len;
+    out[i] = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  }
+  return out;
+}
+function pgrQqeSeries(rows, rsiLen, sf, qqe){
+  rsiLen = rsiLen || 14; sf = sf || 5; qqe = qqe || 4.236;
+  var n = rows.length, closes = [], i;
+  for (i = 0; i < n; i++){
+    var c = pgrNum(rows[i].c);
+    if (!isFinite(c)) return null;
+    closes.push(c);
+  }
+  var rsi = pgrRsi(closes, rsiLen);
+  var rsiMa = pgrEma(rsi, sf);
+  var wild = rsiLen * 2 - 1;
+  var tr = new Array(n).fill(NaN);
+  for (i = 1; i < n; i++){
+    if (isFinite(rsiMa[i]) && isFinite(rsiMa[i - 1])) tr[i] = Math.abs(rsiMa[i] - rsiMa[i - 1]);
+  }
+  var maAtr = pgrEma(tr, wild);
+  var dar = pgrEma(maAtr, wild);
+  for (i = 0; i < n; i++){ if (isFinite(dar[i])) dar[i] *= qqe; }
+  var longb = new Array(n).fill(NaN), shortb = new Array(n).fill(NaN), trend = new Array(n).fill(0);
+  for (i = 1; i < n; i++){
+    if (!isFinite(rsiMa[i]) || !isFinite(dar[i])){ trend[i] = trend[i - 1] || 0; continue; }
+    var nshort = rsiMa[i] + dar[i], nlong = rsiMa[i] - dar[i];
+    var prevMa = rsiMa[i - 1];
+    var prevLong = longb[i - 1], prevShort = shortb[i - 1];
+    if (isFinite(prevLong) && isFinite(prevMa) && prevMa > prevLong && rsiMa[i] > prevLong) longb[i] = Math.max(prevLong, nlong);
+    else longb[i] = nlong;
+    if (isFinite(prevShort) && isFinite(prevMa) && prevMa < prevShort && rsiMa[i] < prevShort) shortb[i] = Math.min(prevShort, nshort);
+    else shortb[i] = nshort;
+    var crossUp = isFinite(prevShort) && isFinite(prevMa) && prevMa <= prevShort && rsiMa[i] > prevShort;
+    var crossDn = isFinite(prevLong) && isFinite(prevMa) && prevMa >= prevLong && rsiMa[i] < prevLong;
+    if (crossUp) trend[i] = 1;
+    else if (crossDn) trend[i] = -1;
+    else if (trend[i - 1] === 1 || trend[i - 1] === -1) trend[i] = trend[i - 1];
+    else trend[i] = 0;
+  }
+  return { trend: trend, rsiMa: rsiMa };
+}
+function pineGoldQqe(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < ((opts.rsiLen || 14) * 4) + sw) return { dir: null };
+    var S = pgrQqeSeries(rows, opts.rsiLen || 14, opts.sf || 5, opts.qqe || 4.236);
+    if (!S) return { dir: null };
+    var i = n - 1, t0 = S.trend[i], t1 = S.trend[i - 1], c = pgrNum(rows[i].c);
+    if (t1 !== 1 && t0 === 1) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { qqe: S.rsiMa[i] });
+    if (t1 !== -1 && t0 === -1) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { qqe: S.rsiMa[i] });
+    return { dir: null, trend: t0 };
+  }catch(e){ return { dir: null }; }
+}
+function pgrSmaAt(src, i, len){
+  if (i < len - 1) return NaN;
+  var s = 0, k;
+  for (k = i - len + 1; k <= i; k++){
+    if (!isFinite(src[k])) return NaN;
+    s += src[k];
+  }
+  return s / len;
+}
+function pgrStdevAt(src, i, len){
+  var m = pgrSmaAt(src, i, len);
+  if (!isFinite(m)) return NaN;
+  var s = 0, k;
+  for (k = i - len + 1; k <= i; k++) s += (src[k] - m) * (src[k] - m);
+  return Math.sqrt(s / len);
+}
+function pgrLinregAt(src, i, len){
+  if (i < len - 1) return NaN;
+  var sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, k, y;
+  for (k = 0; k < len; k++){
+    y = src[i - len + 1 + k];
+    if (!isFinite(y)) return NaN;
+    sumX += k; sumY += y; sumXY += k * y; sumXX += k * k;
+  }
+  var den = len * sumXX - sumX * sumX;
+  if (den === 0) return NaN;
+  var slope = (len * sumXY - sumX * sumY) / den;
+  var intercept = (sumY - slope * sumX) / len;
+  return intercept + slope * (len - 1);
+}
+function pgrSqueezeRead(rows, len, bbMult, kcMult){
+  len = len || 20; bbMult = bbMult || 2; kcMult = kcMult || 1.5;
+  var n = rows ? rows.length : 0;
+  if (n < len * 2 + 2) return null;
+  var closes = [], trs = [], i;
+  for (i = 0; i < n; i++){
+    var c = pgrNum(rows[i].c), h = pgrNum(rows[i].h), l = pgrNum(rows[i].l);
+    if (![c, h, l].every(isFinite)) return null;
+    closes.push(c);
+    var pc = i ? pgrNum(rows[i - 1].c) : c;
+    trs.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  var src = new Array(n).fill(NaN), on = new Array(n).fill(false);
+  for (i = len - 1; i < n; i++){
+    var basis = pgrSmaAt(closes, i, len), dev = pgrStdevAt(closes, i, len), rangeMa = pgrSmaAt(trs, i, len);
+    if (![basis, dev, rangeMa].every(isFinite)) return null;
+    var upperBB = basis + bbMult * dev, lowerBB = basis - bbMult * dev;
+    var upperKC = basis + kcMult * rangeMa, lowerKC = basis - kcMult * rangeMa;
+    on[i] = lowerBB > lowerKC && upperBB < upperKC;
+    var hh = pgrHighest(rows, i - len + 1, i, 'h'), ll = pgrLowest(rows, i - len + 1, i, 'l');
+    src[i] = closes[i] - (((hh + ll) / 2 + basis) / 2);
+  }
+  var i0 = n - 1;
+  var mom = pgrLinregAt(src, i0, len), momPrev = pgrLinregAt(src, i0 - 1, len);
+  if (!isFinite(mom) || !isFinite(momPrev)) return null;
+  return { on: on[i0], prevOn: on[i0 - 1], mom: mom, prevMom: momPrev };
+}
+function pineGoldSqueezeFire(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    var r = pgrSqueezeRead(rows, opts.len || 20, opts.bbMult || 2, opts.kcMult || 1.5);
+    if (!r || n < sw + 2) return { dir: null };
+    var c = pgrNum(rows[n - 1].c);
+    if (r.prevOn && !r.on && r.mom > 0) return pgrResult('long', c, pgrLowest(rows, n - 1 - sw, n - 2, 'l'), { mom: r.mom });
+    if (r.prevOn && !r.on && r.mom < 0) return pgrResult('short', c, pgrHighest(rows, n - 1 - sw, n - 2, 'h'), { mom: r.mom });
+    return { dir: null, squeezeOn: r.on, mom: r.mom };
+  }catch(e){ return { dir: null }; }
+}
+function pgrWeekStart(t){
+  var ms = t > 1e12 ? t : t * 1000;
+  var d = new Date(ms);
+  var mondayOffset = (d.getUTCDay() + 6) % 7;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - mondayOffset * 86400000;
+}
+function pgrWeeklyVwapRun(rows){
+  var n = rows ? rows.length : 0;
+  if (n < 3) return null;
+  var week = null, pv = 0, vv = 0, prev = null, last = null, i;
+  for (i = 0; i < n; i++){
+    var tk = rows[i].t > 1e12 ? rows[i].t : rows[i].t * 1000;
+    var ws = pgrWeekStart(tk);
+    if (week !== ws){ week = ws; pv = 0; vv = 0; }
+    var tp = (pgrNum(rows[i].h) + pgrNum(rows[i].l) + pgrNum(rows[i].c)) / 3;
+    var v = pgrNum(rows[i].v);
+    if (!(v > 0)) v = 1;
+    if (!isFinite(tp)) return null;
+    pv += tp * v; vv += v;
+    var vw = pv / vv;
+    if (i === n - 2) prev = { vwap: vw, c: pgrNum(rows[i].c), week: ws };
+    if (i === n - 1) last = { vwap: vw, c: pgrNum(rows[i].c), week: ws };
+  }
+  if (!last || !prev || !isFinite(last.vwap) || !isFinite(prev.vwap)) return null;
+  return { vwap: last.vwap, prev: prev.vwap, c: last.c, prevC: prev.c, sameWeek: last.week === prev.week };
+}
+function pineGoldWeeklyAvwap(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    var r = pgrWeeklyVwapRun(rows);
+    if (!r || n < sw + 2 || !r.sameWeek) return r ? { dir: null, vwap: r.vwap } : { dir: null };
+    if (r.prevC <= r.prev && r.c > r.vwap) return pgrResult('long', r.c, Math.min(r.vwap, pgrLowest(rows, n - 1 - sw, n - 2, 'l')), { vwap: r.vwap });
+    if (r.prevC >= r.prev && r.c < r.vwap) return pgrResult('short', r.c, Math.max(r.vwap, pgrHighest(rows, n - 1 - sw, n - 2, 'h')), { vwap: r.vwap });
+    return { dir: null, vwap: r.vwap };
+  }catch(e){ return { dir: null }; }
+}
+function pgrEfficiencyAt(rows, i, len){
+  if (i < len) return null;
+  var c0 = pgrNum(rows[i].c), c1 = pgrNum(rows[i - len].c);
+  if (!isFinite(c0) || !isFinite(c1)) return null;
+  var vol = 0, k;
+  for (k = i - len + 1; k <= i; k++){
+    var a = pgrNum(rows[k].c), b = pgrNum(rows[k - 1].c);
+    if (!isFinite(a) || !isFinite(b)) return null;
+    vol += Math.abs(a - b);
+  }
+  var er = vol > 0 ? Math.abs(c0 - c1) / vol : 0;
+  var dir = c0 > c1 ? 'long' : (c0 < c1 ? 'short' : null);
+  return { er: er, dir: dir };
+}
+function pineGoldEfficiency(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 10, gate = opts.trend || 0.30, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 2) return { dir: null };
+    var now = pgrEfficiencyAt(rows, n - 1, len), prev = pgrEfficiencyAt(rows, n - 2, len);
+    if (!now || !prev) return { dir: null };
+    var c = pgrNum(rows[n - 1].c);
+    if (prev.er < gate && now.er >= gate && now.dir === 'long') return pgrResult('long', c, pgrLowest(rows, n - 1 - sw, n - 2, 'l'), { er: now.er });
+    if (prev.er < gate && now.er >= gate && now.dir === 'short') return pgrResult('short', c, pgrHighest(rows, n - 1 - sw, n - 2, 'h'), { er: now.er });
+    return { dir: null, er: now.er };
+  }catch(e){ return { dir: null }; }
+}
 function pineGoldBlocksLead(states, dir){
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
@@ -1464,6 +1702,14 @@ function pineGoldBlocksLead(states, dir){
     else if (v === 'long' || v === 'short') oppose++;
   }
   if (oppose >= 2 && oppose > agree) return 'ADX, Heikin Ashi and session VWAP against';
+  var ids2 = ['qqe', 'squeeze', 'wavwap', 'efficiency'], agree2 = 0, oppose2 = 0, read2 = 0;
+  for (i = 0; i < ids2.length; i++){
+    var v2 = states[ids2[i]];
+    if (v2 === dir){ agree2++; read2++; }
+    else if (v2 === 'long' || v2 === 'short'){ oppose2++; read2++; }
+  }
+  if (read2 >= 3 && oppose2 >= 3 && oppose2 > agree2) return 'QQE, squeeze, weekly AVWAP and efficiency against';
+  if (states.squeezeOn === true && isFinite(states.efficiencyEr) && states.efficiencyEr < 0.22 && withN < PINE_GOLD_MAJORITY) return 'squeeze on with no trend efficiency';
   return null;
 }
 
@@ -1602,6 +1848,8 @@ function pineGoldLayerStates(rows){
               /* hg-v1167 */ chandelier: null, hullma: null, cci: null, aroon: null,
               /* hg-v1171 */ williams: null, trix: null, fisher: null,
               /* price-only confirmation */ adx: null, heikin: null, sessvwap: null,
+              /* hg-v1173 formation family */ qqe: null, squeeze: null, wavwap: null, efficiency: null,
+              squeezeOn: false, efficiencyEr: NaN,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -1755,6 +2003,39 @@ function pineGoldLayerStates(rows){
         else if (c < sv) out.sessvwap = 'short';
       }
     }catch(eSv){}
+    try{
+      var qS = pgrQqeSeries(rows, (layerOpts('qqe').rsiLen) || 14, (layerOpts('qqe').sf) || 5, (layerOpts('qqe').qqe) || 4.236);
+      if (qS && (qS.trend[i] === 1 || qS.trend[i] === -1) && isFinite(qS.rsiMa[i])){
+        var qSide = qS.trend[i] === 1 ? 'long' : 'short';
+        var rSide = qS.rsiMa[i] > 55 ? 'long' : (qS.rsiMa[i] < 45 ? 'short' : null);
+        if (rSide && rSide === qSide) out.qqe = qSide;
+      }
+    }catch(eQq){}
+    try{
+      var sqO = layerOpts('squeeze');
+      var sq = pgrSqueezeRead(rows, sqO.len || 20, sqO.bbMult || 2, sqO.kcMult || 1.5);
+      if (sq){
+        out.squeezeOn = sq.on === true;
+        if (!sq.on && sq.mom > 0) out.squeeze = 'long';
+        else if (!sq.on && sq.mom < 0) out.squeeze = 'short';
+      }
+    }catch(eSq){}
+    try{
+      var wv = pgrWeeklyVwapRun(rows);
+      if (wv && isFinite(wv.vwap)){
+        if (c > wv.vwap) out.wavwap = 'long';
+        else if (c < wv.vwap) out.wavwap = 'short';
+      }
+    }catch(eWv){}
+    try{
+      var efO = layerOpts('efficiency');
+      var ef = pgrEfficiencyAt(rows, i, efO.len || 10);
+      var efGate = efO.trend || 0.30;
+      if (ef){
+        out.efficiencyEr = ef.er;
+        if (ef.er >= efGate && ef.dir) out.efficiency = ef.dir;
+      }
+    }catch(eEf){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
       var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
@@ -1803,7 +2084,7 @@ function pineGoldStackLineHtml(states, marks){
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — recorded for the forward ledger’s read split, not part of this desk’s score, gates nothing.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. Nothing here is scored.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }
@@ -1860,6 +2141,10 @@ G.pineGoldFisherZero = pineGoldFisherZero;
 G.pineGoldAdxDi = pineGoldAdxDi;
 G.pineGoldHeikin = pineGoldHeikin;
 G.pineGoldSessVwap = pineGoldSessVwap;
+G.pineGoldQqe = pineGoldQqe;
+G.pineGoldSqueezeFire = pineGoldSqueezeFire;
+G.pineGoldWeeklyAvwap = pineGoldWeeklyAvwap;
+G.pineGoldEfficiency = pineGoldEfficiency;
 G.pineGoldBlocksLead = pineGoldBlocksLead;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
@@ -1899,6 +2184,7 @@ if (typeof module !== 'undefined' && module.exports){
     /* hg-v1171 */
     pineGoldWilliamsReentry, pineGoldTrixCross, pineGoldFisherZero,
     pineGoldAdxDi, pineGoldHeikin, pineGoldSessVwap, pineGoldBlocksLead,
+    pineGoldQqe, pineGoldSqueezeFire, pineGoldWeeklyAvwap, pineGoldEfficiency,
     pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries
   };
 }
