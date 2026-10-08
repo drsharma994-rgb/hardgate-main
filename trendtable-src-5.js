@@ -46,6 +46,12 @@
   var diverged = rows1 ? tmWtDiverging(rows1, dir) : null;
   if (diverged == null) hard.push('wavetrend divergence unread');
   else if (diverged) hard.push('wavetrend is diverging');
+  var block = rows1 ? tmFreshOb(rows1, dir) : null;
+  if (block == null) hard.push('order block unread');
+  else if (!block) hard.push('not at a fresh order block');
+  var magic = rows1 ? tmTrendMagic(rows1, dir) : null;
+  if (magic == null) hard.push('trend magic unread');
+  else if (!magic) hard.push('trend magic is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -185,6 +191,10 @@
       if (wave1 == null && wave15 == null) hard.push('wavetrend unread');
       else hard.push('no wavetrend cross from the extreme');
     }
+    var ut = tmUtBot(m15, 2);
+    if (ut == null) hard.push('ut bot unread');
+    else if (dir === 'long' && ut !== 'buy') hard.push('ut bot is not long');
+    else if (dir === 'short' && ut !== 'sell') hard.push('ut bot is not short');
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');

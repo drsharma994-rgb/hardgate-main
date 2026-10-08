@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1196',
-  pack: 'Trend Matrix pine suite. The smoothed RSI has to be beyond 55 with the trade. A flat market is not a bullish QQE. The Hull slope has to agree. Volume flow needs real volume and has to be on the trade side. A bar with no volume is unread. WaveTrend divergence of more than 10 points against the trade is a veto. A short history is not marked green. The card does not send an order.',
-  built: '2026-10-08T23:40:00Z'
+  version: 'hg-v1197',
+  pack: 'Trend Matrix citadel. A long has to be inside a fresh 1h order block that no earlier bar has touched. The 15m UT trail, two times ATR, has to be on the trade side. Trend magic is the 50-bar CCI, and a flat tape is unread rather than bullish. The card does not send an order.',
+  built: '2026-10-08T23:55:00Z'
 };
 
 function hgBuildLabel(b){

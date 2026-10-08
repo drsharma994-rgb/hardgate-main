@@ -875,6 +875,64 @@ function tmWtDiverging(rows, dir){
   if (dir === 'long') return rows[recent].h > rows[prior].h && (wt[prior] - wt[recent]) > 10;
   return rows[recent].l < rows[prior].l && (wt[recent] - wt[prior]) > 10;
 }
+function tmFreshOb(rows, dir){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var a = atr(rows, 14);
+  var atrNow = a && a.length ? a[a.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var last = rows.length - 1;
+  var px = rows[last].c;
+  var i, j, o, up, dn, top, bot, hit;
+  for (i = 3; i < last - 2; i++){
+    o = rows[i];
+    up = rows[i + 1];
+    dn = rows[i + 2];
+    if (dir === 'long'){
+      if (!(o.c < o.o && up.c > up.o && dn.c > dn.o && (dn.c - o.c) >= 1.5 * atrNow)) continue;
+    } else if (!(o.c > o.o && up.c < up.o && dn.c < dn.o && (o.c - dn.c) >= 1.5 * atrNow)) continue;
+    top = o.h;
+    bot = o.l;
+    hit = false;
+    for (j = i + 3; j < last; j++){
+      if (dir === 'long' && rows[j].l <= top) { hit = true; break; }
+      if (dir === 'short' && rows[j].h >= bot) { hit = true; break; }
+    }
+    if (hit) continue;
+    if (px >= bot && px <= top) return true;
+  }
+  return false;
+}
+function tmUtBot(rows, key){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  key = key || 2;
+  var a = atr(rows, 10);
+  if (!a || a.length < rows.length) return null;
+  var stop = rows[0].c, i, c, prev, loss;
+  for (i = 1; i < rows.length; i++){
+    if (!(a[i] > 0)) return null;
+    loss = key * a[i];
+    c = rows[i].c;
+    prev = rows[i - 1].c;
+    if (c > stop && prev > stop) stop = Math.max(stop, c - loss);
+    else if (c < stop && prev < stop) stop = Math.min(stop, c + loss);
+    else stop = c > stop ? c - loss : c + loss;
+  }
+  return rows[rows.length - 1].c > stop ? 'buy' : 'sell';
+}
+function tmTrendMagic(rows, dir){
+  if (!rows || rows.length < 55) return null;
+  var tp = [], i, sum = 0;
+  for (i = 0; i < rows.length; i++) tp.push((rows[i].h + rows[i].l + rows[i].c) / 3);
+  var slice = tp.slice(-50);
+  for (i = 0; i < slice.length; i++) sum += slice[i];
+  var sma = sum / slice.length, dev = 0;
+  for (i = 0; i < slice.length; i++) dev += Math.abs(slice[i] - sma);
+  dev = dev / slice.length;
+  if (!(dev > 0)) return null;
+  var cci = (tp[tp.length - 1] - sma) / (0.015 * dev);
+  if (dir === 'long') return cci > 0;
+  return cci < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
