@@ -107,6 +107,40 @@
     var be = this.core.calculateTrailingBreakeven(setup.entryPrice, setup.direction, atr);
     setup.trailingBreakevenStop = be.breakevenStop;
     setup.pocTrapped = poc.trappedSide;
+    var adr = this.core.calculateAdrExhaustion(rows);
+    if (!adr.unread && adr.exhausted && String(sess.sessionName).indexOf('NY') === 0){
+      if (setup.direction === 'BULL' && adr.position >= 0.75) return { active: false, veto: true, reason: 'ADR ' + adr.pctUsed + '% used at the high: no New York continuation long' };
+      if (setup.direction === 'BEAR' && adr.position <= 0.25) return { active: false, veto: true, reason: 'ADR ' + adr.pctUsed + '% used at the low: no New York continuation short' };
+    }
+    var cvd = this.core.calculateCvdAbsorption(rows, setup.direction);
+    if (!cvd.unread && !cvd.confirmed) return { active: false, veto: true, reason: 'Estimated delta does not confirm the ' + setup.direction + '. This is candle location, not the exchange tape' };
+    setup.cvdStatus = cvd.unread ? 'UNREAD' : (cvd.deltaDivergence ? 'ABSORPTION' : 'AGREES');
+    var anchor = nymo && !nymo.unread ? nymo.nymo : (asia.ash && asia.asl ? (asia.ash + asia.asl) / 2 : current.close);
+    var gann = this.core.calculateGannSquare9(anchor, current.close);
+    if (!gann.unread){
+      setup.gannLevel = gann.closestLevel;
+      setup.gannDegree = gann.closestDegree;
+      setup.gannDistance = gann.distanceToGann;
+      if (gann.isAtGannPivot && setup.stamps) setup.stamps.push('GANN');
+    }
+    var vi = this.core.detectVolumeImbalance(rows);
+    if (vi) setup.volumeImbalance = vi.type + ' $' + vi.gapSize;
+    if (!adr.unread && adr.adrDollars > 0){
+      var cap = setup.direction === 'BULL' ? +(adr.todayLow + adr.adrDollars).toFixed(2) : +(adr.todayHigh - adr.adrDollars).toFixed(2);
+      if (adr.exhausted) cap = +((adr.todayHigh + adr.todayLow) / 2).toFixed(2);
+      function pull(px){
+        if (setup.direction === 'BULL') return Math.min(px, cap);
+        return Math.max(px, cap);
+      }
+      setup.tp1_1_5R = pull(setup.tp1_1_5R);
+      setup.tp2_2_6R = pull(setup.tp2_2_6R);
+      setup.tp3_3_5R = pull(setup.tp3_3_5R);
+      setup.target = setup.tp2_2_6R;
+      var room = Math.abs(setup.target - setup.entryPrice);
+      var riskNow = Math.abs(setup.entryPrice - setup.stopLoss);
+      if (!(room >= riskNow)) return { active: false, veto: true, reason: 'The remaining daily range is under 1R, so the target is not worth the stop' };
+      setup.adrRemaining = '$' + adr.remainingDollars;
+    }
     return { active: true, setup: setup };
   };
   root.HG_GoldScalpEngine = GoldScalpEngine;

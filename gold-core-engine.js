@@ -171,6 +171,84 @@
     var bull = direction === 'BULL' || direction === 'long';
     return { breakevenStop: +(bull ? entryPrice + buffer : entryPrice - buffer).toFixed(2), buffer: buffer };
   };
+  GoldCoreEngine.prototype.calculateAdrExhaustion = function(klines){
+    var rows = barsOf(klines);
+    if (rows.length < 20) return { unread: true, exhausted: false, pctUsed: 0, remainingDollars: null };
+    var days = {}, order = [], i, c, key, dt, rec;
+    for (i = 0; i < rows.length; i++){
+      c = rows[i];
+      if (!fin(c.time)) continue;
+      dt = new Date(c.time);
+      key = dt.getUTCFullYear() + '-' + dt.getUTCMonth() + '-' + dt.getUTCDate();
+      rec = days[key];
+      if (!rec){ rec = days[key] = { high: -Infinity, low: Infinity, n: 0 }; order.push(key); }
+      if (c.high > rec.high) rec.high = c.high;
+      if (c.low < rec.low) rec.low = c.low;
+      rec.n++;
+    }
+    if (order.length < 2) return { unread: true, exhausted: false, pctUsed: 0, remainingDollars: null };
+    var today = days[order[order.length - 1]];
+    var prior = [];
+    for (i = 0; i < order.length - 1; i++) if (days[order[i]].n >= 8) prior.push(days[order[i]].high - days[order[i]].low);
+    prior = prior.slice(-20);
+    if (prior.length < 5 || !(today.high > today.low)) return { unread: true, exhausted: false, pctUsed: 0, remainingDollars: null, todayHigh: today.high, todayLow: today.low };
+    var sum = 0;
+    for (i = 0; i < prior.length; i++) sum += prior[i];
+    var adr = +(sum / prior.length).toFixed(2);
+    var used = +(today.high - today.low).toFixed(2);
+    var pct = +((used / adr) * 100).toFixed(1);
+    var pos = (rows[rows.length - 1].close - today.low) / (today.high - today.low);
+    return {
+      unread: false, adrDollars: adr, usedDollars: used, pctUsed: pct, exhausted: pct >= 90,
+      remainingDollars: +Math.max(0, adr - used).toFixed(2), todayHigh: today.high, todayLow: today.low,
+      position: +pos.toFixed(3), days: prior.length
+    };
+  };
+  GoldCoreEngine.prototype.calculateCvdAbsorption = function(klines, direction){
+    var rows = barsOf(klines);
+    if (rows.length < 8) return { unread: true, confirmed: false, deltaDivergence: false, recentDelta: 0 };
+    var recent = rows.slice(-8), real = false, deltas = [], i, k, range, buy, sell;
+    for (i = 0; i < recent.length; i++){
+      k = recent[i];
+      if (k.volume > 1) real = true;
+      range = k.high - k.low;
+      buy = range > 0 ? (k.volume > 0 ? k.volume : 0) * ((k.close - k.low) / range) : 0;
+      sell = (k.volume > 0 ? k.volume : 0) - buy;
+      deltas.push(buy - sell);
+    }
+    if (!real) return { unread: true, confirmed: false, deltaDivergence: false, recentDelta: 0, note: 'no exchange volume' };
+    function sum(a, b){ var s = 0, j; for (j = a; j < b; j++) s += deltas[j]; return s; }
+    var recentDelta = sum(5, 8), prevDelta = sum(0, 3);
+    var c0 = recent[7], cPrev = recent[5];
+    var bull = direction === 'BULL' || direction === 'long';
+    var divergence = bull ? (c0.low <= cPrev.low && recentDelta > prevDelta) : (c0.high >= cPrev.high && recentDelta < prevDelta);
+    var confirmed = divergence || (bull ? recentDelta > 0 : recentDelta < 0);
+    return { unread: false, confirmed: confirmed, deltaDivergence: divergence, recentDelta: +recentDelta.toFixed(1) };
+  };
+  GoldCoreEngine.prototype.calculateGannSquare9 = function(anchor, price){
+    if (!(anchor > 0) || !(price > 0)) return { unread: true, isAtGannPivot: false, distanceToGann: null };
+    var root = Math.sqrt(anchor), angles = [90, 180, 270, 360], levels = [], i, factor, up, down, best = Infinity, level = null, degree = null;
+    for (i = 0; i < angles.length; i++){
+      factor = angles[i] / 180;
+      up = +Math.pow(root + factor, 2).toFixed(2);
+      down = +Math.pow(Math.max(0.01, root - factor), 2).toFixed(2);
+      levels.push({ degree: angles[i], harmonicUp: up, harmonicDown: down });
+      if (Math.abs(price - up) < best){ best = Math.abs(price - up); level = up; degree = angles[i]; }
+      if (Math.abs(price - down) < best){ best = Math.abs(price - down); level = down; degree = angles[i]; }
+    }
+    return { unread: false, levels: levels, closestLevel: level, closestDegree: degree, distanceToGann: +best.toFixed(2), isAtGannPivot: best <= 1.20, anchor: anchor };
+  };
+  GoldCoreEngine.prototype.detectVolumeImbalance = function(klines){
+    var rows = barsOf(klines), out = [], i, a, b, aLo, aHi, bLo, bHi;
+    for (i = Math.max(1, rows.length - 8); i < rows.length; i++){
+      a = rows[i - 1]; b = rows[i];
+      aLo = Math.min(a.open, a.close); aHi = Math.max(a.open, a.close);
+      bLo = Math.min(b.open, b.close); bHi = Math.max(b.open, b.close);
+      if (bLo - aHi >= 0.80) out.push({ type: 'BULLISH_VI', gapTop: +bLo.toFixed(2), gapBottom: +aHi.toFixed(2), gapSize: +(bLo - aHi).toFixed(2) });
+      if (aLo - bHi >= 0.80) out.push({ type: 'BEARISH_VI', gapTop: +aLo.toFixed(2), gapBottom: +bHi.toFixed(2), gapSize: +(aLo - bHi).toFixed(2) });
+    }
+    return out.length ? out[out.length - 1] : null;
+  };
   GoldCoreEngine.prototype.calculateInitialBalance = function(dayKlines){
     var rows = barsOf(dayKlines);
     if (!rows.length) return { londonIb: null, nyIb: null };
@@ -416,8 +494,13 @@
       var sessNow = core.getInstitutionalSession(when);
       if (sessNow.isIbWindow) return 'Initial Balance is still forming (07:00-07:30 or 13:30-14:00 UTC)';
       if (!sessNow.isApex) return 'Outside the apex window (07:30-08:45 or 14:00-15:15 UTC)';
+      var adr = core.calculateAdrExhaustion(rows);
       var pxBars = barsOf(rows);
       var pxNow = pxBars.length ? pxBars[pxBars.length - 1].close : 0;
+      if (!adr.unread && adr.exhausted && String(sessNow.sessionName).indexOf('NY') === 0){
+        if (want === 'BULL' && adr.position >= 0.75) return 'ADR ' + adr.pctUsed + '% used at the high: no New York continuation long';
+        if (want === 'BEAR' && adr.position <= 0.25) return 'ADR ' + adr.pctUsed + '% used at the low: no New York continuation short';
+      }
       var deal = core.calculateDealingRange(rows, pxNow);
       if (!deal.unread && want === 'BULL' && deal.percentile > 0.50) return 'Premium dealing range (' + Math.round(deal.percentile * 100) + '%): do not buy expensive gold';
       if (!deal.unread && want === 'BEAR' && deal.percentile < 0.50) return 'Discount dealing range (' + Math.round(deal.percentile * 100) + '%): do not sell cheap gold';
@@ -432,6 +515,8 @@
       var poc = core.detectPocMigration(rows);
       if (!poc.unread && want === 'BULL' && poc.trappedSide === 'TRAPPED_LONGS') return 'Developing POC migrated up and price is back under it: longs are trapped';
       if (!poc.unread && want === 'BEAR' && poc.trappedSide === 'TRAPPED_SHORTS') return 'Developing POC migrated down and price is back over it: shorts are trapped';
+      var cvd = core.calculateCvdAbsorption(rows, want);
+      if (!cvd.unread && !cvd.confirmed) return 'Estimated delta does not confirm the ' + want + '. This is candle location, not the exchange tape';
       if (root.HG_PineGoldEngine){
         try {
           var fresh = new root.HG_PineGoldEngine().detectFreshFvgs(rows, 2.5) || [];
@@ -456,7 +541,7 @@
   }
 
   function esc(s){
-    return String(s == null ? '' : s).replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>');
+    return String(s == null ? '' : s).replace(/&/g, '&' + 'amp;').replace(/</g, '&' + 'lt;').replace(/>/g, '&' + 'gt;');
   }
 
   function hgGoldInstReport(rows, macro){
@@ -477,6 +562,10 @@
     var nymo = core.calculateTrueDayOpen(rows);
     var kinetic = core.calculateKineticEnergy(rows, atr);
     var poc = core.detectPocMigration(rows);
+    var adr = core.calculateAdrExhaustion(rows);
+    var cvd = core.calculateCvdAbsorption(rows, 'BULL');
+    var gann = core.calculateGannSquare9(nymo && !nymo.unread ? nymo.nymo : px, px);
+    var vi = core.detectVolumeImbalance(rows);
     var smt = core.evaluateTripleSmt(rows, root.__hgSilverRows);
     var breaker = core.detectBreakerBlock(rows);
     var bprs = [], va = null;
@@ -487,7 +576,7 @@
         if (pine.calculateValueArea) va = pine.calculateValueArea(rows);
       }
     }catch(eRep){}
-    return { session: session, veto: veto, view: view, asia: asia, sweep: sw, atr: atr, when: when, regime: regime, apex: apex, smt: smt, breaker: breaker, bprs: bprs, valueArea: va, dealing: dealing, ib: ib, nymo: nymo, kinetic: kinetic, poc: poc };
+    return { session: session, veto: veto, view: view, asia: asia, sweep: sw, atr: atr, when: when, regime: regime, apex: apex, smt: smt, breaker: breaker, bprs: bprs, valueArea: va, dealing: dealing, ib: ib, nymo: nymo, kinetic: kinetic, poc: poc, adr: adr, cvd: cvd, gann: gann, vi: vi };
   }
 
   function hgGoldInstStrip(report, judas){
@@ -510,7 +599,7 @@
       + '<div class="note">Session <b>' + esc(report.apex ? report.apex.sessionName : report.session) + '</b>'
       + (report.apex && report.apex.isApex ? ' APEX' : '')
       + ' · ' + (report.veto && report.veto.veto ? ('<b>SPREAD VETO</b> ' + esc(report.veto.reason)) : 'spread clean')
-      + ' · NYMO ' + (report.nymo && !report.nymo.unread && fin(report.nymo.nymo) ? ('$' + report.nymo.nymo.toFixed(2)) : 'unread') + ' · kinetic ' + (report.kinetic ? report.kinetic.velocityScore : '—') + (report.poc && report.poc.trappedSide && report.poc.trappedSide !== 'NONE' ? (' · ' + report.poc.trappedSide) : '') + ' · range ' + esc((report.dealing && report.dealing.zone) || 'UNREAD') + (report.dealing && fin(report.dealing.percentile) ? (' ' + Math.round(report.dealing.percentile * 100) + '%') : '') + (report.apex && report.apex.isIbWindow ? ' · IB FORMING' : '') + ' · Asia ' + esc(rg.regime || 'UNKNOWN') + (fin(rg.rangePct) ? (' ' + rg.rangePct + '% ' + (rg.drift || '')) : '')
+      + ' · NYMO ' + (report.nymo && !report.nymo.unread && fin(report.nymo.nymo) ? ('$' + report.nymo.nymo.toFixed(2)) : 'unread') + ' · ADR ' + (report.adr && !report.adr.unread ? (report.adr.pctUsed + '% of $' + report.adr.adrDollars) : 'unread') + ' · delta ' + (report.cvd && report.cvd.unread ? 'unread' : (report.cvd && report.cvd.deltaDivergence ? 'absorption' : 'no divergence')) + ' · Gann ' + (report.gann && !report.gann.unread ? ('$' + report.gann.closestLevel + ' ' + report.gann.distanceToGann + ' away') : 'unread') + (report.vi ? (' · ' + report.vi.type + ' $' + report.vi.gapSize) : '') + ' · kinetic ' + (report.kinetic ? report.kinetic.velocityScore : '—') + (report.poc && report.poc.trappedSide && report.poc.trappedSide !== 'NONE' ? (' · ' + report.poc.trappedSide) : '') + ' · range ' + esc((report.dealing && report.dealing.zone) || 'UNREAD') + (report.dealing && fin(report.dealing.percentile) ? (' ' + Math.round(report.dealing.percentile * 100) + '%') : '') + (report.apex && report.apex.isIbWindow ? ' · IB FORMING' : '') + ' · Asia ' + esc(rg.regime || 'UNKNOWN') + (fin(rg.rangePct) ? (' ' + rg.rangePct + '% ' + (rg.drift || '')) : '')
       + ' · ' + esc(smtTxt)
       + ' · ' + esc(bpr)
       + (va && fin(va.poc) ? (' · POC $' + va.poc + ' VAH $' + va.vah + ' VAL $' + va.val) : '')

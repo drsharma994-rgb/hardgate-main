@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1179',
-  pack: 'Gold v5. A long above the New York midnight open is late, and a short below it is late. The clock follows New York daylight saving, not a fixed 04:00 UTC. A three-bar waterfall is not a knife to catch. If the developing point of control traps that side, the lead is blocked. After TP1 the planned stop is entry plus 0.35 ATR.',
-  built: '2026-10-08T19:25:00Z'
+  version: 'hg-v1180',
+  pack: 'Gold v6. Once New York has used 90% of the 20-day average daily range, a continuation at the extreme is blocked and a fade is still allowed. Targets are pulled back inside the remaining daily room. A body gap and a Square-of-9 level are marked when they are there. Delta is estimated from the candle only when the feed actually has volume.',
+  built: '2026-10-08T19:50:00Z'
 };
 
 function hgBuildLabel(b){

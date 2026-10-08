@@ -59,6 +59,25 @@
     var gs7 = reward >= 8.50;
     ledger.push({ step: 'GS7_GOLDEN_EXPANSION', name: '2.6R and at least $8.50', pass: gs7,
       evidence: 'Risk $' + risk.toFixed(2) + ' · target move $' + reward });
+    var adrNow = this.core.calculateAdrExhaustion(rows);
+    var gs7row = ledger[ledger.length - 1];
+    if (!adrNow.unread){
+      var roomLeft = Math.max(0, adrNow.remainingDollars);
+      var capped = Math.min(reward, roomLeft > 0 ? roomLeft : reward);
+      var continuation = direction === 'BULL' ? adrNow.position >= 0.75 : adrNow.position <= 0.25;
+      if (adrNow.exhausted && continuation){ gs7row.pass = false; capped = roomLeft; }
+      gs7row.evidence += ' · ADR ' + adrNow.pctUsed + '% used, $' + adrNow.remainingDollars + ' left' + (adrNow.exhausted && !continuation ? ' · fade still allowed' : '');
+      if (adrNow.exhausted && continuation) gs7row.evidence += ' · continuation blocked';
+      reward = capped;
+    }
+    var cvdNow = this.core.calculateCvdAbsorption(rows, direction || 'BULL');
+    var gs4row = ledger.filter(function(s){ return s.step === 'GS4_TRIPLE_SMT'; })[0];
+    if (gs4row && !cvdNow.unread && direction && !cvdNow.confirmed){
+      gs4row.pass = false;
+      gs4row.evidence += ' · estimated delta opposes';
+    } else if (gs4row && cvdNow.unread) gs4row.evidence += ' · delta unread';
+    var gannNow = this.core.calculateGannSquare9((asia.ash && asia.asl) ? (asia.ash + asia.asl) / 2 : current.close, current.close);
+    if (gs4row && !gannNow.unread) gs4row.evidence += ' · nearest Gann $' + gannNow.closestLevel + ' (' + gannNow.distanceToGann + ' away)';
     var last6 = rows.slice(-6);
     var three = false;
     if (last6.length === 6 && direction === 'BULL') three = last6[1].low > last6[3].low && last6[3].low > last6[5].low;

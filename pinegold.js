@@ -145,5 +145,12 @@
     }
     return fvgs;
   };
+  PineGoldEngine.prototype.detectVolumeImbalances = function(klines){
+    return root.HG_GoldCoreEngine ? new root.HG_GoldCoreEngine().detectVolumeImbalance(klines) : null;
+  };
+  PineGoldEngine.prototype.generateGannGrid = function(anchor, price){
+    var g = root.HG_GoldCoreEngine ? new root.HG_GoldCoreEngine().calculateGannSquare9(anchor, price || anchor) : null;
+    return g && g.levels ? g.levels : [];
+  };
   root.HG_PineGoldEngine = PineGoldEngine;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
