@@ -114,9 +114,11 @@
     tmTakerShare(row),
     tmOiPercentile(row),
     tmPerpPremium(row),
-    tmBookRatio(row, dir)
+    tmBookRatio(row, dir),
+    tmFundingVelocity(row, dir),
+    tmAbsorption(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -152,6 +154,10 @@
   else if (dir === 'short' && prem < -0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is cheap');
   if (book == null) hard.push('book unread');
   else if (book < 1.35) hard.push('book ' + book.toFixed(2) + 'x is under 1.35x');
+  if (fundVel == null) hard.push('funding velocity unread');
+  else if (fundVel) hard.push('funding is accelerating against the trade');
+  if (absorb == null) hard.push('absorption unread');
+  else if (!absorb) hard.push('the pullback was not absorbed');
   var syn = tmSynergy(row, dir, {
     body: m15 ? tmBodyCommit(m15, dir) === true : false,
     takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)

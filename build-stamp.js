@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1190',
-  pack: 'Trend Matrix regime. A continuation needs Hurst above 0.55 on the 4h closes. A short sample is not filled in as a trend. The 15m bar has to sweep the prior swing and close back through it. The perp has to be within 0.12 percent of the index. The book on that side has to be at least 1.35 times the other side. A missing print is not a pass. The card does not send an order.',
-  built: '2026-10-08T22:10:00Z'
+  version: 'hg-v1191',
+  pack: 'Trend Matrix value. The point of control has to migrate with the trend, and only bars with volume count. A funding jump of more than 0.03 percent that more than triples is a veto. On the pullback, the taker ratio has to turn with the trade. A missing print is not a pass. The card does not send an order.',
+  built: '2026-10-08T22:25:00Z'
 };
 
 function hgBuildLabel(b){

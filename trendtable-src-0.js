@@ -378,6 +378,9 @@ function tmValueState(row, dir){
   if (hurst == null) out.reasons.push('hurst unread');
   else if (hurst < 0.48) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is mean-reverting');
   else if (hurst <= 0.55) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is not a trend');
+  var poc = tmPocShift(rows4, dir);
+  if (poc == null) out.reasons.push('point of control unread');
+  else if (!poc) out.reasons.push('point of control did not migrate with the trend');
   if (typeof ttmSqueeze === 'function'){
     try {
       var sq = ttmSqueeze(rows4);
@@ -549,6 +552,22 @@ function tmHurst(rows){
   if (!(small > 0) || !(large > 0)) return null;
   var h = Math.log(large / small) / Math.log(64 / 16);
   return isFinite(h) ? h : null;
+}
+function tmPocShift(rows, dir){
+  if (!rows || rows.length < 80 || typeof tmVolumeProfile !== 'function') return null;
+  var mid = Math.floor(rows.length / 2);
+  var prior = tmVolumeProfile(rows.slice(0, mid));
+  var recent = tmVolumeProfile(rows.slice(mid));
+  if (!prior || !recent || !isFinite(prior.poc) || !isFinite(recent.poc)) return null;
+  if (dir === 'long') return recent.poc > prior.poc;
+  return recent.poc < prior.poc;
+}
+function tmFundingSpike(prev, cur, dir){
+  if (!isFinite(prev) || !isFinite(cur)) return null;
+  var delta = cur - prev;
+  var vel = prev === 0 ? null : (delta / Math.abs(prev)) * 100;
+  if (dir === 'long') return delta > 0.0003 && (vel == null || vel > 250);
+  return delta < -0.0003 && (vel == null || vel < -250);
 }
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;

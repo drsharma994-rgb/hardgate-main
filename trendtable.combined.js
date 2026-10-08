@@ -378,6 +378,9 @@ function tmValueState(row, dir){
   if (hurst == null) out.reasons.push('hurst unread');
   else if (hurst < 0.48) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is mean-reverting');
   else if (hurst <= 0.55) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is not a trend');
+  var poc = tmPocShift(rows4, dir);
+  if (poc == null) out.reasons.push('point of control unread');
+  else if (!poc) out.reasons.push('point of control did not migrate with the trend');
   if (typeof ttmSqueeze === 'function'){
     try {
       var sq = ttmSqueeze(rows4);
@@ -549,6 +552,22 @@ function tmHurst(rows){
   if (!(small > 0) || !(large > 0)) return null;
   var h = Math.log(large / small) / Math.log(64 / 16);
   return isFinite(h) ? h : null;
+}
+function tmPocShift(rows, dir){
+  if (!rows || rows.length < 80 || typeof tmVolumeProfile !== 'function') return null;
+  var mid = Math.floor(rows.length / 2);
+  var prior = tmVolumeProfile(rows.slice(0, mid));
+  var recent = tmVolumeProfile(rows.slice(mid));
+  if (!prior || !recent || !isFinite(prior.poc) || !isFinite(recent.poc)) return null;
+  if (dir === 'long') return recent.poc > prior.poc;
+  return recent.poc < prior.poc;
+}
+function tmFundingSpike(prev, cur, dir){
+  if (!isFinite(prev) || !isFinite(cur)) return null;
+  var delta = cur - prev;
+  var vel = prev === 0 ? null : (delta / Math.abs(prev)) * 100;
+  if (dir === 'long') return delta > 0.0003 && (vel == null || vel > 250);
+  return delta < -0.0003 && (vel == null || vel < -250);
 }
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
@@ -2604,6 +2623,50 @@ async function tmBookRatio(row, dir){
     return dir === 'long' ? book.bidUsd / book.askUsd : book.askUsd / book.bidUsd;
   } catch (e) { return null; }
 }
+async function tmFundingVelocity(row, dir){
+  if (typeof W.binanceFundingHist !== 'function') return null;
+  try {
+    var hist = await W.binanceFundingHist(tmBaseOf(row) + 'USDT', 12);
+    if (!hist || hist.length < 2) return null;
+    var prev = +hist[hist.length - 2].rate;
+    var cur = +hist[hist.length - 1].rate;
+    return tmFundingSpike(prev, cur, dir);
+  } catch (e) { return null; }
+}
+async function tmAbsorption(row, dir){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '1h', 12);
+    var series = tk && tk.series;
+    var bars = tmClosedRows(row.rows1h, 3600);
+    if (!series || series.length < 6 || !bars || bars.length < 6) return null;
+    function ratioAt(ts){
+      var best = null, i, dt, r;
+      for (i = 0; i < series.length; i++){
+        r = +series[i].buySellRatio;
+        dt = Math.abs((+series[i].t) - ts);
+        if (!isFinite(r)) continue;
+        if (best == null || dt < best.dt) best = { dt: dt, r: r };
+      }
+      if (!best || best.dt > 3600) return NaN;
+      return best.r;
+    }
+    var win = bars.slice(-6);
+    var dip = win[0], i;
+    for (i = 1; i < win.length; i++){
+      if (dir === 'long' && win[i].l < dip.l) dip = win[i];
+      if (dir === 'short' && win[i].h > dip.h) dip = win[i];
+    }
+    var before = null;
+    for (i = 0; i < bars.length; i++) if (bars[i] === dip && i > 0) before = bars[i - 1];
+    if (!before) return null;
+    var atDip = ratioAt(dip.t);
+    var atBefore = ratioAt(before.t);
+    if (!isFinite(atDip) || !isFinite(atBefore)) return null;
+    if (dir === 'long') return atDip > atBefore;
+    return atDip < atBefore;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
@@ -2856,9 +2919,11 @@ async function trendmxFormOne(ticket, row, ctx){
     tmTakerShare(row),
     tmOiPercentile(row),
     tmPerpPremium(row),
-    tmBookRatio(row, dir)
+    tmBookRatio(row, dir),
+    tmFundingVelocity(row, dir),
+    tmAbsorption(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -2894,6 +2959,10 @@ async function trendmxFormOne(ticket, row, ctx){
   else if (dir === 'short' && prem < -0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is cheap');
   if (book == null) hard.push('book unread');
   else if (book < 1.35) hard.push('book ' + book.toFixed(2) + 'x is under 1.35x');
+  if (fundVel == null) hard.push('funding velocity unread');
+  else if (fundVel) hard.push('funding is accelerating against the trade');
+  if (absorb == null) hard.push('absorption unread');
+  else if (!absorb) hard.push('the pullback was not absorbed');
   var syn = tmSynergy(row, dir, {
     body: m15 ? tmBodyCommit(m15, dir) === true : false,
     takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
@@ -5348,6 +5417,8 @@ W.tmDisplacementFvg = tmDisplacementFvg;
 W.tmParkinsonHot = tmParkinsonHot;
 W.tmHurst = tmHurst;
 W.tmTurtleReclaim = tmTurtleReclaim;
+W.tmPocShift = tmPocShift;
+W.tmFundingSpike = tmFundingSpike;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

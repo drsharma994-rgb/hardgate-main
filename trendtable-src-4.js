@@ -349,6 +349,50 @@ async function tmBookRatio(row, dir){
     return dir === 'long' ? book.bidUsd / book.askUsd : book.askUsd / book.bidUsd;
   } catch (e) { return null; }
 }
+async function tmFundingVelocity(row, dir){
+  if (typeof W.binanceFundingHist !== 'function') return null;
+  try {
+    var hist = await W.binanceFundingHist(tmBaseOf(row) + 'USDT', 12);
+    if (!hist || hist.length < 2) return null;
+    var prev = +hist[hist.length - 2].rate;
+    var cur = +hist[hist.length - 1].rate;
+    return tmFundingSpike(prev, cur, dir);
+  } catch (e) { return null; }
+}
+async function tmAbsorption(row, dir){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '1h', 12);
+    var series = tk && tk.series;
+    var bars = tmClosedRows(row.rows1h, 3600);
+    if (!series || series.length < 6 || !bars || bars.length < 6) return null;
+    function ratioAt(ts){
+      var best = null, i, dt, r;
+      for (i = 0; i < series.length; i++){
+        r = +series[i].buySellRatio;
+        dt = Math.abs((+series[i].t) - ts);
+        if (!isFinite(r)) continue;
+        if (best == null || dt < best.dt) best = { dt: dt, r: r };
+      }
+      if (!best || best.dt > 3600) return NaN;
+      return best.r;
+    }
+    var win = bars.slice(-6);
+    var dip = win[0], i;
+    for (i = 1; i < win.length; i++){
+      if (dir === 'long' && win[i].l < dip.l) dip = win[i];
+      if (dir === 'short' && win[i].h > dip.h) dip = win[i];
+    }
+    var before = null;
+    for (i = 0; i < bars.length; i++) if (bars[i] === dip && i > 0) before = bars[i - 1];
+    if (!before) return null;
+    var atDip = ratioAt(dip.t);
+    var atBefore = ratioAt(before.t);
+    if (!isFinite(atDip) || !isFinite(atBefore)) return null;
+    if (dir === 'long') return atDip > atBefore;
+    return atDip < atBefore;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
