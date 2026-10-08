@@ -17,6 +17,9 @@
   "scripts": {
     "start": "node scripts/server.mjs",
     "daemon": "node app.js",
+    "lint": "eslint api lib scripts tests",
+    "lint:legacy": "eslint .",
+    "lint:fix": "eslint api lib scripts tests --fix",
     "check:prod": "node scripts/check-production.mjs",
     "sync:backtest-params": "node scripts/sync-backtest-tab-params.mjs",
     "test:data-layer": "node tests/test-data-layer.mjs",
@@ -40,5 +43,8 @@
     "gold:milli-walk": "node scripts/milli-gold-walk.mjs",
     "gold:swing-scope": "node scripts/swing-live-scope.mjs",
     "gold:literals": "node scripts/rebake-gold-literals.mjs"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5"
   }
 }
