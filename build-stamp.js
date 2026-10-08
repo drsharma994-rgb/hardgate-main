@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1198',
-  pack: 'Trend Matrix pantheon. AlphaTrend needs real volume and a money-flow reading on the trade side, with the band moving that way. A flat tape is unread, not bullish. The range filter has to have actually stepped, and price has to be on that side of it. Neither line replaces the stop. The card does not send an order.',
-  built: '2026-10-09T00:10:00Z'
+  version: 'hg-v1199',
+  pack: 'Trend Matrix classifier. The Lorentzian vote uses the seven nearest older bars, and the label is the move that already happened after those bars, not after the current one. A tie is not a buy. A short history is unread. HalfTrend starts with no direction and only turns when price actually breaks. Neither one replaces the stop. The card does not send an order.',
+  built: '2026-10-09T00:25:00Z'
 };
 
 function hgBuildLabel(b){

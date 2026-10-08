@@ -58,6 +58,12 @@
   var band = rows1 ? tmRangeFilter(rows1, dir) : null;
   if (band == null) hard.push('range filter unread');
   else if (!band) hard.push('range filter is against the trade');
+  var ml = rows1 ? tmLorentz(rows1, dir) : null;
+  if (ml == null) hard.push('lorentz unread');
+  else if (!ml) hard.push('lorentz is not with the trade');
+  var half = rows1 ? tmHalfTrend(rows1, dir) : null;
+  if (half == null) hard.push('halftrend unread');
+  else if (!half) hard.push('halftrend is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

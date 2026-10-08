@@ -973,6 +973,65 @@ function tmRangeFilter(rows, dir){
   if (dir === 'long') return way === 1 && px > filter;
   return way === -1 && px < filter;
 }
+function tmLorentz(rows, dir){
+  if (!rows || rows.length < 40) return null;
+  function feat(i){
+    if (i < 4 || !(rows[i].c > 0) || !(rows[i - 1].c > 0) || !(rows[i - 4].c > 0)) return null;
+    var range = rows[i].h - rows[i].l;
+    if (!(range > 0)) return null;
+    return [
+      (rows[i].c - rows[i - 4].c) / rows[i - 4].c,
+      range / rows[i].c,
+      (rows[i].c - rows[i - 1].c) / rows[i - 1].c,
+      Math.abs(rows[i].c - rows[i].o) / range
+    ];
+  }
+  var now = feat(rows.length - 1);
+  if (!now) return null;
+  var mem = [], i, f, dist, j, future;
+  for (i = 10; i < rows.length - 4; i++){
+    f = feat(i);
+    if (!f) continue;
+    dist = 0;
+    for (j = 0; j < 4; j++) dist += Math.log(1 + Math.abs(now[j] - f[j]));
+    future = rows[i + 3].c - rows[i].c;
+    if (future === 0) continue;
+    mem.push({ dist: dist, label: future > 0 ? 1 : -1 });
+  }
+  if (mem.length < 7) return null;
+  mem.sort(function(a, b){ return a.dist - b.dist; });
+  var votes = 0, k;
+  for (k = 0; k < 7; k++) votes += mem[k].label;
+  if (votes === 0) return false;
+  if (dir === 'long') return votes > 0;
+  return votes < 0;
+}
+function tmHalfTrend(rows, dir){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var a = atr(rows, 10);
+  if (!a || a.length < rows.length) return null;
+  var trend = 0, stop = rows[0].c, i, c, dev;
+  for (i = 1; i < rows.length; i++){
+    if (!(a[i] > 0)) return null;
+    dev = a[i];
+    c = rows[i];
+    if (trend === 0){
+      if (c.c > rows[i - 1].h){ trend = 1; stop = c.l - dev; }
+      else if (c.c < rows[i - 1].l){ trend = -1; stop = c.h + dev; }
+      continue;
+    }
+    if (trend === 1){
+      stop = Math.max(stop, c.l - dev);
+      if (c.c < stop){ trend = -1; stop = c.h + dev; }
+    } else {
+      stop = Math.min(stop, c.h + dev);
+      if (c.c > stop){ trend = 1; stop = c.l - dev; }
+    }
+  }
+  if (trend === 0) return null;
+  if (dir === 'long') return trend === 1;
+  return trend === -1;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
