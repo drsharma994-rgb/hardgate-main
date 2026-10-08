@@ -19,6 +19,13 @@ __pycache__/
 *.pyc
 scripts/.bt-cache/
 
+# Agent workforce state — volatile machine-local blackboard; never commit it.
+# (Path is overridable via HARDGATE_AGENT_STATE_FILE, see docs/ENV-VARS.md)
+hardgate-agent-state.json
+
 # 20MB third-party reference clone with its own .git (je-suis-tm/quant-trading).
 # Re-clone it rather than vendoring it; nothing in the app imports from it.
 vendors/quant-trading/
+
+# local test-run scratch log
+baseline-test.log

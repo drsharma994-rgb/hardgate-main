@@ -35,7 +35,7 @@ FILES
   • crypto-fill-risk-test-results.json  Test output (mock data)
 
 Bonus:
-  • CRYPTO-FILL-RISK-DELIVERABLES.txt   Complete summary
+  • docs/phases/CRYPTO-FILL-RISK-DELIVERABLES.txt   Complete summary
   • MEASUREMENT-GUIDE.txt                This file
 
 THE MEASUREMENT
