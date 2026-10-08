@@ -129,11 +129,12 @@
       "expired": true
     },
     "STRK": {
-      "at": "2026-10-05T19:06:10.226Z",
+      "at": "2026-10-08T12:02:40.824Z",
       "score": 5,
       "fresh": true,
-      "ago": 0,
-      "crossDay": "2026-10-05"
+      "ago": 2,
+      "crossDay": "2026-10-05",
+      "expired": true
     },
     "HBAR": {
       "at": "2026-10-05T19:06:10.136Z",
@@ -258,10 +259,10 @@
       "expired": true
     },
     "ARK": {
-      "at": "2026-10-07T11:55:55.946Z",
+      "at": "2026-10-08T12:02:43.797Z",
       "score": 3,
       "fresh": true,
-      "ago": 7,
+      "ago": 8,
       "crossDay": "2026-09-29",
       "expired": true
     },
@@ -302,10 +303,10 @@
       "alerted": true
     },
     "DYDX": {
-      "at": "2026-10-06T15:51:10.426Z",
-      "score": 5,
+      "at": "2026-10-08T12:02:45.875Z",
+      "score": 3,
       "fresh": true,
-      "ago": 6,
+      "ago": 8,
       "crossDay": "2026-09-29",
       "expired": true
     },
@@ -493,9 +494,25 @@
       "ago": 9,
       "crossDay": "2026-09-25",
       "expired": true
+    },
+    "SEI": {
+      "at": "2026-10-08T12:02:42.497Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 1,
+      "crossDay": "2026-10-06",
+      "expired": true
+    },
+    "BAND": {
+      "at": "2026-10-08T12:02:48.869Z",
+      "score": 4,
+      "fresh": true,
+      "ago": 1,
+      "crossDay": "2026-10-06",
+      "expired": true
     }
   },
-  "lastRunAt": "2026-10-08T11:53:19.973Z",
+  "lastRunAt": "2026-10-08T12:02:55.425Z",
   "scanned": 504,
   "cards": 0
 }
