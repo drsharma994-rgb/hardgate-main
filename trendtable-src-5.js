@@ -144,6 +144,9 @@
     var soup = tmTurtleReclaim(m15, dir);
     if (soup == null) hard.push('sweep unread');
     else if (!soup) hard.push('no sweep and reclaim on the close');
+    var stalled = tmStalled(m15, dir);
+    if (stalled == null) hard.push('15m progress unread');
+    else if (stalled) hard.push('15m has not expanded in 3 bars');
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');

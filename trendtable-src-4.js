@@ -84,8 +84,7 @@ function tm15Confirm(rows, dir){
   if (!hs) return false;
   var want = dir === 'long' ? 'up' : 'down';
   var n = rows.length - 1;
-  var shifted = (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12)
-    || (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12);
+  var shifted = hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12;
   var sweep = false;
   for (var i = Math.max(10, rows.length - 12); i < rows.length; i++){
     var prior = rows.slice(i - 10, i);
@@ -95,10 +94,8 @@ function tm15Confirm(rows, dir){
     if (dir === 'short' && rows[i].h > hi && rows[i].c < hi) sweep = true;
   }
   if (!(sweep && shifted)) return false;
-  var shiftI = -1, level = null;
-  if (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12){ shiftI = hs.lastCHoCH.i; level = hs.lastCHoCH.level; }
-  if (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12 && hs.lastBOS.i >= shiftI){ shiftI = hs.lastBOS.i; level = hs.lastBOS.level; }
-  if (!(level > 0) || shiftI < 0) return false;
+  var shiftI = hs.lastCHoCH.i, level = hs.lastCHoCH.level;
+  if (!(level > 0) || !(shiftI >= 0)) return false;
   for (var j = shiftI; j < rows.length; j++){
     if (dir === 'long' && rows[j].l <= level && rows[j].c > level) return true;
     if (dir === 'short' && rows[j].h >= level && rows[j].c < level) return true;

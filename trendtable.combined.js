@@ -610,6 +610,21 @@ function tmEffortTrap(candle, atrNow, share, dir){
   if (dir === 'long') return share >= 0.65 && body < atrNow * 0.35 && (candle.h - candle.c) > body;
   return share <= 0.35 && body < atrNow * 0.35 && (candle.c - candle.l) > body;
 }
+function tmStalled(rows, dir){
+  if (!rows || rows.length < 5 || typeof atr !== 'function') return null;
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var base = rows[rows.length - 4];
+  var last = rows[rows.length - 1];
+  var moved = dir === 'long' ? last.c - base.c : base.c - last.c;
+  return moved < 0.3 * atrNow;
+}
+function tmRunnerR(rows){
+  var pk = tmParkinsonHot(rows);
+  if (!pk) return null;
+  return pk.hot ? 4 : 2.2;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -1416,7 +1431,8 @@ function trendmxPlanLegacy(inp){
     if (!(risk > 0)) return null;
     var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
     var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
-    var t3 = (dir === 'long') ? entry + 4 * risk : entry - 4 * risk;
+    var runner = tmRunnerR(rows);
+    var t3 = runner == null ? NaN : ((dir === 'long') ? entry + runner * risk : entry - runner * risk);
     if (typeof hgStructureTargets === 'function'){
       try{
         var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
@@ -1449,7 +1465,7 @@ function trendmxPlanHTML(s){
   return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
     + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
     + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
-    + (isFinite(s.t3) ? (' · T3 <b>' + pxFmt(s.t3) + '</b> (4R)') : '')
+    + (isFinite(s.t3) ? (' · T3 <b>' + pxFmt(s.t3) + '</b> (' + (Math.abs(s.t3 - s.entry) / Math.abs(s.entry - s.stop)).toFixed(1) + 'R)') : '')
     + (isFinite(s.trailBe) ? (' · after T1, example stop <b>' + pxFmt(s.trailBe) + '</b>') : '')
     + (function(){ var ex = tmExampleSize(s.entry, s.stop); return ex ? (' · example 1% of $10,000 is ' + ex.units.toFixed(4) + ' units ($' + ex.notional.toFixed(0) + '), not an order') : ''; })()
     + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
@@ -2399,8 +2415,7 @@ function tm15Confirm(rows, dir){
   if (!hs) return false;
   var want = dir === 'long' ? 'up' : 'down';
   var n = rows.length - 1;
-  var shifted = (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12)
-    || (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12);
+  var shifted = hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12;
   var sweep = false;
   for (var i = Math.max(10, rows.length - 12); i < rows.length; i++){
     var prior = rows.slice(i - 10, i);
@@ -2410,10 +2425,8 @@ function tm15Confirm(rows, dir){
     if (dir === 'short' && rows[i].h > hi && rows[i].c < hi) sweep = true;
   }
   if (!(sweep && shifted)) return false;
-  var shiftI = -1, level = null;
-  if (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12){ shiftI = hs.lastCHoCH.i; level = hs.lastCHoCH.level; }
-  if (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12 && hs.lastBOS.i >= shiftI){ shiftI = hs.lastBOS.i; level = hs.lastBOS.level; }
-  if (!(level > 0) || shiftI < 0) return false;
+  var shiftI = hs.lastCHoCH.i, level = hs.lastCHoCH.level;
+  if (!(level > 0) || !(shiftI >= 0)) return false;
   for (var j = shiftI; j < rows.length; j++){
     if (dir === 'long' && rows[j].l <= level && rows[j].c > level) return true;
     if (dir === 'short' && rows[j].h >= level && rows[j].c < level) return true;
@@ -2990,6 +3003,9 @@ async function trendmxFormOne(ticket, row, ctx){
     var soup = tmTurtleReclaim(m15, dir);
     if (soup == null) hard.push('sweep unread');
     else if (!soup) hard.push('no sweep and reclaim on the close');
+    var stalled = tmStalled(m15, dir);
+    if (stalled == null) hard.push('15m progress unread');
+    else if (stalled) hard.push('15m has not expanded in 3 bars');
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
@@ -5474,6 +5490,9 @@ W.tmFundingSpike = tmFundingSpike;
 W.tmSettlementFreeze = tmSettlementFreeze;
 W.tmLiquidityRoom = tmLiquidityRoom;
 W.tmEffortTrap = tmEffortTrap;
+W.tmStalled = tmStalled;
+W.tmRunnerR = tmRunnerR;
+W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1192',
-  pack: 'Trend Matrix room. A trigger with real taker flow and a body under 0.35 ATR plus a larger wick is effort without result. The next equal high or low has to be at least 2R away. No pool is not a made-up 3R. Setups freeze for 15 minutes around 00:00, 08:00 and 16:00 UTC. The card does not send an order.',
-  built: '2026-10-08T22:40:00Z'
+  version: 'hg-v1193',
+  pack: 'Trend Matrix structure. The 4h break of structure stays required. The 15m trigger has to be a change of character, not a break standing in for one. If the last three 15m bars have not moved 0.3 ATR, the impulse is stale. The runner is 4R only when volatility is in its own top fifth, otherwise 2.2R. An unreadable tape does not get a runner. The card does not send an order.',
+  built: '2026-10-08T22:55:00Z'
 };
 
 function hgBuildLabel(b){

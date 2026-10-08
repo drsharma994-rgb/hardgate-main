@@ -610,6 +610,21 @@ function tmEffortTrap(candle, atrNow, share, dir){
   if (dir === 'long') return share >= 0.65 && body < atrNow * 0.35 && (candle.h - candle.c) > body;
   return share <= 0.35 && body < atrNow * 0.35 && (candle.c - candle.l) > body;
 }
+function tmStalled(rows, dir){
+  if (!rows || rows.length < 5 || typeof atr !== 'function') return null;
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var base = rows[rows.length - 4];
+  var last = rows[rows.length - 1];
+  var moved = dir === 'long' ? last.c - base.c : base.c - last.c;
+  return moved < 0.3 * atrNow;
+}
+function tmRunnerR(rows){
+  var pk = tmParkinsonHot(rows);
+  if (!pk) return null;
+  return pk.hot ? 4 : 2.2;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
