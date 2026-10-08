@@ -21,6 +21,9 @@ const HG_SHELL = [
   './index.html',
   './manifest.webmanifest',
   './icon.svg', './icon-192.png', './icon-512.png', './bright.css', './hg-icons.css', './vendor/base-themes/tokens-data-dense-light.css', './mobile.css', './annunciator.css', './hardgate-desktop-shell.css',
+  /* task #12: the MAIN stylesheet was never in the shell — the offline app
+     booted unstyled. Guarded now by tests/test-offline-shell-parity.mjs. */
+  './trading-dashboard-pro.css',
   './build-stamp.js', './gold-iux.js',
   './hghost.js', './hardgate-desktop-shell.js',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './inc4-data-core.js', './hg-setup-core.js', './hg-perfect-setup.js', './coinalyze.js', './coinglass.js', './borrow-rates.js', './liquidity-gate.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './agent-alerts.js',
@@ -91,7 +94,7 @@ function hgIsShellRequest(url){
 
    cache.addAll() is ATOMIC by specification: if any one request fails, the
    returned promise rejects and NOTHING is written to the cache. The shell
-   above is 125 files and the comment on it promises that "a single missing
+   above is the app shell (~230 files) and the comment on it promises that "a single missing
    file must never fail install" — which is exactly what addAll does not
    provide. One renamed or mistyped entry and the whole offline shell was
    silently empty, because the .catch() below swallowed the rejection and
