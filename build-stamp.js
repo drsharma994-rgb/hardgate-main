@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1168',
-  pack: 'PERFECT COHORT MARKS reach the ledger seam. hgFwdNormalize has accepted perfect since hg-v1022 and perfectPlus since hg-v1030; hgFwdRecordScan carries them now. The three guards that shipped the hand-ins (hg-v1022/v1025/v1030) tested the lifted record map in a sandbox or the direct door hgFwdRecord, and none drove the scan door, so every GOLD SCALP / GOLD SWING / OMNIBTC / TRENDMX record written through hgFwdRecordScan read perfect=undefined and perfectPlus=undefined and the hg-v1065 PERFECT COHORT SPLIT read zero marked rows by construction. The three unread hg-v1022/v1025/v1030 marks (chased, chaseCode, costR) stay OUT of the seam deliberately: no split reads them in hg-forward.js, so adding them would be the mirror of hg-v955 (field written and never read); they can join once a reader exists. Record-only, three-state via the normaliser; no gate, no threshold, no setup moves.',
-  built: '2026-10-11T06:00:00Z'
+  version: 'hg-v1169',
+  pack: 'THE PERFECT COHORT JOINED THE HARDENING PACK. hgFwdRecordScan now forwards perfect and perfectPlus beside the hg-v1058 pass-throughs, so the hg-v1065 PERFECT COHORT SPLIT reads marked rows through the scan seam every live desk uses; the guard that proves it keeps its three-state rule and no longer reads its module from one laptop absolute path. AROUND IT THE FOURTEEN-TASK HARDENING SHIPS: CI is the one gate (727-file suite, two-tier lint, full-history gitleaks scan, cache-sync check on every push); every public /api answers a per-IP budget with 429 and Retry-After while the fail-closed secret gates stand; the bell carries user cycle minutes and midnight-wrapping quiet hours, and MUTE gates the push cascade too; the offline shell completes — MAIN stylesheet, the twelve trendtable fragments and the Shiva pair — and the Shiva injection sheds a forty-three-deploy-stale cachebuster; every backtest aggregate prints a seeded bootstrap ninety-five-percent band on mean net R beside its venue-true costs, and the README disclaimer tells the truth about both; forty-four phase reports file under docs, the env-var reference becomes one file, fifteen unreferenced root scripts move to the attic, and the root holds only what the page loads, injects or serves.',
+  built: '2026-10-11T18:00:00Z'
 };
 
 function hgBuildLabel(b){
