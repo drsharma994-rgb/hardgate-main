@@ -107,9 +107,10 @@
     tmMicroOk(row, dir),
     tmTradingView(row),
     tmTopTrader(row),
-    tmFundingZ(row)
+    tmFundingZ(row),
+    tmTakerShare(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -128,6 +129,15 @@
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (takerShare == null) hard.push('taker share unread');
+  else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
+  else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  var syn = tmSynergy(row, dir, {
+    body: m15 ? tmBodyCommit(m15, dir) === true : false,
+    takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
+  });
+  row.tmSynergy = syn;
+  if (syn < 85) hard.push('synergy ' + syn + '% is under 85%');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);
@@ -172,6 +182,9 @@
   var got = votes.filter(function(v){ return v.v > 0; }).length;
   if (got < 8) return ['confluence ' + got + '/' + votes.length + ', need 8'];
   ticket.confluence = got + '/' + votes.length;
+  ticket.synergy = row.tmSynergy;
+  var atr4 = tmAtrLast(rows4);
+  if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
   return [];
 }
 
@@ -288,6 +301,8 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
         if (bad.length) out.held.stack.push({ sym: ticket.sym, reasons: bad });
         else {
           ticket.note = (ticket.note || '') + (ticket.confluence ? (' · confluence ' + ticket.confluence) : ' · full stack');
+          if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
+          if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
           out.push(ticket);
         }
       }

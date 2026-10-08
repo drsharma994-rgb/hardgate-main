@@ -474,6 +474,29 @@ function tmExampleSize(entry, stop){
   var units = 100 / dist;
   return { units: units, notional: units * +entry };
 }
+function tmSynergy(row, dir, extras){
+  var score = 0;
+  var c = (row && row.comps) || {};
+  if (dir === 'long' && c.d1Trend > 0) score += 25;
+  else if (dir === 'short' && c.d1Trend < 0) score += 25;
+  if (dir === 'long' && c.h4Cascade > 0) score += 25;
+  else if (dir === 'short' && c.h4Cascade < 0) score += 25;
+  var rows1 = tmClosedRows(row && row.rows1h, 3600);
+  if (rows1 && rows1.length >= 52 && typeof ichimoku === 'function'){
+    try {
+      var ic = ichimoku(rows1);
+      var i1 = rows1.length - 1;
+      var a = ic.senkouA[i1], b = ic.senkouB[i1], px = rows1[i1].c;
+      if (isFinite(a) && isFinite(b) && isFinite(px)){
+        var top = Math.max(a, b), bot = Math.min(a, b);
+        if (dir === 'long' && px > top) score += 25;
+        if (dir === 'short' && px < bot) score += 25;
+      }
+    } catch (e) {}
+  }
+  if (extras && extras.body && extras.takerOk) score += 25;
+  return score;
+}
 function tmBarVol(bar){
   if (!bar) return NaN;
   var v = bar.v != null ? bar.v : bar.volume;

@@ -474,6 +474,29 @@ function tmExampleSize(entry, stop){
   var units = 100 / dist;
   return { units: units, notional: units * +entry };
 }
+function tmSynergy(row, dir, extras){
+  var score = 0;
+  var c = (row && row.comps) || {};
+  if (dir === 'long' && c.d1Trend > 0) score += 25;
+  else if (dir === 'short' && c.d1Trend < 0) score += 25;
+  if (dir === 'long' && c.h4Cascade > 0) score += 25;
+  else if (dir === 'short' && c.h4Cascade < 0) score += 25;
+  var rows1 = tmClosedRows(row && row.rows1h, 3600);
+  if (rows1 && rows1.length >= 52 && typeof ichimoku === 'function'){
+    try {
+      var ic = ichimoku(rows1);
+      var i1 = rows1.length - 1;
+      var a = ic.senkouA[i1], b = ic.senkouB[i1], px = rows1[i1].c;
+      if (isFinite(a) && isFinite(b) && isFinite(px)){
+        var top = Math.max(a, b), bot = Math.min(a, b);
+        if (dir === 'long' && px > top) score += 25;
+        if (dir === 'short' && px < bot) score += 25;
+      }
+    } catch (e) {}
+  }
+  if (extras && extras.body && extras.takerOk) score += 25;
+  return score;
+}
 function tmBarVol(bar){
   if (!bar) return NaN;
   var v = bar.v != null ? bar.v : bar.volume;
@@ -1245,6 +1268,7 @@ function trendmxPlanLegacy(inp){
       type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2, t3: t3,
       rr1: Math.abs(t1 - entry) / risk,
       rr2: Math.abs(t2 - entry) / risk,
+      trailBe: (dir === 'long') ? entry + 0.35 * a : entry - 0.35 * a,
       riskPct: risk / entry * 100,
       confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
     };
@@ -1264,6 +1288,7 @@ function trendmxPlanHTML(s){
     + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
     + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
     + (isFinite(s.t3) ? (' · T3 <b>' + pxFmt(s.t3) + '</b> (4R)') : '')
+    + (isFinite(s.trailBe) ? (' · after T1, example stop <b>' + pxFmt(s.trailBe) + '</b>') : '')
     + (function(){ var ex = tmExampleSize(s.entry, s.stop); return ex ? (' · example 1% of $10,000 is ' + ex.units.toFixed(4) + ' units ($' + ex.notional.toFixed(0) + '), not an order') : ''; })()
     + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
@@ -2433,6 +2458,17 @@ async function tmCvdVerdict(row, dir){
   if (p2 < p1 && r2 > r1 && r2 > 1) return 'against';
   return r2 < 1 ? 'with' : 'against';
 }
+async function tmTakerShare(row){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '15m', 3);
+    var series = tk && tk.series;
+    if (!series || !series.length) return null;
+    var ratio = +series[series.length - 1].buySellRatio;
+    if (!(ratio > 0)) return null;
+    return ratio / (1 + ratio);
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
@@ -2678,9 +2714,10 @@ async function trendmxFormOne(ticket, row, ctx){
     tmMicroOk(row, dir),
     tmTradingView(row),
     tmTopTrader(row),
-    tmFundingZ(row)
+    tmFundingZ(row),
+    tmTakerShare(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -2699,6 +2736,15 @@ async function trendmxFormOne(ticket, row, ctx){
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (takerShare == null) hard.push('taker share unread');
+  else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
+  else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  var syn = tmSynergy(row, dir, {
+    body: m15 ? tmBodyCommit(m15, dir) === true : false,
+    takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
+  });
+  row.tmSynergy = syn;
+  if (syn < 85) hard.push('synergy ' + syn + '% is under 85%');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);
@@ -2743,6 +2789,9 @@ async function trendmxFormOne(ticket, row, ctx){
   var got = votes.filter(function(v){ return v.v > 0; }).length;
   if (got < 8) return ['confluence ' + got + '/' + votes.length + ', need 8'];
   ticket.confluence = got + '/' + votes.length;
+  ticket.synergy = row.tmSynergy;
+  var atr4 = tmAtrLast(rows4);
+  if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
   return [];
 }
 
@@ -2859,6 +2908,8 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
         if (bad.length) out.held.stack.push({ sym: ticket.sym, reasons: bad });
         else {
           ticket.note = (ticket.note || '') + (ticket.confluence ? (' · confluence ' + ticket.confluence) : ' · full stack');
+          if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
+          if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
           out.push(ticket);
         }
       }
@@ -3060,7 +3111,7 @@ function trendmxGoldenDeskHTML(golden){
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade. The 4h RSI has to sit on the bull floor for a long or the bear ceiling for a short, the pullback has to tag the anchored VWAP from the last 4h swing, and an alt long has to be leading Bitcoin by at least 1.5 percent with no lower low in ALT/BTC. The 15m body has to close past the swing by a quarter of its own ATR. Then structure, relative strength versus BTC, open interest, CVD, and at least 8 confluence votes with none against.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade. The 4h RSI has to sit on the bull floor for a long or the bear ceiling for a short, the pullback has to tag the anchored VWAP from the last 4h swing, and an alt long has to be leading Bitcoin by at least 1.5 percent with no lower low in ALT/BTC. The 15m body has to close past the swing by a quarter of its own ATR, and the real 15m taker share has to be at least 60 percent on that side. Open interest has to rise with the break. The four reads have to add to at least 85 percent. A missing taker print is not 50 percent, and missing open interest is not new buying. Then structure, relative strength versus BTC, open interest, CVD, and at least 8 confluence votes with none against.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
@@ -5137,6 +5188,7 @@ W.trendmxSetupGrade = trendmxSetupGrade;
 W.tmValueState = tmValueState;
 W.tmBodyCommit = tmBodyCommit;
 W.tmExampleSize = tmExampleSize;
+W.tmSynergy = tmSynergy;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

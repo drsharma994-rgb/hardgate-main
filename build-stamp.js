@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1187',
-  pack: 'Trend Matrix leaders. An alt long has to beat Bitcoin by at least 1.5 percent, and a lower low in ALT/BTC blocks it. A long needs 4h RSI on the bull floor, not above 52. The pullback has to reach the VWAP anchored at the last 4h swing. The 15m body has to close past that swing by a quarter of the 15m ATR. The size on the card is an example on $10,000, not an order.',
-  built: '2026-10-08T21:30:00Z'
+  version: 'hg-v1188',
+  pack: 'Trend Matrix flow. A long needs real 15m taker buying of at least 60 percent. Open interest has to rise with the break. A missing print is not a pass. The four reads, daily trend, 4h cascade, 1h cloud, and the 15m body plus taker share, have to add to at least 85 percent. After the first target, the example stop is the entry plus 0.35 ATR. That is not an order.',
+  built: '2026-10-08T21:40:00Z'
 };
 
 function hgBuildLabel(b){

@@ -305,6 +305,17 @@ async function tmCvdVerdict(row, dir){
   if (p2 < p1 && r2 > r1 && r2 > 1) return 'against';
   return r2 < 1 ? 'with' : 'against';
 }
+async function tmTakerShare(row){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '15m', 3);
+    var series = tk && tk.series;
+    if (!series || !series.length) return null;
+    var ratio = +series[series.length - 1].buySellRatio;
+    if (!(ratio > 0)) return null;
+    return ratio / (1 + ratio);
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
