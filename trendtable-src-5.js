@@ -100,9 +100,10 @@
     tm5mVolumeOk(row, dir),
     tmMicroOk(row, dir),
     tmTradingView(row),
-    tmTopTrader(row)
+    tmTopTrader(row),
+    tmFundingZ(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -111,6 +112,13 @@
   if (!m15) hard.push('15m unread');
   else if (!tm15Confirm(m15, dir)) hard.push('15m no sweep and CHOCH');
   else if (tm15HeavyAgainst(m15, dir)) hard.push('15m breaking against on volume');
+  if (m15){
+    var trig = tmTriggerRvol(m15);
+    if (trig == null) hard.push('15m trigger volume unread');
+    else if (trig < 1.6) hard.push('15m trigger volume ' + trig.toFixed(2) + 'x is under 1.6x');
+  }
+  if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);

@@ -344,8 +344,93 @@ function tmValueState(row, dir){
     }
     out.touched = touched;
     if (!touched && isFinite(out.distAtr) && out.distAtr > 0.6) out.reasons.push('no pullback into the 1h EMA21');
+    else if (touched){
+      var pull = tmPullbackRvol(rows1, dir, level);
+      if (pull === 'unread') out.reasons.push('pullback volume unread');
+      else if (pull >= 0.85) out.reasons.push('pullback volume ' + pull.toFixed(2) + 'x is distribution, not a quiet retest');
+    }
+    if (rows1.length >= 52 && typeof ichimoku === 'function'){
+      try {
+        var ic = ichimoku(rows1);
+        var i1 = rows1.length - 1;
+        var spanA = ic && ic.senkouA ? ic.senkouA[i1] : NaN;
+        var spanB = ic && ic.senkouB ? ic.senkouB[i1] : NaN;
+        var cloudPx = rows1[i1] && rows1[i1].c;
+        if (!(isFinite(spanA) && isFinite(spanB) && isFinite(cloudPx))) out.reasons.push('1h cloud unread');
+        else {
+          var top = Math.max(spanA, spanB), bot = Math.min(spanA, spanB);
+          if (dir === 'long' && cloudPx < bot) out.reasons.push('1h price is below the cloud');
+          else if (dir === 'long' && cloudPx <= top) out.reasons.push('1h price is inside the cloud');
+          else if (dir === 'short' && cloudPx > top) out.reasons.push('1h price is above the cloud');
+          else if (dir === 'short' && cloudPx >= bot) out.reasons.push('1h price is inside the cloud');
+        }
+      } catch (eIc) { out.reasons.push('1h cloud unread'); }
+    }
+  }
+  if (typeof ttmSqueeze === 'function'){
+    try {
+      var sq = ttmSqueeze(rows4);
+      var i4 = rows4.length - 1;
+      if (sq && sq.on && sq.on[i4]) out.reasons.push('4h squeeze still coiled');
+      else if (sq && sq.fired && sq.fired[i4] && sq.momentum && isFinite(sq.momentum[i4])){
+        if (dir === 'long' && sq.momentum[i4] < 0) out.reasons.push('4h squeeze fired against the long');
+        if (dir === 'short' && sq.momentum[i4] > 0) out.reasons.push('4h squeeze fired against the short');
+      }
+    } catch (eSq) {}
   }
   return out;
+}
+function tmBarVol(bar){
+  if (!bar) return NaN;
+  var v = bar.v != null ? bar.v : bar.volume;
+  return isFinite(+v) && +v > 0 ? +v : NaN;
+}
+function tmPullbackRvol(rows, dir, level){
+  if (!rows || rows.length < 24 || !isFinite(level)) return 'unread';
+  var start = rows.length - 3, touch = [], prior = [], i, v, tagged;
+  for (i = 0; i < rows.length; i++){
+    v = tmBarVol(rows[i]);
+    if (i >= start){
+      tagged = dir === 'long' ? rows[i].l <= level : rows[i].h >= level;
+      if (!tagged) continue;
+      if (!isFinite(v)) return 'unread';
+      touch.push(v);
+    } else if (i >= start - 20 && isFinite(v)) prior.push(v);
+  }
+  if (!touch.length || prior.length < 8) return 'unread';
+  var avg = prior.reduce(function(a, b){ return a + b; }, 0) / prior.length;
+  if (!(avg > 0)) return 'unread';
+  return touch.reduce(function(a, b){ return a + b; }, 0) / touch.length / avg;
+}
+function tmTriggerRvol(rows){
+  if (!rows || rows.length < 12) return null;
+  var last = tmBarVol(rows[rows.length - 1]);
+  var prior = [], i, v;
+  for (i = Math.max(0, rows.length - 21); i < rows.length - 1; i++){
+    v = tmBarVol(rows[i]);
+    if (isFinite(v)) prior.push(v);
+  }
+  if (!isFinite(last) || prior.length < 8) return null;
+  var avg = prior.reduce(function(a, b){ return a + b; }, 0) / prior.length;
+  if (!(avg > 0)) return null;
+  return last / avg;
+}
+async function tmFundingZ(row){
+  var fn = (typeof binanceFundingHist === 'function') ? binanceFundingHist : (W && W.binanceFundingHist);
+  if (typeof fn !== 'function' || typeof tmBaseOf !== 'function') return null;
+  try {
+    var hist = await fn(tmBaseOf(row) + 'USDT', 30);
+    if (!hist || hist.length < 12) return null;
+    var rates = [], i;
+    for (i = 0; i < hist.length; i++) if (isFinite(+hist[i].rate)) rates.push(+hist[i].rate);
+    if (rates.length < 12) return null;
+    var mean = rates.reduce(function(a, b){ return a + b; }, 0) / rates.length;
+    var varr = 0;
+    for (i = 0; i < rates.length; i++) varr += (rates[i] - mean) * (rates[i] - mean);
+    var sd = Math.sqrt(varr / rates.length);
+    if (!(sd > 0)) return null;
+    return (rates[rates.length - 1] - mean) / sd;
+  } catch (e) { return null; }
 }
 function tm15HeavyAgainst(rows, dir){
   if (!rows || rows.length < 10) return false;
@@ -1052,6 +1137,7 @@ function trendmxPlanLegacy(inp){
     if (!(risk > 0)) return null;
     var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
     var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
+    var t3 = (dir === 'long') ? entry + 4 * risk : entry - 4 * risk;
     if (typeof hgStructureTargets === 'function'){
       try{
         var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
@@ -1062,7 +1148,7 @@ function trendmxPlanLegacy(inp){
       }catch(eTg){}
     }
     var fb = {
-      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
+      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2, t3: t3,
       rr1: Math.abs(t1 - entry) / risk,
       rr2: Math.abs(t2 - entry) / risk,
       riskPct: risk / entry * 100,
@@ -1083,6 +1169,7 @@ function trendmxPlanHTML(s){
   return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
     + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
     + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
+    + (isFinite(s.t3) ? (' · T3 <b>' + pxFmt(s.t3) + '</b> (4R)') : '')
     + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
     + (s.note ? ' — ' + escH(s.note) : '')
@@ -2489,9 +2576,10 @@ async function trendmxFormOne(ticket, row, ctx){
     tm5mVolumeOk(row, dir),
     tmMicroOk(row, dir),
     tmTradingView(row),
-    tmTopTrader(row)
+    tmTopTrader(row),
+    tmFundingZ(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -2500,6 +2588,13 @@ async function trendmxFormOne(ticket, row, ctx){
   if (!m15) hard.push('15m unread');
   else if (!tm15Confirm(m15, dir)) hard.push('15m no sweep and CHOCH');
   else if (tm15HeavyAgainst(m15, dir)) hard.push('15m breaking against on volume');
+  if (m15){
+    var trig = tmTriggerRvol(m15);
+    if (trig == null) hard.push('15m trigger volume unread');
+    else if (trig < 1.6) hard.push('15m trigger volume ' + trig.toFixed(2) + 'x is under 1.6x');
+  }
+  if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);
@@ -2859,7 +2954,7 @@ function trendmxGoldenDeskHTML(golden){
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade. The 4h ADX has to sit between 22 and 44, price within 2.2 ATR of the 4h EMA21, and the last three 1h bars have to tag the EMA21. Then the crypto formation: structure, relative strength versus BTC, open interest, CVD, the 15m sweep, and at least 8 confluence votes with none against.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade. The 4h ADX has to sit between 22 and 44, price within 2.2 ATR of the 4h EMA21, and the last three 1h bars have to tag the EMA21 on volume under 0.85x. The 1h close has to be outside the cloud, the 4h squeeze cannot still be coiled or fired the wrong way, and the 15m trigger needs a sweep, a change of character, and volume of at least 1.6x. Then the crypto formation: structure, relative strength versus BTC, open interest, CVD, and at least 8 confluence votes with none against.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')

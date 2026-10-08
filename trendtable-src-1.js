@@ -600,6 +600,7 @@ function trendmxPlanLegacy(inp){
     if (!(risk > 0)) return null;
     var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
     var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
+    var t3 = (dir === 'long') ? entry + 4 * risk : entry - 4 * risk;
     if (typeof hgStructureTargets === 'function'){
       try{
         var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
@@ -610,7 +611,7 @@ function trendmxPlanLegacy(inp){
       }catch(eTg){}
     }
     var fb = {
-      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
+      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2, t3: t3,
       rr1: Math.abs(t1 - entry) / risk,
       rr2: Math.abs(t2 - entry) / risk,
       riskPct: risk / entry * 100,
@@ -631,6 +632,7 @@ function trendmxPlanHTML(s){
   return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
     + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
     + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
+    + (isFinite(s.t3) ? (' · T3 <b>' + pxFmt(s.t3) + '</b> (4R)') : '')
     + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
     + (s.note ? ' — ' + escH(s.note) : '')
