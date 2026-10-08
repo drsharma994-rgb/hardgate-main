@@ -22,6 +22,9 @@
   var a = tmAtrLast(rows4);
   var risk = Math.abs(+ticket.entry - +ticket.stop);
   if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) hard.push('stop outside ATR');
+  var hot = tmParkinsonHot(rows4);
+  if (!hot) hard.push('volatility unread');
+  else if (hot.hot && risk < 1.45 * a) hard.push('stop is inside 1.45 ATR while volatility is elevated');
   if (typeof row.fundingPct !== 'number' || !isFinite(row.fundingPct)) hard.push('funding unread');
   else if (dir === 'long' && row.fundingPct >= 0.04) hard.push('funding crowded long');
   else if (dir === 'short' && row.fundingPct <= -0.04) hard.push('funding crowded short');
@@ -108,9 +111,10 @@
     tmTradingView(row),
     tmTopTrader(row),
     tmFundingZ(row),
-    tmTakerShare(row)
+    tmTakerShare(row),
+    tmOiPercentile(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -126,12 +130,18 @@
     var body = tmBodyCommit(m15, dir);
     if (body == null) hard.push('15m body commit unread');
     else if (!body) hard.push('15m body did not close past the swing');
+    var gap = tmDisplacementFvg(m15, dir);
+    if (gap == null) hard.push('15m displacement unread');
+    else if (!gap) hard.push('15m displacement gap missing');
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (takerShare == null) hard.push('taker share unread');
   else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
   else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  if (fundZ == null || oiPct == null) hard.push('crowding density unread');
+  else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
+  else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');
   var syn = tmSynergy(row, dir, {
     body: m15 ? tmBodyCommit(m15, dir) === true : false,
     takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)

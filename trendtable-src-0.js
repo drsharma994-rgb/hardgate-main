@@ -366,6 +366,13 @@ function tmValueState(row, dir){
         }
       } catch (eIc) { out.reasons.push('1h cloud unread'); }
     }
+    var va = (typeof tmVolumeProfile === 'function') ? tmVolumeProfile(rows1) : null;
+    var px1 = rows1[rows1.length - 1] && rows1[rows1.length - 1].c;
+    if (!va || !isFinite(px1)) out.reasons.push('1h value area unread');
+    else if (dir === 'long' && px1 < va.poc) out.reasons.push('1h price lost the point of control');
+    else if (dir === 'long' && px1 < va.vah) out.reasons.push('1h price is under the value area high');
+    else if (dir === 'short' && px1 > va.poc) out.reasons.push('1h price lost the point of control');
+    else if (dir === 'short' && px1 > va.val) out.reasons.push('1h price is over the value area low');
   }
   if (typeof ttmSqueeze === 'function'){
     try {
@@ -473,6 +480,43 @@ function tmExampleSize(entry, stop){
   if (!(+entry > 0) || !(dist > 0)) return null;
   var units = 100 / dist;
   return { units: units, notional: units * +entry };
+}
+function tmParkinson(rows, period){
+  period = period || 14;
+  if (!rows || rows.length < period) return NaN;
+  var factor = 1 / (4 * Math.log(2) * period);
+  var sum = 0, i, h, l, slice = rows.slice(-period);
+  for (i = 0; i < slice.length; i++){
+    h = slice[i].h; l = slice[i].l;
+    if (!(l > 0) || !(h >= l)) return NaN;
+    sum += Math.pow(Math.log(h / l), 2);
+  }
+  return Math.sqrt(factor * sum);
+}
+function tmParkinsonHot(rows){
+  if (!rows || rows.length < 42) return null;
+  var now = tmParkinson(rows, 14);
+  if (!isFinite(now)) return null;
+  var hist = [], end, w;
+  for (end = 14; end < rows.length - 1; end++){
+    w = tmParkinson(rows.slice(end - 14, end), 14);
+    if (isFinite(w)) hist.push(w);
+  }
+  if (hist.length < 10) return null;
+  hist.sort(function(a, b){ return a - b; });
+  return { now: now, hot: now > hist[Math.floor(0.8 * (hist.length - 1))] };
+}
+function tmDisplacementFvg(rows, dir){
+  if (!rows || rows.length < 4 || typeof atr !== 'function') return null;
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var c0 = rows[rows.length - 3], c1 = rows[rows.length - 2], c2 = rows[rows.length - 1];
+  if (!c0 || !c1 || !c2) return null;
+  var body = Math.abs(c1.c - c1.o);
+  if (!(body > 1.4 * atrNow)) return false;
+  if (dir === 'long') return c1.c > c1.o && c2.l > c0.h;
+  return c1.c < c1.o && c0.l > c2.h;
 }
 function tmSynergy(row, dir, extras){
   var score = 0;

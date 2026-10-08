@@ -366,6 +366,13 @@ function tmValueState(row, dir){
         }
       } catch (eIc) { out.reasons.push('1h cloud unread'); }
     }
+    var va = (typeof tmVolumeProfile === 'function') ? tmVolumeProfile(rows1) : null;
+    var px1 = rows1[rows1.length - 1] && rows1[rows1.length - 1].c;
+    if (!va || !isFinite(px1)) out.reasons.push('1h value area unread');
+    else if (dir === 'long' && px1 < va.poc) out.reasons.push('1h price lost the point of control');
+    else if (dir === 'long' && px1 < va.vah) out.reasons.push('1h price is under the value area high');
+    else if (dir === 'short' && px1 > va.poc) out.reasons.push('1h price lost the point of control');
+    else if (dir === 'short' && px1 > va.val) out.reasons.push('1h price is over the value area low');
   }
   if (typeof ttmSqueeze === 'function'){
     try {
@@ -473,6 +480,43 @@ function tmExampleSize(entry, stop){
   if (!(+entry > 0) || !(dist > 0)) return null;
   var units = 100 / dist;
   return { units: units, notional: units * +entry };
+}
+function tmParkinson(rows, period){
+  period = period || 14;
+  if (!rows || rows.length < period) return NaN;
+  var factor = 1 / (4 * Math.log(2) * period);
+  var sum = 0, i, h, l, slice = rows.slice(-period);
+  for (i = 0; i < slice.length; i++){
+    h = slice[i].h; l = slice[i].l;
+    if (!(l > 0) || !(h >= l)) return NaN;
+    sum += Math.pow(Math.log(h / l), 2);
+  }
+  return Math.sqrt(factor * sum);
+}
+function tmParkinsonHot(rows){
+  if (!rows || rows.length < 42) return null;
+  var now = tmParkinson(rows, 14);
+  if (!isFinite(now)) return null;
+  var hist = [], end, w;
+  for (end = 14; end < rows.length - 1; end++){
+    w = tmParkinson(rows.slice(end - 14, end), 14);
+    if (isFinite(w)) hist.push(w);
+  }
+  if (hist.length < 10) return null;
+  hist.sort(function(a, b){ return a - b; });
+  return { now: now, hot: now > hist[Math.floor(0.8 * (hist.length - 1))] };
+}
+function tmDisplacementFvg(rows, dir){
+  if (!rows || rows.length < 4 || typeof atr !== 'function') return null;
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var c0 = rows[rows.length - 3], c1 = rows[rows.length - 2], c2 = rows[rows.length - 1];
+  if (!c0 || !c1 || !c2) return null;
+  var body = Math.abs(c1.c - c1.o);
+  if (!(body > 1.4 * atrNow)) return false;
+  if (dir === 'long') return c1.c > c1.o && c2.l > c0.h;
+  return c1.c < c1.o && c0.l > c2.h;
 }
 function tmSynergy(row, dir, extras){
   var score = 0;
@@ -2469,6 +2513,22 @@ async function tmTakerShare(row){
     return ratio / (1 + ratio);
   } catch (e) { return null; }
 }
+async function tmOiPercentile(row){
+  if (typeof W.binanceOIHistory !== 'function') return null;
+  try {
+    var hist = await W.binanceOIHistory(tmBaseOf(row) + 'USDT', '4h', 30);
+    if (!hist || !hist.series || hist.series.length < 12) return null;
+    var vals = [], i, v;
+    for (i = 0; i < hist.series.length; i++){
+      v = +hist.series[i].oi;
+      if (v > 0) vals.push(v);
+    }
+    if (vals.length < 12) return null;
+    var now = vals[vals.length - 1], below = 0;
+    for (i = 0; i < vals.length; i++) if (vals[i] <= now) below++;
+    return below / vals.length;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
@@ -2629,6 +2689,9 @@ async function trendmxFormOne(ticket, row, ctx){
   var a = tmAtrLast(rows4);
   var risk = Math.abs(+ticket.entry - +ticket.stop);
   if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) hard.push('stop outside ATR');
+  var hot = tmParkinsonHot(rows4);
+  if (!hot) hard.push('volatility unread');
+  else if (hot.hot && risk < 1.45 * a) hard.push('stop is inside 1.45 ATR while volatility is elevated');
   if (typeof row.fundingPct !== 'number' || !isFinite(row.fundingPct)) hard.push('funding unread');
   else if (dir === 'long' && row.fundingPct >= 0.04) hard.push('funding crowded long');
   else if (dir === 'short' && row.fundingPct <= -0.04) hard.push('funding crowded short');
@@ -2715,9 +2778,10 @@ async function trendmxFormOne(ticket, row, ctx){
     tmTradingView(row),
     tmTopTrader(row),
     tmFundingZ(row),
-    tmTakerShare(row)
+    tmTakerShare(row),
+    tmOiPercentile(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -2733,12 +2797,18 @@ async function trendmxFormOne(ticket, row, ctx){
     var body = tmBodyCommit(m15, dir);
     if (body == null) hard.push('15m body commit unread');
     else if (!body) hard.push('15m body did not close past the swing');
+    var gap = tmDisplacementFvg(m15, dir);
+    if (gap == null) hard.push('15m displacement unread');
+    else if (!gap) hard.push('15m displacement gap missing');
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (takerShare == null) hard.push('taker share unread');
   else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
   else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  if (fundZ == null || oiPct == null) hard.push('crowding density unread');
+  else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
+  else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');
   var syn = tmSynergy(row, dir, {
     body: m15 ? tmBodyCommit(m15, dir) === true : false,
     takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
@@ -5189,6 +5259,8 @@ W.tmValueState = tmValueState;
 W.tmBodyCommit = tmBodyCommit;
 W.tmExampleSize = tmExampleSize;
 W.tmSynergy = tmSynergy;
+W.tmDisplacementFvg = tmDisplacementFvg;
+W.tmParkinsonHot = tmParkinsonHot;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

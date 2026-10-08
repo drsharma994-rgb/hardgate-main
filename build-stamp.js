@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1188',
-  pack: 'Trend Matrix flow. A long needs real 15m taker buying of at least 60 percent. Open interest has to rise with the break. A missing print is not a pass. The four reads, daily trend, 4h cascade, 1h cloud, and the 15m body plus taker share, have to add to at least 85 percent. After the first target, the example stop is the entry plus 0.35 ATR. That is not an order.',
-  built: '2026-10-08T21:40:00Z'
+  version: 'hg-v1189',
+  pack: 'Trend Matrix crowding. A long is blocked when funding z times the open-interest percentile is above 2.5. If either print is missing, that is not a clean crowd. When 4h high-low volatility is in its own top fifth, a stop inside 1.45 ATR is too tight. A long under the 1h value-area high, or through the point of control, is not a hold. The 15m trigger needs a real gap and a body bigger than 1.4 times its own ATR.',
+  built: '2026-10-08T21:55:00Z'
 };
 
 function hgBuildLabel(b){

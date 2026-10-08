@@ -316,6 +316,22 @@ async function tmTakerShare(row){
     return ratio / (1 + ratio);
   } catch (e) { return null; }
 }
+async function tmOiPercentile(row){
+  if (typeof W.binanceOIHistory !== 'function') return null;
+  try {
+    var hist = await W.binanceOIHistory(tmBaseOf(row) + 'USDT', '4h', 30);
+    if (!hist || !hist.series || hist.series.length < 12) return null;
+    var vals = [], i, v;
+    for (i = 0; i < hist.series.length; i++){
+      v = +hist.series[i].oi;
+      if (v > 0) vals.push(v);
+    }
+    if (vals.length < 12) return null;
+    var now = vals[vals.length - 1], below = 0;
+    for (i = 0; i < vals.length; i++) if (vals[i] <= now) below++;
+    return below / vals.length;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
