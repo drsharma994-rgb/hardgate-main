@@ -2501,6 +2501,23 @@ localStorage. Never throws.
             /* hg-v1058: the scalp-anchor marks, the same raw pass-through */
             vwapDevPct: c.vwapDevPct,
             bbSqueeze: c.bbSqueeze,
+            /* hg-v1168: THE PERFECT COHORT MARKS. hgFwdNormalize has accepted
+               `perfect` since hg-v1022 and `perfectPlus` since hg-v1030, and
+               this entry point never forwarded them -- so every desk recording
+               through hgFwdRecordScan (GOLD SCALP goldscalp.js:738, GOLD SWING
+               goldswing.js:704, OMNIBTC omnibtc.js:2448, TRENDMX
+               trendtable.combined.js:3301) wrote records that read
+               perfect=undefined / perfectPlus=undefined, and hgFwdPerfectSplit
+               (the hg-v1065 PERFECT COHORT SPLIT rendered on every gold desk
+               at line 2757) read 0 marked rows by construction. Three-states
+               rule stays with the normaliser; absent still means absent.
+               The three unread hg-v1022/v1025/v1030 marks (chased, chaseCode,
+               costR) stay OUT of this seam deliberately: no reader exists for
+               them in hg-forward.js, so adding them here would be the mirror
+               of hg-v955 (field written but never read). They can join once a
+               split reads them. */
+            perfect: c.perfect,
+            perfectPlus: c.perfectPlus,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV

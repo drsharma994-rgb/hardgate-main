@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1167',
-  pack: 'FOUR MORE GOLD PINE RECORD LAYERS ON EVERY GOLD DESK THROUGH THE ONE TABLE; THREE MORE FREE YAHOO LEGS. pinegoldmath.js carries twelve bar-only Pine ports now (the Chandelier Exit 22x3, the Hull MA 20 turn, the CCI 20 re-entry and the Aroon 25 cross join the eight); their states ride the PINE STACK marks on every record of OMNIGOLD, GANESH GOLD, GOLD SCALP, GOLD SWING and GOLD PINE with no desk edit, they mint record-only through each desk own mint and gates and pineGoldRecordJudge, and the CCI re-entry names CCI-EXTREME as its exact OMNIGOLD twin with the sibling-record literal regenerated from the committed artifact. The TTM squeeze is deliberately absent: the ten-layer table already carries Squeeze Mom. The majority mark keeps its five-layer population. macro.js fetches HYG, LQD, PA=F and GLD; the GLD volume reader refuses the open session; the home marks free:goldPalladium (directional), free:creditRiskOn and free:gldVolumeHigh (states). Twenty-three free keys, scored nowhere; the catalog keeps the ETF-flows row unchecked and names the GLD read. No threshold moves, no gate reads a mark, no setup leaves any board.',
-  built: '2026-10-10T06:00:00Z'
+  version: 'hg-v1168',
+  pack: 'PERFECT COHORT MARKS reach the ledger seam. hgFwdNormalize has accepted perfect since hg-v1022 and perfectPlus since hg-v1030; hgFwdRecordScan carries them now. The three guards that shipped the hand-ins (hg-v1022/v1025/v1030) tested the lifted record map in a sandbox or the direct door hgFwdRecord, and none drove the scan door, so every GOLD SCALP / GOLD SWING / OMNIBTC / TRENDMX record written through hgFwdRecordScan read perfect=undefined and perfectPlus=undefined and the hg-v1065 PERFECT COHORT SPLIT read zero marked rows by construction. The three unread hg-v1022/v1025/v1030 marks (chased, chaseCode, costR) stay OUT of the seam deliberately: no split reads them in hg-forward.js, so adding them would be the mirror of hg-v955 (field written and never read); they can join once a reader exists. Record-only, three-state via the normaliser; no gate, no threshold, no setup moves.',
+  built: '2026-10-11T06:00:00Z'
 };
 
 function hgBuildLabel(b){
