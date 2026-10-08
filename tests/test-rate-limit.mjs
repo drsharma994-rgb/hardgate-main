@@ -23,8 +23,8 @@ function fakeRes(){
 console.log('== 1) config: defaults + env overrides + kill switch ==');
 {
   const d = hgRateLimitConfig({});
-  ok(d.windowMs === 60000 && d.readsMax === 300 && d.writesMax === 30 && d.enabled === true,
-    'defaults: 60s window, 300 reads, 30 writes, enabled');
+  ok(d.windowMs === 60000 && d.readsMax === 1200 && d.writesMax === 30 && d.enabled === true,
+    'defaults: 60s window, 1200 reads (hg-v1170: 300 throttled live users), 30 writes, enabled');
   const e = hgRateLimitConfig({ HG_RATE_MAX: '5', HG_RATE_MUTATING_MAX: '2', HG_RATE_WINDOW_MS: '1000' });
   ok(e.readsMax === 5 && e.writesMax === 2 && e.windowMs === 1000, 'HG_RATE_* env overrides land');
   ok(hgRateLimitConfig({ HG_RATE_LIMIT: '0' }).enabled === false, 'HG_RATE_LIMIT=0 disables the guard');
@@ -60,8 +60,10 @@ console.log('== 4) loopback exempt — the server never rate-limits itself ==');
   let all = true;
   for (let i = 0; i < 10; i++) all = all && hgRateLimitCheck(fakeReq('127.0.0.1'), env).allowed;
   ok(all, 'loopback always allowed');
-  ok(hgClientIp({ headers: { 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }, socket: {} }) === '1.1.1.1',
-    'x-forwarded-for takes the first hop as the client IP');
+  ok(hgClientIp({ headers: { 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }, socket: {} }) === '2.2.2.2',
+    'x-forwarded-for takes the LAST hop — the trusted proxy append, never the client-supplied first entry');
+  ok(hgClientIp({ headers: { 'x-forwarded-for': '9.9.9.9, 203.0.113.7' }, socket: {} }) === '203.0.113.7',
+    'a spoofed first hop is ignored — the spoofer lands in their own bucket, not the victim\'s');
 }
 
 console.log('== 5) window resets: the bucket clears after windowMs ==');

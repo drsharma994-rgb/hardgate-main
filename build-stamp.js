@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1169',
-  pack: 'THE PERFECT COHORT JOINED THE HARDENING PACK. hgFwdRecordScan now forwards perfect and perfectPlus beside the hg-v1058 pass-throughs, so the hg-v1065 PERFECT COHORT SPLIT reads marked rows through the scan seam every live desk uses; the guard that proves it keeps its three-state rule and no longer reads its module from one laptop absolute path. AROUND IT THE FOURTEEN-TASK HARDENING SHIPS: CI is the one gate (727-file suite, two-tier lint, full-history gitleaks scan, cache-sync check on every push); every public /api answers a per-IP budget with 429 and Retry-After while the fail-closed secret gates stand; the bell carries user cycle minutes and midnight-wrapping quiet hours, and MUTE gates the push cascade too; the offline shell completes — MAIN stylesheet, the twelve trendtable fragments and the Shiva pair — and the Shiva injection sheds a forty-three-deploy-stale cachebuster; every backtest aggregate prints a seeded bootstrap ninety-five-percent band on mean net R beside its venue-true costs, and the README disclaimer tells the truth about both; forty-four phase reports file under docs, the env-var reference becomes one file, fifteen unreferenced root scripts move to the attic, and the root holds only what the page loads, injects or serves.',
-  built: '2026-10-11T18:00:00Z'
+  version: 'hg-v1170',
+  pack: 'HOTFIX AFTER THE FIRST LIVE MINUTES OF THE HARDENING PACK. The rate limiter shipped with a 300-reads-per-minute default and the live terminal its own polling filled the bucket — real users met 429s within minutes, exactly what the guard must never do to its own desk. Reads rise to twelve hundred a minute (an abuser still caps at twenty a second; a dozen power users behind one NAT never feel it) and the client is now keyed on the LAST x-forwarded-for hop — the hop the proxy vouches for — so a spoofed first entry can no longer dodge the budget or frame another address. Writes stay at thirty a minute behind their fail-closed secret gate, loopback stays exempt, and the env override stands: HG_RATE_LIMIT=0 lifts the guard entirely.',
+  built: '2026-10-11T19:00:00Z'
 };
 
 function hgBuildLabel(b){
