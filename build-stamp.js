@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1189',
-  pack: 'Trend Matrix crowding. A long is blocked when funding z times the open-interest percentile is above 2.5. If either print is missing, that is not a clean crowd. When 4h high-low volatility is in its own top fifth, a stop inside 1.45 ATR is too tight. A long under the 1h value-area high, or through the point of control, is not a hold. The 15m trigger needs a real gap and a body bigger than 1.4 times its own ATR.',
-  built: '2026-10-08T21:55:00Z'
+  version: 'hg-v1190',
+  pack: 'Trend Matrix regime. A continuation needs Hurst above 0.55 on the 4h closes. A short sample is not filled in as a trend. The 15m bar has to sweep the prior swing and close back through it. The perp has to be within 0.12 percent of the index. The book on that side has to be at least 1.35 times the other side. A missing print is not a pass. The card does not send an order.',
+  built: '2026-10-08T22:10:00Z'
 };
 
 function hgBuildLabel(b){

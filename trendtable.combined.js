@@ -374,6 +374,10 @@ function tmValueState(row, dir){
     else if (dir === 'short' && px1 > va.poc) out.reasons.push('1h price lost the point of control');
     else if (dir === 'short' && px1 > va.val) out.reasons.push('1h price is over the value area low');
   }
+  var hurst = tmHurst(rows4);
+  if (hurst == null) out.reasons.push('hurst unread');
+  else if (hurst < 0.48) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is mean-reverting');
+  else if (hurst <= 0.55) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is not a trend');
   if (typeof ttmSqueeze === 'function'){
     try {
       var sq = ttmSqueeze(rows4);
@@ -505,6 +509,60 @@ function tmParkinsonHot(rows){
   if (hist.length < 10) return null;
   hist.sort(function(a, b){ return a - b; });
   return { now: now, hot: now > hist[Math.floor(0.8 * (hist.length - 1))] };
+}
+function tmRs(closes){
+  if (!closes || closes.length < 8) return NaN;
+  var rets = [], i, mean = 0;
+  for (i = 1; i < closes.length; i++) rets.push(closes[i] - closes[i - 1]);
+  for (i = 0; i < rets.length; i++) mean += rets[i];
+  mean /= rets.length;
+  var cum = 0, mx = -Infinity, mn = Infinity, v = 0;
+  for (i = 0; i < rets.length; i++){
+    cum += rets[i] - mean;
+    if (cum > mx) mx = cum;
+    if (cum < mn) mn = cum;
+    v += (rets[i] - mean) * (rets[i] - mean);
+  }
+  var sd = Math.sqrt(v / rets.length);
+  if (!(sd > 0) || !(mx > mn)) return NaN;
+  return (mx - mn) / sd;
+}
+function tmHurst(rows){
+  if (!rows || rows.length < 80) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  function avgRs(scale){
+    var logs = [], start;
+    for (start = 0; start + scale <= closes.length; start += scale){
+      var rs = tmRs(closes.slice(start, start + scale));
+      if (isFinite(rs) && rs > 0) logs.push(Math.log(rs));
+    }
+    if (logs.length < 2) return NaN;
+    var sum = 0;
+    for (start = 0; start < logs.length; start++) sum += logs[start];
+    return Math.exp(sum / logs.length);
+  }
+  var small = avgRs(16), large = avgRs(64);
+  if (!(small > 0) || !(large > 0)) return null;
+  var h = Math.log(large / small) / Math.log(64 / 16);
+  return isFinite(h) ? h : null;
+}
+function tmTurtleReclaim(rows, dir){
+  if (!rows || rows.length < 8) return null;
+  var current = rows[rows.length - 1];
+  var prev = rows[rows.length - 2];
+  var look = rows.slice(-8, -2);
+  if (dir === 'long'){
+    var recentLow = Math.min.apply(null, look.map(function(bar){ return bar.l; }));
+    var swept = prev.l < recentLow || current.l < recentLow;
+    return !!(swept && current.c > recentLow && current.c > current.o);
+  }
+  var recentHigh = Math.max.apply(null, look.map(function(bar){ return bar.h; }));
+  var sweptH = prev.h > recentHigh || current.h > recentHigh;
+  return !!(sweptH && current.c < recentHigh && current.c < current.o);
 }
 function tmDisplacementFvg(rows, dir){
   if (!rows || rows.length < 4 || typeof atr !== 'function') return null;
@@ -2529,6 +2587,23 @@ async function tmOiPercentile(row){
     return below / vals.length;
   } catch (e) { return null; }
 }
+async function tmPerpPremium(row){
+  if (typeof W.binanceBasis !== 'function') return null;
+  try {
+    var b = await W.binanceBasis(tmBaseOf(row) + 'USDT', 'PERPETUAL', '15m', 1);
+    var last = b && (b.latest || (b.series && b.series[b.series.length - 1]));
+    if (!last || !(last.indexPrice > 0) || !isFinite(last.futuresPrice)) return null;
+    return (last.futuresPrice - last.indexPrice) / last.indexPrice;
+  } catch (e) { return null; }
+}
+async function tmBookRatio(row, dir){
+  if (typeof W.binanceDepth !== 'function') return null;
+  try {
+    var book = await W.binanceDepth(tmBaseOf(row) + 'USDT', 20);
+    if (!book || !(book.bidUsd > 0) || !(book.askUsd > 0)) return null;
+    return dir === 'long' ? book.bidUsd / book.askUsd : book.askUsd / book.bidUsd;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
@@ -2779,9 +2854,11 @@ async function trendmxFormOne(ticket, row, ctx){
     tmTopTrader(row),
     tmFundingZ(row),
     tmTakerShare(row),
-    tmOiPercentile(row)
+    tmOiPercentile(row),
+    tmPerpPremium(row),
+    tmBookRatio(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -2800,6 +2877,9 @@ async function trendmxFormOne(ticket, row, ctx){
     var gap = tmDisplacementFvg(m15, dir);
     if (gap == null) hard.push('15m displacement unread');
     else if (!gap) hard.push('15m displacement gap missing');
+    var soup = tmTurtleReclaim(m15, dir);
+    if (soup == null) hard.push('sweep unread');
+    else if (!soup) hard.push('no sweep and reclaim on the close');
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
@@ -2809,6 +2889,11 @@ async function trendmxFormOne(ticket, row, ctx){
   if (fundZ == null || oiPct == null) hard.push('crowding density unread');
   else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
   else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');
+  if (prem == null) hard.push('perp premium unread');
+  else if (dir === 'long' && prem > 0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is rich');
+  else if (dir === 'short' && prem < -0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is cheap');
+  if (book == null) hard.push('book unread');
+  else if (book < 1.35) hard.push('book ' + book.toFixed(2) + 'x is under 1.35x');
   var syn = tmSynergy(row, dir, {
     body: m15 ? tmBodyCommit(m15, dir) === true : false,
     takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
@@ -5261,6 +5346,8 @@ W.tmExampleSize = tmExampleSize;
 W.tmSynergy = tmSynergy;
 W.tmDisplacementFvg = tmDisplacementFvg;
 W.tmParkinsonHot = tmParkinsonHot;
+W.tmHurst = tmHurst;
+W.tmTurtleReclaim = tmTurtleReclaim;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

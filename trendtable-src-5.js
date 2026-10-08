@@ -112,9 +112,11 @@
     tmTopTrader(row),
     tmFundingZ(row),
     tmTakerShare(row),
-    tmOiPercentile(row)
+    tmOiPercentile(row),
+    tmPerpPremium(row),
+    tmBookRatio(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -133,6 +135,9 @@
     var gap = tmDisplacementFvg(m15, dir);
     if (gap == null) hard.push('15m displacement unread');
     else if (!gap) hard.push('15m displacement gap missing');
+    var soup = tmTurtleReclaim(m15, dir);
+    if (soup == null) hard.push('sweep unread');
+    else if (!soup) hard.push('no sweep and reclaim on the close');
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
@@ -142,6 +147,11 @@
   if (fundZ == null || oiPct == null) hard.push('crowding density unread');
   else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
   else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');
+  if (prem == null) hard.push('perp premium unread');
+  else if (dir === 'long' && prem > 0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is rich');
+  else if (dir === 'short' && prem < -0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is cheap');
+  if (book == null) hard.push('book unread');
+  else if (book < 1.35) hard.push('book ' + book.toFixed(2) + 'x is under 1.35x');
   var syn = tmSynergy(row, dir, {
     body: m15 ? tmBodyCommit(m15, dir) === true : false,
     takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)

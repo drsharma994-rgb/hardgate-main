@@ -374,6 +374,10 @@ function tmValueState(row, dir){
     else if (dir === 'short' && px1 > va.poc) out.reasons.push('1h price lost the point of control');
     else if (dir === 'short' && px1 > va.val) out.reasons.push('1h price is over the value area low');
   }
+  var hurst = tmHurst(rows4);
+  if (hurst == null) out.reasons.push('hurst unread');
+  else if (hurst < 0.48) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is mean-reverting');
+  else if (hurst <= 0.55) out.reasons.push('hurst ' + hurst.toFixed(2) + ' is not a trend');
   if (typeof ttmSqueeze === 'function'){
     try {
       var sq = ttmSqueeze(rows4);
@@ -505,6 +509,60 @@ function tmParkinsonHot(rows){
   if (hist.length < 10) return null;
   hist.sort(function(a, b){ return a - b; });
   return { now: now, hot: now > hist[Math.floor(0.8 * (hist.length - 1))] };
+}
+function tmRs(closes){
+  if (!closes || closes.length < 8) return NaN;
+  var rets = [], i, mean = 0;
+  for (i = 1; i < closes.length; i++) rets.push(closes[i] - closes[i - 1]);
+  for (i = 0; i < rets.length; i++) mean += rets[i];
+  mean /= rets.length;
+  var cum = 0, mx = -Infinity, mn = Infinity, v = 0;
+  for (i = 0; i < rets.length; i++){
+    cum += rets[i] - mean;
+    if (cum > mx) mx = cum;
+    if (cum < mn) mn = cum;
+    v += (rets[i] - mean) * (rets[i] - mean);
+  }
+  var sd = Math.sqrt(v / rets.length);
+  if (!(sd > 0) || !(mx > mn)) return NaN;
+  return (mx - mn) / sd;
+}
+function tmHurst(rows){
+  if (!rows || rows.length < 80) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  function avgRs(scale){
+    var logs = [], start;
+    for (start = 0; start + scale <= closes.length; start += scale){
+      var rs = tmRs(closes.slice(start, start + scale));
+      if (isFinite(rs) && rs > 0) logs.push(Math.log(rs));
+    }
+    if (logs.length < 2) return NaN;
+    var sum = 0;
+    for (start = 0; start < logs.length; start++) sum += logs[start];
+    return Math.exp(sum / logs.length);
+  }
+  var small = avgRs(16), large = avgRs(64);
+  if (!(small > 0) || !(large > 0)) return null;
+  var h = Math.log(large / small) / Math.log(64 / 16);
+  return isFinite(h) ? h : null;
+}
+function tmTurtleReclaim(rows, dir){
+  if (!rows || rows.length < 8) return null;
+  var current = rows[rows.length - 1];
+  var prev = rows[rows.length - 2];
+  var look = rows.slice(-8, -2);
+  if (dir === 'long'){
+    var recentLow = Math.min.apply(null, look.map(function(bar){ return bar.l; }));
+    var swept = prev.l < recentLow || current.l < recentLow;
+    return !!(swept && current.c > recentLow && current.c > current.o);
+  }
+  var recentHigh = Math.max.apply(null, look.map(function(bar){ return bar.h; }));
+  var sweptH = prev.h > recentHigh || current.h > recentHigh;
+  return !!(sweptH && current.c < recentHigh && current.c < current.o);
 }
 function tmDisplacementFvg(rows, dir){
   if (!rows || rows.length < 4 || typeof atr !== 'function') return null;

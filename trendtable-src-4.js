@@ -332,6 +332,23 @@ async function tmOiPercentile(row){
     return below / vals.length;
   } catch (e) { return null; }
 }
+async function tmPerpPremium(row){
+  if (typeof W.binanceBasis !== 'function') return null;
+  try {
+    var b = await W.binanceBasis(tmBaseOf(row) + 'USDT', 'PERPETUAL', '15m', 1);
+    var last = b && (b.latest || (b.series && b.series[b.series.length - 1]));
+    if (!last || !(last.indexPrice > 0) || !isFinite(last.futuresPrice)) return null;
+    return (last.futuresPrice - last.indexPrice) / last.indexPrice;
+  } catch (e) { return null; }
+}
+async function tmBookRatio(row, dir){
+  if (typeof W.binanceDepth !== 'function') return null;
+  try {
+    var book = await W.binanceDepth(tmBaseOf(row) + 'USDT', 20);
+    if (!book || !(book.bidUsd > 0) || !(book.askUsd > 0)) return null;
+    return dir === 'long' ? book.bidUsd / book.askUsd : book.askUsd / book.bidUsd;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
