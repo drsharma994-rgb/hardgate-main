@@ -49,11 +49,12 @@ console.log('== 1) three series helpers + three ports + three table entries ==')
   assert(typeof W.pineGoldFisherSeries === 'function' && typeof W.pineGoldFisherZero === 'function',
     'Fisher Transform: series helper and port both exported');
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 15, 'fifteen record-only layers (' + T.length + ')');
+  assert(T.length === 16, 'sixteen record-only layers since hg-v1172 (' + T.length + ')');
   const OLD12 = ['supertrend','ichimoku','donchian','emacross','keltner','macd','psar','stoch','chandelier','hullma','cci','aroon'];
   const NEW3 = ['williams','trix','fisher'];
   assert(T.slice(0, 12).map(l => l.id).join(',') === OLD12.join(','), 'the twelve earlier layers lead the table');
-  assert(T.slice(12).map(l => l.id).join(',') === NEW3.join(','), 'the three hg-v1171 layers follow');
+  assert(T.slice(12, 15).map(l => l.id).join(',') === NEW3.join(','), 'the three hg-v1171 layers follow at positions 12/13/14');
+  assert(T[15] && T[15].id === 'bpr', 'the hg-v1172 BPR layer follows at position 15');
   assert(NEW3.every(id => {
     const l = T.find(x => x.id === id);
     return l && typeof W[l.fn] === 'function';

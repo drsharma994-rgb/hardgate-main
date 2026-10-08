@@ -198,7 +198,7 @@ const firstWindow = (W, fn, opts, rows, from) => {
 {
   const W = boot(MATH_BASE);
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 15 && NEW3.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function' && l.twin === null)), 'the three hg-v1166 layers sit in the record table (fifteen since hg-v1171) with their detectors and name no twin (STOCHRSI-TURN is not the Stochastic cross)');
+  assert(T.length === 16 && NEW3.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function' && l.twin === null)), 'the three hg-v1166 layers sit in the record table (sixteen since hg-v1172 appended BPR) with their detectors and name no twin (STOCHRSI-TURN is not the Stochastic cross)');
   assert(Array.isArray(W.PINE_GOLD_MAJORITY_IDS) && W.PINE_GOLD_MAJORITY_IDS.join(',') === OLD5.join(','), 'the majority mark keeps its hg-v1165 population: the five hg-v1164 layers');
   const full = tapeEnding(WED, 600, 900, 11, 24, 0);
   const found = {};
@@ -272,7 +272,7 @@ const firstWindow = (W, fn, opts, rows, from) => {
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
   assert(Object.keys(mL).length === 16 && Object.keys(mL).every(k => mL[k] === true) && Object.keys(mS).every(k => mS[k] === false), 'all-long states: sixteen marks WITH on a long, sixteen AGAINST on a short (hg-v1171: fifteen layers + majority)');
   const html = W.pineGoldStackLineHtml(su, mL);
-  assert(/\d+ of 15 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population (fifteen total since hg-v1171)');
+  assert(/\d+ of 16 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population (sixteen total since hg-v1172)');
 }
 
 /* ------------------------------------------------------------------ 4 */
@@ -509,8 +509,8 @@ console.log('== 7) GANESH GOLD reads the eight states; nothing gated; the cap; t
   assert(!/recordOnly|recordReleased/.test(body(gs, 'function gsPickBest(')) && !/recordOnly|recordReleased/.test(body(gw, 'function pickBest(')), 'neither leader picker reads the record-only mark (the demote decides, as for every demoted row)');
   /* the cap */
   const Wr = boot(RANK_BASE.concat(PINE_MATH));
-  const KEYS = Wr.HG_GOLD_FREE_KEYS.length + 2 + Object.keys(Wr.hgGoldIndicatorMarks(Wr.hgGoldIndicatorReads(tapeEnding(WED, 300, 900, 102, 24, 0), { rows1d: tapeEnding(WED, 280, 86400, 105, 60, 20) }), 'long')).length + 16;
-  assert(KEYS <= 64 && KEYS >= 55, 'twenty-six free: + two PERFECT + the indicator stack read on this tape + sixteen pine: = ' + KEYS + ' keys, inside the 64 cap (hg-v1171)');
+  const KEYS = Wr.HG_GOLD_FREE_KEYS.length + 2 + Object.keys(Wr.hgGoldIndicatorMarks(Wr.hgGoldIndicatorReads(tapeEnding(WED, 300, 900, 102, 24, 0), { rows1d: tapeEnding(WED, 280, 86400, 105, 60, 20) }), 'long')).length + 17;
+  assert(KEYS <= 64 && KEYS >= 55, 'twenty-six free: + two PERFECT + the indicator stack read on this tape + seventeen pine: (16 layers + majority) = ' + KEYS + ' keys, inside the 64 cap (hg-v1172)');
   /* the catalog says what it read for the curve, and does not call the 10Y/2Y row USED */
   const Wc = boot(['indicators.js', 'indicators2.js', 'goldind.js', 'gold-catalog.js']);
   const f = Wc.hgGoldCatalogFeed(tapeEnding(WED, 300, 900, 102, 24, 0), { ctx: { macro: MACRO_ALL, now: WED } });

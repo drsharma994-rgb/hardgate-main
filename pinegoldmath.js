@@ -739,7 +739,15 @@ var PINE_GOLD_RECORD_LAYERS = [
   { id: 'trix', label: 'TRIX Zero Cross', fn: 'pineGoldTrixCross', minBars: 60,
     opts: { len: 15, swing: 5 }, twin: null },
   { id: 'fisher', label: 'Fisher Transform', fn: 'pineGoldFisherZero', minBars: 60,
-    opts: { len: 10, swing: 5 }, twin: null }
+    opts: { len: 10, swing: 5 }, twin: null },
+  /* hg-v1172: Balanced Price Range (BPR) — one new concept, record-only.
+     Overlap of a bull FVG and a bear FVG within the last ~20 bars forms a
+     shelf; the port fires on a last-closed-bar reclaim from the opposite
+     side (prev bar closed outside the shelf, this bar wicked in and closed
+     back out). Not registered as an OMNIGOLD mechanic (grep: no BPR,
+     BALANCED-PRICE or balancedPrice in omnigold.js), `twin: null`. */
+  { id: 'bpr', label: 'Balanced Price Range', fn: 'pineGoldBpr', minBars: 60,
+    opts: { lookback: 20, minGapAtr: 0.10 }, twin: null }
 ];
 /* hg-v1165's majority mark is the majority of the FIVE hg-v1164 layers --
    records written since then carry that meaning, so the three hg-v1166
@@ -1331,6 +1339,127 @@ function pineGoldFisherZero(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
+/* hg-v1172: Balanced Price Range (BPR) — the one new concept in this pack
+   that is not already registered somewhere else on the gold stack. A BPR
+   is the price overlap of a bullish three-bar FVG and a bearish three-bar
+   FVG that formed within the same recent window — a shelf where opposing
+   institutional orders both left imbalance, which price tends to rebalance
+   against. Distinct from the Pine ports above (none of them reads an FVG
+   overlap) and from OMNIGOLD's registry (grep: no BPR / BALANCED-PRICE /
+   balancedPrice mechanic exists, `twin: null`); distinct too from the
+   plain FVG mint on GOLD SCALP, which fires on a single-gap retrace. The
+   port fires on a last-closed-bar reclaim of the shelf — price traded
+   into the shelf from the opposite side and closed back out — and never
+   on a wick that failed to close through. State for the record stack is
+   where the close sits relative to the latest readable shelf: close
+   above shelf.top is 'long' (shelf acts as support below), close below
+   shelf.bottom is 'short' (shelf acts as resistance above), inside the
+   shelf is NEITHER. Shelves without a readable ATR gap floor are
+   skipped (a feed with no ATR is not a shelf, not a shelf of zero size).
+   Record-only like every port in this table — mints DEMOTED, both
+   handoffs withheld on the card, released by `pineGoldRecordJudge` per
+   mechanic and per desk once the forward ledger measures it paying. */
+function pgrBprShelves(rows, lookback, minGapAtr){
+  var out = [];
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < 6) return out;
+    lookback = lookback && isFinite(+lookback) ? Math.max(6, Math.min(+lookback, n - 1)) : 20;
+    var atrFn = gfn('atr') || gfn('pineAtr');
+    if (typeof atrFn !== 'function') return out;
+    var a = atrFn(rows, 14);
+    if (!a || !a.length) return out;
+    var floor = isFinite(+minGapAtr) ? +minGapAtr : 0.10;
+    /* Collect three-bar FVGs within the lookback window. c0 = rows[i-2],
+       c1 = rows[i-1], c2 = rows[i]. A bull FVG needs c2.low > c0.high AND
+       the impulse bar c1 closed up; mirror for bear. The gap must be at
+       least floor * ATR at bar i-1 to count as a shelf. */
+    var fvgs = [];
+    var start = Math.max(2, n - lookback);
+    for (var i = start; i < n; i++){
+      var c0 = rows[i - 2], c1 = rows[i - 1], c2 = rows[i];
+      var atr1 = pgrNum(a[i - 1]);
+      if (!c0 || !c1 || !c2 || !isFinite(atr1) || !(atr1 > 0)) continue;
+      var h0 = pgrNum(c0.h), l0 = pgrNum(c0.l), h2 = pgrNum(c2.h), l2 = pgrNum(c2.l);
+      var o1 = pgrNum(c1.o), cc1 = pgrNum(c1.c);
+      if (![h0, l0, h2, l2, o1, cc1].every(isFinite)) continue;
+      var minGap = floor * atr1;
+      /* bull gap: rows[i].low above rows[i-2].high, impulse bar closed up */
+      if (l2 - h0 >= minGap && cc1 > o1){
+        fvgs.push({ type: 'bull', top: l2, bottom: h0, barIndex: i - 1 });
+      }
+      /* bear gap: rows[i-2].low above rows[i].high, impulse bar closed down */
+      if (l0 - h2 >= minGap && cc1 < o1){
+        fvgs.push({ type: 'bear', top: l0, bottom: h2, barIndex: i - 1 });
+      }
+    }
+    if (fvgs.length < 2) return out;
+    /* Pair each FVG with the nearest earlier opposite FVG; keep the overlap. */
+    for (var j = 1; j < fvgs.length; j++){
+      var later = fvgs[j];
+      for (var k = j - 1; k >= 0; k--){
+        var earlier = fvgs[k];
+        if (earlier.type === later.type) continue;
+        if (Math.abs(later.barIndex - earlier.barIndex) > lookback) break;
+        var overlapTop = Math.min(later.top, earlier.top);
+        var overlapBottom = Math.max(later.bottom, earlier.bottom);
+        if (overlapTop > overlapBottom){
+          out.push({
+            top: overlapTop,
+            bottom: overlapBottom,
+            mid: (overlapTop + overlapBottom) / 2,
+            size: overlapTop - overlapBottom,
+            formedBarIndex: later.barIndex
+          });
+          break;
+        }
+      }
+    }
+    return out;
+  }catch(e){ return out; }
+}
+function pineGoldBpr(rows, opts){
+  opts = opts || {};
+  var lookback = opts.lookback || 20, minGap = opts.minGapAtr != null ? opts.minGapAtr : 0.10;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < 6) return { dir: null };
+    var shelves = pgrBprShelves(rows, lookback, minGap);
+    if (!shelves.length) return { dir: null };
+    var i = n - 1;
+    var c = pgrNum(rows[i].c), o = pgrNum(rows[i].o), lo = pgrNum(rows[i].l), hi = pgrNum(rows[i].h);
+    var pc = pgrNum(rows[i - 1].c);
+    if (![c, o, lo, hi, pc].every(isFinite)) return { dir: null };
+    var atrFn = gfn('atr') || gfn('pineAtr');
+    if (typeof atrFn !== 'function') return { dir: null };
+    var a = atrFn(rows, 14);
+    var atr = pgrNum(a && a[i]);
+    if (!isFinite(atr) || !(atr > 0)) return { dir: null };
+    /* Walk shelves newest first; fire on the first that the last closed bar
+       reclaimed from the opposite side. A shelf whose formation includes
+       the last bar is not a reclaim (the imbalance has not resolved yet). */
+    for (var s = shelves.length - 1; s >= 0; s--){
+      var shelf = shelves[s];
+      if (shelf.formedBarIndex >= i - 1) continue;
+      /* Bullish reclaim: prev bar closed above the shelf top; last bar
+         wicked into the shelf (low <= shelf.top) and closed back above
+         the shelf top with a bullish body. */
+      if (pc > shelf.top && lo <= shelf.top && c > shelf.top && c > o){
+        var longStop = shelf.bottom - 0.15 * atr;
+        return pgrResult('long', c, longStop, { shelf: [shelf.bottom, shelf.top], age: i - 1 - shelf.formedBarIndex });
+      }
+      /* Bearish reclaim: prev bar closed below the shelf bottom; last bar
+         wicked into the shelf (high >= shelf.bottom) and closed back below
+         the shelf bottom with a bearish body. */
+      if (pc < shelf.bottom && hi >= shelf.bottom && c < shelf.bottom && c < o){
+        var shortStop = shelf.top + 0.15 * atr;
+        return pgrResult('short', c, shortStop, { shelf: [shelf.bottom, shelf.top], age: i - 1 - shelf.formedBarIndex });
+      }
+    }
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
    consume these through their extras seam and price them through their own
@@ -1465,6 +1594,7 @@ function pineGoldLayerStates(rows){
               /* hg-v1166 */ macd: null, psar: null, stoch: null,
               /* hg-v1167 */ chandelier: null, hullma: null, cci: null, aroon: null,
               /* hg-v1171 */ williams: null, trix: null, fisher: null,
+              /* hg-v1172 */ bpr: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -1595,6 +1725,21 @@ function pineGoldLayerStates(rows){
         if (isFinite(fv)){ if (fv > 0) out.fisher = 'long'; else if (fv < 0) out.fisher = 'short'; }
       }
     }catch(eF){}
+    /* hg-v1172: BPR state. The latest readable Balanced Price Range shelf
+       in the lookback acts as a shelf of institutional support when the
+       close sits above it, and resistance when it sits below. Inside the
+       shelf, or with no shelf found, state is NEITHER. The read is the
+       most recent shelf by `formedBarIndex`; a stale earlier shelf that
+       has since been broken does not override it, which is why
+       `pgrBprShelves` already orders by formation. */
+    try{
+      var bO = layerOpts('bpr'), BS = pgrBprShelves(rows, bO.lookback || 20, bO.minGapAtr != null ? bO.minGapAtr : 0.10);
+      if (BS && BS.length){
+        var latest = BS[BS.length - 1];
+        if (c > latest.top) out.bpr = 'long';
+        else if (c < latest.bottom) out.bpr = 'short';
+      }
+    }catch(eB){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
       var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
@@ -1700,6 +1845,8 @@ G.pineGoldFisherZero = pineGoldFisherZero;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
+G.pineGoldBpr = pineGoldBpr;                          /* hg-v1172 */
+G.pineGoldBprShelves = pgrBprShelves;                 /* hg-v1172 */
 G.pineGoldRecordJudge = pineGoldRecordJudge;
 G.pineGoldRecordFloor = pineGoldRecordFloor;
 G.pineGoldRecordChipHtml = pineGoldRecordChipHtml;
@@ -1734,7 +1881,9 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries,
     /* hg-v1171 */
     pineGoldWilliamsReentry, pineGoldTrixCross, pineGoldFisherZero,
-    pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries
+    pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries,
+    /* hg-v1172 */
+    pineGoldBpr, pineGoldBprShelves: pgrBprShelves
   };
 }
 
