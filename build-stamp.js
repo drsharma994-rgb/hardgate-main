@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1186',
-  pack: 'TERMINAL-QUANT WIRING INTEGRITY - every terminal-quant module is loaded + shell-precached + consumed by the quant desk, the gold desks emit ARMED into the dispatcher/audio/journal path, no exchange secret reaches the browser, and the order router stays the deliberate security stub. Also carries the Trend Matrix volume. A pullback into the EMA only counts when its volume is under 0.85 times the prior average. A 15m trigger needs at least 1.6 times. A long below or inside the 1h cloud is not a bounce. A 4h squeeze that is still coiled, or that fires the wrong way, is not an entry. Funding z above 2 blocks a long. The five-leg score is unchanged.',
-  built: '2026-10-08T21:10:00Z'
+  version: 'hg-v1187',
+  pack: 'Trend Matrix leaders. An alt long has to beat Bitcoin by at least 1.5 percent, and a lower low in ALT/BTC blocks it. A long needs 4h RSI on the bull floor, not above 52. The pullback has to reach the VWAP anchored at the last 4h swing. The 15m body has to close past that swing by a quarter of the 15m ATR. The size on the card is an example on $10,000, not an order.',
+  built: '2026-10-08T21:30:00Z'
 };
 
 function hgBuildLabel(b){

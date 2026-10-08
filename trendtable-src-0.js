@@ -378,7 +378,101 @@ function tmValueState(row, dir){
       }
     } catch (eSq) {}
   }
+  if (typeof rsi === 'function'){
+    try {
+      var rsiSeries = rsi(closes, 14);
+      var rsiNow = rsiSeries && rsiSeries.length ? rsiSeries[rsiSeries.length - 1] : NaN;
+      if (isFinite(rsiNow)){
+        if (dir === 'long' && rsiNow > 52) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is above the bull floor');
+        if (dir === 'short' && rsiNow < 50) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is below the bear ceiling');
+      }
+    } catch (eRsi) {}
+  }
+  var swing = tmSwingAnchor(rows4, dir);
+  if (!swing) out.reasons.push('anchored VWAP unread');
+  else {
+    var avwap = tmAnchoredVwap(rows4, swing.i);
+    if (!isFinite(avwap)) out.reasons.push('anchored VWAP unread');
+    else if (atr > 0){
+      var taggedAv = false, ak, abar;
+      var atail = rows4.slice(-3);
+      for (ak = 0; ak < atail.length; ak++){
+        abar = atail[ak];
+        if (!abar) continue;
+        if (dir === 'long' && abar.l <= avwap) taggedAv = true;
+        if (dir === 'short' && abar.h >= avwap) taggedAv = true;
+      }
+      if (!taggedAv && Math.abs(px - avwap) > atr * 0.8) out.reasons.push('not at the 4h anchored VWAP');
+    }
+  }
   return out;
+}
+function tmSwingAnchor(rows, dir){
+  if (typeof hgStructure !== 'function' || !rows) return null;
+  try {
+    var hs = hgStructure(rows);
+    if (!hs || !hs.swings) return null;
+    var best = null, i;
+    for (i = 0; i < hs.swings.length; i++){
+      var kind = hs.swings[i].kind;
+      var type = hs.swings[i].type;
+      var isLow = kind === 'low' || type === 'HL' || type === 'LL';
+      var isHigh = kind === 'high' || type === 'HH' || type === 'LH';
+      if (dir === 'long' && isLow) best = hs.swings[i];
+      if (dir === 'short' && isHigh) best = hs.swings[i];
+    }
+    return best && isFinite(best.i) ? best : null;
+  } catch (e) { return null; }
+}
+function tmAnchoredVwap(rows, from){
+  if (!rows || !(from >= 0) || from >= rows.length) return NaN;
+  var pv = 0, vv = 0, i, bar, vol, typ;
+  for (i = from; i < rows.length; i++){
+    bar = rows[i];
+    vol = tmBarVol(bar);
+    if (!isFinite(vol)) return NaN;
+    typ = (bar.h + bar.l + bar.c) / 3;
+    if (!isFinite(typ)) return NaN;
+    pv += typ * vol;
+    vv += vol;
+  }
+  return vv > 0 ? pv / vv : NaN;
+}
+function tmBodyCommit(rows, dir){
+  if (!rows || rows.length < 8 || typeof atr !== 'function') return null;
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var cur = rows[rows.length - 1];
+  var recent = rows.slice(-8, -1);
+  var buf = atrNow * 0.25;
+  if (dir === 'long'){
+    var pivotH = Math.max.apply(null, recent.map(function(bar){ return bar.h; }));
+    return cur.c > cur.o && cur.c > pivotH + buf;
+  }
+  var pivotL = Math.min.apply(null, recent.map(function(bar){ return bar.l; }));
+  return cur.c < cur.o && cur.c < pivotL - buf;
+}
+function tmAltBtcLowerLow(coinRows, btcRows){
+  var n = Math.min(coinRows ? coinRows.length : 0, btcRows ? btcRows.length : 0);
+  if (n < 12) return null;
+  var ratio = [], i, c, b;
+  for (i = 0; i < n; i++){
+    c = coinRows[coinRows.length - n + i].c;
+    b = btcRows[btcRows.length - n + i].c;
+    if (!(c > 0) || !(b > 0)) return null;
+    ratio.push(c / b);
+  }
+  var last = ratio.slice(-6), prev = ratio.slice(-12, -6);
+  var minL = Math.min.apply(null, last), minP = Math.min.apply(null, prev);
+  var maxL = Math.max.apply(null, last), maxP = Math.max.apply(null, prev);
+  return { lowerLow: minL < minP, higherHigh: maxL > maxP };
+}
+function tmExampleSize(entry, stop){
+  var dist = Math.abs(+entry - +stop);
+  if (!(+entry > 0) || !(dist > 0)) return null;
+  var units = 100 / dist;
+  return { units: units, notional: units * +entry };
 }
 function tmBarVol(bar){
   if (!bar) return NaN;

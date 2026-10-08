@@ -28,8 +28,14 @@
   if (tmBaseOf(row) !== 'BTC'){
     var coinRet = tmFourHourReturn(row.rows4h);
     if (coinRet == null || !ctx || ctx.btcRet == null) hard.push('relative strength unread');
-    else if (dir === 'long' && (coinRet - ctx.btcRet) < -0.01) hard.push('weaker than BTC');
-    else if (dir === 'short' && (coinRet - ctx.btcRet) > 0.01) hard.push('stronger than BTC');
+    else if (dir === 'long' && (coinRet - ctx.btcRet) < 0.015) hard.push('not leading BTC');
+    else if (dir === 'short' && (ctx.btcRet - coinRet) < 0.015) hard.push('not lagging BTC');
+    if (ctx && ctx.btcRows){
+      var ratio = tmAltBtcLowerLow(rows4, ctx.btcRows);
+      if (!ratio) hard.push('ALT/BTC unread');
+      else if (dir === 'long' && ratio.lowerLow) hard.push('ALT/BTC made a lower low');
+      else if (dir === 'short' && ratio.higherHigh) hard.push('ALT/BTC made a higher high');
+    }
   }
   if (row.mark > 0 && px > 0){
     var basis = (row.mark - px) / px;
@@ -116,6 +122,9 @@
     var trig = tmTriggerRvol(m15);
     if (trig == null) hard.push('15m trigger volume unread');
     else if (trig < 1.6) hard.push('15m trigger volume ' + trig.toFixed(2) + 'x is under 1.6x');
+    var body = tmBodyCommit(m15, dir);
+    if (body == null) hard.push('15m body commit unread');
+    else if (!body) hard.push('15m body did not close past the swing');
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
@@ -252,9 +261,11 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
   var ctx = ctxReady || await trendmxLoadContext(rows);
   if (!ctx.ethOk) tmStampEth(ctx, rows);
   ctx.btcRet = null;
+  ctx.btcRows = null;
   if (Array.isArray(rows)){
     for (var bi = 0; bi < rows.length; bi++){
       if (tmBaseOf(rows[bi]) !== 'BTC') continue;
+      ctx.btcRows = tmClosedRows(rows[bi].rows4h, 14400);
       ctx.btcRet = tmFourHourReturn(rows[bi].rows4h);
       if (ctx.btcRet != null) break;
     }

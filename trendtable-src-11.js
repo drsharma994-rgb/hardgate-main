@@ -336,6 +336,8 @@
 
 W.trendmxSetupGrade = trendmxSetupGrade;
 W.tmValueState = tmValueState;
+W.tmBodyCommit = tmBodyCommit;
+W.tmExampleSize = tmExampleSize;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;
