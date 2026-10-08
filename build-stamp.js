@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1178',
-  pack: 'Gold v4. A long in the top half of the dealing range is blocked, and a short in the bottom half is blocked. The first 30 minutes of London and New York are the Initial Balance and are not a trade. A scalp reclaim needs a 58% rejection wick. A gap traded through its midpoint is exhausted. Ganesh can use a three-drive and prints TP1, TP2, and TP3.',
-  built: '2026-10-08T19:05:00Z'
+  version: 'hg-v1179',
+  pack: 'Gold v5. A long above the New York midnight open is late, and a short below it is late. The clock follows New York daylight saving, not a fixed 04:00 UTC. A three-bar waterfall is not a knife to catch. If the developing point of control traps that side, the lead is blocked. After TP1 the planned stop is entry plus 0.35 ATR.',
+  built: '2026-10-08T19:25:00Z'
 };
 
 function hgBuildLabel(b){

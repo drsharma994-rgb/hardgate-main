@@ -88,10 +88,12 @@
       isFixWindow: !!isFix
     };
   };
-  GoldCoreEngine.prototype.calculateDealingRange = function(dayKlines, currentPrice){
+  GoldCoreEngine.prototype.calculateDealingRange = function(dayKlines, currentPrice, lookbackBars){
     var rows = barsOf(dayKlines);
     if (rows.length < 15 || !(currentPrice > 0)) return { percentile: 0.5, zone: 'EQUILIBRIUM', unread: true };
-    var look = rows.slice(-48);
+    var span = lookbackBars >= 144 ? 144 : (lookbackBars >= 89 ? 89 : (lookbackBars >= 55 ? 55 : (lookbackBars >= 34 ? 34 : 48)));
+    if (!(lookbackBars > 0)) span = 48;
+    var look = rows.slice(-span);
     var hi = -Infinity, lo = Infinity, i;
     for (i = 0; i < look.length; i++){ if (look[i].high > hi) hi = look[i].high; if (look[i].low < lo) lo = look[i].low; }
     var dist = hi - lo;
@@ -102,7 +104,72 @@
     else if (percentile < 0.50) zone = 'DISCOUNT';
     else if (percentile >= 0.60) zone = 'DEEP_PREMIUM';
     else if (percentile > 0.50) zone = 'PREMIUM';
-    return { percentile: percentile, zone: zone, rangeHigh: hi, rangeLow: lo, eqPrice: +((hi + lo) / 2).toFixed(2), unread: false };
+    return { percentile: percentile, zone: zone, rangeHigh: hi, rangeLow: lo, eqPrice: +((hi + lo) / 2).toFixed(2), bars: look.length, unread: false };
+  };
+  function nyParts(ms){
+    try {
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(ms));
+      var o = {}, i;
+      for (i = 0; i < parts.length; i++) if (parts[i].type !== 'literal') o[parts[i].type] = parts[i].value;
+      return o;
+    } catch (e) { return null; }
+  }
+  GoldCoreEngine.prototype.calculateTrueDayOpen = function(dayKlines){
+    var rows = barsOf(dayKlines);
+    if (!rows.length) return { nymo: null, unread: true };
+    var lastNy = nyParts(rows[rows.length - 1].time);
+    if (!lastNy) return { nymo: null, unread: true };
+    var i, c, part;
+    for (i = rows.length - 1; i >= 0; i--){
+      c = rows[i];
+      part = nyParts(c.time);
+      if (!part || part.year !== lastNy.year || part.month !== lastNy.month || part.day !== lastNy.day) continue;
+      if ((part.hour === '00' || part.hour === '24') && part.minute === '00') return { nymo: c.open, time: c.time, unread: false, source: 'NY' };
+    }
+    var day = new Date(rows[rows.length - 1].time);
+    for (i = 0; i < rows.length; i++){
+      c = rows[i];
+      var dt = new Date(c.time);
+      if (dt.getUTCFullYear() === day.getUTCFullYear() && dt.getUTCMonth() === day.getUTCMonth() && dt.getUTCDate() === day.getUTCDate() && dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0){
+        return { nymo: c.open, time: c.time, unread: false, source: 'UTC' };
+      }
+    }
+    return { nymo: null, unread: true };
+  };
+  GoldCoreEngine.prototype.calculateKineticEnergy = function(klines, atr){
+    var rows = barsOf(klines);
+    if (rows.length < 5 || !(atr > 0)) return { safe: true, velocityScore: 0, downCascade: false, upCascade: false };
+    var c0 = rows[rows.length - 1], c1 = rows[rows.length - 2], c2 = rows[rows.length - 3];
+    var score = +(Math.abs(c0.close - c2.open) / (atr * 2.8)).toFixed(2);
+    var falling = c0.close < c1.close && c1.close < c2.close;
+    var rising = c0.close > c1.close && c1.close > c2.close;
+    return { velocityScore: score, downCascade: score > 1.5 && falling, upCascade: score > 1.5 && rising, safe: !(score > 1.5 && (falling || rising)) };
+  };
+  GoldCoreEngine.prototype.detectPocMigration = function(klines){
+    var rows = barsOf(klines);
+    if (rows.length < 16) return { trappedSide: 'NONE', unread: true };
+    var window = rows.slice(-32);
+    var half = Math.floor(window.length / 2);
+    function pocOf(list){
+      var buckets = {}, i, key, vol, max = -1, at = null;
+      for (i = 0; i < list.length; i++){
+        key = (Math.round(list[i].close * 2) / 2).toFixed(2);
+        vol = list[i].volume > 0 ? list[i].volume : 1;
+        buckets[key] = (buckets[key] || 0) + vol;
+        if (buckets[key] > max){ max = buckets[key]; at = +key; }
+      }
+      return at;
+    }
+    var early = pocOf(window.slice(0, half)), recent = pocOf(window.slice(half));
+    var px = rows[rows.length - 1].close, side = 'NONE';
+    if (early != null && recent != null && recent > early && px < recent) side = 'TRAPPED_LONGS';
+    else if (early != null && recent != null && recent < early && px > recent) side = 'TRAPPED_SHORTS';
+    return { trappedSide: side, earlyPoc: early, recentPoc: recent, pocShift: early != null && recent != null ? +(recent - early).toFixed(2) : 0, unread: false };
+  };
+  GoldCoreEngine.prototype.calculateTrailingBreakeven = function(entryPrice, direction, atr){
+    var buffer = +((atr > 0 ? atr : 0) * 0.35).toFixed(2);
+    var bull = direction === 'BULL' || direction === 'long';
+    return { breakevenStop: +(bull ? entryPrice + buffer : entryPrice - buffer).toFixed(2), buffer: buffer };
   };
   GoldCoreEngine.prototype.calculateInitialBalance = function(dayKlines){
     var rows = barsOf(dayKlines);
@@ -354,6 +421,17 @@
       var deal = core.calculateDealingRange(rows, pxNow);
       if (!deal.unread && want === 'BULL' && deal.percentile > 0.50) return 'Premium dealing range (' + Math.round(deal.percentile * 100) + '%): do not buy expensive gold';
       if (!deal.unread && want === 'BEAR' && deal.percentile < 0.50) return 'Discount dealing range (' + Math.round(deal.percentile * 100) + '%): do not sell cheap gold';
+      var nymo = core.calculateTrueDayOpen(rows);
+      if (!nymo.unread && nymo.nymo != null){
+        if (want === 'BULL' && pxNow > nymo.nymo) return 'Above the New York midnight open ($' + nymo.nymo.toFixed(2) + '): the daily long is late';
+        if (want === 'BEAR' && pxNow < nymo.nymo) return 'Below the New York midnight open ($' + nymo.nymo.toFixed(2) + '): the daily short is late';
+      }
+      var kin = core.calculateKineticEnergy(rows, atrFloor);
+      if (want === 'BULL' && kin.downCascade) return 'Arrival is still a waterfall (score ' + kin.velocityScore + '): do not catch the knife';
+      if (want === 'BEAR' && kin.upCascade) return 'Arrival is still a rip (score ' + kin.velocityScore + '): do not catch the knife';
+      var poc = core.detectPocMigration(rows);
+      if (!poc.unread && want === 'BULL' && poc.trappedSide === 'TRAPPED_LONGS') return 'Developing POC migrated up and price is back under it: longs are trapped';
+      if (!poc.unread && want === 'BEAR' && poc.trappedSide === 'TRAPPED_SHORTS') return 'Developing POC migrated down and price is back over it: shorts are trapped';
       if (root.HG_PineGoldEngine){
         try {
           var fresh = new root.HG_PineGoldEngine().detectFreshFvgs(rows, 2.5) || [];
@@ -394,8 +472,11 @@
     var atr = core.calculateAtr(rows, 14);
     var regime = core.classifyAsianRegime(rows, px);
     var apex = when ? core.getInstitutionalSession(when) : null;
-    var dealing = core.calculateDealingRange(rows, px);
+    var dealing = core.calculateDealingRange(rows, px, rows.length >= 144 ? 144 : 89);
     var ib = core.calculateInitialBalance(rows);
+    var nymo = core.calculateTrueDayOpen(rows);
+    var kinetic = core.calculateKineticEnergy(rows, atr);
+    var poc = core.detectPocMigration(rows);
     var smt = core.evaluateTripleSmt(rows, root.__hgSilverRows);
     var breaker = core.detectBreakerBlock(rows);
     var bprs = [], va = null;
@@ -406,7 +487,7 @@
         if (pine.calculateValueArea) va = pine.calculateValueArea(rows);
       }
     }catch(eRep){}
-    return { session: session, veto: veto, view: view, asia: asia, sweep: sw, atr: atr, when: when, regime: regime, apex: apex, smt: smt, breaker: breaker, bprs: bprs, valueArea: va, dealing: dealing, ib: ib };
+    return { session: session, veto: veto, view: view, asia: asia, sweep: sw, atr: atr, when: when, regime: regime, apex: apex, smt: smt, breaker: breaker, bprs: bprs, valueArea: va, dealing: dealing, ib: ib, nymo: nymo, kinetic: kinetic, poc: poc };
   }
 
   function hgGoldInstStrip(report, judas){
@@ -418,6 +499,7 @@
       judasLine = s.direction + ' ' + (s.model || s.type || '') + ' entry $' + s.entryPrice + ' SL $' + s.stopLoss + ' TP $' + s.target;
       if (s.tripleSmtConfirmed) judasLine += ' · silver SMT';
       if (s.breakerConfirmed) judasLine += ' · breaker';
+      if (s.trailingBreakevenStop != null) judasLine += ' · BE after TP1 $' + s.trailingBreakevenStop;
     } else if (judas && judas.reason) judasLine = judas.reason;
     var rg = report.regime || {};
     var sm = report.smt || {};
@@ -428,7 +510,7 @@
       + '<div class="note">Session <b>' + esc(report.apex ? report.apex.sessionName : report.session) + '</b>'
       + (report.apex && report.apex.isApex ? ' APEX' : '')
       + ' · ' + (report.veto && report.veto.veto ? ('<b>SPREAD VETO</b> ' + esc(report.veto.reason)) : 'spread clean')
-      + ' · range ' + esc((report.dealing && report.dealing.zone) || 'UNREAD') + (report.dealing && fin(report.dealing.percentile) ? (' ' + Math.round(report.dealing.percentile * 100) + '%') : '') + (report.apex && report.apex.isIbWindow ? ' · IB FORMING' : '') + ' · Asia ' + esc(rg.regime || 'UNKNOWN') + (fin(rg.rangePct) ? (' ' + rg.rangePct + '% ' + (rg.drift || '')) : '')
+      + ' · NYMO ' + (report.nymo && !report.nymo.unread && fin(report.nymo.nymo) ? ('$' + report.nymo.nymo.toFixed(2)) : 'unread') + ' · kinetic ' + (report.kinetic ? report.kinetic.velocityScore : '—') + (report.poc && report.poc.trappedSide && report.poc.trappedSide !== 'NONE' ? (' · ' + report.poc.trappedSide) : '') + ' · range ' + esc((report.dealing && report.dealing.zone) || 'UNREAD') + (report.dealing && fin(report.dealing.percentile) ? (' ' + Math.round(report.dealing.percentile * 100) + '%') : '') + (report.apex && report.apex.isIbWindow ? ' · IB FORMING' : '') + ' · Asia ' + esc(rg.regime || 'UNKNOWN') + (fin(rg.rangePct) ? (' ' + rg.rangePct + '% ' + (rg.drift || '')) : '')
       + ' · ' + esc(smtTxt)
       + ' · ' + esc(bpr)
       + (va && fin(va.poc) ? (' · POC $' + va.poc + ' VAH $' + va.vah + ' VAL $' + va.val) : '')

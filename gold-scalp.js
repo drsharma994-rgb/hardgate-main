@@ -92,6 +92,21 @@
       if (asia.regime === 'EXPANSION_TREND') return { active: false, veto: true, reason: 'Asian expansion ' + asia.rangePct + '% (' + asia.drift + '): the fade is vetoed' };
       return { active: false, reason: 'Awaiting an apex sweep, a 58% rejection wick, and the right half of the dealing range' };
     }
+    var nymo = this.core.calculateTrueDayOpen(dayKlines15m || klines15m);
+    if (!nymo.unread && nymo.nymo != null){
+      if (setup.direction === 'BULL' && current.close > nymo.nymo) return { active: false, veto: true, reason: 'Above the New York midnight open ($' + nymo.nymo.toFixed(2) + '): the daily long is late' };
+      if (setup.direction === 'BEAR' && current.close < nymo.nymo) return { active: false, veto: true, reason: 'Below the New York midnight open ($' + nymo.nymo.toFixed(2) + '): the daily short is late' };
+      setup.nymo = nymo.nymo;
+    }
+    var kin = this.core.calculateKineticEnergy(rows, atr);
+    if (setup.direction === 'BULL' && kin.downCascade) return { active: false, veto: true, reason: 'Arrival is still a waterfall (score ' + kin.velocityScore + '): do not catch the knife' };
+    if (setup.direction === 'BEAR' && kin.upCascade) return { active: false, veto: true, reason: 'Arrival is still a rip (score ' + kin.velocityScore + '): do not catch the knife' };
+    var poc = this.core.detectPocMigration(rows);
+    if (!poc.unread && setup.direction === 'BULL' && poc.trappedSide === 'TRAPPED_LONGS') return { active: false, veto: true, reason: 'Developing POC migrated up and price is back under it: longs are trapped' };
+    if (!poc.unread && setup.direction === 'BEAR' && poc.trappedSide === 'TRAPPED_SHORTS') return { active: false, veto: true, reason: 'Developing POC migrated down and price is back over it: shorts are trapped' };
+    var be = this.core.calculateTrailingBreakeven(setup.entryPrice, setup.direction, atr);
+    setup.trailingBreakevenStop = be.breakevenStop;
+    setup.pocTrapped = poc.trappedSide;
     return { active: true, setup: setup };
   };
   root.HG_GoldScalpEngine = GoldScalpEngine;

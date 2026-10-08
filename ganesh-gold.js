@@ -68,12 +68,22 @@
       gs3.pass = gs3.pass || three;
       if (three) gs3.evidence = 'Three-drive exhaustion. ' + gs3.evidence;
     }
-    var deal = this.core.calculateDealingRange(rows, current.close);
+    var deal = this.core.calculateDealingRange(rows, current.close, rows.length >= 144 ? 144 : (rows.length >= 89 ? 89 : 55));
     var zoneOk = !direction ? false : (direction === 'BULL' ? deal.percentile <= 0.48 : deal.percentile >= 0.52);
     var gs1 = ledger.filter(function(s){ return s.step === 'GS1_ACCUMULATION'; })[0];
     if (gs1){
       gs1.pass = gs1.pass && zoneOk;
-      gs1.evidence += ' · ' + deal.zone + ' ' + Math.round(deal.percentile * 100) + '%';
+      gs1.evidence += ' · ' + deal.zone + ' ' + Math.round(deal.percentile * 100) + '% of ' + (deal.bars || '?') + ' bars';
+      var nymo = this.core.calculateTrueDayOpen(rows);
+      var nymoOk = nymo.unread || !direction || (direction === 'BULL' ? current.close <= nymo.nymo : current.close >= nymo.nymo);
+      gs1.pass = gs1.pass && nymoOk;
+      gs1.evidence += ' · NYMO ' + (nymo.unread || nymo.nymo == null ? 'unread' : ('$' + nymo.nymo.toFixed(2) + (nymoOk ? ' aligned' : ' against')));
+    }
+    var kin = this.core.calculateKineticEnergy(rows, atr);
+    var gs2 = ledger.filter(function(s){ return s.step === 'GS2_KILLZONE'; })[0];
+    if (gs2 && ((direction === 'BULL' && kin.downCascade) || (direction === 'BEAR' && kin.upCascade))){
+      gs2.pass = false;
+      gs2.evidence += ' · waterfall score ' + kin.velocityScore;
     }
     var wick = this.core.calculateFootprintAbsorption(current, direction || 'BULL');
     var gs5 = ledger.filter(function(s){ return s.step === 'GS5_DISPLACEMENT'; })[0];
@@ -92,6 +102,7 @@
       tp1_1_5R: ok ? +((direction === 'BULL' ? current.close + risk * 1.5 : current.close - risk * 1.5).toFixed(2)) : null,
       tp2_2_6R: ok ? +((direction === 'BULL' ? current.close + reward : current.close - reward).toFixed(2)) : null,
       tp3_3_5R: ok ? +((direction === 'BULL' ? current.close + risk * 3.5 : current.close - risk * 3.5).toFixed(2)) : null,
+      trailingBreakevenStop: ok ? this.core.calculateTrailingBreakeven(current.close, direction, atr).breakevenStop : null,
       threeDrive: three,
       failedSteps: failed, ledger: ledger
     };
@@ -104,7 +115,7 @@
     }).join('');
     var plan = '';
     if (audit.qualified && audit.tp1_1_5R != null){
-      plan = '<div class="note">Scale out · TP1 $' + audit.tp1_1_5R + ' (1.5R) · TP2 $' + audit.tp2_2_6R + ' (2.6R) · TP3 $' + audit.tp3_3_5R + ' (3.5R)</div>';
+      plan = '<div class="note">Scale out · TP1 $' + audit.tp1_1_5R + ' (1.5R) · TP2 $' + audit.tp2_2_6R + ' (2.6R) · TP3 $' + audit.tp3_3_5R + ' (3.5R). After TP1 the stop moves to $' + audit.trailingBreakevenStop + '.</div>';
     }
     return '<div class="panel" data-hg-gs7="1" style="margin-top:10px"><h3>GS1-GS7 <span>'
       + audit.passedCount + '/' + audit.totalSteps + (audit.qualified ? ' ARMED' : ' not a ticket')
