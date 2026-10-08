@@ -650,6 +650,120 @@ function tmChandelier(rows, dir, entry){
   }
   return isFinite(px) ? px : null;
 }
+function tmEmaSeries(values, period){
+  if (!values || values.length <= period) return null;
+  var out = new Array(values.length);
+  var i, sum = 0, k = 2 / (period + 1), seed;
+  for (i = 0; i < period; i++) sum += values[i];
+  seed = sum / period;
+  out[period - 1] = seed;
+  for (i = 0; i < period - 1; i++) out[i] = NaN;
+  for (i = period; i < values.length; i++) out[i] = values[i] * k + out[i - 1] * (1 - k);
+  return out;
+}
+function tmWaveOk(rows, dir){
+  if (!rows || rows.length < 40) return null;
+  var i, ap = [];
+  for (i = 0; i < rows.length; i++) ap.push((rows[i].h + rows[i].l + rows[i].c) / 3);
+  var esa = tmEmaSeries(ap, 10);
+  if (!esa) return null;
+  var diff = [];
+  for (i = 0; i < ap.length; i++) diff.push(Math.abs(ap[i] - (isFinite(esa[i]) ? esa[i] : ap[i])));
+  var d = tmEmaSeries(diff, 10);
+  if (!d) return null;
+  var ci = [];
+  for (i = 0; i < ap.length; i++){
+    var den = 0.015 * d[i];
+    ci.push(den > 0 && isFinite(esa[i]) ? (ap[i] - esa[i]) / den : 0);
+  }
+  var wt1 = tmEmaSeries(ci, 21);
+  if (!wt1) return null;
+  var n = wt1.length - 1;
+  if (!isFinite(wt1[n]) || !isFinite(wt1[n - 1])) return null;
+  function sma4(idx){
+    var s = 0, k;
+    for (k = idx - 3; k <= idx; k++){
+      if (!isFinite(wt1[k])) return NaN;
+      s += wt1[k];
+    }
+    return s / 4;
+  }
+  var wt2 = sma4(n), prev2 = sma4(n - 1);
+  if (!isFinite(wt2) || !isFinite(prev2)) return null;
+  var green = wt1[n - 1] <= prev2 && wt1[n] > wt2;
+  var red = wt1[n - 1] >= prev2 && wt1[n] < wt2;
+  if (dir === 'long') return green && wt1[n - 1] <= -30;
+  return red && wt1[n - 1] >= 30;
+}
+function tmKernel(rows, lookback, bandwidth){
+  lookback = lookback || 24;
+  bandwidth = bandwidth || 8;
+  if (!rows || rows.length < lookback + 1) return null;
+  function at(end){
+    var sumW = 0, sum = 0, j, w;
+    for (j = 0; j < lookback; j++){
+      w = Math.pow(1 + (j * j) / (2 * bandwidth * bandwidth), -1);
+      sumW += w;
+      sum += rows[end - j].c * w;
+    }
+    return sumW > 0 ? sum / sumW : NaN;
+  }
+  var cur = at(rows.length - 1);
+  var prev = at(rows.length - 2);
+  if (!isFinite(cur) || !isFinite(prev)) return null;
+  return { slopeUp: cur >= prev, above: rows[rows.length - 1].c >= cur };
+}
+function tmSuperTrend(rows, period, mult){
+  if (!rows || rows.length < period + 5 || typeof atr !== 'function') return null;
+  var a = atr(rows, period);
+  if (!a || a.length < rows.length) return null;
+  var i, up, dn, trend = null, prevUp = NaN, prevDn = NaN, prevClose, hl2, c;
+  for (i = period; i < rows.length; i++){
+    if (!(a[i] > 0)) return null;
+    hl2 = (rows[i].h + rows[i].l) / 2;
+    if (!isFinite(prevUp)) up = hl2 + mult * a[i];
+    else up = ((hl2 + mult * a[i]) < prevUp || prevClose > prevUp) ? hl2 + mult * a[i] : prevUp;
+    if (!isFinite(prevDn)) dn = hl2 - mult * a[i];
+    else dn = ((hl2 - mult * a[i]) > prevDn || prevClose < prevDn) ? hl2 - mult * a[i] : prevDn;
+    c = rows[i].c;
+    if (trend == null) trend = c >= hl2;
+    else if (trend && c < dn) trend = false;
+    else if (!trend && c > up) trend = true;
+    prevUp = up;
+    prevDn = dn;
+    prevClose = c;
+  }
+  if (trend == null) return null;
+  return { up: trend };
+}
+function tmCmf(rows, period){
+  period = period || 20;
+  if (!rows || rows.length < period) return null;
+  var slice = rows.slice(-period);
+  var mfv = 0, vol = 0, i, k, range, mfm;
+  for (i = 0; i < slice.length; i++){
+    k = slice[i];
+    if (!(k.v > 0)) return null;
+    range = k.h - k.l;
+    mfm = range > 0 ? ((k.c - k.l) - (k.h - k.c)) / range : 0;
+    mfv += mfm * k.v;
+    vol += k.v;
+  }
+  if (!(vol > 0)) return null;
+  return mfv / vol;
+}
+function tmSqueezeHigh(rows){
+  if (!rows || rows.length < 20 || typeof atr !== 'function') return null;
+  var a = atr(rows, 20);
+  var atrNow = a && a.length ? a[a.length - 1] : NaN;
+  if (!(atrNow > 0)) return null;
+  var slice = rows.slice(-20), i, sum = 0;
+  for (i = 0; i < slice.length; i++) sum += slice[i].c;
+  var sma = sum / slice.length, varr = 0;
+  for (i = 0; i < slice.length; i++) varr += Math.pow(slice[i].c - sma, 2);
+  var sd = Math.sqrt(varr / slice.length);
+  return (sma + 2 * sd) < (sma + atrNow) && (sma - 2 * sd) > (sma - atrNow);
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

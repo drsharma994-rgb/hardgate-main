@@ -15,6 +15,23 @@
   if (!isFinite(vwap)) hard.push('VWAP unread');
   else if (dir === 'long' && !(px > vwap)) hard.push('below VWAP');
   else if (dir === 'short' && !(px < vwap)) hard.push('above VWAP');
+  var wave1 = rows1 ? tmWaveOk(rows1, dir) : null;
+  var st4 = tmSuperTrend(rows4, 10, 3);
+  var st1 = rows1 ? tmSuperTrend(rows1, 10, 3) : null;
+  if (!st4 || !st1) hard.push('supertrend unread');
+  else if (dir === 'long' && !(st4.up && st1.up)) hard.push('supertrend against');
+  else if (dir === 'short' && (st4.up || st1.up)) hard.push('supertrend against');
+  var cmf = rows1 ? tmCmf(rows1, 20) : null;
+  if (cmf == null) hard.push('money flow unread');
+  else if (dir === 'long' && cmf < 0.05) hard.push('money flow ' + cmf.toFixed(2) + ' is under 0.05');
+  else if (dir === 'short' && cmf > -0.05) hard.push('money flow ' + cmf.toFixed(2) + ' is above -0.05');
+  var ker = rows1 ? tmKernel(rows1, 24, 8) : null;
+  if (!ker) hard.push('kernel unread');
+  else if (dir === 'long' && !(ker.slopeUp && ker.above)) hard.push('kernel is not rising under price');
+  else if (dir === 'short' && !(!ker.slopeUp && !ker.above)) hard.push('kernel is not falling over price');
+  var coiled = rows1 ? tmSqueezeHigh(rows1) : null;
+  if (coiled == null) hard.push('squeeze unread');
+  else if (coiled) hard.push('still inside the high squeeze');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -149,6 +166,11 @@
     var stalled = tmStalled(m15, dir);
     if (stalled == null) hard.push('15m progress unread');
     else if (stalled) hard.push('15m has not expanded in 3 bars');
+    var wave15 = tmWaveOk(m15, dir);
+    if (wave1 !== true && wave15 !== true){
+      if (wave1 == null && wave15 == null) hard.push('wavetrend unread');
+      else hard.push('no wavetrend cross from the extreme');
+    }
   }
   if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
   if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');

@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1194',
-  pack: 'Trend Matrix flow. The last six real 15m taker prints have to slope with the trade. A missing series is not aligned, and the close of the candle is not used as delta. No new setup from 00:00 to 06:30 UTC. The chandelier is the 8-bar extreme minus twice the 15m ATR, and only when it sits on the stop side of the entry. It does not replace the stop. The card does not send an order.',
-  built: '2026-10-08T23:10:00Z'
+  version: 'hg-v1195',
+  pack: 'Trend Matrix pine gates. SuperTrend on the 4h and the 1h has to agree with the trade. A WaveTrend cross has to come from beyond 30, on the 1h or the 15m. Money flow needs real volume and at least 0.05 with the trade. The kernel has to slope with price on the right side of it. A high squeeze is still a coil, not a breakout. A short history is unread. None of these replace the stop, and the card does not send an order.',
+  built: '2026-10-08T23:25:00Z'
 };
 
 function hgBuildLabel(b){
