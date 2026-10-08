@@ -502,6 +502,20 @@ async function stackOk(symbol, base, h4, ctx){
 }
 
 async function main(){
+  const everyMin = Math.max(30, +(process.env.GOLDEN_ALERT_EVERY_MIN || 120));
+  const state = loadState();
+  const sent = state.sent || {};
+  const minGap = (everyMin - 10) * 60 * 1000;
+  if (state.lastRunAt){
+    const age = Date.now() - Date.parse(state.lastRunAt);
+    if (Number.isFinite(age) && age >= 0 && age < minGap){
+      console.log('skip: last telegram ' + Math.round(age / 60000) + ' min ago; waiting for the ' + everyMin + ' min mark');
+      return;
+    }
+  }
+  const nextLine = (everyMin % 60 === 0)
+    ? ('next new cross check in ' + (everyMin / 60) + ' hours')
+    : ('next new cross check in ' + everyMin + ' minutes');
   const listed = await coindcxBases();
   const tick = await getJson('/api/v3/ticker/24hr');
   if (!Array.isArray(tick)) throw new Error('ticker was not a list');
@@ -512,8 +526,6 @@ async function main(){
   const universe = Array.from(listed).map(function(base){
     return { symbol: base + 'USDT', quoteVolume: vol.get(base + 'USDT') || 0 };
   }).sort(function(a, b){ return b.quoteVolume - a.quoteVolume; });
-  const state = loadState();
-  const sent = state.sent || {};
   const funds = await fundingMap();
   let btcDown = null;
   try { btcDown = btcStructureDown(await klines('BTCUSDT', '4h', 260)); } catch (e) { btcDown = null; }
@@ -576,7 +588,7 @@ async function main(){
       'CoinDCX active USDT futures · ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
       'no qualified setup · scanned ' + universe.length + ' CoinDCX contracts',
       '',
-      'next check in 10 minutes',
+      'next check in ' + (everyMin % 60 === 0 ? ((everyMin / 60) + ' hours') : (everyMin + ' minutes')),
       SITE
     ].join('\n');
     const quietId = await send(quiet);
@@ -608,7 +620,7 @@ async function main(){
       '',
       bodyParts[p],
       '',
-      'next new cross check in 10 minutes',
+      nextLine,
       SITE
     ].join('\n');
     ids.push(await send(text));

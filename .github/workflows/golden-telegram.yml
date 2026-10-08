@@ -1,13 +1,11 @@
-# BATCH 1132 — the scan queues the next scan itself.
-# GitHub's cron has not been starting this workflow, and the chat clock
-# was marking the slot done without launching a run. The job sends Telegram,
-# then waits 9 minutes and dispatches the next run. A newer run already
-# waiting means this one does not start a second chain.
+# Fresh CoinDCX Trend Matrix crosses, every 2 hours.
+# GitHub's cron often does not start this workflow, so after the scan the
+# job waits about 110 minutes and dispatches the next run itself.
 name: HARDGATE Golden Telegram
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '0 */2 * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -21,7 +19,7 @@ concurrency:
 jobs:
   send:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,7 +31,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_DISABLED: "0"
-          GOLDEN_ALERT_EVERY_MIN: "10"
+          GOLDEN_ALERT_EVERY_MIN: "120"
       - name: Commit golden alert state if it changed
         run: |
           git config user.name "hardgate-bot"
@@ -46,8 +44,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "this scan is done; next scan is queued in 9 minutes"
-          sleep 540
+          echo "this scan is done; next scan is queued in about 2 hours"
+          sleep 6600
           NEWER=$(gh run list --repo "${{ github.repository }}" --workflow golden-telegram.yml --limit 20 --json databaseId,status --jq "[.[] | select(.databaseId > ${{ github.run_id }} and (.status==\"queued\" or .status==\"in_progress\" or .status==\"waiting\" or .status==\"pending\" or .status==\"requested\"))] | length")
           if [ "$NEWER" != "0" ]; then
             echo "a newer run is already waiting; not starting a second chain"
