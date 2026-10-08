@@ -23,7 +23,22 @@ const cacheId = (sw.match(/HG_CACHE\s*=\s*'([^']+)'/) || [])[1];
 const stampVer = (stamp.match(/version:\s*'([^']+)'/) || [])[1];
 
 const vNums = new Set();
-for (const m of html.matchAll(/\?v=([0-9]+)/g)) vNums.add(m[1]);
+let htmlTagCount = 0;
+for (const m of html.matchAll(/\?v=([0-9]+)/g)){ vNums.add(m[1]); htmlTagCount++; }
+
+/* Runtime-loaded assets hardcode the SAME cachebuster (trendtable.js fetches
+   'trendtable-src-' + i + '.js?v=NNN' at line ~10) — a half-bumped deploy
+   there serves a stale matrix. Dynamically-built URLs (omnigold.js's
+   import('...?v=' + ver)) self-sync and cannot be checked statically. */
+const rootDir = new URL('../', import.meta.url);
+const runtimeHits = {};
+for (const f of fs.readdirSync(rootDir).filter(f => f.endsWith('.js'))){
+  const src = fs.readFileSync(new URL('./' + f, rootDir), 'utf8');
+  for (const m of src.matchAll(/\?v=([0-9]+)/g)){
+    vNums.add(m[1]);
+    (runtimeHits[f] = runtimeHits[f] || []).push(m[1]);
+  }
+}
 
 const problems = [];
 
@@ -40,12 +55,19 @@ if (vNums.size === 0){
   problems.push('index.html carries no ?v= cachebusters — every <script src> needs one');
 }
 if (vNums.size > 1){
-  problems.push(`index.html mixes cachebuster versions: ${[...vNums].sort().join(', ')} — a half-bumped deploy`);
+  problems.push(`the repo mixes cachebuster versions (${[...vNums].sort().join(', ')}) across index.html and runtime-injected asset literals — a half-bumped deploy`);
 }
 if (cacheId && vNums.size === 1){
   const n = [...vNums][0];
   if (cacheId !== 'hg-v' + n){
-    problems.push(`index.html ?v=${n} does not match sw.js HG_CACHE '${cacheId}' — bump both together`);
+    problems.push(`cachebusters all say ?v=${n} but sw.js HG_CACHE is '${cacheId}' — bump them together`);
+  }
+}
+for (const f of Object.keys(runtimeHits)){
+  for (const v of runtimeHits[f]){
+    if (vNums.size > 1 || (cacheId && cacheId !== 'hg-v' + v)){
+      problems.push(`${f} hardcodes ?v=${v} which does not match the deploy number`);
+    }
   }
 }
 
@@ -56,7 +78,10 @@ if (problems.length){
   console.error("  sw.js            HG_CACHE = 'hg-vNNN'");
   console.error("  build-stamp.js  version:  'hg-vNNN'   (+ fresh built: ISO stamp)");
   console.error('  index.html      every <script src="...?v=NNN">');
+  console.error('  trendtable.js   the runtime fragment fetch (\'?v=NNN\') and any other root');
+  console.error('                  script that hardcodes a ?v= cachebuster');
   process.exit(1);
 }
 
-console.log(`cache-bump triad OK: sw.js HG_CACHE='${cacheId}', build-stamp.js version='${stampVer}', index.html ?v=${[...vNums][0]} x${html.match(/\?v=/g).length} tags`);
+const rt = Object.keys(runtimeHits).map(f => f + ' (x' + runtimeHits[f].length + ')').join(', ') || 'none';
+console.log(`cache-bump sync OK: sw.js HG_CACHE='${cacheId}', build-stamp.js version='${stampVer}', index.html ?v=${[...vNums][0]} x${htmlTagCount} tags, runtime-asset literals: ${rt}`);

@@ -24,6 +24,16 @@ const HG_SHELL = [
   /* task #12: the MAIN stylesheet was never in the shell — the offline app
      booted unstyled. Guarded now by tests/test-offline-shell-parity.mjs. */
   './trading-dashboard-pro.css',
+  /* task #12: the TRENDTABLE matrix loads its 12 literal fragments at runtime
+     (trendtable.js line ~10 fetches 'trendtable-src-'+i), so a first-visit
+     OFFLINE client had an empty matrix. ~200 bytes each — precache them. */
+  './trendtable-src-0.js', './trendtable-src-1.js', './trendtable-src-2.js', './trendtable-src-3.js',
+  './trendtable-src-4.js', './trendtable-src-5.js', './trendtable-src-6.js', './trendtable-src-7.js',
+  './trendtable-src-8.js', './trendtable-src-9.js', './trendtable-src-10.js', './trendtable-src-11.js',
+  /* task #12: the Shiva desk is RUNTIME-INJECTED by hg-api-base.js (never a
+     <script src> in index.html), so it was invisible to every shell-parity
+     sweep — a first-visit offline client lost the whole desk. */
+  './shivagold.js', './shiva-nav.js',
   './build-stamp.js', './gold-iux.js',
   './hghost.js', './hardgate-desktop-shell.js',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './inc4-data-core.js', './hg-setup-core.js', './hg-perfect-setup.js', './coinalyze.js', './coinglass.js', './borrow-rates.js', './liquidity-gate.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './agent-alerts.js',
