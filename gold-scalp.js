@@ -141,6 +141,13 @@
       if (!(room >= riskNow)) return { active: false, veto: true, reason: 'The remaining daily range is under 1R, so the target is not worth the stop' };
       setup.adrRemaining = '$' + adr.remainingDollars;
     }
+    var lots = this.core.calculateContractLots(10000, 0.01, setup.entryPrice, setup.stopLoss);
+    if (!lots.unread) setup.lotExample = lots.lots + ' lots per $' + lots.exampleEquity + ' at 1%';
+    var pool = setup.direction === 'BULL' ? asia.asl : asia.ash;
+    var dset = this.core.detectDoubleSweepExhaustion(rows, pool, setup.direction);
+    if (!dset.unread && dset.sweepStage === 'STAGE_1') return { active: false, veto: true, reason: 'First sweep only. A second stop hunt, about 20 cents deeper, is still likely' };
+    if (dset.confirmedStage2 && setup.stamps) setup.stamps.push('DSET');
+    setup.dsetStage = dset.sweepStage;
     return { active: true, setup: setup };
   };
   root.HG_GoldScalpEngine = GoldScalpEngine;

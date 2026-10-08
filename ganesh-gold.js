@@ -122,6 +122,7 @@
       tp2_2_6R: ok ? +((direction === 'BULL' ? current.close + reward : current.close - reward).toFixed(2)) : null,
       tp3_3_5R: ok ? +((direction === 'BULL' ? current.close + risk * 3.5 : current.close - risk * 3.5).toFixed(2)) : null,
       trailingBreakevenStop: ok ? this.core.calculateTrailingBreakeven(current.close, direction, atr).breakevenStop : null,
+      lotExample: ok ? (this.core.calculateContractLots(10000, 0.01, current.close, direction === 'BULL' ? current.close - risk : current.close + risk).lots + ' lots per $10000 at 1%') : null,
       threeDrive: three,
       failedSteps: failed, ledger: ledger
     };
@@ -134,7 +135,7 @@
     }).join('');
     var plan = '';
     if (audit.qualified && audit.tp1_1_5R != null){
-      plan = '<div class="note">Scale out · TP1 $' + audit.tp1_1_5R + ' (1.5R) · TP2 $' + audit.tp2_2_6R + ' (2.6R) · TP3 $' + audit.tp3_3_5R + ' (3.5R). After TP1 the stop moves to $' + audit.trailingBreakevenStop + '.</div>';
+      plan = '<div class="note">Scale out · TP1 $' + audit.tp1_1_5R + ' (1.5R) · TP2 $' + audit.tp2_2_6R + ' (2.6R) · TP3 $' + audit.tp3_3_5R + ' (3.5R). After TP1 the stop moves to $' + audit.trailingBreakevenStop + '. Example size, not an order: ' + (audit.lotExample || 'unread') + '.</div>';
     }
     return '<div class="panel" data-hg-gs7="1" style="margin-top:10px"><h3>GS1-GS7 <span>'
       + audit.passedCount + '/' + audit.totalSteps + (audit.qualified ? ' ARMED' : ' not a ticket')

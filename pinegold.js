@@ -152,5 +152,25 @@
     var g = root.HG_GoldCoreEngine ? new root.HG_GoldCoreEngine().calculateGannSquare9(anchor, price || anchor) : null;
     return g && g.levels ? g.levels : [];
   };
+  PineGoldEngine.prototype.mapRestingLiquidityPools = function(klines){
+    var rows = rowsOf(klines), pools = [], i, j, high, low, swingHigh, swingLow, later;
+    if (rows.length < 20) return pools;
+    for (i = 5; i < rows.length - 5; i++){
+      high = rows[i].high; low = rows[i].low; swingHigh = true; swingLow = true;
+      for (j = i - 5; j < i; j++){ if (rows[j].high >= high) swingHigh = false; if (rows[j].low <= low) swingLow = false; }
+      for (j = i + 1; j <= i + 5; j++){ if (rows[j].high >= high) swingHigh = false; if (rows[j].low <= low) swingLow = false; }
+      if (swingHigh){
+        later = false;
+        for (j = i + 1; j < rows.length; j++) if (rows[j].high >= high) later = true;
+        if (!later) pools.push({ type: 'BUY_SIDE', price: high });
+      }
+      if (swingLow){
+        later = false;
+        for (j = i + 1; j < rows.length; j++) if (rows[j].low <= low) later = true;
+        if (!later) pools.push({ type: 'SELL_SIDE', price: low });
+      }
+    }
+    return pools.slice(-6);
+  };
   root.HG_PineGoldEngine = PineGoldEngine;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

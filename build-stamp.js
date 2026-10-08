@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1180',
-  pack: 'Gold v6. Once New York has used 90% of the 20-day average daily range, a continuation at the extreme is blocked and a fade is still allowed. Targets are pulled back inside the remaining daily room. A body gap and a Square-of-9 level are marked when they are there. Delta is estimated from the candle only when the feed actually has volume.',
-  built: '2026-10-08T19:50:00Z'
+  version: 'hg-v1181',
+  pack: 'Gold v7. A long is allowed against a rising dollar only when gold and the dollar have both been rising and their 30-day correlation is above 0.20. One sweep is not a trade. The second sweep has to come back inside and then take the stops at least 20 cents deeper. The half hour before each London fix is not an entry. The lot on the card is an example on $10,000, not an order.',
+  built: '2026-10-08T20:10:00Z'
 };
 
 function hgBuildLabel(b){
