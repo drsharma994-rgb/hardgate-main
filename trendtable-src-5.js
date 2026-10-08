@@ -64,6 +64,7 @@
   if (ctx && ctx.macroOk === true && dir === 'long' && ctx.riskOff) hard.push('macro risk-off');
   if (ctx && ctx.macroOk === true && dir === 'short' && ctx.riskOn) hard.push('macro risk-on');
   if (tmSettlementFreeze()) hard.push('funding settlement window');
+  if (tmAsiaChop()) hard.push('asian session');
   var room = tmLiquidityRoom(rows4, dir, +ticket.entry, risk);
   if (room == null) hard.push('liquidity map unread');
   else if (!room.open) hard.push('next pool is only ' + room.room.toFixed(1) + 'R away');
@@ -120,9 +121,10 @@
     tmPerpPremium(row),
     tmBookRatio(row, dir),
     tmFundingVelocity(row, dir),
-    tmAbsorption(row, dir)
+    tmAbsorption(row, dir),
+    tmCvdSlope(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15], slope = net[16];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -172,6 +174,12 @@
   else if (fundVel) hard.push('funding is accelerating against the trade');
   if (absorb == null) hard.push('absorption unread');
   else if (!absorb) hard.push('the pullback was not absorbed');
+  if (slope == null) hard.push('delta slope unread');
+  else if (!slope) hard.push('5-bar delta is against the trade');
+  if (m15){
+    var chand = tmChandelier(m15, dir, +ticket.entry);
+    if (chand != null) ticket.chandelier = chand;
+  }
   var syn = tmSynergy(row, dir, {
     body: m15 ? tmBodyCommit(m15, dir) === true : false,
     takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
@@ -343,6 +351,7 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
           ticket.note = (ticket.note || '') + (ticket.confluence ? (' · confluence ' + ticket.confluence) : ' · full stack');
           if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
           if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
+          if (isFinite(ticket.chandelier)) ticket.note += ' · chandelier ' + ticket.chandelier;
           out.push(ticket);
         }
       }

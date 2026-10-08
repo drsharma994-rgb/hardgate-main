@@ -625,6 +625,31 @@ function tmRunnerR(rows){
   if (!pk) return null;
   return pk.hot ? 4 : 2.2;
 }
+function tmAsiaChop(now){
+  now = now || new Date();
+  var t = now.getUTCHours() + now.getUTCMinutes() / 60;
+  return t >= 0 && t < 6.5;
+}
+function tmChandelier(rows, dir, entry){
+  if (!rows || rows.length < 8 || typeof atr !== 'function') return null;
+  if (!(entry > 0)) return null;
+  var series = atr(rows, 14);
+  var a = series && series.length ? series[series.length - 1] : NaN;
+  if (!(a > 0)) return null;
+  var look = rows.slice(-8), i, px;
+  if (dir === 'long'){
+    px = look[0].h;
+    for (i = 1; i < look.length; i++) if (look[i].h > px) px = look[i].h;
+    px = px - 2 * a;
+    if (!(px < entry)) return null;
+  } else {
+    px = look[0].l;
+    for (i = 1; i < look.length; i++) if (look[i].l < px) px = look[i].l;
+    px = px + 2 * a;
+    if (!(px > entry)) return null;
+  }
+  return isFinite(px) ? px : null;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -2721,6 +2746,19 @@ async function tmAbsorption(row, dir){
     return atDip < atBefore;
   } catch (e) { return null; }
 }
+async function tmCvdSlope(row, dir){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '15m', 8);
+    var series = tk && tk.series;
+    if (!series || series.length < 6) return null;
+    var first = +series[series.length - 6].buySellRatio;
+    var last = +series[series.length - 1].buySellRatio;
+    if (!isFinite(first) || !isFinite(last)) return null;
+    var slope = last - first;
+    return dir === 'long' ? slope >= 0 : slope <= 0;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){
@@ -2923,6 +2961,7 @@ async function trendmxFormOne(ticket, row, ctx){
   if (ctx && ctx.macroOk === true && dir === 'long' && ctx.riskOff) hard.push('macro risk-off');
   if (ctx && ctx.macroOk === true && dir === 'short' && ctx.riskOn) hard.push('macro risk-on');
   if (tmSettlementFreeze()) hard.push('funding settlement window');
+  if (tmAsiaChop()) hard.push('asian session');
   var room = tmLiquidityRoom(rows4, dir, +ticket.entry, risk);
   if (room == null) hard.push('liquidity map unread');
   else if (!room.open) hard.push('next pool is only ' + room.room.toFixed(1) + 'R away');
@@ -2979,9 +3018,10 @@ async function trendmxFormOne(ticket, row, ctx){
     tmPerpPremium(row),
     tmBookRatio(row, dir),
     tmFundingVelocity(row, dir),
-    tmAbsorption(row, dir)
+    tmAbsorption(row, dir),
+    tmCvdSlope(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15], slope = net[16];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -3031,6 +3071,12 @@ async function trendmxFormOne(ticket, row, ctx){
   else if (fundVel) hard.push('funding is accelerating against the trade');
   if (absorb == null) hard.push('absorption unread');
   else if (!absorb) hard.push('the pullback was not absorbed');
+  if (slope == null) hard.push('delta slope unread');
+  else if (!slope) hard.push('5-bar delta is against the trade');
+  if (m15){
+    var chand = tmChandelier(m15, dir, +ticket.entry);
+    if (chand != null) ticket.chandelier = chand;
+  }
   var syn = tmSynergy(row, dir, {
     body: m15 ? tmBodyCommit(m15, dir) === true : false,
     takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
@@ -3202,6 +3248,7 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
           ticket.note = (ticket.note || '') + (ticket.confluence ? (' · confluence ' + ticket.confluence) : ' · full stack');
           if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
           if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
+          if (isFinite(ticket.chandelier)) ticket.note += ' · chandelier ' + ticket.chandelier;
           out.push(ticket);
         }
       }
@@ -5492,6 +5539,9 @@ W.tmLiquidityRoom = tmLiquidityRoom;
 W.tmEffortTrap = tmEffortTrap;
 W.tmStalled = tmStalled;
 W.tmRunnerR = tmRunnerR;
+W.tmAsiaChop = tmAsiaChop;
+W.tmChandelier = tmChandelier;
+W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;

@@ -390,6 +390,19 @@ async function tmAbsorption(row, dir){
     return atDip < atBefore;
   } catch (e) { return null; }
 }
+async function tmCvdSlope(row, dir){
+  if (typeof W.binanceTakerRatio !== 'function') return null;
+  try {
+    var tk = await W.binanceTakerRatio(tmBaseOf(row) + 'USDT', '15m', 8);
+    var series = tk && tk.series;
+    if (!series || series.length < 6) return null;
+    var first = +series[series.length - 6].buySellRatio;
+    var last = +series[series.length - 1].buySellRatio;
+    if (!isFinite(first) || !isFinite(last)) return null;
+    var slope = last - first;
+    return dir === 'long' ? slope >= 0 : slope <= 0;
+  } catch (e) { return null; }
+}
 async function tmFetch15(row){
   try{
     if (typeof W.hgDeskFetchKlines === 'function'){

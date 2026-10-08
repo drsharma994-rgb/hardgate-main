@@ -625,6 +625,31 @@ function tmRunnerR(rows){
   if (!pk) return null;
   return pk.hot ? 4 : 2.2;
 }
+function tmAsiaChop(now){
+  now = now || new Date();
+  var t = now.getUTCHours() + now.getUTCMinutes() / 60;
+  return t >= 0 && t < 6.5;
+}
+function tmChandelier(rows, dir, entry){
+  if (!rows || rows.length < 8 || typeof atr !== 'function') return null;
+  if (!(entry > 0)) return null;
+  var series = atr(rows, 14);
+  var a = series && series.length ? series[series.length - 1] : NaN;
+  if (!(a > 0)) return null;
+  var look = rows.slice(-8), i, px;
+  if (dir === 'long'){
+    px = look[0].h;
+    for (i = 1; i < look.length; i++) if (look[i].h > px) px = look[i].h;
+    px = px - 2 * a;
+    if (!(px < entry)) return null;
+  } else {
+    px = look[0].l;
+    for (i = 1; i < look.length; i++) if (look[i].l < px) px = look[i].l;
+    px = px + 2 * a;
+    if (!(px > entry)) return null;
+  }
+  return isFinite(px) ? px : null;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

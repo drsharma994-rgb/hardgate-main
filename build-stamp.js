@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1193',
-  pack: 'Trend Matrix structure. The 4h break of structure stays required. The 15m trigger has to be a change of character, not a break standing in for one. If the last three 15m bars have not moved 0.3 ATR, the impulse is stale. The runner is 4R only when volatility is in its own top fifth, otherwise 2.2R. An unreadable tape does not get a runner. The card does not send an order.',
-  built: '2026-10-08T22:55:00Z'
+  version: 'hg-v1194',
+  pack: 'Trend Matrix flow. The last six real 15m taker prints have to slope with the trade. A missing series is not aligned, and the close of the candle is not used as delta. No new setup from 00:00 to 06:30 UTC. The chandelier is the 8-bar extreme minus twice the 15m ATR, and only when it sits on the stop side of the entry. It does not replace the stop. The card does not send an order.',
+  built: '2026-10-08T23:10:00Z'
 };
 
 function hgBuildLabel(b){
