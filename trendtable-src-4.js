@@ -428,6 +428,10 @@ async function trendmxFormOne(ticket, row, ctx){
   var rows1 = tmClosedRows(row && row.rows1h, 3600);
   var rowsD = tmClosedRows(row && row.rows1d, 86400);
   if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
+  var valueGate = tmValueState(row, dir);
+  if (valueGate && valueGate.reasons){
+    for (var vg = 0; vg < valueGate.reasons.length; vg++) hard.push(valueGate.reasons[vg]);
+  }
   var px = rows4[rows4.length - 1].c;
   var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
   var want = dir === 'long' ? 'up' : 'down';

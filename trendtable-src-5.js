@@ -110,6 +110,7 @@
   else if (dir === 'short' && !(oi.priceDown && oi.oiUp)) hard.push('OI not confirming the drop');
   if (!m15) hard.push('15m unread');
   else if (!tm15Confirm(m15, dir)) hard.push('15m no sweep and CHOCH');
+  else if (tm15HeavyAgainst(m15, dir)) hard.push('15m breaking against on volume');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);
