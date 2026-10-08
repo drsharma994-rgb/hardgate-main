@@ -129,7 +129,7 @@
       "expired": true
     },
     "STRK": {
-      "at": "2026-10-08T15:56:03.835Z",
+      "at": "2026-10-08T16:05:52.313Z",
       "score": 5,
       "fresh": true,
       "ago": 2,
@@ -259,7 +259,7 @@
       "expired": true
     },
     "ARK": {
-      "at": "2026-10-08T15:56:08.726Z",
+      "at": "2026-10-08T16:05:55.689Z",
       "score": 3,
       "fresh": true,
       "ago": 8,
@@ -512,7 +512,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-08T15:56:27.289Z",
+  "lastRunAt": "2026-10-08T16:06:07.324Z",
   "scanned": 504,
   "cards": 0
 }
