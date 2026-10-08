@@ -764,6 +764,117 @@ function tmSqueezeHigh(rows){
   var sd = Math.sqrt(varr / slice.length);
   return (sma + 2 * sd) < (sma + atrNow) && (sma - 2 * sd) > (sma - atrNow);
 }
+function tmWilderRsi(closes, period){
+  if (!closes || closes.length < period + 2) return null;
+  var i, gains = 0, losses = 0, d, out = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) out[i] = NaN;
+  for (i = 1; i <= period; i++){
+    d = closes[i] - closes[i - 1];
+    if (d >= 0) gains += d; else losses -= d;
+  }
+  var avgGain = gains / period, avgLoss = losses / period;
+  out[period] = (avgGain === 0 && avgLoss === 0) ? 50 : (avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)));
+  for (i = period + 1; i < closes.length; i++){
+    d = closes[i] - closes[i - 1];
+    avgGain = ((avgGain * (period - 1)) + (d > 0 ? d : 0)) / period;
+    avgLoss = ((avgLoss * (period - 1)) + (d < 0 ? -d : 0)) / period;
+    if (avgGain === 0 && avgLoss === 0) out[i] = 50;
+    else if (avgLoss === 0) out[i] = 100;
+    else out[i] = 100 - (100 / (1 + avgGain / avgLoss));
+  }
+  return out;
+}
+function tmQqe(rows, dir){
+  if (!rows || rows.length < 40) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++) closes.push(rows[i].c);
+  var rsi = tmWilderRsi(closes, 14);
+  if (!rsi) return null;
+  var smooth = tmEmaSeries(rsi.map(function(v){ return isFinite(v) ? v : 50; }), 5);
+  if (!smooth) return null;
+  var last = smooth[smooth.length - 1];
+  if (!isFinite(last)) return null;
+  if (dir === 'long') return last > 55;
+  return last < 45;
+}
+function tmWmaAt(values, end, period){
+  if (!values || end < period - 1 || end >= values.length) return NaN;
+  var w = period * (period + 1) / 2, s = 0, i;
+  for (i = 0; i < period; i++) s += values[end - period + 1 + i] * (i + 1);
+  return s / w;
+}
+function tmHullRising(rows, period){
+  period = period || 21;
+  var half = Math.floor(period / 2);
+  var root = Math.floor(Math.sqrt(period));
+  if (!rows || rows.length < period + root + 2 || half < 2) return null;
+  var closes = [], i, raw = [], a, b;
+  for (i = 0; i < rows.length; i++) closes.push(rows[i].c);
+  for (i = period - 1; i < closes.length; i++){
+    a = tmWmaAt(closes, i, half);
+    b = tmWmaAt(closes, i, period);
+    if (!isFinite(a) || !isFinite(b)) return null;
+    raw.push(2 * a - b);
+  }
+  if (raw.length < root + 1) return null;
+  var cur = tmWmaAt(raw, raw.length - 1, root);
+  var prev = tmWmaAt(raw, raw.length - 2, root);
+  if (!isFinite(cur) || !isFinite(prev)) return null;
+  return cur >= prev;
+}
+function tmVfi(rows, period, coef){
+  period = period || 20;
+  coef = (coef == null) ? 0.2 : coef;
+  if (!rows || rows.length < period + 2) return null;
+  var start = rows.length - period, mf = 0, vol = 0, i, tp, prev, tr, diff, cut;
+  for (i = start; i < rows.length; i++){
+    if (!(rows[i].v > 0)) return null;
+    tp = (rows[i].h + rows[i].l + rows[i].c) / 3;
+    prev = (rows[i - 1].h + rows[i - 1].l + rows[i - 1].c) / 3;
+    tr = Math.max(rows[i].h - rows[i].l, Math.abs(rows[i].h - rows[i - 1].c), Math.abs(rows[i].l - rows[i - 1].c));
+    cut = coef * tr;
+    diff = tp - prev;
+    vol += rows[i].v;
+    if (diff > cut) mf += rows[i].v;
+    else if (diff < -cut) mf -= rows[i].v;
+  }
+  if (!(vol > 0)) return null;
+  return mf / vol;
+}
+function tmWt1Series(rows){
+  if (!rows || rows.length < 40) return null;
+  var i, ap = [];
+  for (i = 0; i < rows.length; i++) ap.push((rows[i].h + rows[i].l + rows[i].c) / 3);
+  var esa = tmEmaSeries(ap, 10);
+  if (!esa) return null;
+  var diff = [];
+  for (i = 0; i < ap.length; i++) diff.push(Math.abs(ap[i] - (isFinite(esa[i]) ? esa[i] : ap[i])));
+  var d = tmEmaSeries(diff, 10);
+  if (!d) return null;
+  var ci = [];
+  for (i = 0; i < ap.length; i++){
+    var den = 0.015 * d[i];
+    ci.push(den > 0 && isFinite(esa[i]) ? (ap[i] - esa[i]) / den : 0);
+  }
+  return tmEmaSeries(ci, 21);
+}
+function tmWtDiverging(rows, dir){
+  var wt = tmWt1Series(rows);
+  if (!wt || rows.length < 40) return null;
+  var n = rows.length - 1;
+  function extreme(from, to, high){
+    var idx = from, i;
+    for (i = from + 1; i <= to; i++){
+      if (high ? rows[i].h > rows[idx].h : rows[i].l < rows[idx].l) idx = i;
+    }
+    return idx;
+  }
+  var recent = extreme(n - 14, n, dir === 'long');
+  var prior = extreme(n - 29, n - 15, dir === 'long');
+  if (!isFinite(wt[recent]) || !isFinite(wt[prior])) return null;
+  if (dir === 'long') return rows[recent].h > rows[prior].h && (wt[prior] - wt[recent]) > 10;
+  return rows[recent].l < rows[prior].l && (wt[recent] - wt[prior]) > 10;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

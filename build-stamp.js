@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1195',
-  pack: 'Trend Matrix pine gates. SuperTrend on the 4h and the 1h has to agree with the trade. A WaveTrend cross has to come from beyond 30, on the 1h or the 15m. Money flow needs real volume and at least 0.05 with the trade. The kernel has to slope with price on the right side of it. A high squeeze is still a coil, not a breakout. A short history is unread. None of these replace the stop, and the card does not send an order.',
-  built: '2026-10-08T23:25:00Z'
+  version: 'hg-v1196',
+  pack: 'Trend Matrix pine suite. The smoothed RSI has to be beyond 55 with the trade. A flat market is not a bullish QQE. The Hull slope has to agree. Volume flow needs real volume and has to be on the trade side. A bar with no volume is unread. WaveTrend divergence of more than 10 points against the trade is a veto. A short history is not marked green. The card does not send an order.',
+  built: '2026-10-08T23:40:00Z'
 };
 
 function hgBuildLabel(b){
