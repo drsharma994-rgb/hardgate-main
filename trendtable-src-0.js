@@ -344,8 +344,93 @@ function tmValueState(row, dir){
     }
     out.touched = touched;
     if (!touched && isFinite(out.distAtr) && out.distAtr > 0.6) out.reasons.push('no pullback into the 1h EMA21');
+    else if (touched){
+      var pull = tmPullbackRvol(rows1, dir, level);
+      if (pull === 'unread') out.reasons.push('pullback volume unread');
+      else if (pull >= 0.85) out.reasons.push('pullback volume ' + pull.toFixed(2) + 'x is distribution, not a quiet retest');
+    }
+    if (rows1.length >= 52 && typeof ichimoku === 'function'){
+      try {
+        var ic = ichimoku(rows1);
+        var i1 = rows1.length - 1;
+        var spanA = ic && ic.senkouA ? ic.senkouA[i1] : NaN;
+        var spanB = ic && ic.senkouB ? ic.senkouB[i1] : NaN;
+        var cloudPx = rows1[i1] && rows1[i1].c;
+        if (!(isFinite(spanA) && isFinite(spanB) && isFinite(cloudPx))) out.reasons.push('1h cloud unread');
+        else {
+          var top = Math.max(spanA, spanB), bot = Math.min(spanA, spanB);
+          if (dir === 'long' && cloudPx < bot) out.reasons.push('1h price is below the cloud');
+          else if (dir === 'long' && cloudPx <= top) out.reasons.push('1h price is inside the cloud');
+          else if (dir === 'short' && cloudPx > top) out.reasons.push('1h price is above the cloud');
+          else if (dir === 'short' && cloudPx >= bot) out.reasons.push('1h price is inside the cloud');
+        }
+      } catch (eIc) { out.reasons.push('1h cloud unread'); }
+    }
+  }
+  if (typeof ttmSqueeze === 'function'){
+    try {
+      var sq = ttmSqueeze(rows4);
+      var i4 = rows4.length - 1;
+      if (sq && sq.on && sq.on[i4]) out.reasons.push('4h squeeze still coiled');
+      else if (sq && sq.fired && sq.fired[i4] && sq.momentum && isFinite(sq.momentum[i4])){
+        if (dir === 'long' && sq.momentum[i4] < 0) out.reasons.push('4h squeeze fired against the long');
+        if (dir === 'short' && sq.momentum[i4] > 0) out.reasons.push('4h squeeze fired against the short');
+      }
+    } catch (eSq) {}
   }
   return out;
+}
+function tmBarVol(bar){
+  if (!bar) return NaN;
+  var v = bar.v != null ? bar.v : bar.volume;
+  return isFinite(+v) && +v > 0 ? +v : NaN;
+}
+function tmPullbackRvol(rows, dir, level){
+  if (!rows || rows.length < 24 || !isFinite(level)) return 'unread';
+  var start = rows.length - 3, touch = [], prior = [], i, v, tagged;
+  for (i = 0; i < rows.length; i++){
+    v = tmBarVol(rows[i]);
+    if (i >= start){
+      tagged = dir === 'long' ? rows[i].l <= level : rows[i].h >= level;
+      if (!tagged) continue;
+      if (!isFinite(v)) return 'unread';
+      touch.push(v);
+    } else if (i >= start - 20 && isFinite(v)) prior.push(v);
+  }
+  if (!touch.length || prior.length < 8) return 'unread';
+  var avg = prior.reduce(function(a, b){ return a + b; }, 0) / prior.length;
+  if (!(avg > 0)) return 'unread';
+  return touch.reduce(function(a, b){ return a + b; }, 0) / touch.length / avg;
+}
+function tmTriggerRvol(rows){
+  if (!rows || rows.length < 12) return null;
+  var last = tmBarVol(rows[rows.length - 1]);
+  var prior = [], i, v;
+  for (i = Math.max(0, rows.length - 21); i < rows.length - 1; i++){
+    v = tmBarVol(rows[i]);
+    if (isFinite(v)) prior.push(v);
+  }
+  if (!isFinite(last) || prior.length < 8) return null;
+  var avg = prior.reduce(function(a, b){ return a + b; }, 0) / prior.length;
+  if (!(avg > 0)) return null;
+  return last / avg;
+}
+async function tmFundingZ(row){
+  var fn = (typeof binanceFundingHist === 'function') ? binanceFundingHist : (W && W.binanceFundingHist);
+  if (typeof fn !== 'function' || typeof tmBaseOf !== 'function') return null;
+  try {
+    var hist = await fn(tmBaseOf(row) + 'USDT', 30);
+    if (!hist || hist.length < 12) return null;
+    var rates = [], i;
+    for (i = 0; i < hist.length; i++) if (isFinite(+hist[i].rate)) rates.push(+hist[i].rate);
+    if (rates.length < 12) return null;
+    var mean = rates.reduce(function(a, b){ return a + b; }, 0) / rates.length;
+    var varr = 0;
+    for (i = 0; i < rates.length; i++) varr += (rates[i] - mean) * (rates[i] - mean);
+    var sd = Math.sqrt(varr / rates.length);
+    if (!(sd > 0)) return null;
+    return (rates[rates.length - 1] - mean) / sd;
+  } catch (e) { return null; }
 }
 function tm15HeavyAgainst(rows, dir){
   if (!rows || rows.length < 10) return false;
