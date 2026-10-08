@@ -79,15 +79,17 @@ function boot(){
   /* NOT EVERY .js IN THE ROOT IS A BROWSER MODULE.
 
      This scan read every root .js and treated each as a script index.html
-     could load. Seven of them are Node-only tooling that has never been
-     browser code — standalone backtests and bridges using require(),
+     could load. Seven of them USED to be Node-only tooling that has never
+     been browser code — standalone backtests and bridges using require(),
      module.exports or top-level const fs — so the count was permanently 8
-     against a threshold of 1, and the assertion never passed.
-
-     Detected rather than listed by name, so a new Node script dropped in
-     the root does not reopen this, and a browser module that starts using
-     require() is NOT excused — CommonJS in a file index.html loads is a
-     real failure and still lands in `failed`. */
+     against a threshold of 1, and the assertion never passed. Those seven
+     moved to attic/ (2026-10-10, unreferenced by anything), so today the
+     root should hold ONLY page-loaded scripts, runtime-injected ones, or
+     at worst future Node-only tooling that this scan still detects and
+     excludes. Detected rather than listed by name, so a new Node script
+     dropped in the root does not reopen this, and a browser module that
+     starts using require() is NOT excused — CommonJS in a file index.html
+     loads is a real failure and still lands in `failed`. */
   const NODE_ONLY = /(^|\n)\s*(?:const|let|var)\s+\{?[\w\s,]*\}?\s*=\s*require\(|(^|\n)\s*module\.exports\b|(^|\n)\s*exports\.\w+\s*=/;
   const htmlSrc = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   /* The EXACT set of files index.html loads, parsed rather than matched as
@@ -125,7 +127,21 @@ console.log('== every browser module parses and runs ==');
      printed no names, so reproducing the sandbox by hand was the only way
      to find out what had broken. It names them now. */
   ok(all.length > 100, 'the root holds ' + all.length + ' javascript files');
-  ok(nodeOnly.length > 0, nodeOnly.length + ' are Node-only tooling the page never loads, and are not scanned');
+  /* hg-v1168 (attic/ tidy): the old 'nodeOnly.length > 0' pin froze the seven
+     Node-only strays in place forever. The stronger invariant: every root .js
+     is accounted for — page-loaded, runtime-injected (hg-api-base.js injects
+     the Shiva pair at runtime; they are never a <script src>), or excluded
+     Node-only tooling. An unaccounted stray belongs in attic/, not here. */
+  const ACCOUNTED = new Set([
+    'shivagold.js', 'shiva-nav.js',        /* runtime-injected by hg-api-base.js */
+    'app.js',                             /* the ESM daemon — server-side, named below as the one expected vm failure */
+    'trendtable.combined.js'               /* the server-concatenated bundle served as /trendtable.js (hg-v1080) */
+  ]);
+  const unaccounted = all.filter(f => !loadedByPage(f) && !ACCOUNTED.has(f) && nodeOnly.indexOf(f) < 0);
+  ok(unaccounted.length === 0,
+     'every root .js is page-loaded, runtime-injected, server-side or excluded Node-only tooling'
+     + (unaccounted.length ? ' — unaccounted: ' + unaccounted.join(', ') : ''));
+  console.log('  · ' + nodeOnly.length + ' Node-only tooling file(s) detected and excluded from the browser scan (zero is the healthy state since the attic/ tidy)');
   ok(files.length > 100, 'leaving ' + files.length + ' browser modules');
   ok(failed.length <= 1,
      'at most one fails to run as a browser script (' + failed.length
