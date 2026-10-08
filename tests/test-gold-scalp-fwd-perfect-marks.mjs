@@ -15,7 +15,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-const ROOT = '/home/user/hardgate-main';
+import { fileURLToPath } from 'node:url';
+/* hg-v1169 fix: ROOT was the author's machine path '/home/user/hardgate-main',
+   which is ENOENT everywhere else — including the GitHub Actions runner, so
+   this guard could only ever pass on one laptop. House pattern instead. */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 let PASS = 0, FAIL = 0;

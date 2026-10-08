@@ -130,6 +130,7 @@ import { xmOrderType, ogXmBarTouchesEntry, ogXmFillDepth } from '../lib/omnigold
 import { isPendingOrder, partitionProvable, unprovableNote } from '../lib/unprovable-fill.mjs';
 import { gateKeyOrder, encodeGateMask } from '../lib/gate-mask.mjs';
 import { klinesUrl, klinesRouteNote } from '../lib/klines-source.mjs';
+import { hgMeanRCI } from '../lib/backtest-stats.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
@@ -724,6 +725,10 @@ function agg(trades){
     if (peak - cum > maxDD) maxDD = peak - cum;
   }
   const sumGross = settled.reduce((s, t) => s + (t.rMultiple || 0), 0);
+  /* task #13: bootstrap 95% band on the mean NET R — one number reads like
+     a promise; a seeded, assumption-light band over this replay's own settled
+     trades states the honest range. Same seed + same n => same band. */
+  const ci = hgMeanRCI(settled.map(t => t.netR));
   return {
     n: settled.length,
     unfilled: trades.filter(t => t.outcome === 'unfilled').length,
@@ -731,6 +736,8 @@ function agg(trades){
     avgR_gross: settled.length ? +(sumGross / settled.length).toFixed(3) : null,
     avgR_net: settled.length ? +(sumNet / settled.length).toFixed(3) : null,
     expectancy_net: settled.length ? +(sumNet / settled.length).toFixed(3) : null,
+    netR_band: ci ? { lo: +ci.lo.toFixed(3), mid: +ci.meanR.toFixed(3), hi: +ci.hi.toFixed(3),
+                      n: ci.n, method: 'bootstrap-pctl-95-seeded' } : null,
     profitFactor: neg > 0 ? +(pos / neg).toFixed(2) : (pos > 0 ? Infinity : null),
     sumR_net: +sumNet.toFixed(2),
     maxDD_R: +maxDD.toFixed(2)
@@ -920,6 +927,7 @@ const meta = {
     'no per-kind cooldown beyond the one-open-trade dedup (the XM bot walk uses a global cooldown instead; this harness measures setups, not the single-account bot)'
   ],
   limitations: [
+    'NET R BAND (task #13) — netR_band is a seeded bootstrap 95% percentile band over THIS replay\'s settled net-R trades: an honest range for the mean, not a promise about the next trade. Small n widens it; that widening is the point.',
     'UNPROVABLE FILLS — the position cannot be shown to have existed: ' + unprovableWithheld.rows
       + ' of ' + settledAll.length + ' settled rows are LIMIT/STOP orders that resolved on their own fill bar, where '
       + 'OHLC cannot order the entry touch against the exit touch. If the exit printed first the order was still '
@@ -1011,6 +1019,13 @@ console.log('\n=== RESULTS (' + meta.mode + ') · trades ' + results.length
   + ' · both-touch losses ' + counters.bothTouch
   + ' · same-bar wins ' + counters.sameBarWins + ' (' + counters.sameBarAmbiguousWins + ' ambiguous) ===');
 printAgg('overall', { ALL: aggregates.overall });
+if (aggregates.overall && aggregates.overall.netR_band){
+  const b = aggregates.overall.netR_band;
+  const fb = v => (v >= 0 ? '+' : '') + (+v).toFixed(2);
+  console.log('NET R BAND: mean ' + fb(b.mid) + 'R · bootstrap 95% [' + fb(b.lo) + ', ' + fb(b.hi) + '] · n=' + b.n
+    + ' — venue-true costs included (' + (FEE_SIDE * 100) + '% taker + ' + (SLIP_SIDE * 100) + '% slip per side);'
+    + ' the band is this replay\'s own honest range, not a promise.');
+}
 printAgg('by source:horizon', aggregates.bySource);
 printAgg('by confluence tier — SCAN 0-100 scale vs ENGINE grade letters (separate regimes, never pool)', aggregates.byTier);
 printAgg('by confluence quartile (SCAN only, settled)', aggregates.byConfluenceQuartile);

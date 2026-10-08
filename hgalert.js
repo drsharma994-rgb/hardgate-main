@@ -82,6 +82,15 @@ var CHIME_GAP_MS      = 5*60*1000;      /* per-class chime throttle */
 var BRAIN_REALERT_MS  = 30*60*1000;      /* same-set brain re-alert */
 var GOLD_MIN_DEFAULT  = 10;
 
+/* task #3 — user alert settings surface (cycle + quiet hours), persisted
+   alongside the existing bell-panel keys. Defaults keep today's behavior. */
+var LS_QUIET_START = 'hgAlertQuietStart';  /* 'HH:MM' quiet-hours window ('' = off) */
+var LS_QUIET_END   = 'hgAlertQuietEnd';
+var LS_CYCLE_MIN   = 'hgAlertCycleMin';    /* alert scan-cycle override, minutes */
+var CYCLE_MIN_DEFAULT = 10;      /* mirrors index.html HG_ALERT_CYCLE_MS =
+                                   HG_TAB_ALERT_MS (the 10-min tab clock) for
+                                   standalone loads of this file */
+
 /* ---------------- tiny helpers ---------------- */
 function esc(s){
   return String(s === null || s === undefined ? '' : s)
@@ -91,6 +100,47 @@ function gfn(name){
   try{ if (typeof W[name] === 'function') return W[name]; }catch(e){}
   try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
   return null;
+}
+
+/* ---------- task #3: quiet hours + user alert cycle ---------- */
+function hhmmToMin(s){
+  try{
+    s = String(s || '').trim();
+    if (!/^\d{1,2}:\d{2}$/.test(s)) return NaN;
+    var p = s.split(':');
+    var h = +p[0], m = +p[1];
+    if (h > 23 || m > 59) return NaN;
+    return h * 60 + m;
+  }catch(e){ return NaN; }
+}
+function nowMinutes(){
+  try{ var d = new Date(); return d.getHours() * 60 + d.getMinutes(); }catch(e){ return -1; }
+}
+/** True inside the saved quiet-hours window. A window that wraps midnight
+    (start > end) is supported; unset or equal ends mean 'never quiet'. */
+function hgAlertQuietNow(){
+  try{
+    var a = hhmmToMin(lsGet(LS_QUIET_START));
+    var b = hhmmToMin(lsGet(LS_QUIET_END));
+    if (!isFinite(a) || !isFinite(b) || a === b) return false;
+    var n = nowMinutes();
+    if (n < 0) return false;
+    if (a < b) return n >= a && n < b;          /* same-day window */
+    return n >= a || n < b;                      /* wraps midnight */
+  }catch(e){ return false; }
+}
+/** User alert-cycle override in ms: saved minutes (1-120) win; otherwise the
+    page's HG_TAB_ALERT_MS when present; else the 10-min default. */
+function hgAlertCycleUserMs(){
+  try{
+    var v = +(lsGet(LS_CYCLE_MIN));
+    if (isFinite(v) && v >= 1 && v <= 120) return Math.round(v) * 60 * 1000;
+    if (W && isFinite(+W.HG_TAB_ALERT_MS) && +W.HG_TAB_ALERT_MS >= 60000) return +W.HG_TAB_ALERT_MS;
+  }catch(e){}
+  return CYCLE_MIN_DEFAULT * 60 * 1000;
+}
+function hgAlertsMuted(){
+  try{ return !!__muted; }catch(e){ return false; }
 }
 /* Number(null) and +null are both 0, so coercing before the finite test
    prints a confident zero for a value that is absent. Reject the empty
@@ -357,6 +407,7 @@ function playChime(){
    it calls playChime directly); 5 min minimum between same-class chimes. */
 function tryChime(cls){
   if (__muted) return 'muted';
+  if (hgAlertQuietNow()) return 'quiet';
   var now = 0;
   try{ now = Date.now(); }catch(e){ return 'silent'; }
   if (now - (__lastChime[cls] || 0) < CHIME_GAP_MS) return 'throttled';
@@ -883,6 +934,8 @@ function evaluate(){
         st.chimed.push('brain');
       } else if (rb === 'muted'){
         __lastBrainLine = line + ' (muted)';
+      } else if (rb === 'quiet'){
+        __lastBrainLine = line + ' (quiet hours)';
       } else if (rb === 'throttled'){
         __lastBrainLine = line + ' (chime held by 5-min throttle)';
       } else {
@@ -906,6 +959,8 @@ function evaluate(){
         st.chimed.push('gold');
       } else if (rg === 'muted'){
         __lastGoldLine = gline + ' (muted)';
+      } else if (rg === 'quiet'){
+        __lastGoldLine = gline + ' (quiet hours)';
       } else if (rg === 'throttled'){
         __lastGoldLine = gline + ' (chime held by 5-min throttle)';
       } else {
@@ -1021,6 +1076,13 @@ function renderUI(){
     if (ui.state) ui.state.textContent = stateLine();
     if (ui.mute) ui.mute.textContent = __muted ? 'UNMUTE' : 'MUTE';
     if (ui.minIn && ui.minIn.value !== String(__goldMin)) ui.minIn.value = String(__goldMin);
+    if (ui.cycle){
+      var c = lsGet(LS_CYCLE_MIN);
+      var cShow = (isFinite(+c) && +c >= 1 && +c <= 120) ? String(Math.round(+c)) : '';
+      if (ui.cycle.value !== cShow) ui.cycle.value = cShow;
+    }
+    if (ui.qStart){ var qs = lsGet(LS_QUIET_START) || ''; if (ui.qStart.value !== qs) ui.qStart.value = qs; }
+    if (ui.qEnd){ var qe = lsGet(LS_QUIET_END) || ''; if (ui.qEnd.value !== qe) ui.qEnd.value = qe; }
     if (ui.brain) ui.brain.textContent = brainLine();
     if (ui.gold) ui.gold.textContent = goldLine();
     if (ui.ticket) ui.ticket.textContent = ticketLine();
@@ -1064,6 +1126,33 @@ function onMinChange(){
 function onTest(){
   try{ hgAlertTest(); }catch(e){}
 }
+function onCycleChange(){
+  try{
+    var v = +(__ui && __ui.cycle && __ui.cycle.value);
+    if (isFinite(v) && v >= 1 && v <= 120){
+      lsSet(LS_CYCLE_MIN, String(Math.round(v)));
+      /* re-arm the page's alert cycle NOW when alerts are on so the new
+         cadence takes effect without a reload. armAlertCycle is index.html
+         inline — feature-checked like everything else here. */
+      var arm = gfn('armAlertCycle');
+      if (arm && W.S && W.S.alertsOn === true) arm();
+    }else{
+      lsSet(LS_CYCLE_MIN, '');   /* empty clears the override back to default */
+    }
+    renderUI();
+  }catch(e){}
+}
+function onQuietChange(){
+  try{
+    var a = (__ui && __ui.qStart && __ui.qStart.value) || '';
+    var b = (__ui && __ui.qEnd && __ui.qEnd.value) || '';
+    /* a half-set window (one end empty) is refused: quiet hours need both */
+    if ((a && !b) || (!a && b)){ a = ''; b = ''; }
+    lsSet(LS_QUIET_START, a);
+    lsSet(LS_QUIET_END, b);
+    renderUI();
+  }catch(e){}
+}
 
 function buildUI(){
   if (__ui) return;
@@ -1082,6 +1171,10 @@ function buildUI(){
       + '<button class="hgab-mini" id="hgAlertMute" type="button">MUTE</button>'
       + '<label class="hgab-lbl">gold threshold <input id="hgAlertMin" type="number" min="1" max="99" step="1"></label>'
       + '<button class="hgab-mini" id="hgAlertTest" type="button">TEST CHIME</button>'
+      + '</div>'
+      + '<div class="hgab-row">'
+      + '<label class="hgab-lbl">cycle min <input id="hgAlertCycle" type="number" min="1" max="120" step="1"></label>'
+      + '<label class="hgab-lbl">quiet <input id="hgAlertQStart" type="time">\u2013<input id="hgAlertQEnd" type="time"></label>'
       + '</div>'
       + '<div class="hgab-line" id="hgAlertBrain"></div>'
       + '<div class="hgab-line" id="hgAlertGold"></div>'
@@ -1110,12 +1203,18 @@ function buildUI(){
       lastB: root.querySelector ? root.querySelector('#hgAlertLastB') : null,
       lastG: root.querySelector ? root.querySelector('#hgAlertLastG') : null,
       lastT: root.querySelector ? root.querySelector('#hgAlertLastT') : null,
-      lastS: root.querySelector ? root.querySelector('#hgAlertLastS') : null
+      lastS: root.querySelector ? root.querySelector('#hgAlertLastS') : null,
+      cycle: root.querySelector ? root.querySelector('#hgAlertCycle') : null,
+      qStart: root.querySelector ? root.querySelector('#hgAlertQStart') : null,
+      qEnd: root.querySelector ? root.querySelector('#hgAlertQEnd') : null
     };
     if (__ui.btn && __ui.btn.addEventListener) __ui.btn.addEventListener('click', onBell);
     if (__ui.mute && __ui.mute.addEventListener) __ui.mute.addEventListener('click', onMute);
     if (__ui.minIn && __ui.minIn.addEventListener) __ui.minIn.addEventListener('change', onMinChange);
     if (__ui.test && __ui.test.addEventListener) __ui.test.addEventListener('click', onTest);
+    if (__ui.cycle && __ui.cycle.addEventListener) __ui.cycle.addEventListener('change', onCycleChange);
+    if (__ui.qStart && __ui.qStart.addEventListener) __ui.qStart.addEventListener('change', onQuietChange);
+    if (__ui.qEnd && __ui.qEnd.addEventListener) __ui.qEnd.addEventListener('change', onQuietChange);
     renderUI();
   }catch(e){ /* a broken DOM never breaks the engine */ }
 }
@@ -1175,6 +1274,11 @@ W.hgAlertCheck = function(){
 W.hgAlertTest = function(){
   try{ return hgAlertTest(); }catch(e){ return false; }
 };
+/* task #3 surface — consumed by index.html (sendAlertPush gate + armAlertCycle
+   cadence) and by the settings tests. */
+W.hgAlertQuietNow = hgAlertQuietNow;
+W.hgAlertsMuted = hgAlertsMuted;
+W.hgAlertCycleUserMs = hgAlertCycleUserMs;
 
 try{
   if (typeof document !== 'undefined' && document && !document.body

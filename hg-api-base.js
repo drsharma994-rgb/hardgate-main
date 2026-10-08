@@ -44,15 +44,19 @@
   if (typeof document === 'undefined') return;
   function add(id, src){
     var old = document.getElementById(id);
-    if (old && old.getAttribute('data-v') === '1124') return;
+    if (old && old.getAttribute('data-v') === '1170') return;
     if (old && old.parentNode) old.parentNode.removeChild(old);   /* hg-v1154: a detached or stubbed node has no parent */
     var s = document.createElement('script');
     s.id = id;
-    s.setAttribute('data-v', '1124');
+    s.setAttribute('data-v', '1170');
     s.src = src;
     s.async = false;
     (document.head || document.documentElement).appendChild(s);
   }
-  add('hgShivaDesk', 'shivagold.js?v=1124');
-  add('hgShivaNav', 'shiva-nav.js?v=1124');
+  /* task #12/#2 fix: the ?v= here was 43 deploys stale (1124 vs the hg-v1167
+     deploy) and neither file was precached — a first-visit OFFLINE client lost
+     the whole Shiva desk while the stale cachebuster hid it. Both files are
+     in HG_SHELL now, and the cache-bump check scans runtime literals here. */
+  add('hgShivaDesk', 'shivagold.js?v=1170');
+  add('hgShivaNav', 'shiva-nav.js?v=1170');
 })();

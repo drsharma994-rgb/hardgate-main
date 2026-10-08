@@ -7,7 +7,7 @@ const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep)
 let pass = 0;
 const ok = (c, m) => { if (!c) throw new Error('FAIL: ' + m); pass++; console.log('  ok —', m); };
 
-const provenance = fs.readFileSync(path.join(root, 'PROVENANCE.md'), 'utf8');
+const provenance = fs.readFileSync(path.join(root, 'docs', 'PROVENANCE.md'), 'utf8');
 const license = fs.existsSync(path.join(root, 'LICENSE'));
 
 console.log('== LICENSE ==');
