@@ -161,10 +161,10 @@
       "ago": -1
     },
     "BEAMX": {
-      "at": "2026-10-07T07:52:55.969Z",
+      "at": "2026-10-08T05:45:28.565Z",
       "score": 5,
       "fresh": true,
-      "ago": 2,
+      "ago": 3,
       "crossDay": "2026-10-04",
       "expired": true
     },
@@ -325,10 +325,10 @@
       "expired": true
     },
     "FLUX": {
-      "at": "2026-10-07T03:58:55.402Z",
+      "at": "2026-10-08T05:45:33.826Z",
       "score": 5,
       "fresh": true,
-      "ago": 3,
+      "ago": 4,
       "crossDay": "2026-10-03",
       "expired": true
     },
@@ -495,7 +495,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-08T00:35:36.923Z",
+  "lastRunAt": "2026-10-08T05:45:45.765Z",
   "scanned": 504,
   "cards": 0
 }
