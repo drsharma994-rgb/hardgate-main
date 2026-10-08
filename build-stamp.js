@@ -5,7 +5,7 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1171',
+  version: 'hg-v1172',
   pack: 'THREE MORE record-only gold Pine ports and three more free Yahoo legs. Williams %R 14 re-entry (distance from the recent high, companion mechanic to Stochastic), TRIX 15 zero cross (triple-smoothed momentum, distinct from the hg-v1166 MACD port) and Fisher Transform 10 zero cross (Ehlers Gaussian mapping of hl2) each fire ONLY on the last closed bar; a dead-flat tape, a wrong-side stop or a bar whose window divides by zero reads NEITHER and no signal. None names an exact OMNIGOLD twin (hg-v943: no loose analogies). They mint through pineGoldRecordLayerHits and the record-only judge hg-v1166 established, ride the PINE STACK marks pine:williamsWith / pine:trixWith / pine:fisherWith on every record of every gold desk through the one home, and the hg-v1165 majority mark keeps its five-layer population. Three free Yahoo legs through macro.js: TLT (long bonds, WITH a long when RISING, DIFFERENT from the hg-v1166 TIP which is TIPS), UUP (dollar ETF, WITH a long when FALLING, a direct market read distinct from the Frankfurter DXY calculation and the single-pair crosses) and AUD=X (USD / Australian dollar, WITH a long when FALLING, the top gold-producing nations currency the stack had never read). Twenty-six free: keys; the cap stays 64 (26 free + 2 PERFECT + 18 ind + 16 pine = 62, inside by 2). Record-only, three-state; the ranker scores nothing on any of them (grid comparison identical with and without, both directions); no gate module reads a new key; no threshold moves and no setup leaves any board — the forward ledger is where they get measured.',
   built: '2026-10-14T06:00:00Z'
 };

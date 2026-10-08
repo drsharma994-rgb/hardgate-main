@@ -409,6 +409,15 @@ async function ganeshGoldScan(opts){
     var mL = modelGrade(ev, 'long'), mS = modelGrade(ev, 'short');
     var pL = planFor(ev, mL), pS = planFor(ev, mS);
     ggMarkPlan(pL, ev); ggMarkPlan(pS, ev);   /* hg-v1163 */
+    function ggPineHold(plan){
+      if (!plan || !ev.ps || typeof W.pineGoldBlocksLead !== 'function') return plan;
+      var why = W.pineGoldBlocksLead(ev.ps, plan.dir);
+      if (!why) return plan;
+      plan.pineBlock = why;
+      if (plan.tier === 'TICKET') plan.tier = 'WATCH';
+      return plan;
+    }
+    pL = ggPineHold(pL); pS = ggPineHold(pS);
     /* hg-v1154: both calendars on the LAST CLOSED execution bar, never the
        wall clock (hg-v952 / hg-v978) -- a Monday re-run over Friday's bars
        gives Friday's answer. */

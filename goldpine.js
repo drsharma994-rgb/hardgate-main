@@ -696,7 +696,7 @@ function gpRecordLayerSetups(rows, mode, source){
   return out;
 }
 /** The rows the MOST PROBABLE pin may choose from: never a record-only one. */
-function gpMayLead(s){ return !!(s && !s.recordOnly); }
+function gpMayLead(s){ return !!(s && !s.recordOnly && !s.pineBlock); }
 function gpSgnR(v){ return (isFinite(v) ? ((v >= 0 ? '+' : '\u2212') + Math.abs(v).toFixed(3)) : '?') + 'R'; }
 function gpRecordTwinLine(s){
   if (!s || !s.recordTwin) return '';
@@ -887,6 +887,26 @@ function runGoldPineScan(bars, ctx){
       scalp = sortSetups(scalp);
     }
   }catch(eFS){}
+  try{
+    var blk = gfn('pineGoldBlocksLead'), stFn = gfn('pineGoldLayerStates');
+    function holdPine(list, rows){
+      if (!blk || !stFn || !rows || !list) return;
+      var ps = stFn(rows);
+      if (!ps || ps.ok !== true) return;
+      for (var z = 0; z < list.length; z++){
+        if (!list[z] || list[z].recordOnly) continue;
+        var why = blk(ps, list[z].dir);
+        if (!why) continue;
+        list[z].pineBlock = why;
+        list[z].demoted = true;
+        list[z].demotedWhy = why;
+      }
+    }
+    holdPine(swing, bars && bars.rows4h);
+    holdPine(scalp, bars && bars.rows15m);
+    swing = sortSetups(swing);
+    scalp = sortSetups(scalp);
+  }catch(ePB){}
   return { swing: swing, scalp: scalp, levels: levels, source: source,
            goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
            tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now(),

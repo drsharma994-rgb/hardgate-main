@@ -3219,6 +3219,27 @@ async function runScan(ui, scanSt){
       best = ranked.length ? ranked[0] : null;
       legs.push('goldRankSetups unavailable — ordered by grade/killzone only');
     }
+    try{
+      var psFn = gfn('pineGoldLayerStates'), blkFn = gfn('pineGoldBlocksLead');
+      if (psFn && blkFn && gold.rows15m && gold.rows15m.length){
+        var psLead = psFn(gold.rows15m);
+        if (psLead && psLead.ok){
+          for (i = 0; i < ranked.length; i++){
+            if (!ranked[i] || ranked[i].demoted) continue;
+            var whyP = blkFn(psLead, ranked[i].dir);
+            if (!whyP) continue;
+            ranked[i].demoted = true;
+            ranked[i].pineBlock = whyP;
+            if (!Array.isArray(ranked[i].stamps)) ranked[i].stamps = [];
+            if (ranked[i].stamps.indexOf('PINE AGAINST') < 0) ranked[i].stamps.push('PINE AGAINST');
+          }
+          best = null;
+          for (i = 0; i < ranked.length; i++){
+            if (ranked[i] && !ranked[i].demoted && !ranked[i].vetoed){ best = ranked[i]; break; }
+          }
+        }
+      }
+    }catch(ePine){}
     goldAnnotateXautBasis(ranked, spotRef);
 
     var filterFn = gfn('hgFilterGoldPostGate');

@@ -739,7 +739,16 @@ var PINE_GOLD_RECORD_LAYERS = [
   { id: 'trix', label: 'TRIX Zero Cross', fn: 'pineGoldTrixCross', minBars: 60,
     opts: { len: 15, swing: 5 }, twin: null },
   { id: 'fisher', label: 'Fisher Transform', fn: 'pineGoldFisherZero', minBars: 60,
-    opts: { len: 10, swing: 5 }, twin: null }
+    opts: { len: 10, swing: 5 }, twin: null },
+  /* Price-only ports. Volume on a gold feed is often the tokenized proxy,
+     so these three do not read volume except session VWAP, which falls back
+     to equal-weight typical price when the bar has none. */
+  { id: 'adx', label: 'ADX + DI', fn: 'pineGoldAdxDi', minBars: 50,
+    opts: { len: 14, minAdx: 20, swing: 5 }, twin: null },
+  { id: 'heikin', label: 'Heikin Ashi Flip', fn: 'pineGoldHeikin', minBars: 20,
+    opts: { swing: 5 }, twin: null },
+  { id: 'sessvwap', label: 'Session VWAP', fn: 'pineGoldSessVwap', minBars: 20,
+    opts: { swing: 5 }, twin: null }
 ];
 /* hg-v1165's majority mark is the majority of the FIVE hg-v1164 layers --
    records written since then carry that meaning, so the three hg-v1166
@@ -1331,6 +1340,133 @@ function pineGoldFisherZero(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
+function pgrAdxRead(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len * 2 + 2) return null;
+  var tr = [], pdm = [], mdm = [], i;
+  for (i = 1; i < n; i++){
+    var h = pgrNum(rows[i].h), l = pgrNum(rows[i].l), ph = pgrNum(rows[i - 1].h), pl = pgrNum(rows[i - 1].l), pc = pgrNum(rows[i - 1].c);
+    if (![h, l, ph, pl, pc].every(isFinite)) return null;
+    var up = h - ph, dn = pl - l;
+    pdm.push(up > dn && up > 0 ? up : 0);
+    mdm.push(dn > up && dn > 0 ? dn : 0);
+    tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  function wilder(arr){
+    var out = new Array(arr.length).fill(NaN), s = 0, k;
+    for (k = 0; k < len; k++) s += arr[k];
+    out[len - 1] = s;
+    for (k = len; k < arr.length; k++) out[k] = out[k - 1] - out[k - 1] / len + arr[k];
+    return out;
+  }
+  var trS = wilder(tr), pS = wilder(pdm), mS = wilder(mdm);
+  var last = tr.length - 1, prev = last - 1;
+  if (!(trS[last] > 0) || !(trS[prev] > 0)) return null;
+  var plus = 100 * pS[last] / trS[last], minus = 100 * mS[last] / trS[last];
+  var pPlus = 100 * pS[prev] / trS[prev], pMinus = 100 * mS[prev] / trS[prev];
+  var dx = [], k, adx = NaN, seed = 0, cnt = 0;
+  for (k = 0; k < tr.length; k++){
+    if (!(trS[k] > 0)){ dx.push(NaN); continue; }
+    var pdi = 100 * pS[k] / trS[k], mdi = 100 * mS[k] / trS[k], den = pdi + mdi;
+    dx.push(den > 0 ? 100 * Math.abs(pdi - mdi) / den : NaN);
+  }
+  for (k = 0; k < dx.length; k++){
+    if (!isFinite(dx[k])) continue;
+    if (cnt < len){ seed += dx[k]; cnt++; if (cnt === len) adx = seed / len; }
+    else if (isFinite(adx)) adx = (adx * (len - 1) + dx[k]) / len;
+  }
+  if (!isFinite(adx) || ![plus, minus, pPlus, pMinus].every(isFinite)) return null;
+  return { adx: adx, plus: plus, minus: minus, prevPlus: pPlus, prevMinus: pMinus };
+}
+function pineGoldAdxDi(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 14, minAdx = opts.minAdx || 20, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    var r = pgrAdxRead(rows, len);
+    if (!r || n < sw + 2) return { dir: null };
+    var c = pgrNum(rows[n - 1].c);
+    if (!isFinite(c) || !(r.adx >= minAdx)) return { dir: null, adx: r.adx, plus: r.plus, minus: r.minus };
+    var i = n - 1;
+    if (r.prevPlus <= r.prevMinus && r.plus > r.minus) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), r);
+    if (r.prevMinus <= r.prevPlus && r.minus > r.plus) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), r);
+    return { dir: null, adx: r.adx, plus: r.plus, minus: r.minus };
+  }catch(e){ return { dir: null }; }
+}
+function pgrHeikin(rows){
+  var out = [], i;
+  for (i = 0; i < rows.length; i++){
+    var o = pgrNum(rows[i].o), h = pgrNum(rows[i].h), l = pgrNum(rows[i].l), c = pgrNum(rows[i].c);
+    if (![o, h, l, c].every(isFinite)) return null;
+    var hc = (o + h + l + c) / 4;
+    var ho = i === 0 ? (o + c) / 2 : (out[i - 1].o + out[i - 1].c) / 2;
+    out.push({ o: ho, c: hc });
+  }
+  return out;
+}
+function pineGoldHeikin(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var ha = pgrHeikin(rows);
+    var n = ha ? ha.length : 0;
+    if (n < sw + 2) return { dir: null };
+    var prev = ha[n - 2], last = ha[n - 1], c = pgrNum(rows[n - 1].c);
+    var wasUp = prev.c >= prev.o, nowUp = last.c >= last.o;
+    if (wasUp === nowUp || !isFinite(c)) return { dir: null };
+    if (nowUp) return pgrResult('long', c, pgrLowest(rows, n - 1 - sw, n - 2, 'l'), { ha: last.c });
+    return pgrResult('short', c, pgrHighest(rows, n - 1 - sw, n - 2, 'h'), { ha: last.c });
+  }catch(e){ return { dir: null }; }
+}
+function pgrSessionVwap(rows){
+  var n = rows ? rows.length : 0;
+  if (n < 2) return null;
+  var lastT = rows[n - 1].t > 1e12 ? rows[n - 1].t : rows[n - 1].t * 1000;
+  var day = new Date(lastT); day.setUTCHours(0, 0, 0, 0);
+  var start = day.getTime(), anchor = 0, k;
+  for (k = n - 1; k >= 0; k--){
+    var tk = rows[k].t > 1e12 ? rows[k].t : rows[k].t * 1000;
+    if (tk < start){ anchor = k + 1; break; }
+  }
+  var pv = 0, vv = 0;
+  for (k = anchor; k < n; k++){
+    var tp = (pgrNum(rows[k].h) + pgrNum(rows[k].l) + pgrNum(rows[k].c)) / 3;
+    var v = pgrNum(rows[k].v);
+    if (!(v > 0)) v = 1;
+    if (!isFinite(tp)) return null;
+    pv += tp * v; vv += v;
+  }
+  return vv > 0 ? pv / vv : null;
+}
+function pineGoldSessVwap(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < sw + 2) return { dir: null };
+    var vwap = pgrSessionVwap(rows);
+    var c = pgrNum(rows[n - 1].c), p = pgrNum(rows[n - 2].c);
+    if (!isFinite(vwap) || !isFinite(c) || !isFinite(p)) return { dir: null };
+    if (p <= vwap && c > vwap) return pgrResult('long', c, Math.min(vwap, pgrLowest(rows, n - 1 - sw, n - 2, 'l')), { vwap: vwap });
+    if (p >= vwap && c < vwap) return pgrResult('short', c, Math.max(vwap, pgrHighest(rows, n - 1 - sw, n - 2, 'h')), { vwap: vwap });
+    return { dir: null, vwap: vwap };
+  }catch(e){ return { dir: null }; }
+}
+function pineGoldBlocksLead(states, dir){
+  if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
+  var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
+  var againstN = dir === 'long' ? states.agreeShort : states.agreeLong;
+  if (againstN >= PINE_GOLD_MAJORITY && againstN > withN) return 'pine majority against';
+  var ids = ['adx', 'heikin', 'sessvwap'], agree = 0, oppose = 0, i;
+  for (i = 0; i < ids.length; i++){
+    var v = states[ids[i]];
+    if (v === dir) agree++;
+    else if (v === 'long' || v === 'short') oppose++;
+  }
+  if (oppose >= 2 && oppose > agree) return 'ADX, Heikin Ashi and session VWAP against';
+  return null;
+}
+
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
    consume these through their extras seam and price them through their own
@@ -1465,6 +1601,7 @@ function pineGoldLayerStates(rows){
               /* hg-v1166 */ macd: null, psar: null, stoch: null,
               /* hg-v1167 */ chandelier: null, hullma: null, cci: null, aroon: null,
               /* hg-v1171 */ williams: null, trix: null, fisher: null,
+              /* price-only confirmation */ adx: null, heikin: null, sessvwap: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -1595,6 +1732,29 @@ function pineGoldLayerStates(rows){
         if (isFinite(fv)){ if (fv > 0) out.fisher = 'long'; else if (fv < 0) out.fisher = 'short'; }
       }
     }catch(eF){}
+    try{
+      var ax = pgrAdxRead(rows, (layerOpts('adx').len) || 14);
+      var minAdx = (layerOpts('adx').minAdx) || 20;
+      if (ax && ax.adx >= minAdx){
+        if (ax.plus > ax.minus) out.adx = 'long';
+        else if (ax.minus > ax.plus) out.adx = 'short';
+      }
+    }catch(eAx){}
+    try{
+      var ha = pgrHeikin(rows);
+      if (ha && ha.length){
+        var hb = ha[ha.length - 1];
+        if (hb.c > hb.o) out.heikin = 'long';
+        else if (hb.c < hb.o) out.heikin = 'short';
+      }
+    }catch(eHa){}
+    try{
+      var sv = pgrSessionVwap(rows);
+      if (isFinite(sv)){
+        if (c > sv) out.sessvwap = 'long';
+        else if (c < sv) out.sessvwap = 'short';
+      }
+    }catch(eSv){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
       var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
@@ -1697,6 +1857,10 @@ G.pineGoldChandelierSeries = pgrChandelierSeries;   /* the trails, for a guard t
 G.pineGoldWilliamsReentry = pineGoldWilliamsReentry;
 G.pineGoldTrixCross = pineGoldTrixCross;
 G.pineGoldFisherZero = pineGoldFisherZero;
+G.pineGoldAdxDi = pineGoldAdxDi;
+G.pineGoldHeikin = pineGoldHeikin;
+G.pineGoldSessVwap = pineGoldSessVwap;
+G.pineGoldBlocksLead = pineGoldBlocksLead;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
@@ -1734,6 +1898,7 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries,
     /* hg-v1171 */
     pineGoldWilliamsReentry, pineGoldTrixCross, pineGoldFisherZero,
+    pineGoldAdxDi, pineGoldHeikin, pineGoldSessVwap, pineGoldBlocksLead,
     pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries
   };
 }
