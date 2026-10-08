@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1201',
-  pack: 'TREND MATRIX CRYPTO PINE PORTS - five bar-only Pine strategies (Lorentzian KNN, Half-Trend, Squeeze Momentum, Smart Money Flow, MSB/OB) read off each crowned its own 4h tape as record-only evidence marks, printed in the crown TECHNICAL dimension as a PINE line. The perfect predicate ignores them (no gate, no score); the forward ledger decides whether any separates. Also carries the Trend Matrix explosion gates. The MACD step has to clear both the Bollinger width and 3.7 times the 14-bar ATR, in the direction of the trade. A short history is not an explosion. Squeeze momentum has to be positive and still rising for a long, or negative and still falling for a short. A fading histogram does not pass. Volatility has to be above the longer-window noise. A quiet tape is chop, not a trend. None of these replace the stop. The card does not send an order.',
-  built: '2026-10-09T00:40:00Z'
+  version: 'hg-v1202',
+  pack: 'Trend Matrix. The crown still prints five 4h pine marks as evidence only: Lorentzian, HalfTrend, squeeze momentum, smart money flow, and the structure block. They do not gate. A setup is armed only when Aroon says the 14-bar extreme is fresh, the whole 1h bar is beyond the 13-bar average, and the volume-weighted average sits beyond the simple average on real volume. A bar with no volume is unread. The earlier scripts still have to agree. None of these replace the stop. The card does not send an order.',
+  built: '2026-10-08T21:25:00Z'
 };
 
 function hgBuildLabel(b){

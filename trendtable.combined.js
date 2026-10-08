@@ -1091,6 +1091,51 @@ function tmDamiani(rows){
   var sd = Math.sqrt(varr / slice.length);
   return (v13 / v20) > ((v40 / v20) + (sd / v20));
 }
+function tmAroon(rows, dir){
+  var period = 14;
+  if (!rows || rows.length < period) return null;
+  var win = rows.slice(-period);
+  var hi = 0, lo = 0, i;
+  for (i = 1; i < win.length; i++){
+    if (win[i].h >= win[hi].h) hi = i;
+    if (win[i].l <= win[lo].l) lo = i;
+  }
+  var up = (100 * (period - ((period - 1) - hi))) / period;
+  var down = (100 * (period - ((period - 1) - lo))) / period;
+  if (dir === 'long') return up >= 70 && up > down;
+  return down >= 70 && down > up;
+}
+function tmElder(rows, dir){
+  if (!rows || rows.length < 20) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++) closes.push(rows[i].c);
+  var ema = tmEmaSeries(closes, 13);
+  if (!ema) return null;
+  var n = rows.length - 1;
+  if (!isFinite(ema[n]) || !isFinite(ema[n - 1])) return null;
+  var bull = rows[n].h - ema[n];
+  var bear = rows[n].l - ema[n];
+  if (dir === 'long') return bull > 0 && bear > 0;
+  return bull < 0 && bear < 0;
+}
+function tmVwmaSide(rows, dir){
+  if (!rows || rows.length < 20) return null;
+  var slice = rows.slice(-20);
+  var pv = 0, vol = 0, sum = 0, i, k;
+  for (i = 0; i < slice.length; i++){
+    k = slice[i];
+    if (!(k.v > 0)) return null;
+    pv += k.c * k.v;
+    vol += k.v;
+    sum += k.c;
+  }
+  if (!(vol > 0)) return null;
+  var vwma = pv / vol;
+  var sma = sum / slice.length;
+  var px = slice[slice.length - 1].c;
+  if (dir === 'long') return px > vwma && vwma > sma;
+  return px < vwma && vwma < sma;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -1295,7 +1340,6 @@ function trendScore(rows1d, rows4h){
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
-
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -1974,7 +2018,6 @@ function trendmxCardStack(r, dir){
       style: 'swing', asset: 'crypto', ticker: ticker,
       clean: !!(gate && gate.clean7),
       nearClean: !!(gate && gate.nearClean),
-
       gatesPassed: gate ? gate.gatesPassed : undefined,
       gatesTotal: 7,
       tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
@@ -2361,7 +2404,6 @@ function trendmxFlowScan(rows){
       if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
     });
   }
-
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -2798,7 +2840,6 @@ function tmVolumeProfile(rows){
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
   var pivots = [];
-
   for (var i = 2; i < rows.length - 2; i++){
     if (dir === 'long'){
       if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
@@ -3340,7 +3381,6 @@ async function trendmxFormOne(ticket, row, ctx){
     var n = rows4.length - 1;
     if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
-
     var lastHigh = null, lastLow = null, si;
     for (si = 0; si < swings.length; si++){
       if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
@@ -3416,6 +3456,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var noise = rows1 ? tmDamiani(rows1) : null;
   if (noise == null) hard.push('volatility unread');
   else if (!noise) hard.push('chop, volatility is not above the noise');
+  var aroon = rows1 ? tmAroon(rows1, dir) : null;
+  if (aroon == null) hard.push('aroon unread');
+  else if (!aroon) hard.push('aroon says the extreme is stale');
+  var elder = rows1 ? tmElder(rows1, dir) : null;
+  if (elder == null) hard.push('elder ray unread');
+  else if (!elder) hard.push('elder ray is against the trade');
+  var vwma = rows1 ? tmVwmaSide(rows1, dir) : null;
+  if (vwma == null) hard.push('volume average unread');
+  else if (!vwma) hard.push('volume is not sitting with the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -3643,6 +3692,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
+  ticket.pine = 'aroon, elder ray and the volume average agree';
   return [];
 }
 
@@ -3762,6 +3812,7 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
           if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
           if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
           if (isFinite(ticket.chandelier)) ticket.note += ' · chandelier ' + ticket.chandelier;
+          if (ticket.pine) ticket.note += ' · ' + ticket.pine;
           out.push(ticket);
         }
       }
@@ -3888,7 +3939,6 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     /* hg-v1012: the flow split, read off the stamps the scan left — the
        summary names the evidence the same way the cards do */
     if (r.flow && r.flow.verdict === 'with') flowW++;
-
     else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
@@ -4250,7 +4300,6 @@ function trendmxPerfectState(r){
    drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
 function trendmxAtrRegime(r){
   try{
-
     if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
     if (typeof hgAtrPercentile !== 'function') return null;
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
@@ -4607,7 +4656,6 @@ function trendmxFivePillars(r){
     if (r.flow.verdict === 'against') sentAgainst = true;
     if (r.flow.verdict === 'with') sentWith = true;
   }
-
   if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
     sentRead = true;
     try{
@@ -4983,7 +5031,6 @@ function trendmxTrendFormHTML(rows){
         var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
           + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
         /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
-
            minted tiers; anything below the NEAR floor (or a forming row with
            no majority, whose gate is null) is the house DRAFT ladder, never
            a fabricated 6/7 NEAR. */
@@ -5340,7 +5387,6 @@ async function trendmxPerfectEvidencePass(rows){
           if (isFinite(usd)) reads.liqClusterUsd = usd;
         }catch(eLc){ }
       }
-
         reads.venueFundingPct = +r.fundingPct;
       /* hg-v1144: venue premium = venue funding minus the Binance twin */
       if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
@@ -5677,7 +5723,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · golden cross Telegram every 15m.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · golden cross Telegram every 15m. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray and a volume-weighted average above the simple average. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -5745,7 +5791,6 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
-
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -6119,6 +6164,9 @@ W.tmHalfTrend = tmHalfTrend;
 W.tmWae = tmWae;
 W.tmSqueezeMom = tmSqueezeMom;
 W.tmDamiani = tmDamiani;
+W.tmAroon = tmAroon;
+W.tmElder = tmElder;
+W.tmVwmaSide = tmVwmaSide;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
