@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1204',
-  pack: 'ONE more record-only gold Pine port on top of the TREND MATRIX work hg-v1201 shipped (five crypto Pine ports as record-only marks on the crown; Aroon-fresh + Elder-ray + volume-weighted average arming gates): Balanced Price Range (BPR). A BPR is the overlap of a bull three-bar FVG and a bear three-bar FVG within a lookback window; the overlap is a shelf (institutional pivot the tape has used both sides of). The port fires ONLY on the last closed bar when the tape reclaims the shelf from the opposite side (prev close above shelf.top, last bar wicks into the shelf and closes back above with a bullish body, mirror for shorts); stop = the far side of the shelf +/- 0.15*ATR. DIFFERENT from the Donchian port (price position in the recent range) and the CCI port (overbought/oversold mean-reversion): BPR is a structural overlap of two liquidity gaps, not a statistical read of one series. Fires NO signal on a dead-flat tape, a shelf formed on the last bar (imbalance has not resolved), a last-bar close inside the shelf, or with no ATR helper. The state in pineGoldLayerStates reads long/short by whether the close sits above the shelf top or below the shelf bottom (hg-v989 three-state); the hg-v1165 majority mark keeps its five-layer population - BPR marks its own state and does not join the majority. Record-only, three-state; the ranker scores nothing on it; no gate module reads pine:bprWith; no threshold moves and no setup leaves any board. Telegram: fresh CoinDCX Trend Matrix crosses only, every 2 hours, with entry, stop and targets. A run inside that window does not send a second message.',
-  built: '2026-10-14T22:10:00Z'
+  version: 'hg-v1205',
+  pack: 'Trend Matrix. DMI has to agree with the trade and ADX has to sit between 18 and 70. A dead tape and a one-way blow-off both fail. Bollinger %B has to be on the trade side of the midline and still inside the band. A close outside the band is a chase, not a setup. A short history is unread. The card does not send an order.',
+  built: '2026-10-14T23:30:00Z'
 };
 
 function hgBuildLabel(b){

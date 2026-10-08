@@ -82,6 +82,12 @@
   var vwma = rows1 ? tmVwmaSide(rows1, dir) : null;
   if (vwma == null) hard.push('volume average unread');
   else if (!vwma) hard.push('volume is not sitting with the trade');
+  var dmi = rows1 ? tmDmi(rows1, dir) : null;
+  if (dmi == null) hard.push('dmi unread');
+  else if (!dmi) hard.push('dmi is flat or the directional index is against the trade');
+  var bandPos = rows1 ? tmBbSide(rows1, dir) : null;
+  if (bandPos == null) hard.push('bollinger unread');
+  else if (!bandPos) hard.push('price is outside the band or on the wrong side of the midline');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -309,7 +315,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'aroon, elder ray and the volume average agree';
+  ticket.pine = 'dmi is in the expansion band and price is inside the bollinger half';
   return [];
 }
 
