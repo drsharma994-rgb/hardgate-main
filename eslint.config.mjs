@@ -76,13 +76,6 @@ export default [
     },
   },
 
-  /* app.js is ESM despite the .js extension (Node >=20.10 module detection
-     runs it fine); every other root .js is a classic browser script. */
-  {
-    files: ['app.js'],
-    languageOptions: { sourceType: 'module' },
-  },
-
   /* api/*.js is CommonJS (require/module.exports), not ESM */
   {
     files: ['api/**/*.js'],
@@ -132,5 +125,13 @@ export default [
          catch arms there are a warning, not a deploy blocker. */
       'no-unreachable': 'warn',
     },
+  },
+
+  /* LAST on purpose (flat config: later matches win) — app.js is ESM despite
+     the .js extension (Node >=20.10 module detection runs it fine); every
+     other root .js is a classic browser script. */
+  {
+    files: ['app.js'],
+    languageOptions: { sourceType: 'module' },
   },
 ];
