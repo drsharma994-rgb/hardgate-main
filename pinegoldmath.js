@@ -724,7 +724,22 @@ var PINE_GOLD_RECORD_LAYERS = [
   { id: 'cci', label: 'CCI Re-entry', fn: 'pineGoldCciReentry', minBars: 60,
     opts: { len: 20, band: 100, swing: 5 }, twin: 'CCI-EXTREME' },
   { id: 'aroon', label: 'Aroon Cross', fn: 'pineGoldAroonCross', minBars: 60,
-    opts: { len: 25, swing: 5 }, twin: null }
+    opts: { len: 25, swing: 5 }, twin: null },
+  /* hg-v1171: three more bar-only Pine ports a gold trader runs. Williams
+     %R re-entry (distance from recent high, different series from Stochastic
+     which measures position within the range); TRIX zero cross (triple-
+     smoothed momentum, different from MACD which crosses its signal line);
+     Fisher Transform zero cross (Ehlers' Gaussian mapping of hl2, a scale
+     no other layer here reads). None has an exact OMNIGOLD twin: the
+     closest sibling of Williams %R is WILLIAMS-FAIL and that mechanic is
+     NOT registered on OMNIGOLD today (confirmed by hgGoldSiblingRecord
+     returning null), and a loose analogy is not a twin (hg-v943). */
+  { id: 'williams', label: 'Williams %R Re-entry', fn: 'pineGoldWilliamsReentry', minBars: 60,
+    opts: { len: 14, os: -80, ob: -20, swing: 5 }, twin: null },
+  { id: 'trix', label: 'TRIX Zero Cross', fn: 'pineGoldTrixCross', minBars: 60,
+    opts: { len: 15, swing: 5 }, twin: null },
+  { id: 'fisher', label: 'Fisher Transform', fn: 'pineGoldFisherZero', minBars: 60,
+    opts: { len: 10, swing: 5 }, twin: null }
 ];
 /* hg-v1165's majority mark is the majority of the FIVE hg-v1164 layers --
    records written since then carry that meaning, so the three hg-v1166
@@ -1095,6 +1110,82 @@ function pgrAroonSeries(rows, len){
   }
   return { up: up, down: dn };
 }
+/* hg-v1171: Williams %R(len) = -100 * (highH - close) / (highH - lowL) across
+   the len-bar window ending at i. Scale: 0 at the high, -100 at the low. On a
+   flat window (highH === lowL) the formula divides by zero -- NaN here, which
+   downstream unread is absent and never a guessed zero (hg-v989). */
+function pgrWilliamsSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len + 2) return null;
+  var out = new Array(n), i, k;
+  for (i = 0; i < n; i++){
+    if (i < len - 1){ out[i] = NaN; continue; }
+    var hi = -Infinity, lo = Infinity, bad = false;
+    for (k = i - len + 1; k <= i; k++){
+      var h = pgrNum(rows[k].h), l = pgrNum(rows[k].l);
+      if (!isFinite(h) || !isFinite(l)){ bad = true; break; }
+      if (h > hi) hi = h;
+      if (l < lo) lo = l;
+    }
+    var c = pgrNum(rows[i].c);
+    if (bad || !isFinite(c) || !(hi > lo)){ out[i] = NaN; continue; }
+    out[i] = -100 * (hi - c) / (hi - lo);
+  }
+  return out;
+}
+/* hg-v1171: TRIX(len) is the 1-period momentum of a triple-smoothed EMA of
+   close. Pine's trix() does exactly this; it is NOT the MACD arithmetic
+   (hg-v949). We compute it inline rather than borrow a one-off EMA helper
+   because the three-stage smoothing is the mechanic. A dead-flat tape leaves
+   NaN rather than 0 -- a close-equal series gives TRIX zero, which the port
+   reads as NEITHER (hg-v989's third state). */
+function pgrTrixSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < 3 * len + 3) return null;
+  var k = 2 / (len + 1);
+  var e1 = new Array(n), e2 = new Array(n), e3 = new Array(n), out = new Array(n), i;
+  for (i = 0; i < n; i++){
+    var c = pgrNum(rows[i].c);
+    if (!isFinite(c)){ e1[i] = NaN; e2[i] = NaN; e3[i] = NaN; out[i] = NaN; continue; }
+    e1[i] = (i === 0 || !isFinite(e1[i - 1])) ? c : (e1[i - 1] + k * (c - e1[i - 1]));
+    e2[i] = (i === 0 || !isFinite(e2[i - 1])) ? e1[i] : (e2[i - 1] + k * (e1[i] - e2[i - 1]));
+    e3[i] = (i === 0 || !isFinite(e3[i - 1])) ? e2[i] : (e3[i - 1] + k * (e2[i] - e3[i - 1]));
+    if (i < 3 * (len - 1) + 1 || !(e3[i - 1] > 0)){ out[i] = NaN; continue; }
+    out[i] = 10000 * (e3[i] - e3[i - 1]) / e3[i - 1];
+  }
+  return out;
+}
+/* hg-v1171: Fisher Transform(len) -- Ehlers' price-to-Gaussian mapping. Scale
+   the hl2 midpoint into [-1, 1] over the len-bar window, clamp away from the
+   singularities at +/-1 (ln(0) and ln(inf) are both undefined, so a bar that
+   closed exactly at the window extreme is clamped to +/-0.999 rather than
+   NaN; this is Ehlers' own clamp, not an invention), then recursively
+   half-weight the previous Fisher. A flat window reads NaN; the state is
+   unread when fisher is exactly zero. */
+function pgrFisherSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len + 2) return null;
+  var x = new Array(n), fi = new Array(n), i, k;
+  for (i = 0; i < n; i++){
+    if (i < len - 1){ x[i] = NaN; fi[i] = NaN; continue; }
+    var hi = -Infinity, lo = Infinity, bad = false;
+    for (k = i - len + 1; k <= i; k++){
+      var h = pgrNum(rows[k].h), l = pgrNum(rows[k].l);
+      if (!isFinite(h) || !isFinite(l)){ bad = true; break; }
+      if (h > hi) hi = h;
+      if (l < lo) lo = l;
+    }
+    var hc = pgrNum(rows[i].h), lc = pgrNum(rows[i].l);
+    if (bad || !isFinite(hc) || !isFinite(lc) || !(hi > lo)){ x[i] = NaN; fi[i] = NaN; continue; }
+    var mid = (hc + lc) / 2;
+    var raw = 2 * ((mid - lo) / (hi - lo)) - 1;
+    if (raw > 0.999) raw = 0.999; else if (raw < -0.999) raw = -0.999;
+    x[i] = raw;
+    var pf = (i > 0 && isFinite(fi[i - 1])) ? fi[i - 1] : 0;
+    fi[i] = 0.5 * Math.log((1 + raw) / (1 - raw)) + 0.5 * pf;
+  }
+  return fi;
+}
 /* Chandelier Exit 22 x 3: the direction flips on the last closed bar. Stop is
    the trail the flip put under / over price. */
 function pineGoldChandelierExit(rows, opts){
@@ -1165,6 +1256,77 @@ function pineGoldAroonCross(rows, opts){
     if (![u, d, uP, dP, c].every(isFinite)) return { dir: null };
     if (u > d && uP <= dP) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { up: u, down: d });
     if (u < d && uP >= dP) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { up: u, down: d });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+/* hg-v1171: Williams %R 14 re-entry. The prior bar's %R sat below -80
+   (oversold) and the last closed bar's is back above -80 for a long, or
+   mirror -- above -20 then back inside for a short. The close must also
+   agree with the re-entry direction, so a reclaim through -80 that ends in a
+   lower close is not a long signal. Stop is the prior 5-bar swing. Williams
+   %R and Stochastic are related but not duplicated (hg-v949): %R measures
+   distance from the recent HIGH alone, Stoch measures position within the
+   recent RANGE and uses %K/%D smoothing. */
+function pineGoldWilliamsReentry(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 14, osB = opts.os || -80, obB = opts.ob || -20, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 3) return { dir: null };
+    var W = pgrWilliamsSeries(rows, len);
+    if (!W) return { dir: null };
+    var i = n - 1;
+    var v = pgrNum(W[i]), p = pgrNum(W[i - 1]), c = pgrNum(rows[i].c), pc = pgrNum(rows[i - 1].c);
+    if (![v, p, c, pc].every(isFinite)) return { dir: null };
+    if (p <= osB && v > osB && c > pc) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { wr: v, prev: p });
+    if (p >= obB && v < obB && c < pc) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { wr: v, prev: p });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+/* hg-v1171: TRIX 15 zero-line cross. The prior bar's TRIX was below zero and
+   the last closed bar's is above zero for a long; mirror for a short. Stop is
+   the prior 5-bar swing. TRIX = 1-period rate of change of a triple-smoothed
+   EMA, so a zero cross means the three-stage smoothed momentum has turned.
+   Different from MACD (which crosses its SIGNAL line, not zero, and uses a
+   two-stage subtraction) and so is not a duplicated port of the hg-v1166
+   MACD layer (hg-v949). TRIX exactly equal to zero is unread, never guessed
+   as either side. */
+function pineGoldTrixCross(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 15, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < 3 * len + sw + 3) return { dir: null };
+    var T = pgrTrixSeries(rows, len);
+    if (!T) return { dir: null };
+    var i = n - 1;
+    var v = pgrNum(T[i]), p = pgrNum(T[i - 1]), c = pgrNum(rows[i].c);
+    if (![v, p, c].every(isFinite)) return { dir: null };
+    if (p < 0 && v > 0) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { trix: v, prev: p });
+    if (p > 0 && v < 0) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { trix: v, prev: p });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+/* hg-v1171: Fisher Transform 10 zero-line cross (Ehlers). The transform
+   maps hl2 into a Gaussian-shaped series; a zero cross says the mid-point
+   has moved from the lower half of the window into the upper half (or
+   mirror). Stop is the prior 5-bar swing. The clamp at +/-0.999 inside the
+   series handles bars that closed exactly at the window extreme (ln is
+   undefined at the singularities); it is the series' own rule, applied
+   once. */
+function pineGoldFisherZero(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 10, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 3) return { dir: null };
+    var F = pgrFisherSeries(rows, len);
+    if (!F) return { dir: null };
+    var i = n - 1;
+    var v = pgrNum(F[i]), p = pgrNum(F[i - 1]), c = pgrNum(rows[i].c);
+    if (![v, p, c].every(isFinite)) return { dir: null };
+    if (p < 0 && v > 0) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { fisher: v, prev: p });
+    if (p > 0 && v < 0) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { fisher: v, prev: p });
     return { dir: null };
   }catch(e){ return { dir: null }; }
 }
@@ -1301,7 +1463,9 @@ function pgrStateOf(res){ return res && (res.dir === 'long' || res.dir === 'shor
 function pineGoldLayerStates(rows){
   var out = { ok: false, supertrend: null, ichimoku: null, donchian: null, emacross: null, keltner: null,
               /* hg-v1166 */ macd: null, psar: null, stoch: null,
-              /* hg-v1167 */ chandelier: null, hullma: null, cci: null, aroon: null, allLong: 0, allShort: 0,
+              /* hg-v1167 */ chandelier: null, hullma: null, cci: null, aroon: null,
+              /* hg-v1171 */ williams: null, trix: null, fisher: null,
+              allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
     if (!rows || rows.length < 60) return out;
@@ -1403,6 +1567,34 @@ function pineGoldLayerStates(rows){
         if (isFinite(au) && isFinite(ad)){ if (au > ad) out.aroon = 'long'; else if (au < ad) out.aroon = 'short'; }
       }
     }catch(eA){}
+    /* hg-v1171: the Williams %R sign (above its mid at -50 is 'long', below
+       is 'short', NEITHER at exactly -50); the TRIX sign (above zero is
+       'long', below is 'short', NEITHER at exactly 0); the Fisher Transform
+       sign (above zero is 'long', below is 'short', NEITHER at exactly 0).
+       Each is the state read for the record stack, not the port's signal
+       event -- the port fires on a last-closed-bar transition; the state is
+       the series' current side, read every record. */
+    try{
+      var wO = layerOpts('williams'), WR = pgrWilliamsSeries(rows, wO.len || 14);
+      if (WR){
+        var wv = pgrNum(WR[i]);
+        if (isFinite(wv)){ if (wv > -50) out.williams = 'long'; else if (wv < -50) out.williams = 'short'; }
+      }
+    }catch(eW){}
+    try{
+      var tO = layerOpts('trix'), TR = pgrTrixSeries(rows, tO.len || 15);
+      if (TR){
+        var tv = pgrNum(TR[i]);
+        if (isFinite(tv)){ if (tv > 0) out.trix = 'long'; else if (tv < 0) out.trix = 'short'; }
+      }
+    }catch(eT){}
+    try{
+      var fO = layerOpts('fisher'), FS = pgrFisherSeries(rows, fO.len || 10);
+      if (FS){
+        var fv = pgrNum(FS[i]);
+        if (isFinite(fv)){ if (fv > 0) out.fisher = 'long'; else if (fv < 0) out.fisher = 'short'; }
+      }
+    }catch(eF){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
       var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
@@ -1499,6 +1691,15 @@ G.pineGoldHullTurn = pineGoldHullTurn;
 G.pineGoldCciReentry = pineGoldCciReentry;
 G.pineGoldAroonCross = pineGoldAroonCross;
 G.pineGoldChandelierSeries = pgrChandelierSeries;   /* the trails, for a guard that pins the stop to its own trail */
+/* hg-v1171: the three new ports (dispatched by name through pineGoldRunLayer)
+   and their series helpers (exported so a guard can pin behaviour inside them
+   rather than only through the port facade). */
+G.pineGoldWilliamsReentry = pineGoldWilliamsReentry;
+G.pineGoldTrixCross = pineGoldTrixCross;
+G.pineGoldFisherZero = pineGoldFisherZero;
+G.pineGoldWilliamsSeries = pgrWilliamsSeries;
+G.pineGoldTrixSeries = pgrTrixSeries;
+G.pineGoldFisherSeries = pgrFisherSeries;
 G.pineGoldRecordJudge = pineGoldRecordJudge;
 G.pineGoldRecordFloor = pineGoldRecordFloor;
 G.pineGoldRecordChipHtml = pineGoldRecordChipHtml;
@@ -1530,7 +1731,10 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldLayerStates, pineGoldPineMarks, pineGoldStackLineHtml, PINE_GOLD_MAJORITY,
     pineGoldMacdCross, pineGoldPsarFlip, pineGoldStochCross, pineGoldRecordLayerHits,
     pineGoldRecordJudge, pineGoldRecordFloor, pineGoldRecordChipHtml, pineGoldRecordNoteHtml, PINE_GOLD_MAJORITY_IDS,
-    pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries
+    pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries,
+    /* hg-v1171 */
+    pineGoldWilliamsReentry, pineGoldTrixCross, pineGoldFisherZero,
+    pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries
   };
 }
 

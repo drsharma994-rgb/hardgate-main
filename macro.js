@@ -883,6 +883,18 @@ async function getGoldMacro(){
        its prior 20 sessions. Volume is participation, not tonnage; the
        catalog's ETF-flows row stays unchecked and says so. */
     let creditTrend = null, goldPalladiumTrend = null, gldVolumeRel = null, gldVolumeState = null;
+    /* hg-v1171: three more free Yahoo legs beside the hg-v1167 set. TLT
+       is the iShares 20+Y Treasury ETF -- its price rises when long yields
+       fall, which lifts gold (WITH a long when RISING); DIFFERENT from the
+       hg-v1166 TIP, which is TIPS (real yields), so no duplicated port
+       (hg-v949). UUP is the dollar bull ETF -- rising dollar is AGAINST a
+       gold long (WITH when FALLING), a direct-market read of the dollar
+       distinct from the Frankfurter DXY calculation above and from the
+       USDJPY / USDCNY crosses (which are single pairs, not the index).
+       AUD=X is USD/AUD -- Australia is the world's largest gold producer,
+       so AUD strength (USD/AUD FALLING) is a producer-currency bid WITH a
+       gold long. */
+    let tltTrend = null, uupTrend = null, audusdTrend = null;
     try{
       const free = await Promise.all([
         __yahooLastClose('SI=F', '1mo'),
@@ -905,7 +917,11 @@ async function getGoldMacro(){
         __yahooLastClose('HYG', '1mo'),
         __yahooLastClose('LQD', '1mo'),
         __yahooLastClose('PA=F', '1mo'),
-        __yahooLastClose('GLD', '3mo')
+        __yahooLastClose('GLD', '3mo'),
+        /* hg-v1171: TLT (long bonds), UUP (dollar ETF), AUD=X (producer currency) */
+        __yahooLastClose('TLT', '1mo'),
+        __yahooLastClose('UUP', '1mo'),
+        __yahooLastClose('AUD=X', '1mo')
       ]);
       function chgOf(rows){
         if (!rows || rows.length < 5) return null;
@@ -966,6 +982,15 @@ async function getGoldMacro(){
         gldVolumeRel = gv;
         gldVolumeState = gv >= 1.5 ? 'HIGH' : (gv <= 0.5 ? 'LOW' : 'NORMAL');
       }
+      /* hg-v1171: TLT, UUP, AUD=X -- each a 20-day trend through the one
+         chgOf band (+/-1% / FLAT inside), null when the leg is dark or the
+         first close is not positive */
+      const tl = chgOf(free[21]);
+      if (tl) tltTrend = tl.trend;
+      const uu = chgOf(free[22]);
+      if (uu) uupTrend = uu.trend;
+      const ad = chgOf(free[23]);
+      if (ad) audusdTrend = ad.trend;
       if (si && gc && si.first > 0 && si.last > 0){
         const thenR = gc.first / si.first, nowR = gc.last / si.last;
         const rchg = (nowR - thenR) / thenR;
@@ -1043,7 +1068,11 @@ async function getGoldMacro(){
       creditTrend: creditTrend,
       goldPalladiumTrend: goldPalladiumTrend,
       gldVolumeRel: gldVolumeRel,
-      gldVolumeState: gldVolumeState
+      gldVolumeState: gldVolumeState,
+      /* hg-v1171 */
+      tltTrend: tltTrend,
+      uupTrend: uupTrend,
+      audusdTrend: audusdTrend
     });
   }catch(e){
     return { dxy: null, dxyRows: null, tnxRows: null,

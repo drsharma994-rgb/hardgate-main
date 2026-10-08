@@ -5543,7 +5543,18 @@ var HG_GOLD_FREE_KEYS = ['free:macroTilt', 'free:paxgBasis', 'free:perpFunding',
                             reads -- credit appetite (HYG / LQD rising is risk being bought) and the
                             GLD volume print against its 20-session mean (HIGH / LOW, NORMAL unread).
                             Scored nowhere. */
-                         'free:goldPalladium', 'free:creditRiskOn', 'free:gldVolumeHigh'];
+                         'free:goldPalladium', 'free:creditRiskOn', 'free:gldVolumeHigh',
+                         /* hg-v1171: three more free Yahoo legs through macro.js. TLT (long bonds)
+                            rising is long yields falling -- WITH a gold long. UUP (dollar ETF) rising
+                            is the dollar strengthening -- AGAINST a gold long (trendLeg with
+                            withRising=false). AUD=X (USD/AUD) rising is AUD weakening against the
+                            dollar -- AGAINST a gold long (producer-currency logic, same shape as
+                            USDJPY). Each is DIFFERENT from the pre-existing legs: TLT is nominal
+                            long bonds, TIP is TIPS (real yields); UUP is a direct-market dollar
+                            read distinct from the Frankfurter DXY calc and the single-pair crosses;
+                            AUD=X names a gold-producer currency the stack had never read. Scored
+                            nowhere. */
+                         'free:tlt', 'free:uup', 'free:audusd'];
 /* the correlation band a state mark needs to read: inside it the read is
    UNREAD (absent), not a weak yes */
 var HG_GOLD_CORR_BAND = 0.3;
@@ -5597,6 +5608,10 @@ function hgGoldFreeFeedVerdicts(ctx, dir){
       else if (macro.creditTrend === 'FALLING') m['free:creditRiskOn'] = false;
       if (macro.gldVolumeState === 'HIGH') m['free:gldVolumeHigh'] = true;
       else if (macro.gldVolumeState === 'LOW') m['free:gldVolumeHigh'] = false;
+      /* hg-v1171 */
+      trendLeg('free:tlt', macro.tltTrend, true);
+      trendLeg('free:uup', macro.uupTrend, false);
+      trendLeg('free:audusd', macro.audusdTrend, false);
       /* hg-v1163: state reads -- direction-neutral, three states */
       if (macro.gvzTrend === 'RISING') m['free:gvzRising'] = true;
       else if (macro.gvzTrend === 'FALLING') m['free:gvzRising'] = false;
@@ -5658,7 +5673,11 @@ var HG_GOLD_FREE_ROWS = [
   /* hg-v1167 */
   ['GOLD/PALLADIUM',  'free:goldPalladium',    'Yahoo GC=F / PA=F 20d', 'WITH', 'AGAINST'],
   ['CREDIT HYG/LQD',  'free:creditRiskOn',     'Yahoo HYG / LQD 20d (risk appetite)', 'RISK-ON', 'RISK-OFF'],
-  ['GLD VOLUME',      'free:gldVolumeHigh',    'Yahoo GLD last complete session vs its 20-session mean', 'HIGH', 'LOW']
+  ['GLD VOLUME',      'free:gldVolumeHigh',    'Yahoo GLD last complete session vs its 20-session mean', 'HIGH', 'LOW'],
+  /* hg-v1171 */
+  ['TLT (20Y)',       'free:tlt',              'Yahoo TLT 20d (long bonds rise as long yields fall)', 'WITH', 'AGAINST'],
+  ['DOLLAR UUP',      'free:uup',              'Yahoo UUP 20d (dollar bull ETF)', 'WITH', 'AGAINST'],
+  ['AUD=X',           'free:audusd',           'Yahoo AUD=X 20d (USD / Australian dollar, the top gold producer)', 'WITH', 'AGAINST']
 ];
 function hgGoldFreeFeedLineHtml(marks, opts){
   try{

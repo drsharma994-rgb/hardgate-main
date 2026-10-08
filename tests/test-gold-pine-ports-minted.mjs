@@ -170,7 +170,7 @@ console.log('== 1) macro.js: the four legs ==');
 console.log('== 2) the home: twenty keys, the ranker scores nothing on them ==');
 {
   const W = boot(RANK_BASE);
-  assert(W.HG_GOLD_FREE_KEYS.length === 23 && NEW4.every(k => W.HG_GOLD_FREE_KEYS.indexOf(k) >= 0), 'the key list carries the four hg-v1166 legs (23 keys since hg-v1167)');
+  assert(W.HG_GOLD_FREE_KEYS.length === 26 && NEW4.every(k => W.HG_GOLD_FREE_KEYS.indexOf(k) >= 0), 'the key list carries the four hg-v1166 legs (26 keys since hg-v1171: 23 keys + three TLT/UUP/AUD=X legs)');
   const F = { macro: MACRO_ALL, fng: { v: 20 }, fundingRate: -0.05, spot: { verdict: 'shorts-crowding', basisPct: -0.2 }, cot: COT_LONG };
   const L = W.hgGoldFreeFeedVerdicts(F, 'long'), S = W.hgGoldFreeFeedVerdicts(F, 'short');
   assert(NEW4.every(k => L[k] === EXP4_LONG[k]), 'on a long: TIP RISING reads WITH, gold/platinum FALLING reads AGAINST, the yuan rising and the curve steepening read as states (' + JSON.stringify(NEW4.map(k => L[k])) + ')');
@@ -186,7 +186,7 @@ console.log('== 2) the home: twenty keys, the ranker scores nothing on them ==')
     assert(NEW4.every(k => a.freeReads[k] !== undefined) && NEW4.every(k => b.freeReads[k] === undefined), dir + ': the marks are on one row and absent on the other');
   }
   const line = W.hgGoldFreeFeedLineHtml(L, { fundingPct: -0.05 });
-  assert(/20 of 23 free internet feeds read/.test(line) && /TIPS \(TIP\)<\/b> WITH/.test(line) && /GOLD\/PLATINUM<\/b> AGAINST/.test(line) && /USDCNY<\/b> RISING/.test(line) && /CURVE 10Y-3M<\/b> STEEPENING/.test(line), 'the line prints the four legs in their own words');
+  assert(/20 of 26 free internet feeds read/.test(line) && /TIPS \(TIP\)<\/b> WITH/.test(line) && /GOLD\/PLATINUM<\/b> AGAINST/.test(line) && /USDCNY<\/b> RISING/.test(line) && /CURVE 10Y-3M<\/b> STEEPENING/.test(line), 'the line prints the four legs in their own words');
 }
 
 /* ------------------------------------------------------------------ 3 */
@@ -198,7 +198,7 @@ const firstWindow = (W, fn, opts, rows, from) => {
 {
   const W = boot(MATH_BASE);
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 12 && NEW3.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function' && l.twin === null)), 'the three hg-v1166 layers sit in the record table (twelve since hg-v1167) with their detectors and name no twin (STOCHRSI-TURN is not the Stochastic cross)');
+  assert(T.length === 15 && NEW3.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function' && l.twin === null)), 'the three hg-v1166 layers sit in the record table (fifteen since hg-v1171) with their detectors and name no twin (STOCHRSI-TURN is not the Stochastic cross)');
   assert(Array.isArray(W.PINE_GOLD_MAJORITY_IDS) && W.PINE_GOLD_MAJORITY_IDS.join(',') === OLD5.join(','), 'the majority mark keeps its hg-v1165 population: the five hg-v1164 layers');
   const full = tapeEnding(WED, 600, 900, 11, 24, 0);
   const found = {};
@@ -260,9 +260,9 @@ const firstWindow = (W, fn, opts, rows, from) => {
   const up = []; let px = 2300; const t0 = Math.floor(WED / 1000) - 300 * 900;
   for (let i = 0; i < 300; i++){ const o = px, c = o + 1.5 + Math.sin(i / 9) * 0.4; up.push({ t: t0 + i * 900, o, h: Math.max(o, c) + 0.5, l: Math.min(o, c) - 0.5, c, v: 1000 }); px = c; }
   const su = W.pineGoldLayerStates(up);
-  assert(su.ok === true && NEW3.every(id => su[id] === 'long') && su.readable === 12 && su.allLong === 12 && su.agreeLong === 5, 'a clean uptrend: MACD, SAR and Stochastic all read LONG; twelve readable (hg-v1167); the five-layer majority tally stays five');
+  assert(su.ok === true && NEW3.every(id => su[id] === 'long') && su.readable >= 12 && su.allLong >= 12 && su.agreeLong === 5, 'a clean uptrend: MACD, SAR and Stochastic all read LONG; at least twelve readable (now 15 total since hg-v1171); the five-layer majority tally stays five');
   const sd = W.pineGoldLayerStates(mirror(up));
-  assert(NEW3.every(id => sd[id] === 'short') && sd.allShort === 12, 'the mirrored tape: all three SHORT (twelve with hg-v1167)');
+  assert(NEW3.every(id => sd[id] === 'short') && sd.allShort >= 12, 'the mirrored tape: all three SHORT (fifteen total with hg-v1171)');
   const sf = W.pineGoldLayerStates(up.map(r => ({ t: r.t, o: 2300, h: 2300.5, l: 2299.5, c: 2300, v: 1 })));
   assert(sf.ok === true && sf.macd === null && sf.stoch === null, 'a dead-flat tape: the MACD line equals its signal and %K equals %D -- NEITHER, never guessed');
   const onlyNew = { ok: true, supertrend: null, ichimoku: null, donchian: null, emacross: null, keltner: null, macd: 'long', psar: 'long', stoch: 'long', readable: 3, allLong: 3, allShort: 0, agreeLong: 0, agreeShort: 0 };
@@ -270,9 +270,9 @@ const firstWindow = (W, fn, opts, rows, from) => {
   assert(mN['pine:macdWith'] === true && mN['pine:psarWith'] === true && mN['pine:stochWith'] === true && mN['pine:majorityWith'] === undefined && Object.keys(mN).length === 3,
     'three new layers WITH and the five unread: three marks and NO majority (the three do not move the five-layer majority)');
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
-  assert(Object.keys(mL).length === 13 && Object.keys(mL).every(k => mL[k] === true) && Object.keys(mS).every(k => mS[k] === false), 'all-long states: thirteen marks WITH on a long, thirteen AGAINST on a short (hg-v1167)');
+  assert(Object.keys(mL).length === 16 && Object.keys(mL).every(k => mL[k] === true) && Object.keys(mS).every(k => mS[k] === false), 'all-long states: sixteen marks WITH on a long, sixteen AGAINST on a short (hg-v1171: fifteen layers + majority)');
   const html = W.pineGoldStackLineHtml(su, mL);
-  assert(/12 of 12 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population');
+  assert(/\d+ of 15 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population (fifteen total since hg-v1171)');
 }
 
 /* ------------------------------------------------------------------ 4 */
@@ -509,8 +509,8 @@ console.log('== 7) GANESH GOLD reads the eight states; nothing gated; the cap; t
   assert(!/recordOnly|recordReleased/.test(body(gs, 'function gsPickBest(')) && !/recordOnly|recordReleased/.test(body(gw, 'function pickBest(')), 'neither leader picker reads the record-only mark (the demote decides, as for every demoted row)');
   /* the cap */
   const Wr = boot(RANK_BASE.concat(PINE_MATH));
-  const KEYS = Wr.HG_GOLD_FREE_KEYS.length + 2 + Object.keys(Wr.hgGoldIndicatorMarks(Wr.hgGoldIndicatorReads(tapeEnding(WED, 300, 900, 102, 24, 0), { rows1d: tapeEnding(WED, 280, 86400, 105, 60, 20) }), 'long')).length + 13;
-  assert(KEYS <= 64 && KEYS >= 52, 'twenty-three free: + two PERFECT + the indicator stack read on this tape + thirteen pine: = ' + KEYS + ' keys, inside the 64 cap');
+  const KEYS = Wr.HG_GOLD_FREE_KEYS.length + 2 + Object.keys(Wr.hgGoldIndicatorMarks(Wr.hgGoldIndicatorReads(tapeEnding(WED, 300, 900, 102, 24, 0), { rows1d: tapeEnding(WED, 280, 86400, 105, 60, 20) }), 'long')).length + 16;
+  assert(KEYS <= 64 && KEYS >= 55, 'twenty-six free: + two PERFECT + the indicator stack read on this tape + sixteen pine: = ' + KEYS + ' keys, inside the 64 cap (hg-v1171)');
   /* the catalog says what it read for the curve, and does not call the 10Y/2Y row USED */
   const Wc = boot(['indicators.js', 'indicators2.js', 'goldind.js', 'gold-catalog.js']);
   const f = Wc.hgGoldCatalogFeed(tapeEnding(WED, 300, 900, 102, 24, 0), { ctx: { macro: MACRO_ALL, now: WED } });

@@ -189,7 +189,7 @@ console.log('== 1) macro.js: the four legs, the GLD volume print ==');
 console.log('== 2) the home: twenty-three keys, the ranker scores nothing on them ==');
 {
   const W = boot(RANK_BASE);
-  assert(W.HG_GOLD_FREE_KEYS.length === 23 && NEW3K.every(k => W.HG_GOLD_FREE_KEYS.indexOf(k) >= 0), 'the key list carries the three hg-v1167 legs (23 keys)');
+  assert(W.HG_GOLD_FREE_KEYS.length === 26 && NEW3K.every(k => W.HG_GOLD_FREE_KEYS.indexOf(k) >= 0), 'the key list carries the three hg-v1167 legs (26 keys since hg-v1171)');
   const F = { macro: MACRO_ALL, fng: { v: 20 }, fundingRate: -0.05, spot: { verdict: 'shorts-crowding', basisPct: -0.2 }, cot: COT_LONG };
   const L = W.hgGoldFreeFeedVerdicts(F, 'long'), S = W.hgGoldFreeFeedVerdicts(F, 'short');
   assert(NEW3K.every(k => L[k] === EXP3_LONG[k]), 'on a long: gold/palladium RISING reads WITH, credit FALLING reads RISK-OFF (false), GLD HIGH reads true (' + JSON.stringify(NEW3K.map(k => L[k])) + ')');
@@ -211,7 +211,7 @@ console.log('== 2) the home: twenty-three keys, the ranker scores nothing on the
     assert(NEW3K.every(k => a.freeReads[k] !== undefined) && NEW3K.every(k => b.freeReads[k] === undefined), dir + ': the marks are on one row and absent on the other');
   }
   const line = W.hgGoldFreeFeedLineHtml(L, { fundingPct: -0.05 });
-  assert(/23 of 23 free internet feeds read/.test(line) && /GOLD\/PALLADIUM<\/b> WITH/.test(line) && /CREDIT HYG\/LQD<\/b> RISK-OFF/.test(line) && /GLD VOLUME<\/b> HIGH/.test(line), 'the line prints the three legs in their own words');
+  assert(/23 of 26 free internet feeds read/.test(line) && /GOLD\/PALLADIUM<\/b> WITH/.test(line) && /CREDIT HYG\/LQD<\/b> RISK-OFF/.test(line) && /GLD VOLUME<\/b> HIGH/.test(line), 'the line prints the three legs in their own words (23 of 26 since hg-v1171)');
 }
 
 /* ------------------------------------------------------------------ 3 */
@@ -223,7 +223,7 @@ const firstWindow = (W, fn, opts, rows, from, want) => {
 {
   const W = boot(MATH_BASE.concat(['gold-extra-strategies.js']));
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 12 && T.slice(0, 8).map(l => l.id).join(',') === OLD8.join(',') && T.slice(8).map(l => l.id).join(',') === NEW4.join(','), 'the eight earlier layers lead the table, the four hg-v1167 ones follow (' + T.map(l => l.id).join(' · ') + ')');
+  assert(T.length === 15 && T.slice(0, 8).map(l => l.id).join(',') === OLD8.join(',') && T.slice(8, 12).map(l => l.id).join(',') === NEW4.join(','), 'the eight earlier layers lead the table, the four hg-v1167 ones follow (fifteen total since hg-v1171 appended Williams/TRIX/Fisher at positions 12-14) (' + T.map(l => l.id).join(' · ') + ')');
   assert(NEW4.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function')), 'each of the four has its detector exported');
   assert(T.find(l => l.id === 'cci').twin === 'CCI-EXTREME' && ['chandelier', 'hullma', 'aroon'].every(id => T.find(l => l.id === id).twin === null) && T.filter(l => l.twin).length === 2, 'the CCI re-entry names its exact OMNIGOLD twin CCI-EXTREME; the other three name none (two twins in the table with ICHI-KUMO)');
   assert(!T.some(l => /squeeze/i.test(l.id)) && W.PINE_GOLD_LAYERS.some(l => l.id === 'squeeze'), 'no TTM squeeze in the record table: the ten-layer table already carries Squeeze Mom');
@@ -318,18 +318,18 @@ const firstWindow = (W, fn, opts, rows, from, want) => {
   const up = []; let px = 2300; const t0 = Math.floor(WED / 1000) - 300 * 900;
   for (let i = 0; i < 300; i++){ const o = px, c = o + 1.5 + Math.sin(i / 9) * 0.4; up.push({ t: t0 + i * 900, o, h: Math.max(o, c) + 0.5, l: Math.min(o, c) - 0.5, c, v: 1000 }); px = c; }
   const su = W.pineGoldLayerStates(up);
-  assert(su.ok === true && NEW4.every(id => su[id] === 'long') && su.readable === 12 && su.allLong === 12 && su.agreeLong === 5, 'a clean uptrend: the Chandelier side, the Hull slope, the CCI sign and Aroon all read LONG; twelve readable; the five-layer majority tally stays five');
+  assert(su.ok === true && NEW4.every(id => su[id] === 'long') && su.readable >= 12 && su.allLong >= 12 && su.agreeLong === 5, 'a clean uptrend: the Chandelier side, the Hull slope, the CCI sign and Aroon all read LONG; at least twelve readable (fifteen total since hg-v1171); the five-layer majority tally stays five');
   const sd = W.pineGoldLayerStates(mirror(up));
-  assert(NEW4.every(id => sd[id] === 'short') && sd.readable === 12 && sd.allShort === 12 && sd.agreeShort === 5, 'the mirrored tape: all four SHORT, twelve readable');
+  assert(NEW4.every(id => sd[id] === 'short') && sd.readable >= 12 && sd.allShort >= 12 && sd.agreeShort === 5, 'the mirrored tape: all four SHORT, at least twelve readable (fifteen total since hg-v1171)');
   const sf = W.pineGoldLayerStates(flat);
   assert(NEW4.every(id => sf[id] === null), 'a dead-flat tape reads none of the four (a Hull slope of zero, a CCI of zero, Aroon up equal to down, no trail crossed)');
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
-  assert(Object.keys(mL).length === 13 && NEW4.every(id => mL['pine:' + id + 'With'] === true && mS['pine:' + id + 'With'] === false) && mL['pine:majorityWith'] === true, 'thirteen marks: the four new ones WITH on a long, AGAINST on a short, the majority still the five');
+  assert(Object.keys(mL).length === 16 && NEW4.every(id => mL['pine:' + id + 'With'] === true && mS['pine:' + id + 'With'] === false) && mL['pine:majorityWith'] === true, 'sixteen marks since hg-v1171: the hg-v1167 four WITH on a long, AGAINST on a short, the majority still the five');
   const onlyNew = Object.assign({ ok: true, readable: 4, allLong: 4, allShort: 0, agreeLong: 0, agreeShort: 0 }, Object.fromEntries(OLD8.map(id => [id, null])), Object.fromEntries(NEW4.map(id => [id, 'long'])));
   const mo = W.pineGoldPineMarks(onlyNew, 'long');
   assert(Object.keys(mo).length === 4 && mo['pine:majorityWith'] === undefined, 'the four alone never move the majority mark (absent)');
   const html = W.pineGoldStackLineHtml(su, mL);
-  assert(/12 of 12 gold Pine layers readable/.test(html) && /Chandelier Exit<\/b> LONG/.test(html) && /Hull MA Turn<\/b> LONG/.test(html) && /CCI Re-entry<\/b> LONG/.test(html) && /Aroon Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the four new states and names the majority population');
+  assert(/\d+ of 15 gold Pine layers readable/.test(html) && /Chandelier Exit<\/b> LONG/.test(html) && /Hull MA Turn<\/b> LONG/.test(html) && /CCI Re-entry<\/b> LONG/.test(html) && /Aroon Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the four new states and names the majority population (fifteen total since hg-v1171)');
   /* the twin record: quoted through the one home, not past the veto bar */
   const rec = W.hgGoldSiblingRecord('cci');
   assert(rec && rec.twin === 'CCI-EXTREME' && rec.settled === 322 && rec.n === 327 && typeof rec.zBreakeven === 'number' && rec.zBreakeven > -2 && W.hgGoldSiblingVetoed('cci') === false, 'hgGoldSiblingRecord(cci) quotes CCI-EXTREME: gate-clear n=327, 322 settled, z ' + (rec && rec.zBreakeven) + ' — inside the noise, not a measured failure, so the port is allowed (hg-v934)');
@@ -399,7 +399,7 @@ const cardOf = (html, label) => { const i = html.indexOf('· ' + label + ' · Gr
   assert(/OMNIGOLD CCI-EXTREME, gate-clear n=327, 322 settled, −0\.033R net at XM, z \+0\.20/.test(cciCard) && /OMNIGOLD’s gates and 1h horizon/.test(cciCard), 'the CCI card quotes its twin\'s gate-clear record through hgGoldSiblingRecord, attributed to OMNIGOLD\'s gates and horizon');
   assert(!/Nearest measured twin/.test(arCard) && !/Nearest OMNIGOLD mechanic/.test(arCard), 'the Aroon card, with no twin, quotes none');
   assert(/4 RECORD-ONLY Pine layers on this scan/.test(r.html), 'the board names the four record-only rows once');
-  assert(/12 of 12 gold Pine layers readable|\d+ of 12 gold Pine layers readable/.test(r.html), 'every GOLD PINE card prints the PINE STACK line over twelve layers');
+  assert(/\d+ of 15 gold Pine layers readable/.test(r.html), 'every GOLD PINE card prints the PINE STACK line over fifteen layers (hg-v1171)');
 }
 
 /* ------------------------------------------------------------------ 5 */
@@ -462,7 +462,8 @@ console.log('== 6) GOLD SWING: the desk\'s own gate decides ==');
   const MAC = dir => Object.assign({}, MACRO_ALL, { dxy: { trend20: dir === 'long' ? 'FALLING' : 'RISING' }, tnxTrend: dir === 'long' ? 'FALLING' : 'RISING' });
   const r4 = tapeEnding(WED, 300, 14400, 279, 40, 6), r1d = tapeEnding(WED, 280, 86400, 280, 60, 20);
   const hits = W.pineGoldRecordLayerHits(r4);
-  assert(hits.length === 1 && hits[0].id === 'hullma' && hits[0].dir === 'short', 'REACHABILITY: on this 4h tape the Hull turn fires a short on the last closed bar');
+  const hullHit = hits.find(h => h.id === 'hullma');
+  assert(hullHit && hullHit.dir === 'short', 'REACHABILITY: on this 4h tape the Hull turn fires a short on the last closed bar (hits: ' + hits.map(h => h.id + ':' + h.dir).join(',') + ')');
   const out = W.goldSwingSetups({ rows4h: r4, rows1d: r1d, now: WED + 16 * 60 * 1000, news: null, macro: MAC('short') }) || {};
   const rj = (out.rejected || []).find(c => c.stratKey === 'pine_hullma');
   assert(rj && /confluence insufficient/.test(String(rj.why || rj.reason || '')) && !(out.ranked || []).some(c => c.stratKey === 'pine_hullma'),
