@@ -25,6 +25,7 @@ import { createCcxtApi } from '../lib/ccxt-market-api.mjs';
 import { createHeyLensApi } from '../lib/hey-lens-api.mjs';
 import { createHardgateMcpApi } from '../lib/hardgate-mcp-api.mjs';
 import { createWorldmonitorApi } from '../lib/worldmonitor-api.mjs';
+import { hgApiRateLimit } from '../lib/rate-limit.mjs';
 import { createAgentApi } from '../lib/agent-api.mjs';
 import { createTauricApi } from '../lib/tauric-api.mjs';
 import { createAtomicAgentApi } from '../lib/atomic-agent-api.mjs';
@@ -261,6 +262,10 @@ const server = http.createServer(async (req, res) => {
   try{
     baseHeaders(res);
     const u = new URL(req.url || '/', 'http://localhost');
+    /* Public /api/* volume guard (task #11): generous per-IP read budget, tight
+       write budget, loopback exempt, env-tunable — HG_RATE_* in docs/ENV-VARS.md.
+       Answers 429 + Retry-After instead of feeding the flood. */
+    if (u.pathname.indexOf('/api/') === 0 && hgApiRateLimit(req, res)) return;
     if (u.pathname === '/api/proxy') return proxyHandler(req, res);
     if (u.pathname === '/api/fred') return fredHandler(req, res);
     if (u.pathname === '/api/coinalyze') return coinalyzeHandler(req, res);

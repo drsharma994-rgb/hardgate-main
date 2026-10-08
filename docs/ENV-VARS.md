@@ -16,6 +16,7 @@ what it does. Render deployment keys are also listed in `render.yaml`
 | `RENDER_API_KEY` | deploy scripts | Render API key for deploy-trigger calls |
 | `RENDER_SERVICE_NAME` / `RENDER_SERVICE_ID` | deploy scripts | Which Render service to redeploy |
 | `HARDGATE_SITE` / `HARDGATE_URL` | daemon / alert scripts | Base URL used when the app pings or links itself |
+| `HG_RATE_LIMIT` / `HG_RATE_MAX` / `HG_RATE_MUTATING_MAX` / `HG_RATE_WINDOW_MS` | `lib/rate-limit.mjs`, wired in `scripts/server.mjs` | Per-IP rate limit on all `/api/*` routes: `0` disables; defaults 300 reads/min + 30 writes/min per IP over a 60s window; loopback exempt; over-budget requests get `429` + `Retry-After` |
 | `HG_GEO_FALLBACK` | `api/proxy.js` | `0` disables the geo-blocked-mirror fallback list |
 | `HG_GEO_FALLBACK_HOST` | `api/proxy.js` | Override for the fallback mirror host list (default `hardgate-main.onrender.com`) |
 
