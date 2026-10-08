@@ -64,6 +64,15 @@
   var half = rows1 ? tmHalfTrend(rows1, dir) : null;
   if (half == null) hard.push('halftrend unread');
   else if (!half) hard.push('halftrend is against the trade');
+  var boom = rows1 ? tmWae(rows1, dir) : null;
+  if (boom == null) hard.push('explosion unread');
+  else if (!boom) hard.push('no explosion above the dead zone');
+  var mom = rows1 ? tmSqueezeMom(rows1, dir) : null;
+  if (mom == null) hard.push('squeeze momentum unread');
+  else if (!mom) hard.push('momentum is not accelerating with the trade');
+  var noise = rows1 ? tmDamiani(rows1) : null;
+  if (noise == null) hard.push('volatility unread');
+  else if (!noise) hard.push('chop, volatility is not above the noise');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

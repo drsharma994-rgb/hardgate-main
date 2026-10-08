@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1199',
-  pack: 'Trend Matrix classifier. The Lorentzian vote uses the seven nearest older bars, and the label is the move that already happened after those bars, not after the current one. A tie is not a buy. A short history is unread. HalfTrend starts with no direction and only turns when price actually breaks. Neither one replaces the stop. The card does not send an order.',
-  built: '2026-10-09T00:25:00Z'
+  version: 'hg-v1200',
+  pack: 'Trend Matrix explosion gates. The MACD step has to clear both the Bollinger width and 3.7 times the 14-bar ATR, in the direction of the trade. A short history is not an explosion. Squeeze momentum has to be positive and still rising for a long, or negative and still falling for a short. A fading histogram does not pass. Volatility has to be above the longer-window noise. A quiet tape is chop, not a trend. None of these replace the stop. The card does not send an order.',
+  built: '2026-10-09T00:40:00Z'
 };
 
 function hgBuildLabel(b){

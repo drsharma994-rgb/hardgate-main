@@ -1032,6 +1032,65 @@ function tmHalfTrend(rows, dir){
   if (dir === 'long') return trend === 1;
   return trend === -1;
 }
+function tmWae(rows, dir){
+  if (!rows || rows.length < 50 || typeof atr !== 'function') return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++) closes.push(rows[i].c);
+  var fast = tmEmaSeries(closes, 20);
+  var slow = tmEmaSeries(closes, 40);
+  if (!fast || !slow) return null;
+  var n = closes.length - 1;
+  if (!isFinite(fast[n]) || !isFinite(slow[n]) || !isFinite(fast[n - 1]) || !isFinite(slow[n - 1])) return null;
+  var diff = ((fast[n] - slow[n]) - (fast[n - 1] - slow[n - 1])) * 150;
+  var slice = closes.slice(-20), sum = 0;
+  for (i = 0; i < slice.length; i++) sum += slice[i];
+  var sma = sum / slice.length, varr = 0;
+  for (i = 0; i < slice.length; i++) varr += Math.pow(slice[i] - sma, 2);
+  var width = 4 * Math.sqrt(varr / slice.length);
+  var a = atr(rows, 14);
+  var dead = a && a.length ? a[a.length - 1] * 3.7 : NaN;
+  if (!(dead > 0) || !(width >= 0)) return null;
+  var power = Math.abs(diff);
+  if (!(power > width && power > dead)) return false;
+  if (dir === 'long') return diff > 0;
+  return diff < 0;
+}
+function tmMomBar(rows, end, length){
+  if (end < length - 1) return NaN;
+  var slice = rows.slice(end - length + 1, end + 1);
+  var hh = slice[0].h, ll = slice[0].l, sum = 0, i;
+  for (i = 0; i < slice.length; i++){
+    if (slice[i].h > hh) hh = slice[i].h;
+    if (slice[i].l < ll) ll = slice[i].l;
+    sum += slice[i].c;
+  }
+  var mid = ((hh + ll) / 2 + sum / slice.length) / 2;
+  return rows[end].c - mid;
+}
+function tmSqueezeMom(rows, dir){
+  if (!rows || rows.length < 22) return null;
+  var n = rows.length - 1;
+  var cur = tmMomBar(rows, n, 20);
+  var prev = tmMomBar(rows, n - 1, 20);
+  if (!isFinite(cur) || !isFinite(prev)) return null;
+  if (dir === 'long') return cur > 0 && cur > prev;
+  return cur < 0 && cur < prev;
+}
+function tmDamiani(rows){
+  if (!rows || rows.length < 45 || typeof atr !== 'function') return null;
+  function last(period){
+    var a = atr(rows, period);
+    return a && a.length ? a[a.length - 1] : NaN;
+  }
+  var v13 = last(13), v20 = last(20), v40 = last(40);
+  if (!(v13 > 0) || !(v20 > 0) || !(v40 > 0)) return null;
+  var slice = rows.slice(-13), i, sum = 0;
+  for (i = 0; i < slice.length; i++) sum += slice[i].c;
+  var mean = sum / slice.length, varr = 0;
+  for (i = 0; i < slice.length; i++) varr += Math.pow(slice[i].c - mean, 2);
+  var sd = Math.sqrt(varr / slice.length);
+  return (v13 / v20) > ((v40 / v20) + (sd / v20));
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3343,6 +3402,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var half = rows1 ? tmHalfTrend(rows1, dir) : null;
   if (half == null) hard.push('halftrend unread');
   else if (!half) hard.push('halftrend is against the trade');
+  var boom = rows1 ? tmWae(rows1, dir) : null;
+  if (boom == null) hard.push('explosion unread');
+  else if (!boom) hard.push('no explosion above the dead zone');
+  var mom = rows1 ? tmSqueezeMom(rows1, dir) : null;
+  if (mom == null) hard.push('squeeze momentum unread');
+  else if (!mom) hard.push('momentum is not accelerating with the trade');
+  var noise = rows1 ? tmDamiani(rows1) : null;
+  if (noise == null) hard.push('volatility unread');
+  else if (!noise) hard.push('chop, volatility is not above the noise');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -5997,6 +6065,9 @@ W.tmAlpha = tmAlpha;
 W.tmRangeFilter = tmRangeFilter;
 W.tmLorentz = tmLorentz;
 W.tmHalfTrend = tmHalfTrend;
+W.tmWae = tmWae;
+W.tmSqueezeMom = tmSqueezeMom;
+W.tmDamiani = tmDamiani;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
