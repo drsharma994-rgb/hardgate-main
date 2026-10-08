@@ -29,3 +29,6 @@ vendors/quant-trading/
 
 # local test-run scratch log
 baseline-test.log
+
+# local full-suite scratch log
+final-test.log
