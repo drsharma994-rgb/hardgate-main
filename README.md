@@ -244,5 +244,8 @@ archive/        dead source modules kept for reference only — never loaded by 
 
 Educational tool, not financial advice. Gates replay what already happened and filter what is happening;
 neither is a promise about what happens next. Backtests exclude funding and volume-z where the data
-doesn't exist, include no fees/slippage, and the app says so wherever it shows them. Any real order
+doesn't exist — and they DO carry venue-true costs (fees + slippage per side: 0.26% round trip on
+PAXG omnigold, 0.020% RT XM primary + 0.26% PAXG sensitivity on the gold desks) plus a seeded bootstrap
+95% percentile band on mean net R (`netR_band`) so a small-sample mean never reads like a promise; wherever
+a cost input is missing the app says so. Any real order
 routing is your own endpoint, your own keys, your own responsibility.
