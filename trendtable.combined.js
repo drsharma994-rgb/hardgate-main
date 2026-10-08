@@ -300,7 +300,76 @@ function trendmxSetupGrade(r, dir){
     if (volDiv === 'bull') reasons.push('OBV diverging');
     if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct <= -0.04) reasons.push('funding crowded');
   }
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf };
+  var value = tmValueState(r, dir);
+  for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
+  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+}
+function tmValueState(row, dir){
+  var out = { reasons: [], distAtr: null, adx4: null, touched: null };
+  var rows4 = tmClosedRows(row && row.rows4h, 14400);
+  if (!rows4 || rows4.length < 50 || typeof ema !== 'function') return out;
+  var closes = rows4.map(function(bar){ return bar ? bar.c : NaN; });
+  var px = closes[closes.length - 1];
+  var e21 = tmEmaLast(closes, 21);
+  var atr = tmAtrLast(rows4);
+  if (isFinite(px) && isFinite(e21) && atr > 0){
+    out.distAtr = Math.abs(px - e21) / atr;
+    if (out.distAtr > 2.2) out.reasons.push('extended ' + out.distAtr.toFixed(1) + 'x ATR from the 4h EMA21');
+  }
+  if (typeof adx === 'function'){
+    try {
+      var ax = adx(rows4, 14);
+      var adx4 = ax && ax.adx && ax.adx.length ? ax.adx[ax.adx.length - 1] : NaN;
+      if (isFinite(adx4)){
+        out.adx4 = adx4;
+        if (adx4 > 44) out.reasons.push('4h ADX ' + adx4.toFixed(0) + ' is exhaustion, not an entry');
+        else if (adx4 < 22) out.reasons.push('4h ADX ' + adx4.toFixed(0) + ' is chop, not a trend entry');
+      }
+    } catch (eAdx) {}
+  }
+  var rows1 = tmClosedRows(row && row.rows1h, 3600);
+  if (rows1 && rows1.length >= 30){
+    var c1 = rows1.map(function(bar){ return bar ? bar.c : NaN; });
+    var series = ema(c1, 21);
+    var level = series && series.length ? series[series.length - 1] : NaN;
+    var touched = false;
+    if (isFinite(level)){
+      var slice = rows1.slice(-3), i, bar;
+      for (i = 0; i < slice.length; i++){
+        bar = slice[i];
+        if (!bar) continue;
+        if (dir === 'long' && bar.l <= level) touched = true;
+        if (dir === 'short' && bar.h >= level) touched = true;
+      }
+    }
+    out.touched = touched;
+    if (!touched && isFinite(out.distAtr) && out.distAtr > 0.6) out.reasons.push('no pullback into the 1h EMA21');
+  }
+  return out;
+}
+function tm15HeavyAgainst(rows, dir){
+  if (!rows || rows.length < 10) return false;
+  var last = rows[rows.length - 1], prev = rows[rows.length - 2];
+  if (!last || !prev || !(last.v > 0)) return false;
+  var sum = 0, n = 0, i;
+  for (i = Math.max(0, rows.length - 9); i < rows.length - 1; i++){
+    if (rows[i] && rows[i].v > 0){ sum += rows[i].v; n++; }
+  }
+  if (!(n >= 4) || !(last.v > (sum / n) * 1.4)) return false;
+  if (dir === 'long' && last.c < prev.l && last.c < last.o) return true;
+  if (dir === 'short' && last.c > prev.h && last.c > last.o) return true;
+  return false;
+}
+function trendmxValueChipHtml(r){
+  try {
+    var dir = tmDirOf(r);
+    var st = tmValueState(r, dir);
+    if (!st || !st.reasons.length){
+      if (st && isFinite(st.adx4) && isFinite(st.distAtr)) return '<span class="stamp pass" style="margin-left:6px">4h ADX ' + st.adx4.toFixed(0) + ' · ' + st.distAtr.toFixed(1) + 'x EMA21</span>';
+      return '';
+    }
+    return '<span class="stamp bad" style="margin-left:6px">' + escH(st.reasons[0]) + '</span>';
+  } catch (e) { return ''; }
 }
 function trendmxEmaTag(rows4h, dir){
   var rows = tmClosedRows(rows4h, 14400);
@@ -381,7 +450,6 @@ function trendScore(rows1d, rows4h){
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
-
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -1054,7 +1122,6 @@ function trendmxCardStack(r, dir){
       style: 'swing', asset: 'crypto', ticker: ticker,
       clean: !!(gate && gate.clean7),
       nearClean: !!(gate && gate.nearClean),
-
       gatesPassed: gate ? gate.gatesPassed : undefined,
       gatesTotal: 7,
       tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
@@ -1441,7 +1508,6 @@ function trendmxFlowScan(rows){
       if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
     });
   }
-
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -1878,7 +1944,6 @@ function tmVolumeProfile(rows){
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
   var pivots = [];
-
   for (var i = 2; i < rows.length - 2; i++){
     if (dir === 'long'){
       if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
@@ -2309,6 +2374,10 @@ async function trendmxFormOne(ticket, row, ctx){
   var rows1 = tmClosedRows(row && row.rows1h, 3600);
   var rowsD = tmClosedRows(row && row.rows1d, 86400);
   if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
+  var valueGate = tmValueState(row, dir);
+  if (valueGate && valueGate.reasons){
+    for (var vg = 0; vg < valueGate.reasons.length; vg++) hard.push(valueGate.reasons[vg]);
+  }
   var px = rows4[rows4.length - 1].c;
   var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
   var want = dir === 'long' ? 'up' : 'down';
@@ -2318,7 +2387,6 @@ async function trendmxFormOne(ticket, row, ctx){
     var n = rows4.length - 1;
     if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
-
     var lastHigh = null, lastLow = null, si;
     for (si = 0; si < swings.length; si++){
       if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
@@ -2431,6 +2499,7 @@ async function trendmxFormOne(ticket, row, ctx){
   else if (dir === 'short' && !(oi.priceDown && oi.oiUp)) hard.push('OI not confirming the drop');
   if (!m15) hard.push('15m unread');
   else if (!tm15Confirm(m15, dir)) hard.push('15m no sweep and CHOCH');
+  else if (tm15HeavyAgainst(m15, dir)) hard.push('15m breaking against on volume');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);
@@ -2715,7 +2784,6 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     /* hg-v1012: the flow split, read off the stamps the scan left — the
        summary names the evidence the same way the cards do */
     if (r.flow && r.flow.verdict === 'with') flowW++;
-
     else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
@@ -2791,7 +2859,7 @@ function trendmxGoldenDeskHTML(golden){
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade, then the crypto formation: structure, relative strength versus BTC, open interest, CVD, the 15m sweep, and at least 8 confluence votes with none against.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade. The 4h ADX has to sit between 22 and 44, price within 2.2 ATR of the 4h EMA21, and the last three 1h bars have to tag the EMA21. Then the crypto formation: structure, relative strength versus BTC, open interest, CVD, the 15m sweep, and at least 8 confluence votes with none against.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
@@ -3077,7 +3145,6 @@ function trendmxPerfectState(r){
    drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
 function trendmxAtrRegime(r){
   try{
-
     if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
     if (typeof hgAtrPercentile !== 'function') return null;
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
@@ -3246,10 +3313,8 @@ function trendmxLimitClasses(rows){
       out.clean.push(item);
     } else {
       /* the conviction class orders on its OWN claim: trend strength.
-         Composite first, the ADX strength indicator breaking ties (a ±4 at
-         ADX 38 is a stronger trend than a ±4 at 25); the gate count is the
-         other class's evidence and does not order this desk. */
-      item.rank = Math.abs(r.score) * 10 + (fin(r.adx) ? r.adx / 10 : 0);
+         Composite first. ADX breaks ties only inside 22-38. Above 44 is exhaustion and does not outrank a healthy trend. */
+      item.rank = Math.abs(r.score) * 10 + (fin(r.adx) ? (r.adx > 44 ? 0 : Math.min(r.adx, 38) / 10) : 0);
       item.conv = conv;
       out.conv.push(item);
     }
@@ -3436,7 +3501,6 @@ function trendmxFivePillars(r){
     if (r.flow.verdict === 'against') sentAgainst = true;
     if (r.flow.verdict === 'with') sentWith = true;
   }
-
   if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
     sentRead = true;
     try{
@@ -3572,7 +3636,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxFundChipHtml(r) + trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan) + trendmxChopChipHtml(r) + trendmxPillarHtml(r)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxValueChipHtml(r) + trendmxFundChipHtml(r) + trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan) + trendmxChopChipHtml(r) + trendmxPillarHtml(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
@@ -3812,7 +3876,6 @@ function trendmxTrendFormHTML(rows){
         var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
           + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
         /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
-
            minted tiers; anything below the NEAR floor (or a forming row with
            no majority, whose gate is null) is the house DRAFT ladder, never
            a fabricated 6/7 NEAR. */
@@ -4142,7 +4205,6 @@ async function trendmxPerfectEvidencePass(rows){
           if (isFinite(usd)) reads.liqClusterUsd = usd;
         }catch(eLc){ }
       }
-
         reads.venueFundingPct = +r.fundingPct;
       /* hg-v1144: venue premium = venue funding minus the Binance twin */
       if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
@@ -4534,7 +4596,6 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
-
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -4871,6 +4932,8 @@ function mountTrendMatrix(el){
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxSetupGrade = trendmxSetupGrade;
+W.tmValueState = tmValueState;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

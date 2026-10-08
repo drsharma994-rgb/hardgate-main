@@ -334,6 +334,8 @@
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxSetupGrade = trendmxSetupGrade;
+W.tmValueState = tmValueState;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;

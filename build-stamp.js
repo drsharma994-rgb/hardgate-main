@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1182',
-  pack: 'GOLD TITAN v7.0 QUANT LAYER - Pearson gold-vs-DXY correlation + flight-to-safety, 20-day ADR exhaustion, NYMO true-day open, Gann Square of 9, time-price symmetry (T=P), footprint absorption, DSET double-sweep, 0.618/0.705/0.786 OTE, CE 50%, resting liquidity pools, dealing range and the 1% dynamic lot sizer - additive on top of GoldCoreEngine v2.5, pure and tested, telemetry only (never a gate). Also carries the Gold v7. A long is allowed against a rising dollar only when gold and the dollar have both been rising and their 30-day correlation is above 0.20. One sweep is not a trade. The second sweep has to come back inside and then take the stops at least 20 cents deeper. The half hour before each London fix is not an entry. The lot on the card is an example on $10,000, not an order.',
-  built: '2026-10-08T20:10:00Z'
+  version: 'hg-v1183',
+  pack: 'Trend Matrix. A continuation is skipped when 4h ADX is under 22 or over 44, when price is more than 2.2 ATR from the 4h EMA21, or when the last three 1h bars never tagged that EMA. A 15m bar that breaks the other way on heavy volume is not an entry. The five-leg score is unchanged. A parabolic alignment is not a buy.',
+  built: '2026-10-08T20:45:00Z'
 };
 
 function hgBuildLabel(b){

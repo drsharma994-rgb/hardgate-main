@@ -300,7 +300,76 @@ function trendmxSetupGrade(r, dir){
     if (volDiv === 'bull') reasons.push('OBV diverging');
     if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct <= -0.04) reasons.push('funding crowded');
   }
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf };
+  var value = tmValueState(r, dir);
+  for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
+  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+}
+function tmValueState(row, dir){
+  var out = { reasons: [], distAtr: null, adx4: null, touched: null };
+  var rows4 = tmClosedRows(row && row.rows4h, 14400);
+  if (!rows4 || rows4.length < 50 || typeof ema !== 'function') return out;
+  var closes = rows4.map(function(bar){ return bar ? bar.c : NaN; });
+  var px = closes[closes.length - 1];
+  var e21 = tmEmaLast(closes, 21);
+  var atr = tmAtrLast(rows4);
+  if (isFinite(px) && isFinite(e21) && atr > 0){
+    out.distAtr = Math.abs(px - e21) / atr;
+    if (out.distAtr > 2.2) out.reasons.push('extended ' + out.distAtr.toFixed(1) + 'x ATR from the 4h EMA21');
+  }
+  if (typeof adx === 'function'){
+    try {
+      var ax = adx(rows4, 14);
+      var adx4 = ax && ax.adx && ax.adx.length ? ax.adx[ax.adx.length - 1] : NaN;
+      if (isFinite(adx4)){
+        out.adx4 = adx4;
+        if (adx4 > 44) out.reasons.push('4h ADX ' + adx4.toFixed(0) + ' is exhaustion, not an entry');
+        else if (adx4 < 22) out.reasons.push('4h ADX ' + adx4.toFixed(0) + ' is chop, not a trend entry');
+      }
+    } catch (eAdx) {}
+  }
+  var rows1 = tmClosedRows(row && row.rows1h, 3600);
+  if (rows1 && rows1.length >= 30){
+    var c1 = rows1.map(function(bar){ return bar ? bar.c : NaN; });
+    var series = ema(c1, 21);
+    var level = series && series.length ? series[series.length - 1] : NaN;
+    var touched = false;
+    if (isFinite(level)){
+      var slice = rows1.slice(-3), i, bar;
+      for (i = 0; i < slice.length; i++){
+        bar = slice[i];
+        if (!bar) continue;
+        if (dir === 'long' && bar.l <= level) touched = true;
+        if (dir === 'short' && bar.h >= level) touched = true;
+      }
+    }
+    out.touched = touched;
+    if (!touched && isFinite(out.distAtr) && out.distAtr > 0.6) out.reasons.push('no pullback into the 1h EMA21');
+  }
+  return out;
+}
+function tm15HeavyAgainst(rows, dir){
+  if (!rows || rows.length < 10) return false;
+  var last = rows[rows.length - 1], prev = rows[rows.length - 2];
+  if (!last || !prev || !(last.v > 0)) return false;
+  var sum = 0, n = 0, i;
+  for (i = Math.max(0, rows.length - 9); i < rows.length - 1; i++){
+    if (rows[i] && rows[i].v > 0){ sum += rows[i].v; n++; }
+  }
+  if (!(n >= 4) || !(last.v > (sum / n) * 1.4)) return false;
+  if (dir === 'long' && last.c < prev.l && last.c < last.o) return true;
+  if (dir === 'short' && last.c > prev.h && last.c > last.o) return true;
+  return false;
+}
+function trendmxValueChipHtml(r){
+  try {
+    var dir = tmDirOf(r);
+    var st = tmValueState(r, dir);
+    if (!st || !st.reasons.length){
+      if (st && isFinite(st.adx4) && isFinite(st.distAtr)) return '<span class="stamp pass" style="margin-left:6px">4h ADX ' + st.adx4.toFixed(0) + ' · ' + st.distAtr.toFixed(1) + 'x EMA21</span>';
+      return '';
+    }
+    return '<span class="stamp bad" style="margin-left:6px">' + escH(st.reasons[0]) + '</span>';
+  } catch (e) { return ''; }
 }
 function trendmxEmaTag(rows4h, dir){
   var rows = tmClosedRows(rows4h, 14400);
