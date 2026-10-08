@@ -8976,7 +8976,7 @@ function armAlertCycle(){
   updateAlertChip();
   if (S.alertTimer) clearInterval(S.alertTimer);
   runAlertCycle();
-  S.alertTimer = setInterval(runAlertCycle, HG_ALERT_CYCLE_MS);
+  S.alertTimer = setInterval(runAlertCycle, (typeof hgAlertCycleUserMs === 'function') ? hgAlertCycleUserMs() : HG_ALERT_CYCLE_MS);
 }
 
 /* ntfy.sh push — free, no signup, CORS *. Topic comes from the header settings
@@ -8993,6 +8993,13 @@ async function sendAlertPush(title, body, opts){
       }
     }
   }catch(eAp){}
+  /* MUTE + quiet hours gate the push too, not just the chime (task #3) —
+     feature-checked, so a harness without hgalert.js keeps the old contract:
+     the routing bookkeeping above still happens, only the noise stops. */
+  try{
+    if (typeof hgAlertsMuted === 'function' && hgAlertsMuted()) return;
+    if (typeof hgAlertQuietNow === 'function' && hgAlertQuietNow()) return;
+  }catch(eMq){}
   let topic = null;
   try{ topic = localStorage.getItem('hg_ntfy_topic'); }catch(e){}
   if (!topic) return;
