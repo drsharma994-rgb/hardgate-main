@@ -185,6 +185,12 @@
     var core = new GoldCoreEngine();
     var want = side(dir);
     if (!want) return null;
+    if (typeof root.hgMacroEventLock === 'function'){
+      try {
+        var lock = root.hgMacroEventLock();
+        if (lock && lock.veto) return lock.evidence || 'High-impact USD event';
+      } catch (eLock) {}
+    }
     var when = lastDate(rows);
     if (!when) return null;
     var veto = core.checkTimeVeto(when);
@@ -269,6 +275,11 @@
         if (!lead) lead = why;
       }
     }
+    try {
+      if (judas && judas.active && judas.setup && typeof root.HG_quantEmit === 'function'){
+        root.HG_quantEmit(Object.assign({ status: 'ARMED', symbol: 'XAUUSD', timeframe: '15m', gatesPassed: 7, totalGates: 7 }, judas.setup));
+      }
+    } catch (eEmit) {}
     return { demoted: demoted, lead: lead, html: hgGoldInstStrip(report, judas), judas: judas, report: report };
   }
 

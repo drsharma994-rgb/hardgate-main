@@ -441,6 +441,14 @@ async function ganeshGoldScan(opts){
       return plan;
     }
     pL = ggInstHold(pL); pS = ggInstHold(pS);
+    try{
+      if (gsAudit && gsAudit.qualified && typeof W.HG_quantEmit === 'function'){
+        var gsSide = gsAudit.direction === 'BEAR' ? pS : pL;
+        if (gsSide && gsSide.tier === 'TICKET'){
+          W.HG_quantEmit(Object.assign({ status: 'ARMED', timeframe: '15m', targetPrice: gsAudit.takeProfit, gatesPassed: gsAudit.passedCount, totalGates: gsAudit.totalSteps }, gsAudit));
+        }
+      }
+    }catch(eEmit){}
     /* hg-v1154: both calendars on the LAST CLOSED execution bar, never the
        wall clock (hg-v952 / hg-v978) -- a Monday re-run over Friday's bars
        gives Friday's answer. */

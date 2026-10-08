@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1175',
-  pack: 'Gold Scalp, OmniGold, Ganesh Gold and Pine Gold now share one XAUUSD gate: no Asian-session breakout, no Judas entry before the reclaim close, no long into a surging DXY or real yield, and no fresh lead through the London fix or the rollover. Dollar ATR, session VWAP and a $3 FVG sit under that gate.',
-  built: '2026-10-08T17:35:00Z'
+  version: 'hg-v1176',
+  pack: 'QUANT desk. ARMED formation, a Judas reclaim, and a Ganesh GS7 ticket can alert Telegram or Discord while this tab is open. A high-impact USD print locks new leads for 15 minutes either side. Chime and voice stay off until you turn them on. No exchange order is sent from the browser.',
+  built: '2026-10-08T17:50:00Z'
 };
 
 function hgBuildLabel(b){

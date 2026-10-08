@@ -91,8 +91,10 @@
       return '<div style="font-size:12px;margin-top:2px"><b>' + (g.pass ? 'PASS' : 'FAIL') + '</b> ' + esc(g.name) + ' — ' + esc(g.evidence) + '</div>';
     }).join('');
     var levels = '';
+    if (r.macroLock) levels += '<div style="margin-top:6px">' + esc(r.macroLock) + '</div>';
     if (r.status === 'ARMED'){
       levels = '<div style="margin-top:6px">entry ' + esc(r.entryPrice) + ' · SL ' + esc(r.stopLoss) + ' · TP ' + esc(r.targetPrice) + ' · ' + esc(r.netRR) + 'R</div>';
+      if (typeof W.HG_riskLine === 'function') levels += W.HG_riskLine(r) || '';
     } else {
       levels = '<div style="margin-top:6px">zone ' + esc(r.gapBottom) + ' – ' + esc(r.gapTop) + ' · displacement ' + esc(r.displacementRatio) + ' ATR · ' + r.gatesPassed + '/' + r.totalGates + ' gates</div>';
     }
@@ -130,12 +132,28 @@
             try{ if (typeof W.binanceFunding === 'function') fund = await W.binanceFunding(SYMBOLS[s]); }catch(e2){}
             if (hist) z = fundingZ(hist);
             var hit = bridge.scanCandles(SYMBOLS[s], TFS[tf], rows || [], { fundingZScore: z }, { verdict: 'NEUTRAL', nearSettlement: nearFunding(fund) });
+            if (hit && hit.status === 'ARMED' && typeof W.hgMacroEventLock === 'function'){
+              var lock = W.hgMacroEventLock();
+              if (lock && lock.veto){
+                hit.status = 'STALKING';
+                hit.allPassed = false;
+                hit.entryPrice = null;
+                hit.stopLoss = null;
+                hit.targetPrice = null;
+                hit.macroLock = lock.evidence;
+              }
+            }
             if (hit && hit.status !== 'INVALIDATED') cards.push(hit);
           }
         }
         var order = { ARMED: 0, PRIMED: 1, STALKING: 2 };
         cards.sort(function(a, b){ return (order[a.status] - order[b.status]) || String(a.symbol).localeCompare(String(b.symbol)); });
         W.__hgFormationCards = cards;
+        if (typeof W.HG_quantEmit === 'function'){
+          for (var qi = 0; qi < cards.length; qi++){
+            if (cards[qi] && cards[qi].status === 'ARMED') W.HG_quantEmit(cards[qi]);
+          }
+        }
         if (stat) stat.textContent = cards.length + ' live · ' + scanned + ' tapes';
         if (out){
           out.innerHTML = cards.length
