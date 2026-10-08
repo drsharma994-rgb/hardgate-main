@@ -73,6 +73,15 @@
   var noise = rows1 ? tmDamiani(rows1) : null;
   if (noise == null) hard.push('volatility unread');
   else if (!noise) hard.push('chop, volatility is not above the noise');
+  var aroon = rows1 ? tmAroon(rows1, dir) : null;
+  if (aroon == null) hard.push('aroon unread');
+  else if (!aroon) hard.push('aroon says the extreme is stale');
+  var elder = rows1 ? tmElder(rows1, dir) : null;
+  if (elder == null) hard.push('elder ray unread');
+  else if (!elder) hard.push('elder ray is against the trade');
+  var vwma = rows1 ? tmVwmaSide(rows1, dir) : null;
+  if (vwma == null) hard.push('volume average unread');
+  else if (!vwma) hard.push('volume is not sitting with the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -300,6 +309,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
+  ticket.pine = 'aroon, elder ray and the volume average agree';
   return [];
 }
 
@@ -419,6 +429,7 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
           if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
           if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
           if (isFinite(ticket.chandelier)) ticket.note += ' · chandelier ' + ticket.chandelier;
+          if (ticket.pine) ticket.note += ' · ' + ticket.pine;
           out.push(ticket);
         }
       }

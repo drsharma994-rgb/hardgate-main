@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* HARDGATE hg-v1202: BPR Pine port — the twenty-third record-only gold layer,
+/* HARDGATE hg-v1203: BPR Pine port — the twenty-third record-only gold layer,
    appended after the hg-v1173 formation family (QQE, Squeeze, Weekly AVWAP,
    Kaufman Efficiency) that was ported ahead of it on main.
    Balanced Price Range = overlap of a bull three-bar FVG and a bear three-bar
@@ -38,7 +38,7 @@ console.log('== 1) BPR port, series helper, table entry, state read ==');
   assert(typeof W.pineGoldBpr === 'function', 'pineGoldBpr is exported');
   assert(typeof W.pineGoldBprShelves === 'function', 'pineGoldBprShelves is exported');
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 23, 'twenty-three record-only layers since hg-v1202 — the hg-v1173 formation family (adx/heikin/sessvwap/qqe/squeeze/wavwap/efficiency) came between hg-v1171 and BPR on main (' + T.length + ')');
+  assert(T.length === 23, 'twenty-three record-only layers since hg-v1203 — the hg-v1173 formation family (adx/heikin/sessvwap/qqe/squeeze/wavwap/efficiency) came between hg-v1171 and BPR on main (' + T.length + ')');
   const b = T[22];
   assert(b && b.id === 'bpr', 'BPR follows at the end at position 22');
   assert(b.fn === 'pineGoldBpr', 'the registry names the exported function');
@@ -281,14 +281,14 @@ console.log('== 6) no gate names pine:bprWith, no threshold moves ==');
 /* ====================================================================
    § 7 ship stamps
    ==================================================================== */
-console.log('== 7) build stamps say hg-v1202 ==');
+console.log('== 7) build stamps say hg-v1203 ==');
 {
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1202'/.test(bs), 'build-stamp.js version is hg-v1202');
+  assert(/version:\s*'hg-v1203'/.test(bs), 'build-stamp.js version is hg-v1203');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1202'/.test(sw), 'sw.js HG_CACHE is hg-v1202');
+  assert(/HG_CACHE\s*=\s*'hg-v1203'/.test(sw), 'sw.js HG_CACHE is hg-v1203');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1202/.test(tt), 'trendtable.js header reads hg-v1202');
+  assert(/hg-v1203/.test(tt), 'trendtable.js header reads hg-v1203');
 }
 
-console.log('\nhg-v1202 BPR: all § passed');
+console.log('\nhg-v1203 BPR: all § passed');

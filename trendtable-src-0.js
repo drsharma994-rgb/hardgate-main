@@ -1091,6 +1091,51 @@ function tmDamiani(rows){
   var sd = Math.sqrt(varr / slice.length);
   return (v13 / v20) > ((v40 / v20) + (sd / v20));
 }
+function tmAroon(rows, dir){
+  var period = 14;
+  if (!rows || rows.length < period) return null;
+  var win = rows.slice(-period);
+  var hi = 0, lo = 0, i;
+  for (i = 1; i < win.length; i++){
+    if (win[i].h >= win[hi].h) hi = i;
+    if (win[i].l <= win[lo].l) lo = i;
+  }
+  var up = (100 * (period - ((period - 1) - hi))) / period;
+  var down = (100 * (period - ((period - 1) - lo))) / period;
+  if (dir === 'long') return up >= 70 && up > down;
+  return down >= 70 && down > up;
+}
+function tmElder(rows, dir){
+  if (!rows || rows.length < 20) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++) closes.push(rows[i].c);
+  var ema = tmEmaSeries(closes, 13);
+  if (!ema) return null;
+  var n = rows.length - 1;
+  if (!isFinite(ema[n]) || !isFinite(ema[n - 1])) return null;
+  var bull = rows[n].h - ema[n];
+  var bear = rows[n].l - ema[n];
+  if (dir === 'long') return bull > 0 && bear > 0;
+  return bull < 0 && bear < 0;
+}
+function tmVwmaSide(rows, dir){
+  if (!rows || rows.length < 20) return null;
+  var slice = rows.slice(-20);
+  var pv = 0, vol = 0, sum = 0, i, k;
+  for (i = 0; i < slice.length; i++){
+    k = slice[i];
+    if (!(k.v > 0)) return null;
+    pv += k.c * k.v;
+    vol += k.v;
+    sum += k.c;
+  }
+  if (!(vol > 0)) return null;
+  var vwma = pv / vol;
+  var sma = sum / slice.length;
+  var px = slice[slice.length - 1].c;
+  if (dir === 'long') return px > vwma && vwma > sma;
+  return px < vwma && vwma < sma;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
