@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1174',
-  pack: 'FORMATION desk. A 4-stage displacement engine (STALKING, PRIMED, ARMED) audits BTC, ETH and SOL on 15m and 1h: ATR displacement, reclaim on close, funding crowding, CVD absorption when the print exists, and net 2.2R after fees. No zone, no card.',
-  built: '2026-10-08T17:20:00Z'
+  version: 'hg-v1175',
+  pack: 'Gold Scalp, OmniGold, Ganesh Gold and Pine Gold now share one XAUUSD gate: no Asian-session breakout, no Judas entry before the reclaim close, no long into a surging DXY or real yield, and no fresh lead through the London fix or the rollover. Dollar ATR, session VWAP and a $3 FVG sit under that gate.',
+  built: '2026-10-08T17:35:00Z'
 };
 
 function hgBuildLabel(b){

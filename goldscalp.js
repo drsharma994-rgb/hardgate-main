@@ -3240,6 +3240,20 @@ async function runScan(ui, scanSt){
         }
       }
     }catch(ePine){}
+    var instHtml = '';
+    try{
+      if (typeof W.hgGoldInstApply === 'function'){
+        var inst = W.hgGoldInstApply(ranked, gold.rows15m, ctx.macro, { desk: 'goldscalp', horizon: 'scalp' });
+        if (inst){
+          instHtml = inst.html || '';
+          if (inst.demoted) legs.push('INSTITUTIONAL — ' + inst.demoted + ' candidate' + (inst.demoted === 1 ? '' : 's') + ' cannot lead (' + (inst.lead || 'session, macro, or an unfinished sweep') + ')');
+          best = null;
+          for (i = 0; i < ranked.length; i++){
+            if (ranked[i] && !ranked[i].demoted && !ranked[i].vetoed){ best = ranked[i]; break; }
+          }
+        }
+      }
+    }catch(eInst){}
     goldAnnotateXautBasis(ranked, spotRef);
 
     var filterFn = gfn('hgFilterGoldPostGate');
@@ -3704,7 +3718,7 @@ async function runScan(ui, scanSt){
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
+        ui.cards.innerHTML = instHtml + basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
           + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml()
           + gsxBoardHtml(displayBest, display, display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join(''))
           + formingLayersHtml(displayBest || display[0])
@@ -3716,7 +3730,7 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + uniHtml + gsOneAtATimeHtml(oneAtATime)
+        ui.cards.innerHTML = instHtml + basisHtml + mixedBanner + fundPanelHtml + uniHtml + gsOneAtATimeHtml(oneAtATime)
           + gsBreakevenHtml()
           + gsxBoardHtml(null, [], '')
           + (whySilent ? whySilentHTML(whySilent) : '')
@@ -3729,7 +3743,7 @@ async function runScan(ui, scanSt){
         /* feeds failed: cards stay empty (no fabricated setups);
            the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
            itself the answer the playbook asks for. Catalog lives on empty. */
-        ui.cards.innerHTML = basisHtml + fundPanelHtml + uniHtml + gsxBoardHtml(null, [], '') + sevenStepHtml();
+        ui.cards.innerHTML = instHtml + basisHtml + fundPanelHtml + uniHtml + gsxBoardHtml(null, [], '') + sevenStepHtml();
         var catH = gsCatalogHtml(ctx, gold.rows15m, null);   /* hg-v1158: the census reads the context even when the board is empty */
         if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent) + catH;
         else if (catH) ui.empty.innerHTML = catH;

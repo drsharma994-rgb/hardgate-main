@@ -904,6 +904,10 @@ function runGoldPineScan(bars, ctx){
     }
     holdPine(swing, bars && bars.rows4h);
     holdPine(scalp, bars && bars.rows15m);
+    if (typeof W.hgGoldInstApply === 'function'){
+      W.hgGoldInstApply(scalp, bars && bars.rows15m, macro, { desk: 'goldpine', horizon: 'scalp' });
+      W.hgGoldInstApply(swing, bars && bars.rows15m, macro, { desk: 'goldpine', horizon: 'swing' });
+    }
     swing = sortSetups(swing);
     scalp = sortSetups(scalp);
   }catch(ePB){}

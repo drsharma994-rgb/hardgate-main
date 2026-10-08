@@ -13904,6 +13904,15 @@ terse status, and never launches a first-time scan on a global refresh.
          pick. Unstamped rows (other callers' lists) are untouched. */
       if (c.fundGate && (c.fundGate.refuse === true || c.fundGate.demote === true)) continue;
       if (c.pineBlock) continue;
+      try {
+        var instFn = gfn('hgGoldInstBlocks');
+        if (instFn){
+          var ogRows = (__og && __og.lastRows) ? (__og.lastRows.m15 || __og.lastRows.scalp || []) : [];
+          var ogMacro = (__og && __og.shared && __og.shared.macro) || null;
+          var whyI = instFn(c.dir, ogRows, ogMacro, { desk: 'omnigold', horizon: horizon });
+          if (whyI){ c.instBlock = whyI; continue; }
+        }
+      } catch (eInst) {}
       if (!hgOgLeadMeasOk(c)) continue;
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
