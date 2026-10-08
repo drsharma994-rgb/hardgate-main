@@ -6,7 +6,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
   version: 'hg-v1184',
-  pack: 'TERMINAL-QUANT WIRING INTEGRITY - every terminal-quant module is loaded + shell-precached + consumed by the quant desk, the gold desks emit ARMED into the dispatcher/audio/journal path, no exchange secret reaches the browser, and the order router stays the deliberate security stub. Also carries 'Trend Matrix. A continuation is skipped when 4h ADX is under 22 or over 44, when price is more than 2.2 ATR from the 4h EMA21, or when the last three 1h bars never tagged that EMA. A 15m bar that breaks the other way on heavy volume is not an entry. The five-leg score is unchanged. A parabolic alignment is not a buy.'',
+  pack: 'TERMINAL-QUANT WIRING INTEGRITY - every terminal-quant module is loaded + shell-precached + consumed by the quant desk, the gold desks emit ARMED into the dispatcher/audio/journal path, no exchange secret reaches the browser, and the order router stays the deliberate security stub. Also carries the Trend Matrix. A continuation is skipped when 4h ADX is under 22 or over 44, when price is more than 2.2 ATR from the 4h EMA21, or when the last three 1h bars never tagged that EMA. A 15m bar that breaks the other way on heavy volume is not an entry. The five-leg score is unchanged. A parabolic alignment is not a buy.',
   built: '2026-10-08T20:45:00Z'
 };
 
