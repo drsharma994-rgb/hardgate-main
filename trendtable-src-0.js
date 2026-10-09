@@ -2450,6 +2450,73 @@ function tmRound(rows, dir){
   }
   return true;
 }
+/* A 9/21 cross on this bar. A cross on an earlier bar does not refuse. */
+function tmEmaCross(rows, dir){
+  if (!rows || rows.length < 30 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(+rows[i].c > 0)) return null;
+    closes.push(+rows[i].c);
+  }
+  var e9 = tmSeedEma(closes, 9), e21 = tmSeedEma(closes, 21);
+  if (!e9 || !e21) return null;
+  var n = closes.length - 1;
+  if (dir === 'long' && e9[n - 1] >= e21[n - 1] && e9[n] < e21[n]) return false;
+  if (dir === 'short' && e9[n - 1] <= e21[n - 1] && e9[n] > e21[n]) return false;
+  return true;
+}
+/* The last two swing highs within 0.2% are a pool. A wick through them that
+   closes back inside does not pass as a long. Equal lows are the short.
+   No pair does not refuse. */
+function tmEqSweep(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+  }
+  var sw = tmFractals(rows);
+  if (!sw) return null;
+  var last = rows[rows.length - 1];
+  var pool = dir === 'long' ? sw.highs : sw.lows;
+  if (pool.length < 2) return true;
+  var i1 = pool[pool.length - 2], i2 = pool[pool.length - 1];
+  var p1 = dir === 'long' ? +rows[i1].h : +rows[i1].l;
+  var p2 = dir === 'long' ? +rows[i2].h : +rows[i2].l;
+  var mid = (p1 + p2) / 2;
+  if (!(mid > 0)) return null;
+  if (Math.abs(p1 - p2) / mid > 0.002) return true;
+  var level = dir === 'long' ? Math.max(p1, p2) : Math.min(p1, p2);
+  if (dir === 'long' && +last.h > level && +last.c <= level && +last.c < +last.o) return false;
+  if (dir === 'short' && +last.l < level && +last.c >= level && +last.c > +last.o) return false;
+  return true;
+}
+/* Losing the 61.8 of the last impulse on this bar. A level already lost
+   does not refuse. A swing smaller than 0.4% does not refuse. */
+function tmFibLost(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+  }
+  var sw = tmFractals(rows);
+  if (!sw || !sw.highs.length || !sw.lows.length) return true;
+  var hi = sw.highs[sw.highs.length - 1], lo = sw.lows[sw.lows.length - 1];
+  var prev = +rows[rows.length - 2].c, c = +rows[rows.length - 1].c;
+  if (dir === 'long'){
+    if (!(lo < hi)) return true;
+    var low = +rows[lo].l, high = +rows[hi].h, span = high - low;
+    if (!(span > 0) || span / c < 0.004) return true;
+    var fib = high - 0.618 * span;
+    if (prev >= fib && c < fib) return false;
+    return true;
+  }
+  if (!(hi < lo)) return true;
+  var top = +rows[hi].h, bot = +rows[lo].l, drop = top - bot;
+  if (!(drop > 0) || drop / c < 0.004) return true;
+  var fibS = bot + 0.618 * drop;
+  if (prev <= fibS && c > fibS) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

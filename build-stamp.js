@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1242',
-  pack: 'Trend Matrix also refuses On-balance volume divergence, a UTC day open lost on this bar, and a wick back through a round level. One swing, a one-bar session, or price away from a round step does not refuse. The card does not send an order.',
-  built: '2026-10-09T06:40:00Z'
+  version: 'hg-v1243',
+  pack: 'Trend Matrix also refuses a fresh 9/21 cross against the trade, a sweep of equal highs or equal lows that closes back inside, and a close that loses the 61.8 of the last swing. An older cross, no equal pair, or a swing under 0.4% does not refuse. The card does not send an order.',
+  built: '2026-10-09T06:55:00Z'
 };
 
 function hgBuildLabel(b){

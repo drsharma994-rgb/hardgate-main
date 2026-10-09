@@ -238,6 +238,15 @@
   var round = rows1 ? tmRound(rows1, dir) : null;
   if (round == null) hard.push('round level unread');
   else if (!round) hard.push('a round level was pierced and closed back through');
+  var cross = rows1 ? tmEmaCross(rows1, dir) : null;
+  if (cross == null) hard.push('ema cross unread');
+  else if (!cross) hard.push('the 9 EMA just crossed against the trade');
+  var eq = rows1 ? tmEqSweep(rows1, dir) : null;
+  if (eq == null) hard.push('equal levels unread');
+  else if (!eq) hard.push('equal highs or equal lows were swept and closed back inside');
+  var fib = rows1 ? tmFibLost(rows1, dir) : null;
+  if (fib == null) hard.push('fib unread');
+  else if (!fib) hard.push('price lost the 61.8 of the last swing');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

@@ -2450,6 +2450,73 @@ function tmRound(rows, dir){
   }
   return true;
 }
+/* A 9/21 cross on this bar. A cross on an earlier bar does not refuse. */
+function tmEmaCross(rows, dir){
+  if (!rows || rows.length < 30 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(+rows[i].c > 0)) return null;
+    closes.push(+rows[i].c);
+  }
+  var e9 = tmSeedEma(closes, 9), e21 = tmSeedEma(closes, 21);
+  if (!e9 || !e21) return null;
+  var n = closes.length - 1;
+  if (dir === 'long' && e9[n - 1] >= e21[n - 1] && e9[n] < e21[n]) return false;
+  if (dir === 'short' && e9[n - 1] <= e21[n - 1] && e9[n] > e21[n]) return false;
+  return true;
+}
+/* The last two swing highs within 0.2% are a pool. A wick through them that
+   closes back inside does not pass as a long. Equal lows are the short.
+   No pair does not refuse. */
+function tmEqSweep(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+  }
+  var sw = tmFractals(rows);
+  if (!sw) return null;
+  var last = rows[rows.length - 1];
+  var pool = dir === 'long' ? sw.highs : sw.lows;
+  if (pool.length < 2) return true;
+  var i1 = pool[pool.length - 2], i2 = pool[pool.length - 1];
+  var p1 = dir === 'long' ? +rows[i1].h : +rows[i1].l;
+  var p2 = dir === 'long' ? +rows[i2].h : +rows[i2].l;
+  var mid = (p1 + p2) / 2;
+  if (!(mid > 0)) return null;
+  if (Math.abs(p1 - p2) / mid > 0.002) return true;
+  var level = dir === 'long' ? Math.max(p1, p2) : Math.min(p1, p2);
+  if (dir === 'long' && +last.h > level && +last.c <= level && +last.c < +last.o) return false;
+  if (dir === 'short' && +last.l < level && +last.c >= level && +last.c > +last.o) return false;
+  return true;
+}
+/* Losing the 61.8 of the last impulse on this bar. A level already lost
+   does not refuse. A swing smaller than 0.4% does not refuse. */
+function tmFibLost(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+  }
+  var sw = tmFractals(rows);
+  if (!sw || !sw.highs.length || !sw.lows.length) return true;
+  var hi = sw.highs[sw.highs.length - 1], lo = sw.lows[sw.lows.length - 1];
+  var prev = +rows[rows.length - 2].c, c = +rows[rows.length - 1].c;
+  if (dir === 'long'){
+    if (!(lo < hi)) return true;
+    var low = +rows[lo].l, high = +rows[hi].h, span = high - low;
+    if (!(span > 0) || span / c < 0.004) return true;
+    var fib = high - 0.618 * span;
+    if (prev >= fib && c < fib) return false;
+    return true;
+  }
+  if (!(hi < lo)) return true;
+  var top = +rows[hi].h, bot = +rows[lo].l, drop = top - bot;
+  if (!(drop > 0) || drop / c < 0.004) return true;
+  var fibS = bot + 0.618 * drop;
+  if (prev <= fibS && c > fibS) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -4949,6 +5016,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var round = rows1 ? tmRound(rows1, dir) : null;
   if (round == null) hard.push('round level unread');
   else if (!round) hard.push('a round level was pierced and closed back through');
+  var cross = rows1 ? tmEmaCross(rows1, dir) : null;
+  if (cross == null) hard.push('ema cross unread');
+  else if (!cross) hard.push('the 9 EMA just crossed against the trade');
+  var eq = rows1 ? tmEqSweep(rows1, dir) : null;
+  if (eq == null) hard.push('equal levels unread');
+  else if (!eq) hard.push('equal highs or equal lows were swept and closed back inside');
+  var fib = rows1 ? tmFibLost(rows1, dir) : null;
+  if (fib == null) hard.push('fib unread');
+  else if (!fib) hard.push('price lost the 61.8 of the last swing');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -7231,7 +7307,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero, price outside the Ichimoku cloud on the trade side, True Strength Index on the trade side of zero, and the Chaikin Oscillator on the trade side of zero, the Detrended Price Oscillator on the trade side of zero, Ease of Movement with the trade, and Relative Volatility on the trade side of 50, the Coppock Curve on the trade side of zero, Laguerre RSI on the trade side of one half, and the 20-bar regression slope with the trade, Williams %R on the trade side of -50, Balance of Power with the trade, and the Klinger volume oscillator on the trade side of zero, Stochastic Momentum Index on the trade side of zero, a triple EMA moving with the trade, and Elder Impulse not sloping against the trade. RSI divergence against the trade does not pass, Price Volume Trend has to be moving with the trade, and a lower-high lower-low structure does not pass a long. A wick back inside the 20-bar extreme does not pass, a lost session VWAP does not pass, and a close through the latest swing against the trade does not pass. A wick back inside the prior-day extreme does not pass, a candle that engulfs the prior body does not pass, and an inside-bar break that closes back inside the mother bar does not pass. On-balance volume divergence against the trade does not pass, a lost UTC day open does not pass, and a wick back through a round level does not pass. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero, price outside the Ichimoku cloud on the trade side, True Strength Index on the trade side of zero, and the Chaikin Oscillator on the trade side of zero, the Detrended Price Oscillator on the trade side of zero, Ease of Movement with the trade, and Relative Volatility on the trade side of 50, the Coppock Curve on the trade side of zero, Laguerre RSI on the trade side of one half, and the 20-bar regression slope with the trade, Williams %R on the trade side of -50, Balance of Power with the trade, and the Klinger volume oscillator on the trade side of zero, Stochastic Momentum Index on the trade side of zero, a triple EMA moving with the trade, and Elder Impulse not sloping against the trade. RSI divergence against the trade does not pass, Price Volume Trend has to be moving with the trade, and a lower-high lower-low structure does not pass a long. A wick back inside the 20-bar extreme does not pass, a lost session VWAP does not pass, and a close through the latest swing against the trade does not pass. A wick back inside the prior-day extreme does not pass, a candle that engulfs the prior body does not pass, and an inside-bar break that closes back inside the mother bar does not pass. On-balance volume divergence against the trade does not pass, a lost UTC day open does not pass, and a wick back through a round level does not pass. A fresh 9/21 cross against the trade does not pass, equal highs or equal lows swept and closed back inside do not pass, and a close that loses the 61.8 of the last swing does not pass. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -7727,6 +7803,9 @@ W.tmInsideFail = tmInsideFail;
 W.tmObvDiv = tmObvDiv;
 W.tmDayOpen = tmDayOpen;
 W.tmRound = tmRound;
+W.tmEmaCross = tmEmaCross;
+W.tmEqSweep = tmEqSweep;
+W.tmFibLost = tmFibLost;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
