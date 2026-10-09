@@ -2165,6 +2165,8 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (pivWhy) return pivWhy;
     var cprWhy = pineGoldCprVeto(rows, dir);
     if (cprWhy) return cprWhy;
+    var asiaFail = pineGoldAsiaFailVeto(rows, dir);
+    if (asiaFail) return asiaFail;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
@@ -2190,6 +2192,10 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (openWhy) return openWhy;
   var midWhy = pineGoldMidVeto(rows, dir);
   if (midWhy) return midWhy;
+  var qWhy = pineGoldQuarterVeto(rows, dir);
+  if (qWhy) return qWhy;
+  var htfWhy = pineGoldHtfSlopeVeto(rows, dir);
+  if (htfWhy) return htfWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2770,6 +2776,81 @@ function pineGoldMidVeto(rows, dir){
   if (dir === 'short' && o < mid && c > mid) return 'Price crossed back through yesterday\'s midpoint. A short does not pass.';
   return null;
 }
+/* Asian high and low, 00:00-07:00 UTC. A later wick that closes back inside
+   does not pass. During Asia, or with no Asian box, this does not refuse. */
+function pineGoldAsiaFailVeto(rows, dir){
+  if (!rows || rows.length < 6) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var day = lastD.toISOString().slice(0, 10);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 7) return null;
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, key, hv;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    var dt = new Date(tb);
+    key = dt.toISOString().slice(0, 10);
+    if (key !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv >= 7) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi) return 'The Asian high was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo) return 'The Asian low was pierced and closed back over.';
+  return null;
+}
+/* The $25 level the bar reached and did not hold. A close through it does not refuse. */
+function pineGoldQuarterVeto(rows, dir){
+  if (!rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var o = pgrNum(last.o), h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var step = 25;
+  if (dir === 'long'){
+    var up = Math.floor(h / step) * step;
+    if (up > o && up >= c && h > up) return 'The $' + up.toFixed(0) + ' level was pierced and closed back under.';
+  } else {
+    var dn = Math.ceil(l / step) * step;
+    if (dn < o && dn <= c && l < dn) return 'The $' + dn.toFixed(0) + ' level was pierced and closed back over.';
+  }
+  return null;
+}
+/* Every fourth bar is the higher timeframe. A long under a falling average
+   does not pass. A dip under a rising average still passes. */
+function pineGoldHtfSlopeVeto(rows, dir){
+  if (!rows || rows.length < 84) return null;
+  var closes = [], i, c;
+  for (i = 3; i < rows.length; i += 4){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    closes.push(c);
+  }
+  if (closes.length < 21) return null;
+  function emaAt(end){
+    var k = 2 / 21, ema = null, j;
+    for (j = 0; j <= end; j++) ema = ema == null ? closes[j] : (closes[j] * k + ema * (1 - k));
+    return ema;
+  }
+  var now = emaAt(closes.length - 1);
+  var prev = emaAt(closes.length - 4);
+  var px = closes[closes.length - 1];
+  if (!isFinite(now) || !isFinite(prev) || !isFinite(px)) return null;
+  if (dir === 'long' && px < now && now < prev) return 'The higher-timeframe average is falling and price is under it.';
+  if (dir === 'short' && px > now && now > prev) return 'The higher-timeframe average is rising and price is over it.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3333,6 +3414,9 @@ G.pineGoldDisplacementVeto = pineGoldDisplacementVeto;
 G.pineGoldBbFailVeto = pineGoldBbFailVeto;
 G.pineGoldDayOpenVeto = pineGoldDayOpenVeto;
 G.pineGoldMidVeto = pineGoldMidVeto;
+G.pineGoldAsiaFailVeto = pineGoldAsiaFailVeto;
+G.pineGoldQuarterVeto = pineGoldQuarterVeto;
+G.pineGoldHtfSlopeVeto = pineGoldHtfSlopeVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
