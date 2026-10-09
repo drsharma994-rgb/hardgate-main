@@ -2153,6 +2153,8 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (nymoWhy) return nymoWhy;
     var asiaWhy = pineGoldAsiaDriftVeto(rows, dir);
     if (asiaWhy) return asiaWhy;
+    var fixWhy = pineGoldFixDriftVeto(rows, dir);
+    if (fixWhy) return fixWhy;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
@@ -2160,6 +2162,10 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (pocWhy) return pocWhy;
   var wickWhy = pineGoldWickVeto(rows, dir);
   if (wickWhy) return wickWhy;
+  var kinWhy = pineGoldKineticVeto(rows, dir);
+  if (kinWhy) return kinWhy;
+  var swWhy = pineGoldSweep2Veto(rows, dir);
+  if (swWhy) return swWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2436,6 +2442,65 @@ function pineGoldWickVeto(rows, dir){
   if (!fp || fp.absorbed !== true) return null;
   if (dir === 'long') return 'The last candle rejected higher. The upper wick took most of the range.';
   return 'The last candle rejected lower. The lower wick took most of the range.';
+}
+/* Three closes still running, and the distance is more than 4 ATR.
+   A quiet tape does not refuse. */
+function pineGoldKineticVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateKineticEnergy !== 'function' || !rows || rows.length < 5) return null;
+  var atrV = pineGoldBarAtr(rows);
+  if (!(atrV > 0) && rows.length >= 16 && typeof core.calculateAtr === 'function'){
+    try{ atrV = core.calculateAtr(rows, 14); }catch(eAt){ atrV = NaN; }
+  }
+  if (!(atrV > 0)) return null;
+  var kin = null;
+  try{ kin = core.calculateKineticEnergy(rows, atrV); }catch(eKn){ return null; }
+  if (!kin) return null;
+  if (dir === 'long' && kin.downCascade === true) return 'Price is still cascading down. A long would be catching the knife.';
+  if (dir === 'short' && kin.upCascade === true) return 'Price is still cascading up. A short would be catching the knife.';
+  return null;
+}
+/* One sweep of yesterday's extreme is not the entry. The second, deeper
+   sweep is. No prior day, or no sweep, does not refuse. */
+function pineGoldSweep2Veto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectDoubleSweepExhaustion !== 'function' || !rows || rows.length < 8) return null;
+  var days = {}, order = [], i, b, t, key, rec;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    t = pgrNum(b && b.t);
+    if (!isFinite(t) || !isFinite(pgrNum(b.h)) || !isFinite(pgrNum(b.l))) return null;
+    if (t < 1e12) t = t * 1000;
+    key = new Date(t).toISOString().slice(0, 10);
+    rec = days[key];
+    if (!rec){ rec = days[key] = { hi: -Infinity, lo: Infinity, n: 0 }; order.push(key); }
+    if (b.h > rec.hi) rec.hi = +b.h;
+    if (b.l < rec.lo) rec.lo = +b.l;
+    rec.n++;
+  }
+  if (order.length < 2) return null;
+  var prior = days[order[order.length - 2]];
+  if (!prior || prior.n < 4 || !(prior.hi > prior.lo)) return null;
+  var level = dir === 'long' ? prior.lo : prior.hi;
+  if (!(level > 0)) return null;
+  var sw = null;
+  try{ sw = core.detectDoubleSweepExhaustion(rows, level, dir); }catch(eSw){ return null; }
+  if (!sw || sw.unread || sw.sweepStage !== 'STAGE_1') return null;
+  if (dir === 'long') return 'First sweep of the prior day low. The second sweep has not printed.';
+  return 'First sweep of the prior day high. The second sweep has not printed.';
+}
+/* The half hour into the London AM or PM fix. Fading a real drift into
+   the auction does not pass. Outside that window does not refuse. */
+function pineGoldFixDriftVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculatePreFixDrift !== 'function' || !rows || !rows.length) return null;
+  var drift = null;
+  try{ drift = core.calculatePreFixDrift(rows); }catch(eFx){ return null; }
+  if (!drift || drift.unread || drift.active !== true || !isFinite(drift.drift)) return null;
+  if (Math.abs(drift.drift) < 2) return null;
+  if (dir === 'short' && drift.drift > 0) return 'Price is drifting up into the London fix. A short does not fade it.';
+  if (dir === 'long' && drift.drift < 0) return 'Price is drifting down into the London fix. A long does not fade it.';
+  return null;
 }
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
@@ -2985,6 +3050,9 @@ G.pineGoldPocVeto = pineGoldPocVeto;
 G.pineGoldNymoVeto = pineGoldNymoVeto;
 G.pineGoldAsiaDriftVeto = pineGoldAsiaDriftVeto;
 G.pineGoldWickVeto = pineGoldWickVeto;
+G.pineGoldKineticVeto = pineGoldKineticVeto;
+G.pineGoldSweep2Veto = pineGoldSweep2Veto;
+G.pineGoldFixDriftVeto = pineGoldFixDriftVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
