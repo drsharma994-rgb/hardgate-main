@@ -104,5 +104,33 @@ console.log('\n== S40 gap + S43 ratio fixtures ==');
   ok(isFinite(ratio.ratio) && ratio.ratio > 50, 'advisory ratio extreme (' + (ratio && ratio.ratio) + ')');
 }
 
+console.log('\n== S43 ratio uses daily sessions, not the 15m tape ==');
+{
+  const intra = [];
+  const t15 = Math.floor(Date.UTC(2026, 0, 6) / 1000);
+  for (let i = 0; i < 40; i++){
+    intra.push({ t: t15 + i * 900, o: 2600, h: 2602, l: 2598, c: 2600, v: 100 });
+  }
+  const sil15 = intra.map(function(b){ return { t: b.t, o: 30, h: 30.2, l: 29.8, c: 30, v: 50 }; });
+  const quiet = W.hgGoldPart7Engine(intra, { silverRows: sil15 });
+  ok(quiet.ratio && quiet.ratio.ok !== true, '15m silver is not a 60-day ratio (' + (quiet.ratio && quiet.ratio.why) + ')');
+
+  const gold = [], silver = [];
+  const t0 = Math.floor(Date.UTC(2023, 0, 1) / 1000);
+  for (let d = 0; d < 80; d++){
+    const g = 2000 + d * 0.5;
+    const s = 25 + (d < 75 ? d * 0.02 : 0.1);
+    gold.push({ t: t0 + d * 86400, o: g, h: g + 2, l: g - 2, c: g, v: 100 });
+    silver.push({ t: t0 + d * 86400, o: s, h: s + 0.2, l: s - 0.2, c: s, v: 100 });
+  }
+  gold[79].c = 2400; silver[79].c = 20;
+  const hit = W.hgGoldPart7Engine(intra, { goldDaily: gold, silverDaily: silver, silverRows: sil15 });
+  ok(hit.ratio && hit.ratio.ok === true && hit.ratio.dir === 'short',
+    'daily pair at the extreme is a short (' + (hit.ratio && hit.ratio.why) + ')');
+  const missing = W.hgGoldPart7Engine(intra, {});
+  ok(missing.ratio && missing.ratio.ok !== true && /unread/i.test(missing.ratio.why || ''), 'no silver stays unread');
+  ok(missing.unchecked.some(function(u){ return /S43|silver/i.test(u); }), 'S43 stays unchecked when silver never arrived');
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1286',
-  pack: 'Gold Scalp only. Silver 15-minute bars and Yahoo dollar-index 15-minute highs and lows are read before a setup is minted, so a gold Asia-low sweep can be checked against a dollar that did not take its Asia high. A close-only dollar series is not an Asia box. A feed that did not arrive stays unread and is not invented. Every target stays 2.5R. The card does not send an order.',
-  built: '2026-10-09T13:48:00Z'
+  version: 'hg-v1287',
+  pack: 'Gold Scalp only. The gold/silver ratio now needs sixty daily sessions of both metals, not a few hours of 15-minute bars. A gold Asia sweep is still checked against the dollar index 15-minute box. Daily gold and dollar returns, and SPX or oil when those sessions actually overlap, can feed the macro residual; a missing day is left out, not filled with zero. Bitcoin correlation is measured on daily closes. A feed that did not arrive stays unread. Every target stays 2.5R. The card does not send an order.',
+  built: '2026-10-09T14:13:10Z'
 };
 
 function hgBuildLabel(b){

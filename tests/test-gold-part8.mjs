@@ -118,6 +118,35 @@ console.log('\n== S49 boost does not invent ENTER ==');
   ok(blank.agree === 3 && blank.stamps.indexOf('S49 BVC+') >= 0, 'diverge grade+1 stamp');
 }
 
+console.log('\n== residual returns align on the date, and a hole is not a zero ==');
+{
+  ok(typeof W.hgGoldAlignLogReturns === 'function', 'align exported');
+  const g = [], dxy = [], spx = [];
+  const t0 = Math.floor(Date.UTC(2024, 0, 1) / 1000);
+  for (let i = 0; i < 50; i++){
+    const gc = 2000 * Math.exp(0.001 * i);
+    const dc = 104 * Math.exp(-0.0005 * i);
+    g.push({ t: t0 + i * 86400, o: gc, h: gc + 1, l: gc - 1, c: gc, v: 1 });
+    dxy.push({ t: t0 + i * 86400, o: dc, h: dc + 0.1, l: dc - 0.1, c: dc, v: 1 });
+    spx.push({ t: t0 + i * 86400, o: 5000, h: 5010, l: 4990, c: 5000 + i, v: 1 });
+  }
+  spx.splice(10, 1);
+  const holed = W.hgGoldAlignLogReturns(g, { dxy: dxy, spx: spx });
+  ok(holed && holed.rGold.length >= 40 && holed.rDxy.length === holed.rGold.length && !holed.rSpx,
+    'an SPX hole is left off, not filled and not used to shrink gold (' + (holed && holed.rGold.length) + ')');
+  const bare = g.map(function(b){ return { t: b.t, c: b.c }; });
+  ok(W.hgGoldAlignLogReturns(bare, { dxy: dxy }) === null, 'a close-only gold series is not a daily OHLC sample');
+  const thin = W.hgGoldAlignLogReturns(g.slice(0, 10), { dxy: dxy.slice(0, 10) });
+  ok(thin === null, 'under 40 shared returns stays null');
+  const full = W.hgGoldAlignLogReturns(g, { dxy: dxy });
+  ok(full && full.rGold.length >= 40 && full.rDxy.length === full.rGold.length, 'gold and DXY alone are enough');
+  const rows = bars(80, 2300);
+  const eng = W.hgGoldPart8Engine(rows, { rGold: full.rGold, rDxy: full.rDxy });
+  ok(eng.resid && eng.resid.ok, 'the engine reads the aligned returns (' + (eng.resid && eng.resid.why) + ')');
+  const unread = W.hgGoldPart8Engine(rows, {});
+  ok(unread.resid && unread.resid.ok !== true && /unread/i.test(unread.resid.why || ''), 'no return series stays unread');
+}
+
 console.log('\n== stamp ==');
 {
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');

@@ -3110,12 +3110,23 @@ async function runScan(ui, scanSt){
     }
     /* Free tapes the scalp engines already know how to read, fetched BEFORE
        the mint. The daily dollar series on the macro object is close-only, so
-       it cannot draw an Asia box. Yahoo DX-Y.NYB 15m can. Silver is the other
-       metal. A failed fetch leaves the field absent — it is not invented. */
+       it cannot draw an Asia box. Yahoo DX-Y.NYB 15m can. Silver 15m is the
+       other metal on the same clock. The gold/silver ratio and the gold–BTC
+       correlation are daily statistics: a 15m tape is a couple of sessions
+       and cannot satisfy them. Daily OHLC is fetched beside the 15m tapes.
+       A failed fetch leaves the field absent — it is not invented. */
     try{
       var silFn = gfn('getSilverCandles');
       var freeFn = gfn('getFreeOHLC');
+      var alignFn = gfn('hgGoldAlignLogReturns');
       var freeWaits = [];
+      if (gold.rows1d && gold.rows1d.length >= 30) scalpBundle.goldDaily = gold.rows1d;
+      function wantDaily(sym, field, minN){
+        if (!freeFn) return;
+        freeWaits.push(Promise.resolve().then(function(){ return freeFn(sym, '1d'); }).then(function(pack){
+          if (pack && pack.rows && pack.rows.length >= minN) scalpBundle[field] = pack.rows;
+        }).catch(function(){}));
+      }
       if (silFn){
         freeWaits.push(Promise.resolve().then(function(){ return silFn('15m', 160); }).then(function(sv){
           if (sv && sv.rows && sv.rows.length >= 20){
@@ -3131,11 +3142,37 @@ async function runScan(ui, scanSt){
           if (dxy && dxy.rows && dxy.rows.length >= 20) scalpBundle.dxyIntraday = dxy.rows;
         }).catch(function(){}));
       }
+      wantDaily('SI=F', 'silverDaily', 60);
+      wantDaily('BTC-USD', 'btcRows', 25);
+      wantDaily('DX-Y.NYB', 'dxyDaily', 41);
+      wantDaily('^GSPC', 'spxDaily', 41);
+      wantDaily('CL=F', 'oilDaily', 41);
       if (freeWaits.length){
         await Promise.race([Promise.all(freeWaits), new Promise(function(r){ setTimeout(r, 8000); })]);
       }
+      if (alignFn && scalpBundle.goldDaily && scalpBundle.dxyDaily){
+        var aligned = alignFn(scalpBundle.goldDaily, {
+          dxy: scalpBundle.dxyDaily,
+          spx: scalpBundle.spxDaily || null,
+          oil: scalpBundle.oilDaily || null
+        });
+        if (aligned && aligned.rGold && aligned.rGold.length >= 40 && aligned.rDxy){
+          scalpBundle.rGold = aligned.rGold;
+          scalpBundle.rDxy = aligned.rDxy;
+          if (aligned.rSpx) scalpBundle.rSpx = aligned.rSpx;
+          if (aligned.rOil) scalpBundle.rOil = aligned.rOil;
+        }
+      }
       if (scalpBundle.dxyIntraday) legs.push('DXY 15m (Yahoo DX-Y.NYB) ' + scalpBundle.dxyIntraday.length + ' bars');
       if (scalpBundle.silverRows) legs.push('silver 15m ' + scalpBundle.silverRows.length + ' bars');
+      if (scalpBundle.silverDaily) legs.push('silver daily ' + scalpBundle.silverDaily.length + ' sessions');
+      if (scalpBundle.btcRows) legs.push('BTC daily ' + scalpBundle.btcRows.length + ' sessions');
+      if (scalpBundle.rGold){
+        var residLegs = 'gold, DXY';
+        if (scalpBundle.rSpx) residLegs += ', SPX';
+        if (scalpBundle.rOil) residLegs += ', oil';
+        legs.push('macro residual ' + scalpBundle.rGold.length + ' sessions (' + residLegs + ')');
+      }
     }catch(eFree){}
     if (gold.rows15m.length){
       var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)

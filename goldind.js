@@ -4235,6 +4235,7 @@ function goldScalpSetups(inp){
             return null;
           })(),
           btcRows: (inp && inp.btcRows) || null,
+          goldDaily: (inp && (inp.goldDaily || inp.dailyCandles)) || null,
           events: (inp && inp.events) || null,
           dom: (inp && inp.dom) || null,
           skew: (inp && inp.skew) || null
@@ -4274,6 +4275,8 @@ function goldScalpSetups(inp){
           usdInr: (inp && inp.usdInr) || null,
           kToday: (inp && inp.kToday) || null,
           silverRows: (inp && inp.silverRows) || null,
+          silverDaily: (inp && inp.silverDaily) || null,
+          goldDaily: (inp && (inp.goldDaily || inp.dailyCandles)) || null,
           mcxRows: (inp && inp.mcxRows) || null,
           priorDay: (inp && inp.priorDay) || null,
           tradesToday: (inp && inp.tradesToday) || 0,
@@ -14364,7 +14367,9 @@ function hgGoldPart6Engine(rows, opts){
     out.z = hgGoldPart6ZScore(rows);
     out.ac = hgGoldPart6Autocorr(rows);
     out.hurst = hgGoldPart6Hurst(rows);
-    out.corr = opts.btcRows ? hgGoldPart6Corr(rows, opts.btcRows) : { ok: false, why: 'BTC unread' };
+    var gCorr = __rows(opts.goldDaily);
+    if (!gCorr || gCorr.length < 30) gCorr = rows;
+    out.corr = opts.btcRows ? hgGoldPart6Corr(gCorr, opts.btcRows) : { ok: false, why: 'BTC unread' };
     if (!out.corr.ok) out.unchecked.push('gold–BTC corr');
 
     var ker = typeof hgGoldPart5KerRegime === 'function' ? hgGoldPart5KerRegime(rows) : null;
@@ -14860,10 +14865,18 @@ function hgGoldPart7Engine(rows, opts){
       ? hgGoldPart7McxGapFade(opts.mcxRows, { parityInr: opts.parityInr })
       : { ok: false, why: 'S40 MCX unread' };
     if (!opts.mcxRows) out.unchecked.push('S40 MCX gap');
-    out.ratio = opts.silverRows
-      ? hgGoldPart7RatioPair(rows, opts.silverRows)
-      : { ok: false, why: 'S43 silver unread' };
-    if (!opts.silverRows) out.unchecked.push('S43 gold/silver');
+    var gDaily = __rows(opts.goldDaily);
+    var sDaily = __rows(opts.silverDaily);
+    if (gDaily && sDaily && gDaily.length >= 60 && sDaily.length >= 60){
+      out.ratio = hgGoldPart7RatioPair(gDaily, sDaily);
+    } else if (opts.silverRows){
+      out.ratio = hgGoldPart7RatioPair(rows, opts.silverRows);
+    } else if (sDaily || opts.silverDaily){
+      out.ratio = { ok: false, why: 'S43 need ≥60 daily gold and silver sessions' };
+    } else {
+      out.ratio = { ok: false, why: 'S43 silver unread' };
+    }
+    if (!opts.silverRows && !(sDaily && sDaily.length)) out.unchecked.push('S43 gold/silver');
 
     var last = rows[rows.length - 1];
     var parity = hgGoldPart7McxParity(last.c, opts.usdInr, opts.kToday);
@@ -15253,6 +15266,72 @@ function hgGoldPart8ApplyIlliqScale(cand, illiq){
     if (illiq.thin && cand.stamps.indexOf('S55 THIN') < 0) cand.stamps.push('S55 THIN');
     return cand;
   }catch(e){ return cand; }
+}
+
+/**
+ * §5 Macro-residual. Needs opts.residSeries (ε_t array) OR daily return series
+ * gold/dxy/real/spx/oil. Fail-open when unread.
+ *
+ * hgGoldAlignLogReturns builds those return arrays from daily OHLC, aligned on
+ * the UTC date. A series with a hole is left off — it is not filled with zero
+ * and it does not shorten the gold/dollar sample. Under 40 shared returns the
+ * whole pack is null.
+ */
+function __dayKeySec(t){
+  var n = +t;
+  if (!isFinite(n)) return null;
+  if (n > 1e12) n = Math.floor(n / 1000);
+  return Math.floor(n / 86400);
+}
+function __dayCloseMap(rows){
+  rows = __rows(rows);
+  if (!rows) return null;
+  var m = {}, i, k, n = 0;
+  for (i = 0; i < rows.length; i++){
+    k = __dayKeySec(rows[i].t);
+    if (k == null || !(+rows[i].c > 0)) continue;
+    m[k] = +rows[i].c;
+    n++;
+  }
+  return n ? m : null;
+}
+function hgGoldAlignLogReturns(goldRows, other){
+  try{
+    other = other || {};
+    var g = __dayCloseMap(goldRows);
+    var d = __dayCloseMap(other.dxy || other.dxyRows);
+    if (!g || !d) return null;
+    var days = [], k;
+    for (k in g){
+      if (Object.prototype.hasOwnProperty.call(g, k) && d[k] > 0) days.push(+k);
+    }
+    days.sort(function(a, b){ return a - b; });
+    if (days.length < 41) return null;
+    function rets(map){
+      var out = [], i, a, b;
+      for (i = 1; i < days.length; i++){
+        a = map[days[i - 1]]; b = map[days[i]];
+        if (!(a > 0) || !(b > 0)) return null;
+        out.push(Math.log(b / a));
+      }
+      return out.length >= 40 ? out : null;
+    }
+    var rGold = rets(g), rDxy = rets(d);
+    if (!rGold || !rDxy || rGold.length !== rDxy.length) return null;
+    var out = { rGold: rGold, rDxy: rDxy };
+    function extra(rows){
+      var m = __dayCloseMap(rows);
+      if (!m) return null;
+      var i;
+      for (i = 0; i < days.length; i++) if (!(m[days[i]] > 0)) return null;
+      return rets(m);
+    }
+    var sp = extra(other.spx || other.spxRows);
+    var oil = extra(other.oil || other.oilRows);
+    if (sp && sp.length === rGold.length) out.rSpx = sp;
+    if (oil && oil.length === rGold.length) out.rOil = oil;
+    return out;
+  }catch(e){ return null; }
 }
 
 /**
@@ -17189,6 +17268,7 @@ function hgGoldFormingStack(inp){
       now: inp.now || Date.now(),
       dxyRows: inp.dxyRows || inp.dxyCandles || null,
       btcRows: inp.btcRows || null,
+      goldDaily: inp.goldDaily || inp.dailyCandles || null,
       events: inp.events || null,
       skew: inp.skew || null,
       dom: inp.dom || null
@@ -17199,6 +17279,8 @@ function hgGoldFormingStack(inp){
       usdInr: inp.usdInr || null,
       kToday: inp.kToday || null,
       silverRows: inp.silverRows || null,
+      silverDaily: inp.silverDaily || null,
+      goldDaily: inp.goldDaily || inp.dailyCandles || null,
       mcxRows: inp.mcxRows || null,
       priorDay: inp.priorDay || null,
       gvzMinusRealized: inp.gvzMinusRealized,
@@ -18000,6 +18082,7 @@ W.hgGoldVpin = hgGoldVpin;
 W.hgGoldPart8ApplyVpinFilter = hgGoldPart8ApplyVpinFilter;
 W.hgGoldAmihudIlliq = hgGoldAmihudIlliq;
 W.hgGoldPart8ApplyIlliqScale = hgGoldPart8ApplyIlliqScale;
+W.hgGoldAlignLogReturns = hgGoldAlignLogReturns;
 W.hgGoldMacroResidual = hgGoldMacroResidual;
 W.hgGoldPart8ResidualTrade = hgGoldPart8ResidualTrade;
 W.hgGoldRegimeCluster = hgGoldRegimeCluster;
