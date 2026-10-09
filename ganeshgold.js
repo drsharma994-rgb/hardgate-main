@@ -616,15 +616,19 @@ function paint(el, snap){
     el.innerHTML = '<div class="note warn" style="margin-top:10px">' + escH(snap.note || 'scan failed') + '</div>';
     return;
   }
-  var html = (snap.ev && snap.ev.tapeNote ? snap.ev.tapeNote : '')   /* hg-v1154: the tape-sanity note leads */
+  var html = (snap.ev && snap.ev.tapeNote ? snap.ev.tapeNote : '')
     + (snap.gsHtml || '')
+    + '<div class="gg-board"><aside class="gg-mp-col" aria-label="Most probable setup">'
+    + '<div class="gg-eye">MOST PROBABLE</div>'
     + callHtml(snap)
+    + '</aside><div class="gg-rest">'
     + pipelineHtml(snap)
     + modelHtml('GOLD LONG MODEL', snap.mL, snap.planL)
     + modelHtml('GOLD SHORT MODEL', snap.mS, snap.planS);
   if (snap.alt){
     html += '<div class="panel" style="margin-top:10px"><h3>ALT SIDE</h3><div class="kv"><span class="k">' + snap.alt.dir.toUpperCase() + '</span><span class="v">grade ' + (snap.alt.grade || 'NONE') + (snap.alt.tier ? ' - ' + snap.alt.tier : '') + '</span></div></div>';
   }
+  html += '</div></div>';
   el.innerHTML = html;
   try{
     var fwd = el.querySelector('[data-r="ggfwd"]');
@@ -634,7 +638,10 @@ function paint(el, snap){
 
 function mount(el){
   if (!el) return;
-  el.innerHTML = '<div class="panel">'
+  el.innerHTML = '<style>.gg-board{display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:14px;align-items:start;margin-top:12px}'
+    + '.gg-mp-col{position:sticky;top:78px}.gg-eye{font-size:10px;letter-spacing:.22em;font-weight:800;color:#A67C12;margin-bottom:6px}'
+    + '@media(max-width:980px){.gg-board{grid-template-columns:1fr}.gg-mp-col{position:static}}</style>'
+    + '<div class="panel">'
     + '<h2>GANESH GOLD TRADING FIRM <span>structure + liquidity + levels + confirmation + risk - XAUUSD</span></h2>'
     + '<div class="note" style="margin-bottom:8px">The full 17-step pipeline, both models graded on the live tape: HTF bias, BOS/CHOCH/MSS, buy-side and sell-side liquidity, PDH/PDL/week levels, premium/discount, order blocks and FVGs, displacement, volume, VWAP, ATR, DXY + yields, the news calendar and the sessions. No single indicator makes a setup - agreement makes a setup.</div>'
     + '<div class="row"><button class="btn" id="ggRun">RUN GOLD SCAN</button>'

@@ -1239,7 +1239,10 @@ var GOLDPINE_AUTO_REFRESH_MS = 5 * 60 * 1000;
 
 function mount(el){
   el.innerHTML =
-    '<div class="panel">'
+    '<style>.gp-board{display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:14px;align-items:start}'
+    + '.gp-mp-col{position:sticky;top:78px}.gp-eye{font-size:10px;letter-spacing:.22em;font-weight:800;color:#A67C12;margin:0 0 8px}'
+    + '@media(max-width:980px){.gp-board{grid-template-columns:1fr}.gp-mp-col{position:static}}</style>'
+    + '<div class="panel">'
     + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
     + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
     + 'plus native GOLD SWING/SCALP candidates. UI shows the <b>top ' + TOP_SETUPS + ' highest-probability formations</b> per section '
@@ -1397,6 +1400,11 @@ function mount(el){
           + 'stack\'s full read.</div>';
       }
       var html = fundNote + gpFundPanelHtml() + tapeNote + heldNote + killedNote + recordNote
+        + '<div class="gp-board"><aside class="gp-mp-col" aria-label="Most probable setup">'
+        + (mpList.length
+          ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1))
+          : ('<div class="gp-eye">NO LEAD</div><div class="note">Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.</div>'))
+        + '</aside><div class="gp-rest">'
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: result.swing.length })
@@ -1404,7 +1412,8 @@ function mount(el){
           'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
           { total: result.scalp.length })
         + recordSection
-        + gpCatalogHtml(result, bars);   /* hg-v1162: one census */
+        + gpCatalogHtml(result, bars)
+        + '</div></div>';
 
       if (out) out.innerHTML = html;
       try { if (typeof W.hgMpPin === 'function') W.hgMpPin('goldpine', mpList, null, out); } catch (eMp) {}

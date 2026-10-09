@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1265',
-  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse an Awesome Oscillator cross under zero, a wick back inside last week high, and a +DI cross under -DI. Staying on one side, no prior week, or a week under $20 does not refuse. The card does not send an order.',
-  built: '2026-10-09T12:25:00Z'
+  version: 'hg-v1266',
+  pack: 'OmniGold, Ganesh Gold, and Pine Gold now keep the most probable setup in its own column, the same way Gold Scalp already does. The other cards stay beside it. When nothing is eligible to lead, the column says so and does not invent a setup. The card does not send an order.',
+  built: '2026-10-09T12:40:00Z'
 };
 
 function hgBuildLabel(b){

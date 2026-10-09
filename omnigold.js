@@ -16314,7 +16314,12 @@ terse status, and never launches a first-time scan on a global refresh.
       + '<div class="note warn" id="ogWarn" style="display:none"></div>'
       /* PAID-ONLY toggle (hg-v540) — stays visible above the picks. */
       + '<div id="ogShowMode" style="margin-top:8px"></div>'
-      + '<div id="ogMp" style="margin-top:12px"></div>'
+      + '<style>.og-board{display:grid;grid-template-columns:minmax(320px,42%) minmax(0,1fr);gap:14px;align-items:start;margin-top:12px}'
+      + '.og-mp-col{position:sticky;top:78px;max-height:calc(100vh - 96px);overflow:auto}'
+      + '@media(max-width:980px){.og-board{grid-template-columns:1fr}.og-mp-col{position:static;max-height:none}}</style>'
+      + '<div class="og-board">'
+      + '<aside class="og-mp-col" id="ogMp" aria-label="Most probable setups"></aside>'
+      + '<div class="og-rest">'
       + '<div id="ogVerdict" style="margin-top:12px"></div>'
       + '<div id="ogSettledExec" style="margin-top:12px"></div>'
       + '<div id="ogCoverage" style="margin-top:12px"></div>'
@@ -16341,6 +16346,7 @@ terse status, and never launches a first-time scan on a global refresh.
       + '<div id="ogGridOut" style="margin-top:10px"></div>'
       + '<div id="ogPool" style="margin-top:10px"></div>'
       + '<div class="cards" id="ogCards" style="margin-top:12px"></div>'
+      + '</div></div>'
       + '</div>';
 
     var ui = {
