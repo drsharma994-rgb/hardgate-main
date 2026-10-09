@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1275',
-  pack: 'Four more gold strategies, still unread when the series is missing. Gold Scalp adds a London-to-New York overlap sweep that needs a 65 percent wick. OmniGold adds a gold-silver ratio extreme of 1.8 deviations, and it does not invent a silver price. Pine Gold adds a session-average and daily-open ribbon within 1.50 dollars. Ganesh Gold adds a turn within 15 minutes of a 3-hour boundary. The earlier twelve stay. Every target stays 2.5R. The card does not send an order.',
-  built: '2026-10-09T15:20:00Z'
+  version: 'hg-v1276',
+  pack: 'Three more gold reads that stay quiet when the series is missing. Gold Scalp adds a dual Asia-boundary flush: an earlier bar must take one side, and this bar must take the other and close back inside. Pine Gold adds a shallow order-block touch of no more than 38.2 percent. Ganesh Gold adds a rejection of the 108 and 144 degree Gann angles. A physical-bullion premium and a gold-plus-crude stagflation read exist, and both stay unread until a separate bullion print, a crude series, and a yield series are actually present. Every target stays 2.5R. The card does not send an order.',
+  built: '2026-10-09T15:40:00Z'
 };
 
 function hgBuildLabel(b){

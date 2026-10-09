@@ -163,11 +163,26 @@
         }
       }
     }
+    if (hour >= 7 && hour < 10 && today && n >= 3 && hi - lo >= 3){
+      var tookHigh = false, tookLow = false, bi;
+      for (bi = Math.max(0, rows.length - 8); bi < rows.length - 1; bi++){
+        if (rows[bi].h > hi) tookHigh = true;
+        if (rows[bi].l < lo) tookLow = true;
+      }
+      if (tookHigh && last.l < lo && last.c > lo && last.c > last.o){
+        var dbL = hit('GS-5', 'Dual Asia Boundary', 'long', last.c, last.l - Math.max(a * 0.4, 2.8), 'An earlier bar took the Asia high, and this bar took the Asia low and closed back above it.');
+        if (dbL) out.push(dbL);
+      } else if (tookLow && last.h > hi && last.c < hi && last.c < last.o){
+        var dbS = hit('GS-5', 'Dual Asia Boundary', 'short', last.c, last.h + Math.max(a * 0.4, 2.8), 'An earlier bar took the Asia low, and this bar took the Asia high and closed back under it.');
+        if (dbS) out.push(dbS);
+      }
+    }
     return out;
   }
 
-  function omniHits(raw, silverRaw, dxyRaw){
+  function omniHits(raw, silverRaw, dxyRaw, extra){
     var rows = rowsOf(raw), silver = rowsOf(silverRaw), dxy = rowsOf(dxyRaw);
+    extra = extra || {};
     var out = [];
     if (rows.length < 8) return out;
     var last = rows[rows.length - 1], back = rows[rows.length - 3];
@@ -231,6 +246,24 @@
           var gsrS = hit('OG-4', 'Gold-Silver Ratio Band', 'short', last.c, last.h + Math.max(a * 0.45, 3.2), 'The gold-silver ratio is 1.8 deviations rich and this bar closed down.');
           if (gsrS) out.push(gsrS);
         }
+      }
+    }
+    var paxg = rowsOf(extra.paxg);
+    if (paxg.length >= 2 && last.c > 0){
+      var prem = (paxg[paxg.length - 1].c - last.c) / last.c;
+      if (prem >= 0.002 && last.c > last.o && paxg[paxg.length - 1].c !== last.c){
+        var pb = hit('OG-5', 'Physical Bullion Premium', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Tokenized bullion is at least 0.20 percent above this gold print, and this bar closed up.');
+        if (pb) out.push(pb);
+      }
+    }
+    var oil = rowsOf(extra.oil), yields = rowsOf(extra.yields);
+    if (oil.length >= 6 && yields.length >= 6 && rows.length >= 6){
+      var gUp = last.c > rows[rows.length - 6].c && last.c > last.o;
+      var oUp = oil[oil.length - 1].c > oil[oil.length - 6].c;
+      var yDn = yields[yields.length - 1].c < yields[yields.length - 6].c;
+      if (gUp && oUp && yDn){
+        var ssi = hit('OG-6', 'Stagflation Shock', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold and crude both rose over six bars while the yield print fell.');
+        if (ssi) out.push(ssi);
       }
     }
     return out;
@@ -326,7 +359,38 @@
         }
       }
     }
+    var ob = shallowBlock(rows, a, last);
+    if (ob) out.push(ob);
     return out;
+  }
+
+  function shallowBlock(rows, a, last){
+    var i, origin, next, body, pen, ratio, k, broken;
+    for (i = rows.length - 5; i >= 2 && i > rows.length - 24; i--){
+      origin = rows[i];
+      next = rows[i + 1];
+      if (!origin || !next) continue;
+      body = origin.h - origin.l;
+      if (!(body > 0)) continue;
+      if (origin.c < origin.o && next.c > next.o && (next.c - origin.c) >= a * 1.4){
+        broken = false;
+        for (k = i + 2; k < rows.length - 1; k++){ if (rows[k].l <= origin.l) broken = true; }
+        pen = origin.h - last.l;
+        ratio = pen / body;
+        if (!broken && ratio > 0 && ratio <= 0.382 && last.c > origin.h && last.c > last.o){
+          return hit('PG-5', 'Shallow Order Block', 'long', last.c, origin.l, 'A bullish order block was touched by no more than 38.2 percent and the bar closed back above it.');
+        }
+      } else if (origin.c > origin.o && next.c < next.o && (origin.c - next.c) >= a * 1.4){
+        broken = false;
+        for (k = i + 2; k < rows.length - 1; k++){ if (rows[k].h >= origin.h) broken = true; }
+        pen = last.h - origin.l;
+        ratio = pen / body;
+        if (!broken && ratio > 0 && ratio <= 0.382 && last.c < origin.l && last.c < last.o){
+          return hit('PG-5', 'Shallow Order Block', 'short', last.c, origin.h, 'A bearish order block was touched by no more than 38.2 percent and the bar closed back under it.');
+        }
+      }
+    }
+    return null;
   }
 
   function valueArea(rows){
@@ -471,13 +535,36 @@
         }
       }
     }
+    var sacred = gannAngles(last.c, [108, 144]);
+    if (sacred && sacred.dist <= 1.2){
+      if (last.h >= sacred.level - 1.2 && last.c < sacred.level && last.c < last.o){
+        var sacS = hit('GG-5', 'Gann 108 and 144', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged the ' + sacred.deg + ' degree Gann angle and closed back under it.');
+        if (sacS) out.push(sacS);
+      } else if (last.l <= sacred.level + 1.2 && last.c > sacred.level && last.c > last.o){
+        var sacL = hit('GG-5', 'Gann 108 and 144', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the ' + sacred.deg + ' degree Gann angle and closed back above it.');
+        if (sacL) out.push(sacL);
+      }
+    }
     return out;
+  }
+
+  function gannAngles(price, angles){
+    if (!(price > 0) || !angles || !angles.length) return null;
+    var rootN = Math.sqrt(price), best = Infinity, level = NaN, deg = 0, i, d, up, dn;
+    for (i = 0; i < angles.length; i++){
+      d = angles[i];
+      up = Math.pow(rootN + d / 180, 2);
+      dn = Math.pow(rootN - d / 180, 2);
+      if (Math.abs(price - up) < best){ best = Math.abs(price - up); level = up; deg = d; }
+      if (dn > 0 && Math.abs(price - dn) < best){ best = Math.abs(price - dn); level = dn; deg = d; }
+    }
+    return { dist: best, level: level, deg: deg };
   }
 
   function forDesk(desk, raw, extra){
     extra = extra || {};
     if (desk === 'goldscalp') return scalpHits(raw, extra.day || raw);
-    if (desk === 'omnigold') return omniHits(raw, extra.silver, extra.dxy);
+    if (desk === 'omnigold') return omniHits(raw, extra.silver, extra.dxy, extra);
     if (desk === 'pinegold') return pineHits(raw);
     if (desk === 'ganeshgold') return ganeshHits(raw, extra.dxy);
     return [];
