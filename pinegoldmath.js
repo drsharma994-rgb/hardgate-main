@@ -2159,6 +2159,10 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (rollWhy) return rollWhy;
     var deepWhy = pineGoldDeepRangeVeto(rows, dir);
     if (deepWhy) return deepWhy;
+    var camWhy = pineGoldCamarillaVeto(rows, dir);
+    if (camWhy) return camWhy;
+    var pivWhy = pineGoldPivotVeto(rows, dir);
+    if (pivWhy) return pivWhy;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
@@ -2172,6 +2176,8 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (swWhy) return swWhy;
   var ceWhy = pineGoldCeVeto(rows, dir);
   if (ceWhy) return ceWhy;
+  var gannWhy = pineGoldGannVeto(rows);
+  if (gannWhy) return gannWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2557,6 +2563,75 @@ function pineGoldCeVeto(rows, dir){
     if (dir === 'short' && f.type === 'BEARISH_FVG') return 'This bearish gap is already mitigated past its midpoint.';
   }
   return null;
+}
+/* Yesterday's high, low, and last close. A short prior day does not count. */
+function pineGoldPriorOhlc(rows){
+  if (!rows || rows.length < 8) return null;
+  var days = {}, order = [], i, b, t, key, rec;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    t = pgrNum(b && b.t);
+    if (!isFinite(t) || !isFinite(pgrNum(b.h)) || !isFinite(pgrNum(b.l)) || !isFinite(pgrNum(b.c))) return null;
+    if (t < 1e12) t = t * 1000;
+    key = new Date(t).toISOString().slice(0, 10);
+    rec = days[key];
+    if (!rec){ rec = days[key] = { hi: -Infinity, lo: Infinity, c: NaN, n: 0 }; order.push(key); }
+    if (+b.h > rec.hi) rec.hi = +b.h;
+    if (+b.l < rec.lo) rec.lo = +b.l;
+    rec.c = +b.c;
+    rec.n++;
+  }
+  if (order.length < 2) return null;
+  rec = days[order[order.length - 2]];
+  if (!rec || rec.n < 4 || !(rec.hi > rec.lo) || !(rec.c > 0)) return null;
+  return rec;
+}
+/* Camarilla H3-H4 and L3-L4 from yesterday. A long inside the upper band,
+   or a short inside the lower band, does not pass. A close through H4 or L4 does.
+   A prior day smaller than $8 does not refuse. */
+function pineGoldCamarillaVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior) return null;
+  var range = prior.hi - prior.lo;
+  if (!(range >= 8)) return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(px)) return null;
+  var h3 = prior.c + range * 1.1 / 4;
+  var h4 = prior.c + range * 1.1 / 2;
+  var l3 = prior.c - range * 1.1 / 4;
+  var l4 = prior.c - range * 1.1 / 2;
+  if (dir === 'long' && px >= h3 && px < h4) return 'Price is between Camarilla H3 and H4. A long does not buy that band.';
+  if (dir === 'short' && px <= l3 && px > l4) return 'Price is between Camarilla L3 and L4. A short does not sell that band.';
+  return null;
+}
+/* Classic floor pivot. A wick through R1 or S1 that closes back inside
+   does not pass. A close clean through it does not refuse. */
+function pineGoldPivotVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var pp = (prior.hi + prior.lo + prior.c) / 3;
+  var r1 = 2 * pp - prior.lo;
+  var s1 = 2 * pp - prior.hi;
+  if (dir === 'long' && h > r1 && c <= r1) return 'R1 was pierced and closed back under.';
+  if (dir === 'short' && l < s1 && c >= s1) return 'S1 was pierced and closed back over.';
+  return null;
+}
+/* Square of 9 from yesterday's close. Sitting within $1.20 of a 90, 180,
+   270, or 360 degree level does not pass. Far from those levels does not refuse. */
+function pineGoldGannVeto(rows){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateGannSquare9 !== 'function') return null;
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior) return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!(px > 0)) return null;
+  var gann = null;
+  try{ gann = core.calculateGannSquare9(prior.c, px); }catch(eGn){ return null; }
+  if (!gann || gann.unread || gann.isAtGannPivot !== true) return null;
+  return 'Price is sitting on a Gann cardinal from yesterday\'s close.';
 }
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
@@ -3112,6 +3187,9 @@ G.pineGoldFixDriftVeto = pineGoldFixDriftVeto;
 G.pineGoldRolloverVeto = pineGoldRolloverVeto;
 G.pineGoldDeepRangeVeto = pineGoldDeepRangeVeto;
 G.pineGoldCeVeto = pineGoldCeVeto;
+G.pineGoldCamarillaVeto = pineGoldCamarillaVeto;
+G.pineGoldPivotVeto = pineGoldPivotVeto;
+G.pineGoldGannVeto = pineGoldGannVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;

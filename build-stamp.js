@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1227',
-  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a scalp during the gold rollover, a scalp sitting in the deep premium or deep discount of the dealing range without a sweep, and a trade inside a fair-value gap that is already mitigated past its midpoint. A fresh gap, a swept extreme, or a bar outside the rollover does not refuse. The card does not send an order.',
-  built: '2026-10-09T03:30:00Z'
+  version: 'hg-v1228',
+  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a scalp buying the Camarilla H3-H4 band or selling the L3-L4 band, a wick through R1 or S1 that closes back inside, and a price sitting on a Gann cardinal from yesterday close. A close through the level, a prior day under $8, or a price far from the cardinal does not refuse. The card does not send an order.',
+  built: '2026-10-09T03:40:00Z'
 };
 
 function hgBuildLabel(b){
