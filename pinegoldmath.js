@@ -2220,6 +2220,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (kijWhy) return kijWhy;
   var macdWhy = pineGoldMacdVeto(rows, dir);
   if (macdWhy) return macdWhy;
+  var lonWhy = pineGoldLondonHourVeto(rows, dir);
+  if (lonWhy) return lonWhy;
+  var emaWhy = pineGoldEma50Veto(rows, dir);
+  if (emaWhy) return emaWhy;
+  var tdWhy = pineGoldTd9Veto(rows, dir);
+  if (tdWhy) return tdWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3134,6 +3140,75 @@ function pineGoldMacdVeto(rows, dir){
   if (dir === 'short' && prev <= 0 && now > 0) return 'MACD just crossed over zero. A short does not pass.';
   return null;
 }
+/* The 07:00 UTC hour. After 08:00, a wick back inside it does not pass.
+   Before 08:00, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldLondonHourVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 8) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 7 || hv >= 8) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The London open hour was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The London open hour was pierced and closed back over.';
+  return null;
+}
+/* The 50 EMA. Losing it on this bar does not pass. A close already through it does not refuse. */
+function pineGoldEma50Veto(rows, dir){
+  var len = 50;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var k = 2 / (len + 1), ema = null, prevE = NaN, prevC = NaN, i, c;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    ema = ema == null ? c : (c * k + ema * (1 - k));
+    if (i === rows.length - 2){ prevE = ema; prevC = c; }
+  }
+  if (dir === 'long' && prevC >= prevE && c < ema) return 'Price lost the 50 EMA. A long does not pass.';
+  if (dir === 'short' && prevC <= prevE && c > ema) return 'Price reclaimed the 50 EMA. A short does not pass.';
+  return null;
+}
+/* A TD 9 whose last bar closes against the trade does not pass.
+   A count under 9, or a 9th bar that still closes with the trade, does not refuse. */
+function pineGoldTd9Veto(rows, dir){
+  if (!rows || rows.length < 13 || (dir !== 'long' && dir !== 'short')) return null;
+  var count = 0, i, c, back, o;
+  for (i = rows.length - 1; i >= 4; i--){
+    c = pgrNum(rows[i].c);
+    back = pgrNum(rows[i - 4].c);
+    o = pgrNum(rows[i].o);
+    if (!(c > 0) || !(back > 0) || !isFinite(o)) return null;
+    if (dir === 'long' && c > back) count++;
+    else if (dir === 'short' && c < back) count++;
+    else break;
+  }
+  if (count < 9) return null;
+  var last = rows[rows.length - 1];
+  if (dir === 'long' && pgrNum(last.c) < pgrNum(last.o)) return 'A TD 9 closed down. A long does not pass.';
+  if (dir === 'short' && pgrNum(last.c) > pgrNum(last.o)) return 'A TD 9 closed up. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3712,6 +3787,9 @@ G.pineGoldEngulfVeto = pineGoldEngulfVeto;
 G.pineGoldR2Veto = pineGoldR2Veto;
 G.pineGoldKijunVeto = pineGoldKijunVeto;
 G.pineGoldMacdVeto = pineGoldMacdVeto;
+G.pineGoldLondonHourVeto = pineGoldLondonHourVeto;
+G.pineGoldEma50Veto = pineGoldEma50Veto;
+G.pineGoldTd9Veto = pineGoldTd9Veto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;

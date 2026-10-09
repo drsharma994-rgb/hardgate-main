@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1255',
-  pack: 'Trend Matrix also refuses yesterday midpoint lost on this bar, a close back inside the Keltner band after the previous close was outside it, and a TD 9 whose last bar closes against the trade. No prior day, a close that never left the band, or a 9th bar that still closes with the trade does not refuse. The card does not send an order.',
-  built: '2026-10-09T09:55:00Z'
+  version: 'hg-v1256',
+  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a London open hour that was pierced and closed back inside, a 50 EMA lost on this bar, and a TD 9 that closes against the trade. Before 08:00 UTC, an EMA already lost, or a 9th bar that still closes with the trade does not refuse. The card does not send an order.',
+  built: '2026-10-09T10:10:00Z'
 };
 
 function hgBuildLabel(b){
