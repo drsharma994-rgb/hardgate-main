@@ -160,8 +160,8 @@ console.log('== participation: raid sweeps need a defended print, level reads ca
   const src = read('gold-suite-unified.js');
   ok(/var PACE_WIN = 20, PACE_MIN_READ = 10, PACE_DEAD = 0\.5;/.test(src),
     'the participation priors are stated: 20-bar median, 10 readable prints, 0.5x dead');
-  ok((src.match(/\bpaceDead\(/g) || []).length === 16,
-    'paceDead is defined once and consulted by the session-raid detections, including the London AM-fix hunt');
+  ok((src.match(/\bpaceDead\(/g) || []).length === 18,
+    'paceDead is defined once and consulted by the session-raid detections, including the London opening void and the marked news fade');
 }
 
 console.log('== the four desks read the suite ==');

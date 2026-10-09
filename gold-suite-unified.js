@@ -113,7 +113,8 @@
   }
   function paceDead(pc){ return pc != null && pc < PACE_DEAD; }
 
-  function scalpHits(raw, dayRaw){
+  function scalpHits(raw, dayRaw, pack){
+    pack = pack || {};
     var rows = rowsOf(raw);
     var day = rowsOf(dayRaw || raw);
     var out = [];
@@ -353,6 +354,44 @@
         if (amL) out.push(amL);
       }
     }
+    if (isFinite(hour) && hour >= 7 && hour < 8 && today && !paceDead(__pace)){
+      var voidBar = null, vi, vh, vBody, vSpan, vBull, vOpp, vMid;
+      for (vi = 0; vi < day.length - 1; vi++){
+        if (dayOf(day[vi]) !== today) continue;
+        vh = hourOf(day[vi]);
+        if (isFinite(vh) && vh >= 7 && vh < 7.25){ voidBar = day[vi]; break; }
+      }
+      if (voidBar){
+        vBody = Math.abs(voidBar.c - voidBar.o);
+        vSpan = voidBar.h - voidBar.l;
+        vBull = voidBar.c > voidBar.o;
+        vOpp = vBull ? (Math.min(voidBar.o, voidBar.c) - voidBar.l) : (voidBar.h - Math.max(voidBar.o, voidBar.c));
+        vMid = (voidBar.h + voidBar.l) / 2;
+        if (vBody >= a * 2 && vSpan > 0 && vOpp / vSpan <= 0.08){
+          if (vBull && last.l <= vMid && last.c > vMid && last.c > last.o){
+            var vdL = hit('GS-13', 'London Opening Void', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The 07:00 UTC bar ran at least twice the average range with almost no lower wick, and this bar closed back above its midpoint before 08:00 UTC.');
+            if (vdL) out.push(vdL);
+          } else if (!vBull && last.h >= vMid && last.c < vMid && last.c < last.o){
+            var vdS = hit('GS-13', 'London Opening Void', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The 07:00 UTC bar ran at least twice the average range with almost no upper wick, and this bar closed back under its midpoint before 08:00 UTC.');
+            if (vdS) out.push(vdS);
+          }
+        }
+      }
+    }
+    if (pack.newsRelease === true && isFinite(hour) && ((hour >= 12.5 && hour < 12.75) || (hour >= 13.5 && hour < 13.75)) && rows.length >= 6 && !paceDead(__pace)){
+      var preHi = -Infinity, preLo = Infinity, qi;
+      for (qi = rows.length - 6; qi < rows.length - 1; qi++){
+        if (rows[qi].h > preHi) preHi = rows[qi].h;
+        if (rows[qi].l < preLo) preLo = rows[qi].l;
+      }
+      if (preHi > preLo && last.h > preHi && last.c < preHi && last.c > preLo && last.c < last.o){
+        var nwS = hit('GS-14', 'News Exhaustion', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'A marked US release bar ran above the prior range and closed back inside it.');
+        if (nwS) out.push(nwS);
+      } else if (preHi > preLo && last.l < preLo && last.c > preLo && last.c < preHi && last.c > last.o){
+        var nwL = hit('GS-14', 'News Exhaustion', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'A marked US release bar ran under the prior range and closed back inside it.');
+        if (nwL) out.push(nwL);
+      }
+    }
     return out;
   }
 
@@ -495,6 +534,28 @@
         if (usdRet < 0.0015 && (eurRet > 0.004 || jpyRet > 0.004)){
           var fx = hit('OG-12', 'Currency Dispersion', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold in euros or yen rose more than 0.4 percent over eight bars while dollar gold rose less than 0.15 percent, and this bar closed up. A missing euro or yen series is not a lead.');
           if (fx) out.push(fx);
+        }
+      }
+    }
+    var spx = rowsOf(extra.spx);
+    if (spx.length >= 20 && rows.length >= 20 && last.c > last.o){
+      var ratios = [], ri, sc, meanR = 0, varR = 0, zR, rNow, rThen;
+      for (ri = 0; ri < 20; ri++){
+        sc = spx[spx.length - 20 + ri].c;
+        if (!(sc > 0) || !(rows[rows.length - 20 + ri].c > 0)){ ratios = []; break; }
+        ratios.push(rows[rows.length - 20 + ri].c / sc);
+      }
+      if (ratios.length === 20){
+        for (ri = 0; ri < 20; ri++) meanR += ratios[ri];
+        meanR /= 20;
+        for (ri = 0; ri < 20; ri++) varR += (ratios[ri] - meanR) * (ratios[ri] - meanR);
+        varR = Math.sqrt(varR / 20);
+        rNow = ratios[19];
+        rThen = ratios[13];
+        zR = varR > 0 ? (rNow - meanR) / varR : 0;
+        if (zR > 1.5 && rNow > rThen){
+          var sx = hit('OG-13', 'Sovereign Risk', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold divided by the equity index is more than 1.5 standard deviations above its 20-bar mean and still rising, and this bar closed up. A missing equity series is not a sovereign bid.');
+          if (sx) out.push(sx);
         }
       }
     }
@@ -1036,6 +1097,41 @@
         if (nvL) out.push(nvL);
       }
     }
+    var gzBase = Math.floor(last.c / 100) * 100, gzLevels = [gzBase + 51.84, gzBase + 38.16], gz, gzLv;
+    for (gz = 0; gz < gzLevels.length; gz++){
+      gzLv = gzLevels[gz];
+      if (Math.abs(last.c - gzLv) > 0.65) continue;
+      if (last.h >= gzLv && last.c < gzLv && last.c < last.o){
+        var gzS = hit('GG-13', 'Giza Slope', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged the 51.84 or 38.16 print inside this hundred dollars and closed back under it.');
+        if (gzS) out.push(gzS);
+        break;
+      }
+      if (last.l <= gzLv && last.c > gzLv && last.c > last.o){
+        var gzL = hit('GG-13', 'Giza Slope', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the 51.84 or 38.16 print inside this hundred dollars and closed back above it.');
+        if (gzL) out.push(gzL);
+        break;
+      }
+    }
+    var rayLoI = -1, rayHiI = -1, rayLo = Infinity, rayHi = -Infinity, rayI, rayBars, rayPx;
+    for (rayI = Math.max(0, rows.length - 24); rayI < rows.length - 1; rayI++){
+      if (rows[rayI].l <= rayLo){ rayLo = rows[rayI].l; rayLoI = rayI; }
+      if (rows[rayI].h >= rayHi){ rayHi = rows[rayI].h; rayHiI = rayI; }
+    }
+    if (last.c > last.o && rayLoI >= 0){
+      rayBars = (rows.length - 1) - rayLoI;
+      rayPx = rayLo + rayBars;
+      if (rayBars >= 4 && Math.abs(last.c - rayPx) <= 1.25 && last.l <= rayPx && last.c > rayPx){
+        var rayL = hit('GG-14', 'Gann One by One', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the one-dollar-per-bar ray up from the swing low and closed back above it.');
+        if (rayL) out.push(rayL);
+      }
+    } else if (last.c < last.o && rayHiI >= 0){
+      rayBars = (rows.length - 1) - rayHiI;
+      rayPx = rayHi - rayBars;
+      if (rayBars >= 4 && rayPx > 0 && Math.abs(last.c - rayPx) <= 1.25 && last.h >= rayPx && last.c < rayPx){
+        var rayS = hit('GG-14', 'Gann One by One', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged the one-dollar-per-bar ray down from the swing high and closed back under it.');
+        if (rayS) out.push(rayS);
+      }
+    }
     return out;
   }
 
@@ -1054,7 +1150,7 @@
 
   function forDesk(desk, raw, extra){
     extra = extra || {};
-    if (desk === 'goldscalp') return scalpHits(raw, extra.day || raw);
+    if (desk === 'goldscalp') return scalpHits(raw, extra.day || raw, extra);
     if (desk === 'omnigold') return omniHits(raw, extra.silver, extra.dxy, extra);
     if (desk === 'pinegold') return pineHits(raw);
     if (desk === 'ganeshgold') return ganeshHits(raw, extra.dxy);

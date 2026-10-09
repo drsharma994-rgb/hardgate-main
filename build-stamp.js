@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1283',
-  pack: 'Four reads that were not already on the desks. Gold Scalp hunts the 10:30 UTC open only between 12:00 and 14:00 UTC, and only after a one-dollar run through it and a close back. OmniGold adds a euro or yen gold lead of more than 0.4 percent over eight bars while dollar gold rose less than 0.15 percent. A missing euro or yen series is not a lead. Ganesh Gold tags a 14.40 dollar harmonic, and it tags a 40 degree Navamsha angle, and both require a close back away from the level. The prior-session value area was already on Pine Gold. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
-  built: '2026-10-09T17:50:00Z'
+  version: 'hg-v1284',
+  pack: 'Five reads that were not already on the desks. Gold Scalp retests the midpoint of a 07:00 UTC bar that ran at least twice the average range with almost no opposing wick, and only before 08:00 UTC. A marked US release fade runs only when that release is actually flagged, and only when the bar closes back inside the prior range. OmniGold adds a gold-versus-equity stretch of more than 1.5 standard deviations. A missing equity series is not a sovereign bid. Ganesh Gold tags the 51.84 and 38.16 prints inside the current hundred dollars, and it tags a one-dollar-per-bar ray from the swing. Both require a close back. The Donchian-Keltner release was already on Pine Gold. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
+  built: '2026-10-09T18:10:00Z'
 };
 
 function hgBuildLabel(b){
