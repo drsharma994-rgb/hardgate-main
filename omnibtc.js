@@ -125,6 +125,57 @@ a global hard refresh.
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  /* hg-v1293: RECORD-ONLY three-state Pine marks on every OMNIBTC forward
+     record. Delegates to the ONE HOME trendmxPineMarks (hg-v949) in
+     trendtable.combined.js — the ten crypto Pine ports (Lorentzian KNN,
+     HalfTrend, Squeeze, SMF, MSB-OB, SMC, Cipher B, Range Filter, NW
+     envelope, Weekly AVWAP) that TREND MATRIX already runs on 4h bars.
+     Beside the hg-v1291/v1292 freshness gates: those read newLong/barsAgo
+     to decide whether a crown fires; this reads the final sign to RECORD
+     which Pine port's state the record formed under, so the hg-v1065
+     PERFECT COHORT SPLIT and hg-v989 read-split can measure, out of
+     sample, which Pine port's agreement actually paid on this desk.
+     No new weight: hg-v987 (no OMNIROUTE signal-time read separates on
+     2,833-trade replay), hg-v945 (gold additive well measured dry),
+     hg-v922 (nothing either gold desk ranks by separates on four disjoint
+     windows), and OMNIBTC has no baked walk at all. The gates fire;
+     the marks measure. */
+  function hgObtcPineMarks(rows){
+    try{
+      if (!Array.isArray(rows) || rows.length < 30) return null;
+      var fn = (W && typeof W.trendmxPineMarks === 'function') ? W.trendmxPineMarks : null;
+      if (!fn) return null;
+      var pm = fn(rows);
+      return (pm && typeof pm === 'object') ? pm : null;
+    }catch(e){ return null; }
+  }
+
+  /* The ten keys trendmxPineMarks emits, mapped to the record field each
+     rides on. Three-state: a long/short reads writes the field, a null
+     port leaves the field absent (hg-v989: an absent read is NOT
+     MEASURED, never a guessed false). */
+  var HG_OBTC_PINE_FIELDS = [
+    ['lor',     'pineLorKnn'],
+    ['ht',      'pineHalfTrend'],
+    ['sqz',     'pineSqueeze'],
+    ['smf',     'pineSmf'],
+    ['msb',     'pineMsb'],
+    ['smc',     'pineSmc'],
+    ['cipher',  'pineCipher'],
+    ['rfilter', 'pineRangeFilter'],
+    ['nwenv',   'pineNwEnvelope'],
+    ['wavwap',  'pineWavwap']
+  ];
+  function hgObtcPineStamp(row, pm){
+    if (!row || !pm) return;
+    for (var i = 0; i < HG_OBTC_PINE_FIELDS.length; i++){
+      var src = HG_OBTC_PINE_FIELDS[i][0];
+      var dst = HG_OBTC_PINE_FIELDS[i][1];
+      var v = pm[src];
+      if (v === 'long' || v === 'short') row[dst] = v;
+    }
+  }
+
   function hgObtcIsBtc(sym){
     try{
       var raw = String(sym || '');
@@ -1435,6 +1486,33 @@ a global hard refresh.
       if (reads.bbSqueeze) tLines.push('Bollinger ' + reads.bbSqueeze);
       if (isFinite(reads.vwapDevPct)) tLines.push('VWAP dev ' + (reads.vwapDevPct >= 0 ? '+' : '') + (+reads.vwapDevPct).toFixed(2) + '%');
       if (isFinite(+r.rsi)) tLines.push('RSI ' + (+r.rsi).toFixed(1));
+      /* hg-v1293: the ten Pine port long/short reads on the winner's 4h
+         tape — printed as a PINE line so a reader sees which ports agree
+         with the pick's direction and which do not. A null port prints
+         nothing; a line with no long/short reads is skipped entirely.
+         Beside the hg-v1291/v1292 freshness-gate wordings (PINE CONFIRM /
+         PINE AGAINST / INDICATOR AGAINST etc. on pineNote above): those
+         decide the ticket, this reports the final sign on the same tape
+         for the record. The ledger reads the same marks; the card and
+         the record agree by construction. */
+      try{
+        var pmNow = reads && reads.pineMarks;
+        if (pmNow && typeof pmNow === 'object'){
+          var __pineBits = [];
+          var __pineLabel = { lor:'LorKNN', ht:'halftrend', sqz:'squeeze', smf:'SMF', msb:'MSB', smc:'SMC', cipher:'cipher', rfilter:'range', nwenv:'NWenv', wavwap:'wAVWAP' };
+          var __pineOrder = ['lor','ht','sqz','smf','msb','smc','cipher','rfilter','nwenv','wavwap'];
+          for (var __pi = 0; __pi < __pineOrder.length; __pi++){
+            var __pk = __pineOrder[__pi];
+            var __pv = pmNow[__pk];
+            if (__pv === 'long' || __pv === 'short'){
+              __pineBits.push(__pineLabel[__pk] + ' ' + __pv);
+            }
+          }
+          if (__pineBits.length){
+            tLines.push('PINE ' + __pineBits.join(' · ') + ' (record-only, gates nothing)');
+          }
+        }
+      }catch(ePineLine){}
       html += dim('TECHNICAL', tVerd, tCls, tLines);
       /* ---- SENTIMENTAL: flow, positioning, fear/greed, vol ---- */
       var sLines = [], sVerd = 'UNREAD', sCls = '';
@@ -2283,6 +2361,13 @@ a global hard refresh.
            taker flow, the event-calendar blackout, and perp funding. A leg
            the desk did not read stays null (neither confirms nor denies). */
         var pfReads = {};
+        /* hg-v1293: ten Pine port marks on the crown's own 4h tape, through
+           the ONE HOME. Read off the WINNER's rows (match._rows / winnerRows)
+           so the card and the record agree by construction; the TECHNICAL
+           block prints the long/short reads and the record stamps them.
+           Null when the home is absent or the tape is thin — never a
+           guessed sign. */
+        try{ pfReads.pineMarks = hgObtcPineMarks(match && match._rows); }catch(ePm){ pfReads.pineMarks = null; }
         /* hg-v1061: the Deribit options-vol read (already gathered into
            extra.dvol) rides the pick so the witnesses panel can show it. */
         try{
@@ -2749,6 +2834,14 @@ a global hard refresh.
               ? ((match && Array.isArray(match._rows15) && match._rows15.length >= 60) ? match._rows15 : winnerRows)
               : winnerRows;
             var fwdLast = fwdTape[fwdTape.length - 1];
+            /* hg-v1293: the ten Pine port reads on the record's OWN tape —
+               winnerRows (4h) for swing records, match._rows15 (15m) for
+               scalp records (fwdScalp branch above). Stamped AFTER the
+               fwdRow literal so the hg-v986 census window ('entry:' within
+               3000 chars BEFORE the hgFwdRecordScan call) stays intact.
+               Three-state: a long/short writes pine*; a null port leaves
+               the field absent (NOT MEASURED, hg-v989). */
+            var fwdPine = hgObtcPineMarks(fwdTape);
             var fwdRow = {
               sym: 'BTCUSD',
               dir: pick.row.dir,
@@ -2796,6 +2889,14 @@ a global hard refresh.
               session: (pfReads.sessName || undefined)
             };
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
+            /* hg-v1293: stamp the ten Pine port marks here, AFTER the
+               literal, so the literal stays short enough for the hg-v986
+               census window ('entry:' within 3000 chars before the call).
+               Ten inline pine* fields in the literal would have pushed
+               `entry:` past the window; the test-crypto-funding-mark
+               guard would have judged this writer bare again, exactly
+               the hg-v986 trap that drove the record array to a variable. */
+            if (fwdPine) hgObtcPineStamp(fwdRow, fwdPine);
             /* the record array is a named variable so the call-shape censuses
                (test-crypto-funding-mark / test-crypto-ledger-fill-mark) read the
                record literal itself, not the first `entry:` that follows the call
@@ -2915,6 +3016,11 @@ a global hard refresh.
   W.hgObtcPineBook = hgObtcPineBook;
   W.hgObtcIndBook = hgObtcIndBook;
   W.hgObtcApplyPineAccuracy = hgObtcApplyPineAccuracy;
+  /* hg-v1293: the record-only Pine-marks seams, exported so the guard
+     drives the real functions rather than a re-implementation (hg-v967). */
+  W.hgObtcPineMarks = hgObtcPineMarks;
+  W.hgObtcPineStamp = hgObtcPineStamp;
+  W.HG_OBTC_PINE_FIELDS = HG_OBTC_PINE_FIELDS;
   /* hg-v1057: the accuracy-pack seams, exported so the test drives the real
      computation rather than a re-implementation */
   W.hgObtcFlowAcceptance = hgObtcFlowAcceptance;

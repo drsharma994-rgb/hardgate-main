@@ -534,6 +534,7 @@ W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
+W.trendmxPineMarks = trendmxPineMarks;   /* hg-v1293: ONE HOME for the 10 crypto Pine port reads (hg-v949). OMNIBTC's record-site stamp delegates to this through hgObtcPineMarks; a second port definition would be a second rule. Three-state (long/short/absent), 30-bar floor, fails open with a null row set — nothing scores, no gate reads. Beside their hg-v1291/v1292 freshness gates, which read newLong/barsAgo directly for firing: this reads final sign for recording, so the ledger can measure which Pine port's agreement paid, out of sample. */
 W.trendmxCrossState = function(){
   try{
     if (!__tmScanSnap) return null;

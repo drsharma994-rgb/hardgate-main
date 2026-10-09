@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1292',
-  pack: 'OmniBTC only. A crown is a ticket only when two independent pine families fired fresh the same way and none fired against it, or one family fired fresh and either a second house strategy already has levels that way or a house indicator (EMA 20/50, MACD histogram, Donchian 20) crossed fresh that way. Two scripts in one family are one vote. A fresh 1h core the other way leaves a watch. A standing bias is not a fresh signal. A script that did not fire is not a vote. A missing script stays unread. The card does not invent levels.',
-  built: '2026-10-09T19:57:32Z'
+  version: 'hg-v1293',
+  pack: 'OmniBTC gains record-only three-state Pine marks beside the hg-v1291/v1292 freshness gates. Every OMNIBTC forward record carries ten pine* fields (Lorentzian KNN, HalfTrend, Squeeze, SMF, MSB-OB, SMC, Cipher B, Range Filter, NW envelope, Weekly AVWAP), stamped through the one home trendmxPineMarks (hg-v949): long/short writes the field, a null port leaves it absent. The TECHNICAL block prints a PINE line reading the same ten ports on the winner 4h tape. The gates decide whether a crown fires; the marks let the hg-v1065 PERFECT COHORT SPLIT and hg-v989 read-split measure, out of sample, which Pine port actually paid. No new weight: hg-v987/v945/v922 doctrine, hg-v1083 server splice untouched, no gate reads a pine* key.',
+  built: '2026-10-09T20:30:00Z'
 };
 
 function hgBuildLabel(b){
