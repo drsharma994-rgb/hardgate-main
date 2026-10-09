@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1266',
-  pack: 'OmniGold, Ganesh Gold, and Pine Gold now keep the most probable setup in its own column, the same way Gold Scalp already does. The other cards stay beside it. When nothing is eligible to lead, the column says so and does not invent a setup. The card does not send an order.',
-  built: '2026-10-09T12:40:00Z'
+  version: 'hg-v1267',
+  pack: 'The desk opens on the work. Tools stay behind the menu until you open them. Trend Matrix, Gold Scalp, OmniGold, Ganesh, and Pine Gold are one click on the header. Type a tab name and press Enter to jump. The page is wider so the most probable column sits beside the other cards. The card does not send an order.',
+  built: '2026-10-09T12:55:00Z'
 };
 
 function hgBuildLabel(b){

@@ -253,11 +253,11 @@
   #hgAlertRoot .hgab-panel{width:min(92vw,320px)!important;max-height:70vh;overflow:auto}
 }
 
-/* ---------- desktop: drawer always open, no hamburger --------------- */
+/* ---------- desktop: tools stay closed until the menu is opened ---------- */
 @media (min-width: 861px){
-  .header-menu-btn{display:none!important}
-  html:not(.hg-chrome-min) .header-drawer{max-height:none!important;opacity:1!important;overflow:visible;transform:none!important}
-  html:not(.hg-chrome-min) .header-drawer-inner{border-top:0;margin-top:0;padding-top:4px}
+  .header-menu-btn{display:inline-flex!important;align-items:center;justify-content:center}
+  html:not(.hg-chrome-min) .header-drawer{max-height:0;overflow:hidden;opacity:0}
+  html:not(.hg-chrome-min) .header-drawer.open{max-height:70vh;overflow:auto;opacity:1}
 }
 
 /* ---------- small phones (≤480px) ---------------------------------------- */
