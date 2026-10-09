@@ -2660,6 +2660,113 @@ function tmBbReject(rows, dir){
   if (dir === 'short' && l < lower && px >= lower && px > o) return false;
   return true;
 }
+/* Session point of control, from bars before this one. Losing it on this bar does not pass.
+   Fewer than four session bars does not refuse. Missing volume does not pass. */
+function tmPocLost(rows, dir){
+  if (!rows || !rows.length || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var sess = [], i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key === today) sess.push(rows[i]);
+  }
+  if (sess.length < 4) return true;
+  var px = +rows[rows.length - 1].c;
+  if (!(px > 0)) return null;
+  var step = px * 0.001, bins = {}, best = null, vol = 0, b, tp, bin, v;
+  for (i = 0; i < sess.length; i++){
+    b = sess[i];
+    v = +b.v;
+    if (!(v > 0) || !isFinite(+b.h) || !isFinite(+b.l) || !(+b.c > 0)) return null;
+    tp = (+b.h + +b.l + +b.c) / 3;
+    bin = Math.round(tp / step);
+    bins[bin] = (bins[bin] || 0) + v;
+    if (bins[bin] > vol){ vol = bins[bin]; best = bin; }
+  }
+  if (best == null || !(vol > 0)) return null;
+  var poc = best * step;
+  var prevC = +sess[sess.length - 1].c;
+  if (dir === 'long' && prevC > poc && px < poc) return false;
+  if (dir === 'short' && prevC < poc && px > poc) return false;
+  return true;
+}
+/* Yesterday floor pivot. A wick through R1 or S1 that closes back through it does not pass.
+   No prior day, or a prior day under 0.4%, does not refuse. */
+function tmPivot(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return true;
+  var hi = -Infinity, lo = Infinity, lastC = NaN, n = 0;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    lastC = +rows[i].c;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || !(lastC > 0)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.004) return true;
+  var pp = (hi + lo + lastC) / 3;
+  var r1 = 2 * pp - lo, s1 = 2 * pp - hi;
+  if (dir === 'long' && h > r1 && c < r1 && c < o) return false;
+  if (dir === 'short' && l < s1 && c > s1 && c > o) return false;
+  return true;
+}
+/* The order block before the latest displacement. A close through it on this bar does not pass.
+   No displacement does not refuse. */
+function tmObLost(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var atr = 0, i, pc, tr;
+  for (i = rows.length - 14; i < rows.length; i++){
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i - 1].c > 0)) return null;
+    pc = +rows[i - 1].c;
+    tr = Math.max(+rows[i].h - +rows[i].l, Math.abs(+rows[i].h - pc), Math.abs(+rows[i].l - pc));
+    atr += tr;
+  }
+  atr = atr / 14;
+  if (!(atr > 0)) return null;
+  var prev = +rows[rows.length - 2].c, c = +rows[rows.length - 1].c;
+  if (!(prev > 0) || !(c > 0)) return null;
+  for (i = rows.length - 2; i >= 1; i--){
+    var body = +rows[i].c - +rows[i].o;
+    if (dir === 'long' && body >= 0.6 * atr && +rows[i - 1].c < +rows[i - 1].o){
+      var level = +rows[i - 1].l;
+      if (prev >= level && c < level) return false;
+      return true;
+    }
+    if (dir === 'short' && -body >= 0.6 * atr && +rows[i - 1].c > +rows[i - 1].o){
+      var top = +rows[i - 1].h;
+      if (prev <= top && c > top) return false;
+      return true;
+    }
+  }
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

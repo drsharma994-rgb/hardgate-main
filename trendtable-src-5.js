@@ -265,6 +265,15 @@
   var bb = rows1 ? tmBbReject(rows1, dir) : null;
   if (bb == null) hard.push('bollinger unread');
   else if (!bb) hard.push('a Bollinger band was pierced and closed back inside');
+  var poc = rows1 ? tmPocLost(rows1, dir) : null;
+  if (poc == null) hard.push('point of control unread');
+  else if (!poc) hard.push('price lost the session point of control');
+  var pivot = rows1 ? tmPivot(rows1, dir) : null;
+  if (pivot == null) hard.push('pivot unread');
+  else if (!pivot) hard.push('a daily pivot was pierced and closed back through');
+  var ob = rows1 ? tmObLost(rows1, dir) : null;
+  if (ob == null) hard.push('order block unread');
+  else if (!ob) hard.push('price closed through the order block');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
