@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1214',
-  pack: 'Trend Matrix also requires Parabolic SAR, the Schaff Trend Cycle, and Vortex to agree with the trade. A short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
-  built: '2026-10-09T01:15:00Z'
+  version: 'hg-v1215',
+  pack: 'Trend Matrix also requires the Awesome Oscillator, Money Flow Index, and Williams Alligator to agree with the trade. Missing volume or a short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
+  built: '2026-10-09T01:25:00Z'
 };
 
 function hgBuildLabel(b){

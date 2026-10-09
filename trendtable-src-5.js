@@ -112,6 +112,15 @@
   var vortex = rows1 ? tmVortex(rows1, dir) : null;
   if (vortex == null) hard.push('vortex unread');
   else if (!vortex) hard.push('vortex is against the trade');
+  var ao = rows1 ? tmAwesome(rows1, dir) : null;
+  if (ao == null) hard.push('awesome oscillator unread');
+  else if (!ao) hard.push('awesome oscillator is against the trade');
+  var mfi = rows1 ? tmMfi(rows1, dir) : null;
+  if (mfi == null) hard.push('money flow index unread');
+  else if (!mfi) hard.push('money flow index is against the trade');
+  var gator = rows1 ? tmAlligator(rows1, dir) : null;
+  if (gator == null) hard.push('alligator unread');
+  else if (!gator) hard.push('alligator is not feeding with the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -339,7 +348,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'SSL, Stochastic RSI, Fisher, Parabolic SAR, Schaff and Vortex agree';
+  ticket.pine = 'Awesome Oscillator, Money Flow Index and Alligator agree with the earlier crypto scripts';
   return [];
 }
 

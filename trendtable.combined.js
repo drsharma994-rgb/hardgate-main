@@ -1444,6 +1444,90 @@ function tmVortex(rows, dir){
   if (dir === 'long') return plus > minus;
   return minus > plus;
 }
+function tmSmaWindow(values, end, len){
+  if (!values || end < len - 1 || end >= values.length) return NaN;
+  var s = 0, i;
+  for (i = end - len + 1; i <= end; i++){
+    if (!isFinite(values[i])) return NaN;
+    s += values[i];
+  }
+  return s / len;
+}
+/* Bill Williams Awesome Oscillator. Median price, 5 versus 34.
+   A long needs it above zero and not falling. */
+function tmAwesome(rows, dir){
+  var fast = 5, slow = 34;
+  if (!rows || rows.length < slow + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var med = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l)) return null;
+    med.push((rows[i].h + rows[i].l) / 2);
+  }
+  var n = med.length - 1;
+  var ao = tmSmaWindow(med, n, fast) - tmSmaWindow(med, n, slow);
+  var prev = tmSmaWindow(med, n - 1, fast) - tmSmaWindow(med, n - 1, slow);
+  if (!isFinite(ao) || !isFinite(prev)) return null;
+  if (dir === 'long') return ao > 0 && ao + 1e-8 >= prev;
+  return ao < 0 && ao <= prev + 1e-8;
+}
+/* Money Flow Index, 14. Volume has to be real. Above 50 agrees with a
+   long unless it is rolling off 80. The mirror is the short. */
+function tmMfi(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function at(end){
+    var pos = 0, neg = 0, i, tp, prevTp, flow;
+    for (i = end - len + 1; i <= end; i++){
+      if (!(rows[i].v > 0) || !isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return NaN;
+      if (!isFinite(rows[i - 1].h) || !isFinite(rows[i - 1].l) || !isFinite(rows[i - 1].c)) return NaN;
+      tp = (rows[i].h + rows[i].l + rows[i].c) / 3;
+      prevTp = (rows[i - 1].h + rows[i - 1].l + rows[i - 1].c) / 3;
+      flow = tp * rows[i].v;
+      if (tp > prevTp) pos += flow;
+      else if (tp < prevTp) neg += flow;
+    }
+    if (pos === 0 && neg === 0) return 50;
+    if (neg === 0) return 100;
+    if (pos === 0) return 0;
+    return 100 - (100 / (1 + pos / neg));
+  }
+  var now = at(rows.length - 1), prev = at(rows.length - 2);
+  if (!isFinite(now) || !isFinite(prev)) return null;
+  if (dir === 'long') return now > 50 && !(prev >= 80 && now < prev);
+  return now < 50 && !(prev <= 20 && now > prev);
+}
+function tmSmmaAt(values, end, len){
+  if (!values || end < len - 1 || end >= values.length) return NaN;
+  var sum = 0, i;
+  for (i = 0; i < len; i++){
+    if (!isFinite(values[i])) return NaN;
+    sum += values[i];
+  }
+  var smma = sum / len;
+  for (i = len; i <= end; i++){
+    if (!isFinite(values[i])) return NaN;
+    smma = (smma * (len - 1) + values[i]) / len;
+  }
+  return smma;
+}
+/* Williams Alligator. Lips (5, shift 3) lead teeth (8, shift 5),
+   which lead the jaw (13, shift 8), and price is on that side. */
+function tmAlligator(rows, dir){
+  if (!rows || rows.length < 24 || (dir !== 'long' && dir !== 'short')) return null;
+  var med = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return null;
+    med.push((rows[i].h + rows[i].l) / 2);
+  }
+  var n = med.length - 1;
+  var lips = tmSmmaAt(med, n - 3, 5);
+  var teeth = tmSmmaAt(med, n - 5, 8);
+  var jaw = tmSmmaAt(med, n - 8, 13);
+  var px = rows[n].c;
+  if (!isFinite(lips) || !isFinite(teeth) || !isFinite(jaw) || !(px > 0)) return null;
+  if (dir === 'long') return px > lips && lips > teeth && teeth > jaw;
+  return px < lips && lips < teeth && teeth < jaw;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3803,6 +3887,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var vortex = rows1 ? tmVortex(rows1, dir) : null;
   if (vortex == null) hard.push('vortex unread');
   else if (!vortex) hard.push('vortex is against the trade');
+  var ao = rows1 ? tmAwesome(rows1, dir) : null;
+  if (ao == null) hard.push('awesome oscillator unread');
+  else if (!ao) hard.push('awesome oscillator is against the trade');
+  var mfi = rows1 ? tmMfi(rows1, dir) : null;
+  if (mfi == null) hard.push('money flow index unread');
+  else if (!mfi) hard.push('money flow index is against the trade');
+  var gator = rows1 ? tmAlligator(rows1, dir) : null;
+  if (gator == null) hard.push('alligator unread');
+  else if (!gator) hard.push('alligator is not feeding with the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -4030,7 +4123,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'SSL, Stochastic RSI, Fisher, Parabolic SAR, Schaff and Vortex agree';
+  ticket.pine = 'Awesome Oscillator, Money Flow Index and Alligator agree with the earlier crypto scripts';
   return [];
 }
 
@@ -6082,7 +6175,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6536,6 +6629,9 @@ W.tmFisher = tmFisher;
 W.tmPsar = tmPsar;
 W.tmSchaff = tmSchaff;
 W.tmVortex = tmVortex;
+W.tmAwesome = tmAwesome;
+W.tmMfi = tmMfi;
+W.tmAlligator = tmAlligator;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
