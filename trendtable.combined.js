@@ -1746,6 +1746,65 @@ function tmKst(rows, dir){
   if (dir === 'long') return kst > 0;
   return kst < 0;
 }
+/* MACD 12/26/9. The line has to be on the trade side of zero and not
+   under its signal. A short tape does not pass. */
+function tmMacd(rows, dir){
+  var fast = 12, slow = 26, sigLen = 9;
+  if (!rows || rows.length < slow + sigLen + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  var ef = tmEmaSeed(closes, fast), es = tmEmaSeed(closes, slow);
+  if (!ef || !es) return null;
+  var macd = [];
+  for (i = 0; i < closes.length; i++){
+    if (isFinite(ef[i]) && isFinite(es[i])) macd.push(ef[i] - es[i]);
+  }
+  if (macd.length < sigLen + 2) return null;
+  var signal = tmEmaSeed(macd, sigLen);
+  if (!signal) return null;
+  var line = macd[macd.length - 1];
+  var sigNow = signal[signal.length - 1];
+  if (!isFinite(line) || !isFinite(sigNow)) return null;
+  if (dir === 'long') return line > 0 && line + 1e-6 >= sigNow;
+  return line < 0 && line <= sigNow + 1e-6;
+}
+/* Donchian midpoint, 20. A long has to close above the middle of the
+   channel. A short has to close below it. A flat channel does not pass. */
+function tmDonchian(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < slice.length; i++){
+    if (!isFinite(slice[i].h) || !isFinite(slice[i].l) || !isFinite(slice[i].c)) return null;
+    if (slice[i].h > hi) hi = slice[i].h;
+    if (slice[i].l < lo) lo = slice[i].l;
+  }
+  if (!(hi > lo)) return false;
+  var mid = (hi + lo) / 2;
+  var px = slice[slice.length - 1].c;
+  if (dir === 'long') return px > mid;
+  return px < mid;
+}
+/* Chande Momentum Oscillator, 14. Above zero agrees with a long. */
+function tmCmo(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var up = 0, down = 0, i, ch, start = rows.length - len;
+  for (i = start; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !isFinite(rows[i - 1].c)) return null;
+    ch = rows[i].c - rows[i - 1].c;
+    if (ch > 0) up += ch;
+    else if (ch < 0) down -= ch;
+  }
+  if (!(up + down > 0)) return false;
+  var cmo = 100 * (up - down) / (up + down);
+  if (!isFinite(cmo)) return null;
+  if (dir === 'long') return cmo > 0;
+  return cmo < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -4141,6 +4200,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var kst = rows1 ? tmKst(rows1, dir) : null;
   if (kst == null) hard.push('kst unread');
   else if (!kst) hard.push('know sure thing is against the trade');
+  var macd = rows1 ? tmMacd(rows1, dir) : null;
+  if (macd == null) hard.push('macd unread');
+  else if (!macd) hard.push('macd is against the trade');
+  var don = rows1 ? tmDonchian(rows1, dir) : null;
+  if (don == null) hard.push('donchian unread');
+  else if (!don) hard.push('price is on the wrong side of the donchian midpoint');
+  var cmo = rows1 ? tmCmo(rows1, dir) : null;
+  if (cmo == null) hard.push('chande unread');
+  else if (!cmo) hard.push('chande momentum is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -4368,7 +4436,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'Heikin Ashi, Force Index and Know Sure Thing agree with the earlier crypto scripts';
+  ticket.pine = 'MACD, Donchian and Chande Momentum agree with the earlier crypto scripts';
   return [];
 }
 
@@ -6420,7 +6488,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6886,6 +6954,9 @@ W.tmObv = tmObv;
 W.tmHeikin = tmHeikin;
 W.tmForce = tmForce;
 W.tmKst = tmKst;
+W.tmMacd = tmMacd;
+W.tmDonchian = tmDonchian;
+W.tmCmo = tmCmo;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

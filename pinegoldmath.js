@@ -848,7 +848,7 @@ var PINE_GOLD_RECORD_LAYERS = [
      majority. Record-only until the ledger measures it. */
   { id: 'ote', label: 'OTE 0.705', fn: 'pineGoldOte', minBars: 50,
     opts: { look: 40 }, twin: null },
-  /* hg-v1219: three more bar-only Pine ports a gold trader runs, each
+  /* hg-v1220: three more bar-only Pine ports a gold trader runs, each
      distinct from every layer above and from every live-lane port on GOLD
      PINE. HalfTrend (an amplitude-pivot ATR trend flip, different from
      Supertrend's HL2 ATR bands and Chandelier's trail-from-extreme);
@@ -1624,7 +1624,7 @@ function pineGoldOte(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
-/* hg-v1219: Nadaraya-Watson Gaussian kernel smoother. The port's own
+/* hg-v1220: Nadaraya-Watson Gaussian kernel smoother. The port's own
    compute path (see pineNwEnvelope in pinemath.js), lifted here so the
    state read in pineGoldLayerStates can compare close against the
    kernel center on EVERY bar -- not only the bars the port fires on.
@@ -1650,7 +1650,7 @@ function pgrNwCenter(rows, bandwidth, lookback){
   return sumYw / sumW;
 }
 
-/* hg-v1219: Range Filter builder. Calls the pinemath port and promotes
+/* hg-v1220: Range Filter builder. Calls the pinemath port and promotes
    its flip-bar output to the hg-v1164 shape {dir, entry, stop, t1, t2}
    through pgrResult. On a long flip the stop sits below the lower edge
    of the active range (filterLevel - rng - 0.15*ATR via pgrResult's
@@ -1674,7 +1674,7 @@ function pineGoldRangeFilter(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
-/* hg-v1219: Nadaraya-Watson envelope builder. The port fires on a wick
+/* hg-v1220: Nadaraya-Watson envelope builder. The port fires on a wick
    that pierced +/-mult*ATR of the kernel center and closed back inside.
    Entry is the close on that bar; stop sits beyond the band plus a
    0.15*ATR buffer (same shape as BPR, hg-v1203); t1/t2 follow the
@@ -2472,8 +2472,8 @@ function pineGoldLayerStates(rows){
               squeezeOn: false, efficiencyEr: NaN,
               /* hg-v1202 */ bpr: null,
               /* hg-v1207 */ ote: null,
-              /* hg-v1219 record-only scored layers */ halftrend: null, rangefilter: null, nwenvelope: null,
-              /* hg-v1219 state-only (not in the record-layer table) */ vumanchuCipher: null,
+              /* hg-v1220 record-only scored layers */ halftrend: null, rangefilter: null, nwenvelope: null,
+              /* hg-v1220 state-only (not in the record-layer table) */ vumanchuCipher: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -2682,7 +2682,7 @@ function pineGoldLayerStates(rows){
         else if (!oteSw.up && c < oteSw.zoneBot) out.ote = 'short';
       }
     }catch(eOte){}
-    /* hg-v1219: HalfTrend state. The port's own `trend` field is +1/-1
+    /* hg-v1220: HalfTrend state. The port's own `trend` field is +1/-1
        on every bar (not only the flip bar), so a readable amplitude
        trend reads one side; the state is the trend-side, not the flip
        event. The port itself returns null without enough bars (atrLen +
@@ -2695,7 +2695,7 @@ function pineGoldLayerStates(rows){
         if (htRes && (htRes.trend === 1 || htRes.trend === -1)) out.halftrend = htRes.trend === 1 ? 'long' : 'short';
       }
     }catch(eHt){}
-    /* hg-v1219: Range Filter state. The port's own `trend` field reads
+    /* hg-v1220: Range Filter state. The port's own `trend` field reads
        the regime (+1 above the filter level with the range, -1 below),
        so the state is the regime side on every bar; `includeContext`
        returns the trend without needing a fresh flip. */
@@ -2707,7 +2707,7 @@ function pineGoldLayerStates(rows){
         if (rfRes && (rfRes.trend === 1 || rfRes.trend === -1)) out.rangefilter = rfRes.trend === 1 ? 'long' : 'short';
       }
     }catch(eRf){}
-    /* hg-v1219: NW Envelope state. The port only returns on a wick
+    /* hg-v1220: NW Envelope state. The port only returns on a wick
        reversion, so for a continuous state read we compare close
        against the Gaussian kernel center via pgrNwCenter (one home
        with the port's own compute, hg-v949). NEITHER at exact
@@ -2720,7 +2720,7 @@ function pineGoldLayerStates(rows){
         else if (c < nwC) out.nwenvelope = 'short';
       }
     }catch(eNw){}
-    /* hg-v1219: VuManChu Cipher state (state-only, NOT in the record
+    /* hg-v1220: VuManChu Cipher state (state-only, NOT in the record
        table). WaveTrend sitting beyond +osLevel is overbought (reads
        SHORT as a mean-reversion bias); sitting below -osLevel is
        oversold (LONG); inside the band is NEITHER. The port's
@@ -2757,7 +2757,7 @@ function pineGoldLayerStates(rows){
    (at least three of the five with the plan is true, at least three
    against is false, anything else absent) */
 var PINE_GOLD_MAJORITY = 3;
-/* hg-v1219: state-only mark ids (NOT in PINE_GOLD_RECORD_LAYERS). The
+/* hg-v1220: state-only mark ids (NOT in PINE_GOLD_RECORD_LAYERS). The
    state joins pineGoldLayerStates and pineGoldPineMarks for the PINE
    STACK line and the forward record, but does NOT mint a record-only
    layer and does NOT join readable/allLong/allShort counts or the
@@ -2794,7 +2794,7 @@ function pineGoldStackLineHtml(states, marks){
       var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
       cells += '<span class="gsx-ind ' + cls + '" title="' + e('pine:' + l.id + 'With — ' + l.label + ' state on this tape') + '"><b>' + e(l.label) + '</b> ' + e(tag) + '</span>';
     });
-    /* hg-v1219: state-only cells live beside the scored record-layer cells
+    /* hg-v1220: state-only cells live beside the scored record-layer cells
        in the stack but are counted separately (they do not join the
        readable-of-table count or the majority bar). Each adds its own
        cell with a dashed-border class so a reader sees the shape
@@ -2880,10 +2880,10 @@ G.pineGoldFisherSeries = pgrFisherSeries;
 G.pineGoldBpr = pineGoldBpr;                          /* hg-v1172 */
 G.pineGoldBprShelves = pgrBprShelves;                 /* hg-v1172 */
 G.pineGoldOte = pineGoldOte;                          /* hg-v1207 */
-G.pineGoldRangeFilter = pineGoldRangeFilter;          /* hg-v1219 */
-G.pineGoldNwEnvelope = pineGoldNwEnvelope;            /* hg-v1219 */
-G.pineGoldNwCenter = pgrNwCenter;                     /* hg-v1219 */
-G.PINE_GOLD_STATE_ONLY_IDS = PINE_GOLD_STATE_ONLY_IDS; /* hg-v1219 */
+G.pineGoldRangeFilter = pineGoldRangeFilter;          /* hg-v1220 */
+G.pineGoldNwEnvelope = pineGoldNwEnvelope;            /* hg-v1220 */
+G.pineGoldNwCenter = pgrNwCenter;                     /* hg-v1220 */
+G.PINE_GOLD_STATE_ONLY_IDS = PINE_GOLD_STATE_ONLY_IDS; /* hg-v1220 */
 G.pineGoldFixLock = pineGoldFixLock;
 G.pineGoldRecordJudge = pineGoldRecordJudge;
 G.pineGoldRecordFloor = pineGoldRecordFloor;

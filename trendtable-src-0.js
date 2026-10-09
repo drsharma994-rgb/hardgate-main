@@ -1746,6 +1746,65 @@ function tmKst(rows, dir){
   if (dir === 'long') return kst > 0;
   return kst < 0;
 }
+/* MACD 12/26/9. The line has to be on the trade side of zero and not
+   under its signal. A short tape does not pass. */
+function tmMacd(rows, dir){
+  var fast = 12, slow = 26, sigLen = 9;
+  if (!rows || rows.length < slow + sigLen + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  var ef = tmEmaSeed(closes, fast), es = tmEmaSeed(closes, slow);
+  if (!ef || !es) return null;
+  var macd = [];
+  for (i = 0; i < closes.length; i++){
+    if (isFinite(ef[i]) && isFinite(es[i])) macd.push(ef[i] - es[i]);
+  }
+  if (macd.length < sigLen + 2) return null;
+  var signal = tmEmaSeed(macd, sigLen);
+  if (!signal) return null;
+  var line = macd[macd.length - 1];
+  var sigNow = signal[signal.length - 1];
+  if (!isFinite(line) || !isFinite(sigNow)) return null;
+  if (dir === 'long') return line > 0 && line + 1e-6 >= sigNow;
+  return line < 0 && line <= sigNow + 1e-6;
+}
+/* Donchian midpoint, 20. A long has to close above the middle of the
+   channel. A short has to close below it. A flat channel does not pass. */
+function tmDonchian(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < slice.length; i++){
+    if (!isFinite(slice[i].h) || !isFinite(slice[i].l) || !isFinite(slice[i].c)) return null;
+    if (slice[i].h > hi) hi = slice[i].h;
+    if (slice[i].l < lo) lo = slice[i].l;
+  }
+  if (!(hi > lo)) return false;
+  var mid = (hi + lo) / 2;
+  var px = slice[slice.length - 1].c;
+  if (dir === 'long') return px > mid;
+  return px < mid;
+}
+/* Chande Momentum Oscillator, 14. Above zero agrees with a long. */
+function tmCmo(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var up = 0, down = 0, i, ch, start = rows.length - len;
+  for (i = start; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !isFinite(rows[i - 1].c)) return null;
+    ch = rows[i].c - rows[i - 1].c;
+    if (ch > 0) up += ch;
+    else if (ch < 0) down -= ch;
+  }
+  if (!(up + down > 0)) return false;
+  var cmo = 100 * (up - down) / (up + down);
+  if (!isFinite(cmo)) return null;
+  if (dir === 'long') return cmo > 0;
+  return cmo < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
