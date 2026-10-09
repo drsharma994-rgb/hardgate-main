@@ -2262,6 +2262,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (ema100) return ema100;
   var tsiWhy = pineGoldTsiVeto(rows, dir);
   if (tsiWhy) return tsiWhy;
+  var orbWhy = pineGoldOrbVeto(rows, dir);
+  if (orbWhy) return orbWhy;
+  var forceWhy = pineGoldForceVeto(rows, dir);
+  if (forceWhy) return forceWhy;
+  var pocWhy2 = pineGoldNakedPocVeto(rows, dir);
+  if (pocWhy2) return pocWhy2;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3696,6 +3702,115 @@ function pineGoldTsiVeto(rows, dir){
   if (dir === 'short' && before <= 0 && now > 0) return 'TSI crossed over zero. A short does not pass.';
   return null;
 }
+/* The 08:00-08:30 UTC London opening range. After 08:30, a wick back inside it does not pass.
+   Before 08:30, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldOrbVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 8.5) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 8 || hv >= 8.5) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The London opening range was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The London opening range was pierced and closed back over.';
+  return null;
+}
+/* Elder Force Index, EMA 13. Crossing under zero does not pass.
+   Staying on one side, or a tape with no volume, does not refuse. */
+function pineGoldForceVeto(rows, dir){
+  var len = 13;
+  if (!rows || rows.length < len + 3 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  var raw = [], i, c, prev, v;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    v = volOf(rows[i]);
+    if (!(c > 0) || !(v > 0)) return null;
+    if (i > 0) raw.push((c - prev) * v);
+    prev = c;
+  }
+  var k = 2 / (len + 1), ema = null, before = NaN;
+  for (i = 0; i < raw.length; i++){
+    ema = ema == null ? raw[i] : (raw[i] * k + ema * (1 - k));
+    if (i === raw.length - 2) before = ema;
+  }
+  if (!isFinite(before) || !isFinite(ema)) return null;
+  if (dir === 'long' && before >= 0 && ema < 0) return 'Force Index crossed under zero. A long does not pass.';
+  if (dir === 'short' && before <= 0 && ema > 0) return 'Force Index crossed over zero. A short does not pass.';
+  return null;
+}
+/* Yesterday volume node. Losing it on this close does not pass.
+   No volume, no prior day, or a prior day under $8 does not refuse. */
+function pineGoldNakedPocVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  function dayOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key, hi = -Infinity, lo = Infinity, bins = {}, n = 0, px, v;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return null;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l)) || !(pgrNum(rows[i].c) > 0)) return null;
+    v = volOf(rows[i]);
+    if (!(v > 0)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    px = Math.round((pgrNum(rows[i].h) + pgrNum(rows[i].l) + pgrNum(rows[i].c)) / 3);
+    bins[px] = (bins[px] || 0) + v;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || hi - lo < 8) return null;
+  var poc = NaN, best = -1, keyS;
+  for (keyS in bins){
+    if (bins[keyS] > best){ best = bins[keyS]; poc = +keyS; }
+  }
+  if (!(poc > 0)) return null;
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(rows[rows.length - 1].c);
+  if (!(prevC > 0) || !(c > 0)) return null;
+  if (dir === 'long' && prevC > poc && c < poc) return 'Price lost yesterday volume node. A long does not pass.';
+  if (dir === 'short' && prevC < poc && c > poc) return 'Price reclaimed yesterday volume node. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -4295,6 +4410,9 @@ G.pineGoldPpLostVeto = pineGoldPpLostVeto;
 G.pineGoldFirstHourVeto = pineGoldFirstHourVeto;
 G.pineGoldEma100Veto = pineGoldEma100Veto;
 G.pineGoldTsiVeto = pineGoldTsiVeto;
+G.pineGoldOrbVeto = pineGoldOrbVeto;
+G.pineGoldForceVeto = pineGoldForceVeto;
+G.pineGoldNakedPocVeto = pineGoldNakedPocVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
