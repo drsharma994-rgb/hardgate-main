@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1233',
-  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a long that loses yesterday 61.8, a short that reclaims yesterday 38.2, a session VWAP that the last close crosses back through, and a 9/21 cross that prints on this bar. An older cross, a hold of the VWAP, or a prior day under $8 does not refuse. The card does not send an order.',
-  built: '2026-10-09T04:30:00Z'
+  version: 'hg-v1234',
+  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a Supertrend flip on this bar, a CCI that just left +100 or -100, and a candle that engulfs the prior body by at least 0.6 ATR. An old trend, a CCI that stays beyond the line, or a small candle does not refuse. The card does not send an order.',
+  built: '2026-10-09T04:40:00Z'
 };
 
 function hgBuildLabel(b){

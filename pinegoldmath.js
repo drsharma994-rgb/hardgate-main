@@ -2208,6 +2208,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (lagWhy) return lagWhy;
   var crossWhy = pineGoldEmaCrossVeto(rows, dir);
   if (crossWhy) return crossWhy;
+  var stWhy = pineGoldSupertrendVeto(rows, dir);
+  if (stWhy) return stWhy;
+  var cciWhy = pineGoldCciVeto(rows, dir);
+  if (cciWhy) return cciWhy;
+  var engWhy = pineGoldEngulfVeto(rows, dir);
+  if (engWhy) return engWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2982,6 +2988,86 @@ function pineGoldEmaCrossVeto(rows, dir){
   if (dir === 'short' && e9[n - 1] <= e21[n - 1] && e9[n] > e21[n]) return 'The 9 EMA just crossed over the 21.';
   return null;
 }
+/* Supertrend 10, 3. Only the bar that flips. An old trend does not refuse. */
+function pineGoldSupertrendVeto(rows, dir){
+  var period = 10, factor = 3;
+  if (!rows || rows.length < period + 2) return null;
+  var atr = [], i, h, l, c, tr, prevC;
+  for (i = 0; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l); c = pgrNum(rows[i].c);
+    if (!(c > 0) || !isFinite(h) || !isFinite(l)) return null;
+    if (i === 0) tr = h - l;
+    else {
+      prevC = pgrNum(rows[i - 1].c);
+      tr = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
+    }
+    atr.push(i === 0 ? tr : ((atr[i - 1] * (period - 1) + tr) / period));
+  }
+  var up = 0, dn = 0, trend = 1, prevUp = 0, prevDn = 0, prevTrend = 1, flip = null;
+  for (i = 0; i < rows.length; i++){
+    h = +rows[i].h; l = +rows[i].l; c = +rows[i].c;
+    var mid = (h + l) / 2;
+    var rawUp = mid - factor * atr[i];
+    var rawDn = mid + factor * atr[i];
+    if (i === 0){ up = rawUp; dn = rawDn; }
+    else {
+      var prevClose = +rows[i - 1].c;
+      up = (prevClose > prevUp) ? Math.max(rawUp, prevUp) : rawUp;
+      dn = (prevClose < prevDn) ? Math.min(rawDn, prevDn) : rawDn;
+      prevTrend = trend;
+      if (c > prevDn) trend = 1;
+      else if (c < prevUp) trend = -1;
+      else trend = prevTrend;
+      if (i === rows.length - 1 && trend !== prevTrend) flip = trend === -1 ? 'bear' : 'bull';
+    }
+    prevUp = up;
+    prevDn = dn;
+  }
+  if (dir === 'long' && flip === 'bear') return 'Supertrend just flipped down. A long does not pass.';
+  if (dir === 'short' && flip === 'bull') return 'Supertrend just flipped up. A short does not pass.';
+  return null;
+}
+function pineGoldCciValue(rows, end, len){
+  if (!rows || end < len - 1) return NaN;
+  var tps = [], i, tp, sum = 0, md = 0;
+  for (i = end - len + 1; i <= end; i++){
+    if (!(pgrNum(rows[i].c) > 0) || !isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))) return NaN;
+    tp = (+rows[i].h + +rows[i].l + +rows[i].c) / 3;
+    tps.push(tp);
+    sum += tp;
+  }
+  var mean = sum / len;
+  for (i = 0; i < tps.length; i++) md += Math.abs(tps[i] - mean);
+  md = md / len;
+  if (!(md > 0)) return 0;
+  return (tps[tps.length - 1] - mean) / (0.015 * md);
+}
+/* CCI leaving +100 or -100 on this bar. Staying beyond the line does not refuse. */
+function pineGoldCciVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 2) return null;
+  var n = rows.length - 1;
+  var prev = pineGoldCciValue(rows, n - 1, len);
+  var now = pineGoldCciValue(rows, n, len);
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= 100 && now < 100) return 'CCI just left +100. A long does not pass.';
+  if (dir === 'short' && prev <= -100 && now > -100) return 'CCI just left -100. A short does not pass.';
+  return null;
+}
+/* The last candle body covers the prior candle body, and the body is at least 0.6 ATR. */
+function pineGoldEngulfVeto(rows, dir){
+  if (!rows || rows.length < 16) return null;
+  var prev = rows[rows.length - 2], last = rows[rows.length - 1];
+  var atrV = pineGoldAtrNow(rows);
+  var o = pgrNum(last.o), c = pgrNum(last.c);
+  var po = pgrNum(prev.o), pc = pgrNum(prev.c);
+  if (!(atrV > 0) || !isFinite(o) || !isFinite(c) || !isFinite(po) || !isFinite(pc)) return null;
+  if (Math.abs(c - o) < 0.6 * atrV) return null;
+  var top = Math.max(po, pc), bot = Math.min(po, pc);
+  if (dir === 'long' && c < o && o >= top && c <= bot) return 'A bearish candle engulfed the prior body. A long does not pass.';
+  if (dir === 'short' && c > o && o <= bot && c >= top) return 'A bullish candle engulfed the prior body. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3554,6 +3640,9 @@ G.pineGoldLagVeto = pineGoldLagVeto;
 G.pineGoldFibLostVeto = pineGoldFibLostVeto;
 G.pineGoldVwapLostVeto = pineGoldVwapLostVeto;
 G.pineGoldEmaCrossVeto = pineGoldEmaCrossVeto;
+G.pineGoldSupertrendVeto = pineGoldSupertrendVeto;
+G.pineGoldCciVeto = pineGoldCciVeto;
+G.pineGoldEngulfVeto = pineGoldEngulfVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
