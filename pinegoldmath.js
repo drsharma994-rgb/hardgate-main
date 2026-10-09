@@ -2226,6 +2226,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (emaWhy) return emaWhy;
   var tdWhy = pineGoldTd9Veto(rows, dir);
   if (tdWhy) return tdWhy;
+  var comexWhy = pineGoldComexHourVeto(rows, dir);
+  if (comexWhy) return comexWhy;
+  var bbAcc = pineGoldBbAcceptVeto(rows, dir);
+  if (bbAcc) return bbAcc;
+  var h4Why = pineGoldH4OpenVeto(rows, dir);
+  if (h4Why) return h4Why;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3209,6 +3215,95 @@ function pineGoldTd9Veto(rows, dir){
   if (dir === 'short' && pgrNum(last.c) > pgrNum(last.o)) return 'A TD 9 closed up. A short does not pass.';
   return null;
 }
+/* The 13:00 UTC hour, New York cash and COMEX. After 14:00, a wick back inside it does not pass.
+   Before 14:00, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldComexHourVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 14) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 13 || hv >= 14) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The COMEX hour was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The COMEX hour was pierced and closed back over.';
+  return null;
+}
+/* A close back inside a Bollinger band after the previous close was outside it.
+   A close that never left the band, or a band under $4, does not refuse. */
+function pineGoldBbAcceptVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1);
+  var sum = 0, i, c;
+  for (i = 0; i < prior.length; i++){
+    c = pgrNum(prior[i].c);
+    if (!(c > 0)) return null;
+    sum += c;
+  }
+  var mean = sum / prior.length, acc = 0, d;
+  for (i = 0; i < prior.length; i++){
+    d = pgrNum(prior[i].c) - mean;
+    acc += d * d;
+  }
+  var sd = Math.sqrt(acc / prior.length);
+  if (!(sd > 0) || sd * 4 < 4) return null;
+  var prevC = pgrNum(prior[prior.length - 1].c);
+  var now = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(prevC) || !isFinite(now)) return null;
+  if (dir === 'long' && prevC > mean + 2 * sd && now <= mean + 2 * sd) return 'Price closed back inside the upper Bollinger band.';
+  if (dir === 'short' && prevC < mean - 2 * sd && now >= mean - 2 * sd) return 'Price closed back inside the lower Bollinger band.';
+  return null;
+}
+/* The open of the current 4-hour block. Losing it on this bar does not pass.
+   One bar in the block does not refuse. */
+function pineGoldH4OpenVeto(rows, dir){
+  if (!rows || rows.length < 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var start = Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), Math.floor(when.getUTCHours() / 4) * 4);
+  var open = NaN, n = 0, i, ms;
+  for (i = 0; i < rows.length; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms < start) continue;
+    if (!isFinite(open)) open = pgrNum(rows[i].o);
+    n++;
+  }
+  if (!(open > 0) || n < 2) return null;
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(prevC) || !isFinite(c)) return null;
+  if (dir === 'long' && prevC > open && c < open) return 'Price lost the 4-hour open. A long does not pass.';
+  if (dir === 'short' && prevC < open && c > open) return 'Price crossed back through the 4-hour open. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3790,6 +3885,9 @@ G.pineGoldMacdVeto = pineGoldMacdVeto;
 G.pineGoldLondonHourVeto = pineGoldLondonHourVeto;
 G.pineGoldEma50Veto = pineGoldEma50Veto;
 G.pineGoldTd9Veto = pineGoldTd9Veto;
+G.pineGoldComexHourVeto = pineGoldComexHourVeto;
+G.pineGoldBbAcceptVeto = pineGoldBbAcceptVeto;
+G.pineGoldH4OpenVeto = pineGoldH4OpenVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
