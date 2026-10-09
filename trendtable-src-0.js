@@ -2767,6 +2767,117 @@ function tmObLost(rows, dir){
   }
   return true;
 }
+/* A wick through the Keltner band, measured before this bar, that closes back inside.
+   Price that stays inside the band does not refuse. */
+function tmKeltner(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(0, -1), closes = [], i, atr = 0, pc, tr;
+  for (i = 0; i < prior.length; i++){
+    if (!(+prior[i].c > 0)) return null;
+    closes.push(+prior[i].c);
+  }
+  for (i = prior.length - len; i < prior.length; i++){
+    if (!isFinite(+prior[i].h) || !isFinite(+prior[i].l) || !(+prior[i - 1].c > 0)) return null;
+    pc = +prior[i - 1].c;
+    tr = Math.max(+prior[i].h - +prior[i].l, Math.abs(+prior[i].h - pc), Math.abs(+prior[i].l - pc));
+    atr += tr;
+  }
+  atr = atr / len;
+  if (!(atr > 0)) return true;
+  var ema = tmSeedEma(closes, len);
+  if (!ema) return null;
+  var mid = ema[ema.length - 1];
+  var upper = mid + 2 * atr, lower = mid - 2 * atr;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if (dir === 'long' && h > upper && c <= upper && c < o) return false;
+  if (dir === 'short' && l < lower && c >= lower && c > o) return false;
+  return true;
+}
+/* Asian range, 00:00 to 07:00 UTC. A later wick back inside it does not pass.
+   Before 07:00, or no Asian bars, it does not refuse. */
+function tmAsiaSweep(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  if (when.getUTCHours() < 7) return true;
+  var day = when.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms, barDay, hour;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    var at = new Date(ms);
+    barDay = at.toISOString().slice(0, 10);
+    hour = at.getUTCHours();
+    if (barDay !== day || hour >= 7) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 3 || !(hi > lo)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.002) return true;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return false;
+  if (dir === 'short' && l < lo && c >= lo && c > o) return false;
+  return true;
+}
+/* A wick through the session VWAP band, one standard deviation, that closes back inside.
+   Fewer than four session bars does not refuse. */
+function tmVwapBand(rows, dir){
+  if (!rows || !rows.length || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var sess = [], i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key === today) sess.push(rows[i]);
+  }
+  if (sess.length < 4) return true;
+  var sum = 0, vol = 0, b, v, tp;
+  for (i = 0; i < sess.length; i++){
+    b = sess[i];
+    v = +b.v;
+    if (!(v > 0) || !isFinite(+b.h) || !isFinite(+b.l) || !(+b.c > 0)) return null;
+    tp = (+b.h + +b.l + +b.c) / 3;
+    sum += tp * v;
+    vol += v;
+  }
+  if (!(vol > 0)) return null;
+  var vwap = sum / vol, acc = 0;
+  for (i = 0; i < sess.length; i++){
+    b = sess[i];
+    tp = (+b.h + +b.l + +b.c) / 3;
+    var d = tp - vwap;
+    acc += (+b.v) * d * d;
+  }
+  var sd = Math.sqrt(acc / vol);
+  if (!(sd > 0)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if (dir === 'long' && h > vwap + sd && c <= vwap + sd && c < o) return false;
+  if (dir === 'short' && l < vwap - sd && c >= vwap - sd && c > o) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

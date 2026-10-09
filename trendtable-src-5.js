@@ -274,6 +274,15 @@
   var ob = rows1 ? tmObLost(rows1, dir) : null;
   if (ob == null) hard.push('order block unread');
   else if (!ob) hard.push('price closed through the order block');
+  var kelt = rows1 ? tmKeltner(rows1, dir) : null;
+  if (kelt == null) hard.push('keltner unread');
+  else if (!kelt) hard.push('a Keltner band was pierced and closed back inside');
+  var asia = rows1 ? tmAsiaSweep(rows1, dir) : null;
+  if (asia == null) hard.push('asian range unread');
+  else if (!asia) hard.push('the Asian range was swept and closed back inside');
+  var vwapBand = rows1 ? tmVwapBand(rows1, dir) : null;
+  if (vwapBand == null) hard.push('vwap band unread');
+  else if (!vwapBand) hard.push('a VWAP band was pierced and closed back inside');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
