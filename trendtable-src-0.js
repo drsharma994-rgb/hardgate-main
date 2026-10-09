@@ -2232,6 +2232,84 @@ function tmStructure(rows, dir){
   if (dir === 'long') return !bear;
   return !bull;
 }
+/* A wick through the prior 20-bar extreme that closes back inside, on a candle
+   against the trade. A close through the extreme does not refuse. */
+function tmFailedBreak(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var look = rows.slice(-(len + 1), -1);
+  var hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(look[i].h) || !isFinite(look[i].l) || !(look[i].c > 0)) return null;
+    if (look[i].h > hi) hi = look[i].h;
+    if (look[i].l < lo) lo = look[i].l;
+  }
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0) || !(hi > lo)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return false;
+  if (dir === 'short' && l < lo && c >= lo && c > o) return false;
+  return true;
+}
+/* Session VWAP from 00:00 UTC. Losing it on this bar does not pass.
+   Fewer than four bars in the session does not pass. */
+function tmVwapLost(rows, dir){
+  if (!rows || rows.length < 4 || (dir !== 'long' && dir !== 'short')) return null;
+  var lastT = +rows[rows.length - 1].t;
+  if (!isFinite(lastT)) return null;
+  if (lastT < 1e12) lastT = lastT * 1000;
+  var day = new Date(lastT).toISOString().slice(0, 10);
+  var sess = [], i, b, tb, key;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    tb = +b.t;
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    key = new Date(tb).toISOString().slice(0, 10);
+    if (key !== day) continue;
+    if (!(+b.c > 0) || !isFinite(+b.h) || !isFinite(+b.l)) return null;
+    sess.push(b);
+  }
+  if (sess.length < 4) return null;
+  function vwap(list){
+    var s = 0, vol = 0, j, bar, v, tp;
+    for (j = 0; j < list.length; j++){
+      bar = list[j];
+      v = +bar.v;
+      if (!(v > 0)) v = 1;
+      tp = (+bar.h + +bar.l + +bar.c) / 3;
+      s += tp * v;
+      vol += v;
+    }
+    return vol > 0 ? s / vol : NaN;
+  }
+  var prevV = vwap(sess.slice(0, -1));
+  var nowV = vwap(sess);
+  var prevC = +sess[sess.length - 2].c;
+  var c = +sess[sess.length - 1].c;
+  if (!isFinite(prevV) || !isFinite(nowV)) return null;
+  if (dir === 'long' && prevC > prevV && c < nowV) return false;
+  if (dir === 'short' && prevC < prevV && c > nowV) return false;
+  return true;
+}
+/* A close through the latest swing against the trade is a break of structure.
+   No swing means there is nothing against the trade. */
+function tmBos(rows, dir){
+  if (!rows || rows.length < 15 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l) || !(rows[i].c > 0)) return null;
+  }
+  var sw = tmFractals(rows);
+  if (!sw) return null;
+  var c = +rows[rows.length - 1].c;
+  if (dir === 'long'){
+    if (!sw.lows.length) return true;
+    return !(c < rows[sw.lows[sw.lows.length - 1]].l);
+  }
+  if (!sw.highs.length) return true;
+  return !(c > rows[sw.highs[sw.highs.length - 1]].h);
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

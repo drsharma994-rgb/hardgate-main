@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1238',
-  pack: 'Trend Matrix also refuses RSI divergence against the trade, a Price Volume Trend that is not moving with the trade, and a lower-high lower-low structure on a long. A short tape, missing volume, or a single swing does not pass. The card does not send an order.',
-  built: '2026-10-09T05:50:00Z'
+  version: 'hg-v1239',
+  pack: 'Trend Matrix also refuses a wick back inside the 20-bar extreme, a session VWAP lost on this bar, and a close that breaks the latest swing against the trade. A close through the extreme, a hold of VWAP, or no swing does not refuse. The card does not send an order.',
+  built: '2026-10-09T06:05:00Z'
 };
 
 function hgBuildLabel(b){

@@ -211,6 +211,15 @@
   var struct = rows1 ? tmStructure(rows1, dir) : null;
   if (struct == null) hard.push('structure unread');
   else if (!struct) hard.push('market structure is against the trade');
+  var failBr = rows1 ? tmFailedBreak(rows1, dir) : null;
+  if (failBr == null) hard.push('failed break unread');
+  else if (!failBr) hard.push('the 20-bar extreme was pierced and closed back inside');
+  var lostVwap = rows1 ? tmVwapLost(rows1, dir) : null;
+  if (lostVwap == null) hard.push('session vwap unread');
+  else if (!lostVwap) hard.push('price lost the session VWAP');
+  var bos = rows1 ? tmBos(rows1, dir) : null;
+  if (bos == null) hard.push('break of structure unread');
+  else if (!bos) hard.push('structure broke against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
