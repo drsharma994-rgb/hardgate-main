@@ -1136,6 +1136,91 @@ function tmVwmaSide(rows, dir){
   if (dir === 'long') return px > vwma && vwma > sma;
   return px < vwma && vwma < sma;
 }
+function tmDmi(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len * 2 + 2) return null;
+  var tr = [], pd = [], md = [], i;
+  for (i = 1; i < rows.length; i++){
+    var up = rows[i].h - rows[i - 1].h;
+    var dn = rows[i - 1].l - rows[i].l;
+    pd.push(up > dn && up > 0 ? up : 0);
+    md.push(dn > up && dn > 0 ? dn : 0);
+    tr.push(Math.max(rows[i].h - rows[i].l, Math.abs(rows[i].h - rows[i - 1].c), Math.abs(rows[i].l - rows[i - 1].c)));
+  }
+  if (tr.length < len + len) return null;
+  function wilder(src){
+    var s = 0, out = [], j;
+    for (j = 0; j < len; j++) s += src[j];
+    out.push(s);
+    for (j = len; j < src.length; j++) out.push(out[out.length - 1] - (out[out.length - 1] / len) + src[j]);
+    return out;
+  }
+  var trS = wilder(tr), pdS = wilder(pd), mdS = wilder(md);
+  var dx = [], pdi = NaN, mdi = NaN, k;
+  for (k = 0; k < trS.length; k++){
+    if (!(trS[k] > 0)) return null;
+    pdi = 100 * pdS[k] / trS[k];
+    mdi = 100 * mdS[k] / trS[k];
+    var den = pdi + mdi;
+    dx.push(den > 0 ? (100 * Math.abs(pdi - mdi) / den) : 0);
+  }
+  if (dx.length < len || !isFinite(pdi) || !isFinite(mdi)) return null;
+  var adx = 0;
+  for (k = 0; k < len; k++) adx += dx[k];
+  adx /= len;
+  for (k = len; k < dx.length; k++) adx = ((adx * (len - 1)) + dx[k]) / len;
+  if (!(adx >= 18 && adx <= 70)) return false;
+  if (dir === 'long') return pdi > mdi;
+  return mdi > pdi;
+}
+function tmBbSide(rows, dir){
+  var n = 20;
+  if (!rows || rows.length < n) return null;
+  var slice = rows.slice(-n), sum = 0, i, v = 0;
+  for (i = 0; i < slice.length; i++) sum += slice[i].c;
+  var sma = sum / n;
+  for (i = 0; i < slice.length; i++) v += Math.pow(slice[i].c - sma, 2);
+  var sd = Math.sqrt(v / n);
+  if (!(sd > 0)) return null;
+  var pct = (slice[n - 1].c - (sma - 2 * sd)) / (4 * sd);
+  if (dir === 'long') return pct >= 0.5 && pct <= 0.95;
+  return pct <= 0.5 && pct >= 0.05;
+}
+function tmHlMid(rows, end, len){
+  if (!rows || end < len - 1 || end >= rows.length) return NaN;
+  var hi = -Infinity, lo = Infinity, i, bar;
+  for (i = end - len + 1; i <= end; i++){
+    bar = rows[i];
+    if (!bar || !isFinite(bar.h) || !isFinite(bar.l)) return NaN;
+    if (bar.h > hi) hi = bar.h;
+    if (bar.l < lo) lo = bar.l;
+  }
+  if (!isFinite(hi) || !isFinite(lo)) return NaN;
+  return (hi + lo) / 2;
+}
+function tmIchiSignal(rows, dir){
+  if (!rows || rows.length < 52) return null;
+  var i = rows.length - 1;
+  var ten = tmHlMid(rows, i, 9);
+  var kij = tmHlMid(rows, i, 26);
+  var ago = rows[i - 26] && rows[i - 26].c;
+  var px = rows[i].c;
+  if (!isFinite(ten) || !isFinite(kij) || !(ago > 0) || !(px > 0)) return null;
+  if (ten === kij) return false;
+  if (dir === 'long') return ten > kij && px > ago;
+  return ten < kij && px < ago;
+}
+function tmVwapStretch(rows, dir){
+  if (!rows || rows.length < 14 || typeof tmSessionVwap !== 'function' || typeof atr !== 'function') return null;
+  var vwap = tmSessionVwap(rows);
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  var px = rows[rows.length - 1] && rows[rows.length - 1].c;
+  if (!isFinite(vwap) || !(atrNow > 0) || !(px > 0)) return null;
+  var dist = (px - vwap) / atrNow;
+  if (dir === 'long') return dist > 0 && dist <= 2;
+  return dist < 0 && dist >= -2;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3465,6 +3550,18 @@ async function trendmxFormOne(ticket, row, ctx){
   var vwma = rows1 ? tmVwmaSide(rows1, dir) : null;
   if (vwma == null) hard.push('volume average unread');
   else if (!vwma) hard.push('volume is not sitting with the trade');
+  var dmi = rows1 ? tmDmi(rows1, dir) : null;
+  if (dmi == null) hard.push('dmi unread');
+  else if (!dmi) hard.push('dmi is flat or the directional index is against the trade');
+  var bandPos = rows1 ? tmBbSide(rows1, dir) : null;
+  if (bandPos == null) hard.push('bollinger unread');
+  else if (!bandPos) hard.push('price is outside the band or on the wrong side of the midline');
+  var ichi = rows1 ? tmIchiSignal(rows1, dir) : null;
+  if (ichi == null) hard.push('ichimoku line unread');
+  else if (!ichi) hard.push('tenkan, kijun or chikou is against the trade');
+  var stretch = rows1 ? tmVwapStretch(rows1, dir) : null;
+  if (stretch == null) hard.push('vwap band unread');
+  else if (!stretch) hard.push('price is stretched more than 2 ATR from VWAP');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -3692,7 +3789,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'aroon, elder ray and the volume average agree';
+  ticket.pine = 'tenkan leads kijun, chikou agrees, and price is within 2 ATR of VWAP';
   return [];
 }
 
@@ -5744,7 +5841,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · golden cross Telegram every 15m. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray and a volume-weighted average above the simple average. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, and price within 2 ATR of the session VWAP. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6188,6 +6285,10 @@ W.tmDamiani = tmDamiani;
 W.tmAroon = tmAroon;
 W.tmElder = tmElder;
 W.tmVwmaSide = tmVwmaSide;
+W.tmDmi = tmDmi;
+W.tmBbSide = tmBbSide;
+W.tmIchiSignal = tmIchiSignal;
+W.tmVwapStretch = tmVwapStretch;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

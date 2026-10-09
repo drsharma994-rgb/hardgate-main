@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* HARDGATE hg-v1205: four more crypto Pine ports join TREND MATRIX's
+/* HARDGATE hg-v1207: four more crypto Pine ports join TREND MATRIX's
    `trendmxPineMarks` as record-only three-state marks. VuManChu Cipher B,
    Range Filter, Nadaraya-Watson envelope and Weekly AVWAP are all defined
    in pinemath.js and were read by nothing on this desk; they ride the same
@@ -200,15 +200,15 @@ console.log('== 6) no gate module reads a new pineCipher/pineRangeFilter/pineNwE
 /* ====================================================================
    § 7 ship stamps
    ==================================================================== */
-console.log('== 7) build stamps say hg-v1205 ==');
+console.log('== 7) build stamps say hg-v1207 ==');
 {
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1205'/.test(bs), 'build-stamp.js version is hg-v1205');
+  assert(/version:\s*'hg-v1207'/.test(bs), 'build-stamp.js version is hg-v1207');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1205'/.test(sw), 'sw.js HG_CACHE is hg-v1205');
+  assert(/HG_CACHE\s*=\s*'hg-v1207'/.test(sw), 'sw.js HG_CACHE is hg-v1207');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1205/.test(tt), 'trendtable.js header reads hg-v1205');
-  assert(/v=1205/.test(tt), 'trendtable.js loader cachebuster reads v=1205');
+  assert(/hg-v1207/.test(tt), 'trendtable.js header reads hg-v1207');
+  assert(/v=1207/.test(tt), 'trendtable.js loader cachebuster reads v=1207');
 }
 
 /* ====================================================================
@@ -246,4 +246,4 @@ console.log('== 8) parts files served to the browser carry the four new reads an
   }
 }
 
-console.log('\nhg-v1205 TREND MATRIX nine Pine marks: all § passed');
+console.log('\nhg-v1207 TREND MATRIX nine Pine marks: all § passed');

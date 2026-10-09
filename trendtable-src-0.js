@@ -1136,6 +1136,91 @@ function tmVwmaSide(rows, dir){
   if (dir === 'long') return px > vwma && vwma > sma;
   return px < vwma && vwma < sma;
 }
+function tmDmi(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len * 2 + 2) return null;
+  var tr = [], pd = [], md = [], i;
+  for (i = 1; i < rows.length; i++){
+    var up = rows[i].h - rows[i - 1].h;
+    var dn = rows[i - 1].l - rows[i].l;
+    pd.push(up > dn && up > 0 ? up : 0);
+    md.push(dn > up && dn > 0 ? dn : 0);
+    tr.push(Math.max(rows[i].h - rows[i].l, Math.abs(rows[i].h - rows[i - 1].c), Math.abs(rows[i].l - rows[i - 1].c)));
+  }
+  if (tr.length < len + len) return null;
+  function wilder(src){
+    var s = 0, out = [], j;
+    for (j = 0; j < len; j++) s += src[j];
+    out.push(s);
+    for (j = len; j < src.length; j++) out.push(out[out.length - 1] - (out[out.length - 1] / len) + src[j]);
+    return out;
+  }
+  var trS = wilder(tr), pdS = wilder(pd), mdS = wilder(md);
+  var dx = [], pdi = NaN, mdi = NaN, k;
+  for (k = 0; k < trS.length; k++){
+    if (!(trS[k] > 0)) return null;
+    pdi = 100 * pdS[k] / trS[k];
+    mdi = 100 * mdS[k] / trS[k];
+    var den = pdi + mdi;
+    dx.push(den > 0 ? (100 * Math.abs(pdi - mdi) / den) : 0);
+  }
+  if (dx.length < len || !isFinite(pdi) || !isFinite(mdi)) return null;
+  var adx = 0;
+  for (k = 0; k < len; k++) adx += dx[k];
+  adx /= len;
+  for (k = len; k < dx.length; k++) adx = ((adx * (len - 1)) + dx[k]) / len;
+  if (!(adx >= 18 && adx <= 70)) return false;
+  if (dir === 'long') return pdi > mdi;
+  return mdi > pdi;
+}
+function tmBbSide(rows, dir){
+  var n = 20;
+  if (!rows || rows.length < n) return null;
+  var slice = rows.slice(-n), sum = 0, i, v = 0;
+  for (i = 0; i < slice.length; i++) sum += slice[i].c;
+  var sma = sum / n;
+  for (i = 0; i < slice.length; i++) v += Math.pow(slice[i].c - sma, 2);
+  var sd = Math.sqrt(v / n);
+  if (!(sd > 0)) return null;
+  var pct = (slice[n - 1].c - (sma - 2 * sd)) / (4 * sd);
+  if (dir === 'long') return pct >= 0.5 && pct <= 0.95;
+  return pct <= 0.5 && pct >= 0.05;
+}
+function tmHlMid(rows, end, len){
+  if (!rows || end < len - 1 || end >= rows.length) return NaN;
+  var hi = -Infinity, lo = Infinity, i, bar;
+  for (i = end - len + 1; i <= end; i++){
+    bar = rows[i];
+    if (!bar || !isFinite(bar.h) || !isFinite(bar.l)) return NaN;
+    if (bar.h > hi) hi = bar.h;
+    if (bar.l < lo) lo = bar.l;
+  }
+  if (!isFinite(hi) || !isFinite(lo)) return NaN;
+  return (hi + lo) / 2;
+}
+function tmIchiSignal(rows, dir){
+  if (!rows || rows.length < 52) return null;
+  var i = rows.length - 1;
+  var ten = tmHlMid(rows, i, 9);
+  var kij = tmHlMid(rows, i, 26);
+  var ago = rows[i - 26] && rows[i - 26].c;
+  var px = rows[i].c;
+  if (!isFinite(ten) || !isFinite(kij) || !(ago > 0) || !(px > 0)) return null;
+  if (ten === kij) return false;
+  if (dir === 'long') return ten > kij && px > ago;
+  return ten < kij && px < ago;
+}
+function tmVwapStretch(rows, dir){
+  if (!rows || rows.length < 14 || typeof tmSessionVwap !== 'function' || typeof atr !== 'function') return null;
+  var vwap = tmSessionVwap(rows);
+  var series = atr(rows, 14);
+  var atrNow = series && series.length ? series[series.length - 1] : NaN;
+  var px = rows[rows.length - 1] && rows[rows.length - 1].c;
+  if (!isFinite(vwap) || !(atrNow > 0) || !(px > 0)) return null;
+  var dist = (px - vwap) / atrNow;
+  if (dir === 'long') return dist > 0 && dist <= 2;
+  return dist < 0 && dist >= -2;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
