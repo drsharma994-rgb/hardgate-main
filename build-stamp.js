@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1258',
-  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a 20-bar breakout on less than half the average volume, an evening or morning star at the local extreme, and an RSI cross back through 70. A break on normal volume, a star that is not at the extreme, or an RSI already inside 70 does not refuse. The card does not send an order.',
-  built: '2026-10-09T10:40:00Z'
+  version: 'hg-v1259',
+  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a wick back inside yesterday 1.272 extension, a stochastic cross down from 80, and a wick back inside the prior 55-bar extreme. A close through the level, a stochastic already inside 80, or a channel under $8 does not refuse. The card does not send an order.',
+  built: '2026-10-09T10:55:00Z'
 };
 
 function hgBuildLabel(b){

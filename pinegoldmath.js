@@ -2238,6 +2238,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (starWhy) return starWhy;
   var rsiX = pineGoldRsiExitVeto(rows, dir);
   if (rsiX) return rsiX;
+  var extWhy = pineGoldExtVeto(rows, dir);
+  if (extWhy) return extWhy;
+  var stochX = pineGoldStochExitVeto(rows, dir);
+  if (stochX) return stochX;
+  var donWhy = pineGoldDonchian55Veto(rows, dir);
+  if (donWhy) return donWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3380,6 +3386,69 @@ function pineGoldRsiExitVeto(rows, dir){
   if (dir === 'short' && prev <= 30 && now > 30) return 'RSI crossed back from 30. A short does not pass.';
   return null;
 }
+/* Yesterday's 1.272 extension. A wick back inside it does not pass.
+   A close through it, or a prior day under $8, does not refuse. */
+function pineGoldExtVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8 || !rows || !rows.length || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  var range = prior.hi - prior.lo;
+  var up = prior.hi + range * 0.272;
+  var dn = prior.lo - range * 0.272;
+  if (dir === 'long' && h > up && c <= up && c < o) return 'The 1.272 extension was pierced and closed back under.';
+  if (dir === 'short' && l < dn && c >= dn && c > o) return 'The 1.272 extension was pierced and closed back over.';
+  return null;
+}
+/* Slow stochastic leaving 80. A cross already inside 80 does not refuse. A flat range does not pass. */
+function pineGoldStochExitVeto(rows, dir){
+  var len = 14, smooth = 3;
+  if (!rows || rows.length < len + smooth + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var ks = [], i, j, hi, lo, c;
+  for (i = len - 1; i < rows.length; i++){
+    hi = -Infinity; lo = Infinity;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(pgrNum(rows[j].h)) || !isFinite(pgrNum(rows[j].l)) || !(pgrNum(rows[j].c) > 0)) return null;
+      if (+rows[j].h > hi) hi = +rows[j].h;
+      if (+rows[j].l < lo) lo = +rows[j].l;
+    }
+    c = pgrNum(rows[i].c);
+    if (!(hi > lo)) return null;
+    ks.push(100 * (c - lo) / (hi - lo));
+  }
+  function sma(end){
+    var s = 0, k;
+    for (k = end - smooth + 1; k <= end; k++) s += ks[k];
+    return s / smooth;
+  }
+  var n = ks.length - 1;
+  var rawNow = ks[n], rawPrev = ks[n - 1], kNow = sma(n), kPrev = sma(n - 1);
+  if (!isFinite(rawNow) || !isFinite(rawPrev) || !isFinite(kNow) || !isFinite(kPrev)) return null;
+  if (dir === 'long' && rawPrev >= 80 && rawPrev >= kPrev && rawNow < kNow) return 'Stochastic crossed down from 80. A long does not pass.';
+  if (dir === 'short' && rawPrev <= 20 && rawPrev <= kPrev && rawNow > kNow) return 'Stochastic crossed up from 20. A short does not pass.';
+  return null;
+}
+/* A wick through the prior 55-bar extreme that closes back inside, against the trade.
+   A close through the extreme, or a channel under $8, does not refuse. */
+function pineGoldDonchian55Veto(rows, dir){
+  var len = 55;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var look = rows.slice(-(len + 1), -1);
+  var hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(pgrNum(look[i].h)) || !isFinite(pgrNum(look[i].l)) || !(pgrNum(look[i].c) > 0)) return null;
+    if (+look[i].h > hi) hi = +look[i].h;
+    if (+look[i].l < lo) lo = +look[i].l;
+  }
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c) || !(hi > lo)) return null;
+  if (hi - lo < 8) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The 55-bar high was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The 55-bar low was pierced and closed back over.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3967,6 +4036,9 @@ G.pineGoldH4OpenVeto = pineGoldH4OpenVeto;
 G.pineGoldWeakBreakVeto = pineGoldWeakBreakVeto;
 G.pineGoldStarVeto = pineGoldStarVeto;
 G.pineGoldRsiExitVeto = pineGoldRsiExitVeto;
+G.pineGoldExtVeto = pineGoldExtVeto;
+G.pineGoldStochExitVeto = pineGoldStochExitVeto;
+G.pineGoldDonchian55Veto = pineGoldDonchian55Veto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
