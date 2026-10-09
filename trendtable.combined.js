@@ -8190,7 +8190,10 @@ async function trendmxPerfectEvidencePass(rows){
       var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
       if (!plan) continue;
       var reads = {};
-      if (isFinite(+r.fundingPct)){
+      /* hg-v1288: dvol + liq-cluster reads attach PER ROW regardless of funding
+         — the 1f7bbd79 merge-repair re-nested them inside the funding guard,
+         silently costing CoinDCX rows these reads (hg-v1144's documented
+         'attached per row regardless of funding' intent). */
       if (dvol && isFinite(+dvol.dvol)){ reads.dvolVal = +dvol.dvol; reads.dvolRegime = dvol.regime || null; }
       if (cg){
         try{
@@ -8200,6 +8203,7 @@ async function trendmxPerfectEvidencePass(rows){
           if (isFinite(usd)) reads.liqClusterUsd = usd;
         }catch(eLc){ }
       }
+      if (isFinite(+r.fundingPct)){
         reads.venueFundingPct = +r.fundingPct;
       /* hg-v1144: venue premium = venue funding minus the Binance twin */
       if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;

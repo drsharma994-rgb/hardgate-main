@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1287',
-  pack: 'Gold Scalp only. The gold/silver ratio now needs sixty daily sessions of both metals, not a few hours of 15-minute bars. A gold Asia sweep is still checked against the dollar index 15-minute box. Daily gold and dollar returns, and SPX or oil when those sessions actually overlap, can feed the macro residual; a missing day is left out, not filled with zero. Bitcoin correlation is measured on daily closes. A feed that did not arrive stays unread. Every target stays 2.5R. The card does not send an order.',
-  built: '2026-10-09T14:13:10Z'
+  version: 'hg-v1288',
+  pack: 'Seven defects across GOLD PINE, GANESH GOLD, and TREND MATRIX. Four GOLD PINE fixes close the hg-v948 isFinite(+null) trap: hgGpRecord stamps goldShut on every record (the hg-v955 seam goldscalp and goldswing closed and goldpine missed), gpHandoffBlock stops reading a null R:R as a vetoing zero, and two record-side filters reject null entry/stop/price without the +null coercion that routed bogus zeros into the forward ledger. Two GANESH GOLD fixes extend the hg-v1154 ggBarMs seconds-to-ms helper to asiaBox and the AVWAP anchor loop so the Asian range and daily VWAP anchor stop reading in 1970 on seconds-based rows. One TREND MATRIX fix unnests the DVOL and Coinglass liquidation-cluster reads from isFinite(+r.fundingPct) where a merge-repair hid them, restoring the hg-v1144 intent that both evidence legs attach per row regardless of funding, which CoinDCX rows (no funding) had silently lost. No weight added, no gate moved.',
+  built: '2026-10-09T19:00:00Z'
 };
 
 function hgBuildLabel(b){
