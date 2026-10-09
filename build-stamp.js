@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1261',
-  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a close back inside the Keltner band after the previous close was outside it, a wick back inside a 20-bar regression channel, and a daily pivot point lost on this bar. A close that never left the band, a channel under $8, or a pivot already lost does not refuse. The card does not send an order.',
-  built: '2026-10-09T11:25:00Z'
+  version: 'hg-v1262',
+  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a wick back inside the 00:00 UTC hour after 01:00, a 100 EMA lost on this bar, and a TSI cross under zero. Before 01:00 UTC, an EMA already lost, or a TSI that stays on its side does not refuse. The card does not send an order.',
+  built: '2026-10-09T11:40:00Z'
 };
 
 function hgBuildLabel(b){

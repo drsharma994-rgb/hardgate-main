@@ -2256,6 +2256,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (regWhy) return regWhy;
   var ppWhy = pineGoldPpLostVeto(rows, dir);
   if (ppWhy) return ppWhy;
+  var hrWhy = pineGoldFirstHourVeto(rows, dir);
+  if (hrWhy) return hrWhy;
+  var ema100 = pineGoldEma100Veto(rows, dir);
+  if (ema100) return ema100;
+  var tsiWhy = pineGoldTsiVeto(rows, dir);
+  if (tsiWhy) return tsiWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3609,6 +3615,87 @@ function pineGoldPpLostVeto(rows, dir){
   if (dir === 'short' && prevC < pp && c > pp) return 'Price reclaimed the daily pivot point. A short does not pass.';
   return null;
 }
+/* The 00:00 UTC hour. After 01:00, a wick back inside it does not pass.
+   Before 01:00, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldFirstHourVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 1) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv >= 1) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The first hour was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The first hour was pierced and closed back over.';
+  return null;
+}
+/* The 100 EMA. Losing it on this bar does not pass. A close already through it does not refuse. */
+function pineGoldEma100Veto(rows, dir){
+  var len = 100;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var k = 2 / (len + 1), ema = null, prevE = NaN, prevC = NaN, i, c;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    ema = ema == null ? c : (c * k + ema * (1 - k));
+    if (i === rows.length - 2){ prevE = ema; prevC = c; }
+  }
+  if (dir === 'long' && prevC >= prevE && c < ema) return 'Price lost the 100 EMA. A long does not pass.';
+  if (dir === 'short' && prevC <= prevE && c > ema) return 'Price reclaimed the 100 EMA. A short does not pass.';
+  return null;
+}
+/* TSI 13/7 crossing under zero. Staying on one side does not refuse. */
+function pineGoldTsiVeto(rows, dir){
+  var slow = 13, fast = 7;
+  if (!rows || rows.length < slow + fast + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var ch = [], i, c, prev;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    if (i > 0) ch.push(c - prev);
+    prev = c;
+  }
+  function ema(src, len){
+    var k = 2 / (len + 1), v = null, out = [], j;
+    for (j = 0; j < src.length; j++){
+      if (!isFinite(src[j])) return null;
+      v = v == null ? src[j] : (src[j] * k + v * (1 - k));
+      out.push(v);
+    }
+    return out;
+  }
+  var abs = ch.map(function(x){ return Math.abs(x); });
+  var s1 = ema(ch, slow), a1 = ema(abs, slow);
+  if (!s1 || !a1) return null;
+  var s2 = ema(s1, fast), a2 = ema(a1, fast);
+  if (!s2 || !a2) return null;
+  var n = s2.length - 1;
+  if (!(a2[n] > 0) || !(a2[n - 1] > 0)) return null;
+  var now = 100 * s2[n] / a2[n], before = 100 * s2[n - 1] / a2[n - 1];
+  if (dir === 'long' && before >= 0 && now < 0) return 'TSI crossed under zero. A long does not pass.';
+  if (dir === 'short' && before <= 0 && now > 0) return 'TSI crossed over zero. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -4205,6 +4292,9 @@ G.pineGoldH4SweepVeto = pineGoldH4SweepVeto;
 G.pineGoldKeltAcceptVeto = pineGoldKeltAcceptVeto;
 G.pineGoldRegressVeto = pineGoldRegressVeto;
 G.pineGoldPpLostVeto = pineGoldPpLostVeto;
+G.pineGoldFirstHourVeto = pineGoldFirstHourVeto;
+G.pineGoldEma100Veto = pineGoldEma100Veto;
+G.pineGoldTsiVeto = pineGoldTsiVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
