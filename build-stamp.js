@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1210',
-  pack: 'Gold Scalp and OmniGold refuse to lead on the gold tape. That now includes a chase two sigma past session VWAP, a long into an unswept prior-day high, a short into an unswept prior-day low, and a round-dollar rejection against the trade. Premium, the Asian fade, the London fix, a used-up daily range, RSI divergence, and a real-rate headwind still refuse. A missing reading does not. The card does not send an order.',
-  built: '2026-10-09T00:40:00Z'
+  version: 'hg-v1211',
+  pack: 'Gold Scalp and OmniGold refuse a failed London or New York opening-range break, a fresh fair-value gap in the way of a scalp, and unswept equal highs or lows. The earlier gold-tape refusals still apply. A missing reading does not refuse. The card does not send an order.',
+  built: '2026-10-09T00:50:00Z'
 };
 
 function hgBuildLabel(b){

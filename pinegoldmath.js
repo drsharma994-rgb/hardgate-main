@@ -2023,6 +2023,14 @@ function pineGoldTapeVeto(rows, dir, opts){
     var rr = rrFn ? rrFn(rows) : null;
     if (rr && (rr.dir === 'long' || rr.dir === 'short') && rr.dir !== dir) return rr.why || 'A round-dollar level rejected against this trade.';
   }catch(eRr){}
+  if (mode === 'scalp'){
+    var orWhy = pineGoldOpeningReject(rows, dir);
+    if (orWhy) return orWhy;
+    var fvgWhy = pineGoldFvgInPath(rows, dir);
+    if (fvgWhy) return fvgWhy;
+  }
+  var eqWhy = pineGoldEqualPool(rows, dir);
+  if (eqWhy) return eqWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2075,6 +2083,86 @@ function pineGoldPriorDayVeto(rows, dir){
       if (c > prior.lo && c - prior.lo <= 0.35 * atrV && !(l < prior.lo)) return 'Price is over the prior day low and has not swept it.';
     }
   }catch(eDy){}
+  return null;
+}
+/* London 07:00-08:00 and New York 13:00-14:00 UTC, from the desk's own
+   opening-range read. A pierce that closes back inside is a failed break.
+   A box still building, or a clean close through, is not this veto. */
+function pineGoldOpeningReject(rows, dir){
+  var orFn = gfn('goldOpeningRange');
+  if (typeof orFn !== 'function' || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last && last.h), l = pgrNum(last && last.l), c = pgrNum(last && last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var names = { london: 'London', ny: 'New York' };
+  var keys = ['london', 'ny'];
+  for (var i = 0; i < keys.length; i++){
+    var box = null;
+    try{ box = orFn(rows, keys[i]); }catch(eOr){ box = null; }
+    if (!box || !(box.hi > box.lo) || box.state === 'BUILDING') continue;
+    var name = names[keys[i]];
+    if (dir === 'long' && h > box.hi && c <= box.hi) return name + ' opening range high was pierced and closed back inside.';
+    if (dir === 'short' && l < box.lo && c >= box.lo) return name + ' opening range low was pierced and closed back over.';
+  }
+  return null;
+}
+/* A fresh $3 gold fair-value gap from the Pine gold library, still open,
+   and either touching price or within half an ATR. An old or mitigated
+   gap does not refuse. */
+function pineGoldFvgInPath(rows, dir){
+  var Eng = G.HG_PineGoldEngine;
+  if (typeof Eng !== 'function' || !rows || rows.length < 8) return null;
+  var fvgs = null;
+  try{ fvgs = new Eng().detectGoldFvg(rows, 3); }catch(eFg){ return null; }
+  if (!fvgs || !fvgs.length) return null;
+  var atrV = pineGoldBarAtr(rows);
+  var c = pgrNum(rows[rows.length - 1] && rows[rows.length - 1].c);
+  if (!isFinite(atrV) || !isFinite(c)) return null;
+  var n = rows.length, i;
+  for (i = fvgs.length - 1; i >= 0; i--){
+    var f = fvgs[i];
+    if (!f || f.mitigated || !isFinite(f.barIndex) || f.barIndex < n - 16) continue;
+    if (!(f.top > f.bottom)) continue;
+    if (dir === 'long' && f.type === 'BEARISH_FVG' && c < f.top){
+      if (c >= f.bottom) return 'Price is inside a fresh bearish fair value gap.';
+      if (f.bottom - c <= 0.5 * atrV) return 'A fresh bearish fair value gap sits in the way of this long.';
+    }
+    if (dir === 'short' && f.type === 'BULLISH_FVG' && c > f.bottom){
+      if (c <= f.top) return 'Price is inside a fresh bullish fair value gap.';
+      if (c - f.top <= 0.5 * atrV) return 'A fresh bullish fair value gap sits in the way of this short.';
+    }
+  }
+  return null;
+}
+/* Equal highs above a long, equal lows under a short, on this tape.
+   A close through the pool is a break, not this veto. */
+function pineGoldEqualPool(rows, dir){
+  try{
+    var eqFn = gfn('goldEqualLevels');
+    if (!eqFn) return null;
+    var eq = eqFn(rows);
+    if (!eq) return null;
+    var atrV = pineGoldBarAtr(rows);
+    var lastB = rows[rows.length - 1];
+    if (!lastB || !isFinite(atrV)) return null;
+    var c = pgrNum(lastB.c), h = pgrNum(lastB.h), l = pgrNum(lastB.l);
+    if (!isFinite(c) || !isFinite(h) || !isFinite(l)) return null;
+    var near = 0.35 * atrV;
+    if (dir === 'long' && eq.nearestHigh && isFinite(eq.nearestHigh.level)){
+      var hi = eq.nearestHigh.level;
+      if (hi > c && hi - c <= near){
+        if (h > hi) return 'Equal highs were pierced and closed back under.';
+        return 'Equal highs sit just above and have not been swept.';
+      }
+    }
+    if (dir === 'short' && eq.nearestLow && isFinite(eq.nearestLow.level)){
+      var lo = eq.nearestLow.level;
+      if (c > lo && c - lo <= near){
+        if (l < lo) return 'Equal lows were pierced and closed back over.';
+        return 'Equal lows sit just below and have not been swept.';
+      }
+    }
+  }catch(eEq){}
   return null;
 }
 
