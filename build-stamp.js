@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1252',
-  pack: 'Trend Matrix also refuses a wick back inside the 07:00 UTC hour after 08:00, a 50 EMA lost on this bar, and a wick back inside the prior 55-bar extreme. Before 08:00 UTC, an EMA already lost, or a close through the extreme does not refuse. The card does not send an order.',
-  built: '2026-10-09T09:10:00Z'
+  version: 'hg-v1253',
+  pack: 'Trend Matrix also refuses an RSI cross back through 70, a wick back inside the prior 4-hour block, and an evening or morning star at the local extreme. An RSI already inside 70, no prior block, or a star that is not at the extreme does not refuse. The card does not send an order.',
+  built: '2026-10-09T09:25:00Z'
 };
 
 function hgBuildLabel(b){

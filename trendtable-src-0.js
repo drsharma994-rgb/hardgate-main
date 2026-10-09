@@ -3314,6 +3314,81 @@ function tmDonchian55(rows, dir){
   if (dir === 'short' && l < lo && c >= lo && c > o) return false;
   return true;
 }
+/* RSI(14) crossing back through 70. A reading already inside does not refuse. */
+function tmRsiExit(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(+rows[i].c > 0)) return null;
+    closes.push(+rows[i].c);
+  }
+  var rsi = tmRsiSeries(closes, 14);
+  if (!rsi) return null;
+  var prev = rsi[rsi.length - 2], now = rsi[rsi.length - 1];
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= 70 && now < 70) return false;
+  if (dir === 'short' && prev <= 30 && now > 30) return false;
+  return true;
+}
+/* The completed 4-hour block before this one. A wick back inside it does not pass.
+   No prior block, or a block under 0.2%, does not refuse. */
+function tmH4Sweep(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var start = Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), Math.floor(when.getUTCHours() / 4) * 4);
+  var prior = start - 4 * 3600 * 1000;
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms < prior || ms >= start) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 2 || !(hi > lo)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.002) return true;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return false;
+  if (dir === 'short' && l < lo && c >= lo && c > o) return false;
+  return true;
+}
+/* Evening star at the local high, or morning star at the local low. Anywhere else it does not refuse. */
+function tmStar(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var n = rows.length, i;
+  var a = rows[n - 3], b = rows[n - 2], c = rows[n - 1];
+  if (!(+a.c > 0) || !(+b.c > 0) || !(+c.c > 0)) return null;
+  if (!isFinite(+a.h) || !isFinite(+b.h) || !isFinite(+c.h)) return null;
+  var bodyA = Math.abs(+a.c - +a.o), rangeA = +a.h - +a.l;
+  var bodyB = Math.abs(+b.c - +b.o), rangeB = +b.h - +b.l;
+  if (!(rangeA > 0) || !(rangeB > 0)) return true;
+  if (dir === 'long'){
+    if (!(+a.c > +a.o) || bodyA < 0.6 * rangeA) return true;
+    if (bodyB > 0.35 * rangeA) return true;
+    if (!(+c.c < +c.o)) return true;
+    if (!(+c.c < (+a.o + +a.c) / 2)) return true;
+    for (i = n - 8; i < n; i++) if (+rows[i].h > +b.h) return true;
+    return false;
+  }
+  if (!(+a.c < +a.o) || bodyA < 0.6 * rangeA) return true;
+  if (bodyB > 0.35 * rangeA) return true;
+  if (!(+c.c > +c.o)) return true;
+  if (!(+c.c > (+a.o + +a.c) / 2)) return true;
+  for (i = n - 8; i < n; i++) if (+rows[i].l < +b.l) return true;
+  return false;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

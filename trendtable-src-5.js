@@ -328,6 +328,15 @@
   var don55 = rows1 ? tmDonchian55(rows1, dir) : null;
   if (don55 == null) hard.push('donchian unread');
   else if (!don55) hard.push('the 55-bar extreme was pierced and closed back inside');
+  var rsiX = rows1 ? tmRsiExit(rows1, dir) : null;
+  if (rsiX == null) hard.push('rsi extreme unread');
+  else if (!rsiX) hard.push('RSI crossed back from 70');
+  var h4s = rows1 ? tmH4Sweep(rows1, dir) : null;
+  if (h4s == null) hard.push('prior 4h block unread');
+  else if (!h4s) hard.push('the prior 4h block was pierced and closed back inside');
+  var star = rows1 ? tmStar(rows1, dir) : null;
+  if (star == null) hard.push('star unread');
+  else if (!star) hard.push('a star printed at the local extreme');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
