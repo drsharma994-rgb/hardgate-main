@@ -5162,13 +5162,17 @@ function trendmxCrownPanelHTML(state){
     if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
     if (isFinite(+pfR.dvolVal)) tech.push('DVOL ' + (+pfR.dvolVal).toFixed(1) + (pfR.dvolRegime ? ' ' + String(pfR.dvolRegime) : ''));
-    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb){
+    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb || pfR.pineCipher || pfR.pineRangeFilter || pfR.pineNwEnvelope || pfR.pineWavwap){
       var pineBits = [];
       if (pfR.pineLorKnn) pineBits.push('LorKNN ' + pfR.pineLorKnn);
       if (pfR.pineHalfTrend) pineBits.push('half-trend ' + pfR.pineHalfTrend);
       if (pfR.pineSqueeze) pineBits.push('squeeze ' + pfR.pineSqueeze);
       if (pfR.pineSmf) pineBits.push('SMF ' + pfR.pineSmf);
       if (pfR.pineMsb) pineBits.push('MSB ' + pfR.pineMsb);
+      if (pfR.pineCipher) pineBits.push('cipher ' + pfR.pineCipher);
+      if (pfR.pineRangeFilter) pineBits.push('range ' + pfR.pineRangeFilter);
+      if (pfR.pineNwEnvelope) pineBits.push('NW ' + pfR.pineNwEnvelope);
+      if (pfR.pineWavwap) pineBits.push('wAVWAP ' + pfR.pineWavwap);
       tech.push('PINE ' + pineBits.join(' | '));
     }
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
@@ -5333,9 +5337,17 @@ function tmStructureDir(rows){
    the row's own 4h tape, returned as a light mark bag. Record-only: the
    perfect predicate ignores them and the forward ledger decides whether
    any of them separates. Each unreadable signal is null (the honest
-   third state). */
+   third state).
+   hg-v1205: four more crypto-shaped Pine ports join the bag — VuManChu
+   Cipher B (Wave Trend oscillator, DIFFERENT from Lorentzian which is an
+   ML kernel), Range Filter (regime flip on adaptive range band, DIFFERENT
+   from Half-Trend which is a trailing stop), Nadaraya-Watson envelope
+   (Gaussian smoother reversion, no analog in the five), Weekly AVWAP
+   (location against the week's volume-weighted average, no analog in the
+   five). All four already exist in pinemath.js and were read by nothing on
+   this desk. Record-only like the five; nothing scores on them. */
 function trendmxPineMarks(rows){
-  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null };
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null };
   try{
     if (!Array.isArray(rows) || rows.length < 30) return out;
     if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
@@ -5343,6 +5355,10 @@ function trendmxPineMarks(rows){
     if (typeof W.pineSqueezeMomentum === 'function'){ var s = W.pineSqueezeMomentum(rows, {}); if (s && s.dir) out.sqz = String(s.dir).toLowerCase(); }
     if (typeof W.pineSmartMoneyFlow === 'function'){ var f = W.pineSmartMoneyFlow(rows, {}); if (f && f.dir) out.smf = String(f.dir).toLowerCase(); }
     if (typeof W.pineMsbOb === 'function'){ var m = W.pineMsbOb(rows, {}); if (m && m.dir) out.msb = String(m.dir).toLowerCase(); }
+    if (typeof W.pineVumanchuCipher === 'function'){ var vc = W.pineVumanchuCipher(rows, {}); if (vc && vc.dir) out.cipher = String(vc.dir).toLowerCase(); }
+    if (typeof W.pineRangeFilter === 'function'){ var rf = W.pineRangeFilter(rows, { includeContext: true }); if (rf && rf.dir) out.rfilter = String(rf.dir).toLowerCase(); }
+    if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
+    if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
   }catch(e){ }
   return out;
 }
@@ -5529,6 +5545,11 @@ async function trendmxPerfectEvidencePass(rows){
           reads.pineSqueeze = pm.sqz;
           reads.pineSmf = pm.smf;
           reads.pineMsb = pm.msb;
+          /* hg-v1205: four more crypto Pine ports as record-only marks. */
+          reads.pineCipher = pm.cipher;
+          reads.pineRangeFilter = pm.rfilter;
+          reads.pineNwEnvelope = pm.nwenv;
+          reads.pineWavwap = pm.wavwap;
           r.pineMarks = pm;
         }
       }catch(ePine){ }
