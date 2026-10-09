@@ -1329,6 +1329,121 @@ function tmFisher(rows, dir){
   if (dir === 'long') return fish > 0 && fish >= prev;
   return fish < 0 && fish <= prev;
 }
+/* Wilder Parabolic SAR. A long needs the stop under price. A short needs
+   it over price. A tape too short to place the stop does not pass. */
+function tmPsar(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return null;
+  }
+  var step = 0.02, cap = 0.2;
+  var up = rows[1].c >= rows[0].c;
+  var sar = up ? rows[0].l : rows[0].h;
+  var ep = up ? rows[1].h : rows[1].l;
+  var af = step;
+  for (i = 2; i < rows.length; i++){
+    var next = sar + af * (ep - sar);
+    if (up){
+      next = Math.min(next, rows[i - 1].l, rows[i - 2].l);
+      if (rows[i].l < next){
+        up = false; next = ep; ep = rows[i].l; af = step;
+      } else if (rows[i].h > ep){
+        ep = rows[i].h; af = Math.min(cap, af + step);
+      }
+    } else {
+      next = Math.max(next, rows[i - 1].h, rows[i - 2].h);
+      if (rows[i].h > next){
+        up = true; next = ep; ep = rows[i].h; af = step;
+      } else if (rows[i].l < ep){
+        ep = rows[i].l; af = Math.min(cap, af + step);
+      }
+    }
+    sar = next;
+  }
+  if (!isFinite(sar)) return null;
+  var px = rows[rows.length - 1].c;
+  if (dir === 'long') return up && px > sar;
+  return !up && px < sar;
+}
+function tmEmaSeed(values, len){
+  if (!values || values.length < len) return null;
+  var k = 2 / (len + 1), out = new Array(values.length), sum = 0, i;
+  for (i = 0; i < values.length; i++){
+    if (!isFinite(values[i])) return null;
+    if (i < len){
+      sum += values[i];
+      out[i] = i === len - 1 ? sum / len : NaN;
+    } else out[i] = values[i] * k + out[i - 1] * (1 - k);
+  }
+  return out;
+}
+/* Schaff Trend Cycle, 23/50/10. Above 50 and not falling for a long.
+   Below 50 and not rising for a short. */
+function tmSchaff(rows, dir){
+  var fast = 23, slow = 50, cycle = 10, factor = 0.5;
+  if (!rows || rows.length < slow + cycle * 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].c)) return null;
+    closes.push(rows[i].c);
+  }
+  var ef = tmEmaSeed(closes, fast), es = tmEmaSeed(closes, slow);
+  if (!ef || !es) return null;
+  var macd = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) macd[i] = (isFinite(ef[i]) && isFinite(es[i])) ? ef[i] - es[i] : NaN;
+  function stochAt(src, end, asPercent){
+    var hi = -Infinity, lo = Infinity, k;
+    for (k = end - cycle + 1; k <= end; k++){
+      if (!isFinite(src[k])) return NaN;
+      if (src[k] > hi) hi = src[k];
+      if (src[k] < lo) lo = src[k];
+    }
+    if (!(hi > lo) || (hi - lo) <= Math.max(1e-9, Math.abs(hi) * 1e-6)){
+      if (asPercent) return Math.max(0, Math.min(100, src[end]));
+      return src[end] > 0 ? 100 : (src[end] < 0 ? 0 : 50);
+    }
+    return ((src[end] - lo) / (hi - lo)) * 100;
+  }
+  var dSeries = new Array(closes.length), d = 0;
+  for (i = 0; i < closes.length; i++) dSeries[i] = NaN;
+  for (i = slow + cycle - 2; i < closes.length; i++){
+    var kk = stochAt(macd, i, false);
+    if (!isFinite(kk)) return null;
+    d = factor * kk + (1 - factor) * d;
+    dSeries[i] = d;
+  }
+  var stc = 0, prev = 0, seen = 0;
+  for (i = slow + cycle * 2 - 2; i < closes.length; i++){
+    var kd = stochAt(dSeries, i, true);
+    if (!isFinite(kd)) return null;
+    prev = stc;
+    stc = factor * kd + (1 - factor) * stc;
+    seen++;
+  }
+  if (seen < 2 || !isFinite(stc) || !isFinite(prev)) return null;
+  if (dir === 'long') return stc > 50 && stc + 1e-8 >= prev;
+  return stc < 50 && stc <= prev + 1e-8;
+}
+/* Vortex, length 14. The plus line has to lead a long. The minus line
+   has to lead a short. A tie does not pass. */
+function tmVortex(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var start = rows.length - len, vmp = 0, vmm = 0, tr = 0, i, c, p, range;
+  for (i = start; i < rows.length; i++){
+    c = rows[i]; p = rows[i - 1];
+    if (!isFinite(c.h) || !isFinite(c.l) || !isFinite(c.c) || !isFinite(p.h) || !isFinite(p.l) || !isFinite(p.c)) return null;
+    vmp += Math.abs(c.h - p.l);
+    vmm += Math.abs(c.l - p.h);
+    range = Math.max(c.h - c.l, Math.abs(c.h - p.c), Math.abs(c.l - p.c));
+    tr += range;
+  }
+  if (!(tr > 0)) return null;
+  var plus = vmp / tr, minus = vmm / tr;
+  if (dir === 'long') return plus > minus;
+  return minus > plus;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3679,6 +3794,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var fisher = rows1 ? tmFisher(rows1, dir) : null;
   if (fisher == null) hard.push('fisher unread');
   else if (!fisher) hard.push('fisher is against the trade');
+  var psar = rows1 ? tmPsar(rows1, dir) : null;
+  if (psar == null) hard.push('parabolic sar unread');
+  else if (!psar) hard.push('parabolic sar is against the trade');
+  var schaff = rows1 ? tmSchaff(rows1, dir) : null;
+  if (schaff == null) hard.push('schaff unread');
+  else if (!schaff) hard.push('schaff trend cycle is against the trade');
+  var vortex = rows1 ? tmVortex(rows1, dir) : null;
+  if (vortex == null) hard.push('vortex unread');
+  else if (!vortex) hard.push('vortex is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -3906,7 +4030,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'SSL, Stochastic RSI and Fisher agree, tenkan leads kijun, and price is within 2 ATR of VWAP';
+  ticket.pine = 'SSL, Stochastic RSI, Fisher, Parabolic SAR, Schaff and Vortex agree';
   return [];
 }
 
@@ -5958,7 +6082,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6409,6 +6533,9 @@ W.tmVwapStretch = tmVwapStretch;
 W.tmSsl = tmSsl;
 W.tmStochRsi = tmStochRsi;
 W.tmFisher = tmFisher;
+W.tmPsar = tmPsar;
+W.tmSchaff = tmSchaff;
+W.tmVortex = tmVortex;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

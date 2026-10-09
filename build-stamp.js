@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1213',
-  pack: 'Trend Matrix does not arm unless the SSL channel, Stochastic RSI, and Fisher Transform agree with the trade. A short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
-  built: '2026-10-09T01:05:00Z'
+  version: 'hg-v1214',
+  pack: 'Trend Matrix also requires Parabolic SAR, the Schaff Trend Cycle, and Vortex to agree with the trade. A short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
+  built: '2026-10-09T01:15:00Z'
 };
 
 function hgBuildLabel(b){

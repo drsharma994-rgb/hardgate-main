@@ -103,6 +103,15 @@
   var fisher = rows1 ? tmFisher(rows1, dir) : null;
   if (fisher == null) hard.push('fisher unread');
   else if (!fisher) hard.push('fisher is against the trade');
+  var psar = rows1 ? tmPsar(rows1, dir) : null;
+  if (psar == null) hard.push('parabolic sar unread');
+  else if (!psar) hard.push('parabolic sar is against the trade');
+  var schaff = rows1 ? tmSchaff(rows1, dir) : null;
+  if (schaff == null) hard.push('schaff unread');
+  else if (!schaff) hard.push('schaff trend cycle is against the trade');
+  var vortex = rows1 ? tmVortex(rows1, dir) : null;
+  if (vortex == null) hard.push('vortex unread');
+  else if (!vortex) hard.push('vortex is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -330,7 +339,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'SSL, Stochastic RSI and Fisher agree, tenkan leads kijun, and price is within 2 ATR of VWAP';
+  ticket.pine = 'SSL, Stochastic RSI, Fisher, Parabolic SAR, Schaff and Vortex agree';
   return [];
 }
 
