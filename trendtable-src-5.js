@@ -256,6 +256,15 @@
   var macdDiv = rows1 ? tmMacdDiv(rows1, dir) : null;
   if (macdDiv == null) hard.push('macd divergence unread');
   else if (!macdDiv) hard.push('macd histogram diverged against the trade');
+  var rsiX = rows1 ? tmRsiCross(rows1, dir) : null;
+  if (rsiX == null) hard.push('rsi cross unread');
+  else if (!rsiX) hard.push('RSI just crossed against the trade');
+  var fvg = rows1 ? tmFvgLost(rows1, dir) : null;
+  if (fvg == null) hard.push('fair value gap unread');
+  else if (!fvg) hard.push('price lost the fair value gap');
+  var bb = rows1 ? tmBbReject(rows1, dir) : null;
+  if (bb == null) hard.push('bollinger unread');
+  else if (!bb) hard.push('a Bollinger band was pierced and closed back inside');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

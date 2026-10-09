@@ -2591,6 +2591,75 @@ function tmMacdDiv(rows, dir){
   if (dir === 'short' && rows[b].l < rows[a].l && hist[b] > hist[a]) return false;
   return true;
 }
+/* RSI(14) crossing 50 on this bar. A cross on an earlier bar does not refuse. */
+function tmRsiCross(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(+rows[i].c > 0)) return null;
+    closes.push(+rows[i].c);
+  }
+  var rsi = tmRsiSeries(closes, 14);
+  if (!rsi) return null;
+  var n = rsi.length - 1;
+  if (!isFinite(rsi[n]) || !isFinite(rsi[n - 1])) return null;
+  if (dir === 'long' && rsi[n - 1] >= 50 && rsi[n] < 50) return false;
+  if (dir === 'short' && rsi[n - 1] <= 50 && rsi[n] > 50) return false;
+  return true;
+}
+/* The nearest fair-value gap of at least 0.15%. Losing it on this bar does not pass.
+   No gap does not refuse. */
+function tmFvgLost(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+  }
+  var prev = +rows[rows.length - 2].c, c = +rows[rows.length - 1].c;
+  var start = Math.max(2, rows.length - 30);
+  for (i = rows.length - 3; i >= start; i--){
+    if (dir === 'long' && +rows[i].l > +rows[i - 2].h){
+      var bot = +rows[i - 2].h;
+      if ((+rows[i].l - bot) / c < 0.0015) continue;
+      if (prev >= bot && c < bot) return false;
+      return true;
+    }
+    if (dir === 'short' && +rows[i].h < +rows[i - 2].l){
+      var top = +rows[i - 2].l;
+      if ((top - +rows[i].h) / c < 0.0015) continue;
+      if (prev <= top && c > top) return false;
+      return true;
+    }
+  }
+  return true;
+}
+/* A wick through the 20-bar Bollinger band that closes back inside, against the trade.
+   Price that stays inside the band does not refuse. */
+function tmBbReject(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var look = rows.slice(-len);
+  var sum = 0, i, c;
+  for (i = 0; i < look.length; i++){
+    c = +look[i].c;
+    if (!(c > 0)) return null;
+    sum += c;
+  }
+  var mean = sum / len, acc = 0;
+  for (i = 0; i < look.length; i++){
+    var d = +look[i].c - mean;
+    acc += d * d;
+  }
+  var sd = Math.sqrt(acc / len);
+  if (!(sd > 0)) return true;
+  var upper = mean + 2 * sd, lower = mean - 2 * sd;
+  var h = +last.h, l = +last.l, o = +last.o, px = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(px > 0)) return null;
+  if (dir === 'long' && h > upper && px <= upper && px < o) return false;
+  if (dir === 'short' && l < lower && px >= lower && px > o) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
