@@ -164,6 +164,16 @@ function pineGoldNearLevel(price, level, atr, mult){
   return Math.abs(price - level) <= (mult || 0.6) * atr;
 }
 
+/* LBMA Gold Price auctions, 10:30 and 15:00 London, which is 10:30 and 15:00 UTC
+   while London is on GMT. The scalp stands down from five minutes before
+   until ten minutes after. A clock that cannot be read does not lock. */
+function pineGoldFixLock(now){
+  var d = new Date(fin(+now) ? +now : Date.now());
+  if (isNaN(d.getTime())) return false;
+  var m = d.getUTCHours() * 60 + d.getUTCMinutes();
+  return (m >= 625 && m <= 640) || (m >= 895 && m <= 910);
+}
+
 function pineGoldGrade(score, max){
   max = max || PINE_GOLD_MAX;
   var pct = max > 0 ? score / max : 0;
@@ -490,6 +500,48 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
     pass = false;
     factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'R:R ' + rr.toFixed(2) + ' < ' + tierCfg.rrPrimary + ' min' });
   }
+  if (mode === 'scalp' && native.pd && !hasSweep && !hasOb){
+    if (dir === 'long' && native.pd.zone === 'PREMIUM'){
+      pass = false;
+      factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Scalp long in premium without a sweep or order block' });
+    } else if (dir === 'short' && native.pd.zone === 'DISCOUNT'){
+      pass = false;
+      factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Scalp short in discount without a sweep or order block' });
+    }
+  }
+  if (native.rsi && dir === 'long' && native.rsi.zone === 'OVERBOUGHT' && native.rsi.div === 'bearish'){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Gold RSI is overbought and diverging' });
+  } else if (native.rsi && dir === 'short' && native.rsi.zone === 'OVERSOLD' && native.rsi.div === 'bullish'){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Gold RSI is oversold and diverging' });
+  }
+  if (mode === 'scalp' && native.asian && native.asian.hi > native.asian.lo && price > 0){
+    var asiaW = (native.asian.hi - native.asian.lo) / price;
+    if (asiaW >= 0.01 && ((dir === 'long' && native.asian.state === 'SHORT_BREAK') || (dir === 'short' && native.asian.state === 'LONG_BREAK'))){
+      pass = false;
+      factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Asian range already expanded. Do not fade it.' });
+    }
+  }
+  try{
+    var adrFn = gfn('goldADR');
+    var adrR = adrFn ? adrFn(primaryRows, 14) : null;
+    if (adrR && adrR.exhausted === 'YES' && adrR.bias && adrR.bias !== dir){
+      pass = false;
+      factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'The day has used its average range. A continuation does not pass.' });
+    }
+  }catch(eAdr){}
+  if (mode === 'scalp' && pineGoldFixLock(opts.now)){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'London fix auction. A scalp does not pass in this window.' });
+  }
+  if (hint === 'HEADWIND' && dir === 'long' && !hasSweep){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Real-rate headwind against a long without a sweep' });
+  } else if (hint === 'TAILWIND' && dir === 'short' && !hasSweep){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Real-rate tailwind against a short without a sweep' });
+  }
 
   var isNew = false;
   var isRecent = false;
@@ -771,7 +823,13 @@ var PINE_GOLD_RECORD_LAYERS = [
      an OMNIGOLD mechanic (grep: no BPR, BALANCED-PRICE or balancedPrice in
      omnigold.js), `twin: null`. */
   { id: 'bpr', label: 'Balanced Price Range', fn: 'pineGoldBpr', minBars: 60,
-    opts: { lookback: 20, minGapAtr: 0.10 }, twin: null }
+    opts: { lookback: 20, minGapAtr: 0.10 }, twin: null },
+  /* hg-v1207: Optimal Trade Entry. The last closed bar tags the 0.62–0.79
+     retrace of the latest swing and closes back out of it. A wick through
+     0.79 is a failed pocket, not a signal. It does not join the five-layer
+     majority. Record-only until the ledger measures it. */
+  { id: 'ote', label: 'OTE 0.705', fn: 'pineGoldOte', minBars: 50,
+    opts: { look: 40 }, twin: null }
 ];
 /* hg-v1165's majority mark is the majority of the FIVE hg-v1164 layers --
    records written since then carry that meaning, so the three hg-v1166
@@ -1484,6 +1542,46 @@ function pineGoldBpr(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
+/* The latest swing inside the lookback, not including the signal bar.
+   Up impulse: the low printed before the high. The pocket is 62–79% back
+   from that high. A flat swing is no swing. */
+function pgrOteSwing(rows, look){
+  var n = rows ? rows.length : 0;
+  look = look || 40;
+  if (n < look + 2) return null;
+  var i = n - 1, from = i - look, hiI = from, loI = from, k, bar;
+  for (k = from; k < i; k++){
+    bar = rows[k];
+    if (!bar || !isFinite(bar.h) || !isFinite(bar.l)) return null;
+    if (bar.h >= rows[hiI].h) hiI = k;
+    if (bar.l <= rows[loI].l) loI = k;
+  }
+  var hi = rows[hiI].h, lo = rows[loI].l;
+  if (!(hi > lo) || hiI === loI) return null;
+  var rng = hi - lo, up = loI < hiI;
+  return {
+    hi: hi, lo: lo, up: up,
+    zoneTop: up ? (hi - 0.62 * rng) : (lo + 0.79 * rng),
+    zoneBot: up ? (hi - 0.79 * rng) : (lo + 0.62 * rng)
+  };
+}
+function pineGoldOte(rows, opts){
+  opts = opts || {};
+  try{
+    var sw = pgrOteSwing(rows, opts.look || 40);
+    if (!sw) return { dir: null };
+    var bar = rows[rows.length - 1];
+    var c = pgrNum(bar.c), o = pgrNum(bar.o), h = pgrNum(bar.h), l = pgrNum(bar.l);
+    if (![c, o, h, l].every(isFinite)) return { dir: null };
+    if (sw.up){
+      if (l <= sw.zoneTop && l >= sw.zoneBot && c > o && c > sw.zoneTop) return pgrResult('long', c, sw.lo, { oteTop: sw.zoneTop, oteBot: sw.zoneBot });
+      return { dir: null };
+    }
+    if (h >= sw.zoneBot && h <= sw.zoneTop && c < o && c < sw.zoneBot) return pgrResult('short', c, sw.hi, { oteTop: sw.zoneTop, oteBot: sw.zoneBot });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
 function pgrAdxRead(rows, len){
   var n = rows ? rows.length : 0;
   if (n < len * 2 + 2) return null;
@@ -1981,6 +2079,7 @@ function pineGoldLayerStates(rows){
               /* hg-v1173 formation family */ qqe: null, squeeze: null, wavwap: null, efficiency: null,
               squeezeOn: false, efficiencyEr: NaN,
               /* hg-v1202 */ bpr: null,
+              /* hg-v1207 */ ote: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -2182,6 +2281,13 @@ function pineGoldLayerStates(rows){
         else if (c < latest.bottom) out.bpr = 'short';
       }
     }catch(eB){}
+    try{
+      var oteSw = pgrOteSwing(rows, (layerOpts('ote').look) || 40);
+      if (oteSw){
+        if (oteSw.up && c > oteSw.zoneTop) out.ote = 'long';
+        else if (!oteSw.up && c < oteSw.zoneBot) out.ote = 'short';
+      }
+    }catch(eOte){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
       var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
@@ -2230,7 +2336,7 @@ function pineGoldStackLineHtml(states, marks){
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. Nothing here is scored.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. Nothing here is scored and it gates nothing.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }
@@ -2297,6 +2403,8 @@ G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
 G.pineGoldBpr = pineGoldBpr;                          /* hg-v1172 */
 G.pineGoldBprShelves = pgrBprShelves;                 /* hg-v1172 */
+G.pineGoldOte = pineGoldOte;                          /* hg-v1207 */
+G.pineGoldFixLock = pineGoldFixLock;
 G.pineGoldRecordJudge = pineGoldRecordJudge;
 G.pineGoldRecordFloor = pineGoldRecordFloor;
 G.pineGoldRecordChipHtml = pineGoldRecordChipHtml;
@@ -2335,7 +2443,8 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldQqe, pineGoldSqueezeFire, pineGoldWeeklyAvwap, pineGoldEfficiency,
     pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries,
     /* hg-v1202 */
-    pineGoldBpr, pineGoldBprShelves: pgrBprShelves
+    pineGoldBpr, pineGoldBprShelves: pgrBprShelves,
+    pineGoldOte, pineGoldFixLock
   };
 }
 

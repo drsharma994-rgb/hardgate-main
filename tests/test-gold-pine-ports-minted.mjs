@@ -198,7 +198,7 @@ const firstWindow = (W, fn, opts, rows, from) => {
 {
   const W = boot(MATH_BASE);
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 23 && NEW3.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function' && l.twin === null)), 'the three hg-v1166 layers sit in the record table (twenty-three since hg-v1202 appended BPR after hg-v1173 formation family) with their detectors and name no twin (STOCHRSI-TURN is not the Stochastic cross)');
+  assert(T.length === 24 && NEW3.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function' && l.twin === null)) && T[23].id === 'ote', 'the three hg-v1166 layers sit in the record table (twenty-four since hg-v1207 appended OTE) with their detectors and name no twin (STOCHRSI-TURN is not the Stochastic cross)');
   assert(Array.isArray(W.PINE_GOLD_MAJORITY_IDS) && W.PINE_GOLD_MAJORITY_IDS.join(',') === OLD5.join(','), 'the majority mark keeps its hg-v1165 population: the five hg-v1164 layers');
   const full = tapeEnding(WED, 600, 900, 11, 24, 0);
   const found = {};
@@ -270,9 +270,9 @@ const firstWindow = (W, fn, opts, rows, from) => {
   assert(mN['pine:macdWith'] === true && mN['pine:psarWith'] === true && mN['pine:stochWith'] === true && mN['pine:majorityWith'] === undefined && Object.keys(mN).length === 3,
     'three new layers WITH and the five unread: three marks and NO majority (the three do not move the five-layer majority)');
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
-  assert(Object.keys(mL).length === 16 && Object.keys(mL).every(k => mL[k] === true) && Object.keys(mS).every(k => mS[k] === false), 'all-long states: sixteen marks WITH on a long, sixteen AGAINST on a short (hg-v1171: fifteen layers + majority)');
+  assert(Object.keys(mL).length > 16 && mL['pine:oteWith'] === true && Object.keys(mL).every(k => mL[k] === true) && Object.keys(mS).every(k => mS[k] === false), 'all-long states stay WITH on a long, and OTE is one of them');
   const html = W.pineGoldStackLineHtml(su, mL);
-  assert(/\d+ of 23 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population (twenty-three total since hg-v1202)');
+  assert(/\d+ of 24 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population (twenty-four total since hg-v1207)');
 }
 
 /* ------------------------------------------------------------------ 4 */

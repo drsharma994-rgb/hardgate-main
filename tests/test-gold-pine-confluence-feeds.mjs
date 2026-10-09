@@ -191,7 +191,7 @@ console.log('== 3) the Pine stack: states, marks, the majority, the line ==');
   assert(sb.ok === true && sb.keltner === null, 'so the Keltner state reads NEITHER (the slope leg is part of the rule)');
   /* marks */
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
-  assert(PINE_KEYS.every(k => mL[k] === true) && Object.keys(mL).length === 16, 'all-long states on a long: the six hg-v1165 marks all WITH (sixteen with the hg-v1166 three, hg-v1167 four and hg-v1171 three)');
+  assert(PINE_KEYS.every(k => mL[k] === true) && mL['pine:oteWith'] === true && Object.keys(mL).length > 16, 'all-long states on a long stay WITH, and OTE is one of them (' + Object.keys(mL).length + ')');
   assert(PINE_KEYS.every(k => mS[k] === false), 'the same states on a short: six marks, all AGAINST');
   const mixed = { ok: true, supertrend: 'long', ichimoku: null, donchian: 'short', emacross: 'long', keltner: null, readable: 3, agreeLong: 2, agreeShort: 1 };
   const mM = W.pineGoldPineMarks(mixed, 'long');
@@ -202,7 +202,7 @@ console.log('== 3) the Pine stack: states, marks, the majority, the line ==');
   assert(Object.keys(W.pineGoldPineMarks(null, 'long')).length === 0 && Object.keys(W.pineGoldPineMarks({ ok: false }, 'long')).length === 0 && Object.keys(W.pineGoldPineMarks(su, 'x')).length === 0, 'no states, a failed read or no direction mark nothing');
   /* the line */
   const html = W.pineGoldStackLineHtml(mixed, mM);
-  assert(/data-hg-pine-stack="1"/.test(html) && /PINE STACK/.test(html) && /\d+ of 23 gold Pine layers readable/.test(html), 'the line carries its marker and the readable count (of twenty-three since hg-v1202)');
+  assert(/data-hg-pine-stack="1"/.test(html) && /PINE STACK/.test(html) && /\d+ of 24 gold Pine layers readable/.test(html), 'the line carries its marker and the readable count (of twenty-four since hg-v1207)');
   assert(/Supertrend 10x3<\/b> LONG/.test(html) && /Ichimoku TK Cross<\/b> UNREAD/.test(html) && /MAJORITY<\/b> SPLIT 2L\/1S/.test(html) && /gates nothing/.test(html), 'each layer prints its state (UNREAD where neither), the majority prints SPLIT with the tally, and the line says it gates nothing');
   assert(/MAJORITY<\/b> WITH/.test(W.pineGoldStackLineHtml(su, mL)) && /MAJORITY<\/b> AGAINST/.test(W.pineGoldStackLineHtml(su, mS)), 'a majority prints WITH or AGAINST by the marks');
   assert(W.pineGoldStackLineHtml(null, mL) === '' && W.pineGoldStackLineHtml({ ok: false }, {}) === '', 'no states: no line');

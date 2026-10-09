@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1207',
-  pack: 'FOUR more crypto Pine ports on the TREND MATRIX crown as record-only marks, on top of hg-v1205/v1206 (which added DMI, Bollinger position, Ichimoku lines and the VWAP band as inline gates). VuManChu Cipher B (Wave Trend oscillator - the crypto-standard momentum reading, DIFFERENT from the hg-v1201 Lorentzian KNN which is an ML kernel on bar features), Range Filter (regime flip on an adaptive EMA range band - crypto chop/trend detector, DIFFERENT from Half-Trend which is a trailing stop), Nadaraya-Watson envelope (Gaussian kernel mean with ATR bands and wick-pierce reversion, no analog in the five) and Weekly AVWAP (location against the weeks volume-weighted average, no analog in the five) all exist in pinemath.js and were read by nothing on this desk. They ride the same record-only path as the hg-v1201 five - every record of every TREND MATRIX scan now carries pineCipher / pineRangeFilter / pineNwEnvelope / pineWavwap as three-state marks (long / short / null, hg-v989); the perfect predicate ignores them (asserted); the forward ledger decides whether any separates on this desks own population. The crown TECHNICAL dimension prints them beside the hg-v1201 five on its PINE line. No gate reads them, no threshold moves, no setup leaves any board.',
-  built: '2026-10-15T00:30:00Z'
+  version: 'hg-v1208',
+  pack: 'Pine Gold, on top of the hg-v1207 Trend Matrix record marks. A scalp primary does not pass when it is long in premium or short in discount without a sweep or an order block. It does not pass during the London fix, and it does not fade an Asian range that already expanded by 1%. A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. The 0.705 pocket is recorded and does not lead. The card does not send an order.',
+  built: '2026-10-15T00:45:00Z'
 };
 
 function hgBuildLabel(b){
