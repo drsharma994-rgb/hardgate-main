@@ -355,6 +355,15 @@
   var td = rows1 ? tmTd9(rows1, dir) : null;
   if (td == null) hard.push('td unread');
   else if (!td) hard.push('a TD 9 closed against the trade');
+  var fundH = rows1 ? tmFundingHour(rows1, dir) : null;
+  if (fundH == null) hard.push('funding hour unread');
+  else if (!fundH) hard.push('the funding hour was swept and closed back inside');
+  var ema21 = rows1 ? tmEma21(rows1, dir) : null;
+  if (ema21 == null) hard.push('ema 21 unread');
+  else if (!ema21) hard.push('price lost the 21 EMA');
+  var yClose = rows1 ? tmPriorClose(rows1, dir) : null;
+  if (yClose == null) hard.push('prior close unread');
+  else if (!yClose) hard.push('price lost yesterday close');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

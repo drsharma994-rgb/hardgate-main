@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1267',
-  pack: 'The desk opens on the work. Tools stay behind the menu until you open them. Trend Matrix, Gold Scalp, OmniGold, Ganesh, and Pine Gold are one click on the header. Type a tab name and press Enter to jump. The page is wider so the most probable column sits beside the other cards. The card does not send an order.',
-  built: '2026-10-09T12:55:00Z'
+  version: 'hg-v1268',
+  pack: 'Trend Matrix also refuses a funding-hour sweep that closed back inside, a 21 EMA lost on this bar, and yesterday close lost on this bar. During the funding hour, an EMA already lost, or no prior day does not refuse. The card does not send an order.',
+  built: '2026-10-09T13:10:00Z'
 };
 
 function hgBuildLabel(b){

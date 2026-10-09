@@ -3550,6 +3550,91 @@ function tmTd9(rows, dir){
   if (dir === 'short' && +last.c > +last.o) return false;
   return true;
 }
+/* The last completed funding hour, 00:00, 08:00, or 16:00 UTC.
+   After it closes, a wick back inside it does not pass.
+   During that hour, or no such bar, it does not refuse. */
+function tmFundingHour(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var hour = when.getUTCHours();
+  var fund = hour >= 17 ? 16 : (hour >= 9 ? 8 : (hour >= 1 ? 0 : -1));
+  if (fund < 0) return true;
+  var day = when.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms, at;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    at = new Date(ms);
+    if (at.toISOString().slice(0, 10) !== day || at.getUTCHours() !== fund) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.0015) return true;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return false;
+  if (dir === 'short' && l < lo && c >= lo && c > o) return false;
+  return true;
+}
+/* The 21 EMA. Losing it on this bar does not pass. A close already through it does not refuse. */
+function tmEma21(rows, dir){
+  var len = 21;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(+rows[i].c > 0)) return null;
+    closes.push(+rows[i].c);
+  }
+  var ema = tmSeedEma(closes, len);
+  if (!ema) return null;
+  var n = closes.length - 1;
+  if (dir === 'long' && closes[n - 1] >= ema[n - 1] && closes[n] < ema[n]) return false;
+  if (dir === 'short' && closes[n - 1] <= ema[n - 1] && closes[n] > ema[n]) return false;
+  return true;
+}
+/* Yesterday close. Losing it on this bar does not pass.
+   No prior day, or a close already through it, does not refuse. */
+function tmPriorClose(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key, close = NaN;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return true;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!(+rows[i].c > 0)) return null;
+    close = +rows[i].c;
+  }
+  if (!(close > 0)) return true;
+  var prevC = +rows[rows.length - 2].c, c = +rows[rows.length - 1].c;
+  if (!(prevC > 0) || !(c > 0)) return null;
+  if (dir === 'long' && prevC > close && c < close) return false;
+  if (dir === 'short' && prevC < close && c > close) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -6166,6 +6251,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var td = rows1 ? tmTd9(rows1, dir) : null;
   if (td == null) hard.push('td unread');
   else if (!td) hard.push('a TD 9 closed against the trade');
+  var fundH = rows1 ? tmFundingHour(rows1, dir) : null;
+  if (fundH == null) hard.push('funding hour unread');
+  else if (!fundH) hard.push('the funding hour was swept and closed back inside');
+  var ema21 = rows1 ? tmEma21(rows1, dir) : null;
+  if (ema21 == null) hard.push('ema 21 unread');
+  else if (!ema21) hard.push('price lost the 21 EMA');
+  var yClose = rows1 ? tmPriorClose(rows1, dir) : null;
+  if (yClose == null) hard.push('prior close unread');
+  else if (!yClose) hard.push('price lost yesterday close');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
