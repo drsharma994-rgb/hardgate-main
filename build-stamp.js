@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1257',
-  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a COMEX hour that was pierced and closed back inside, a close back inside a Bollinger band after the previous close was outside it, and a 4-hour open lost on this bar. Before 14:00 UTC, a close that never left the band, or one bar in the block does not refuse. The card does not send an order.',
-  built: '2026-10-09T10:25:00Z'
+  version: 'hg-v1258',
+  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a 20-bar breakout on less than half the average volume, an evening or morning star at the local extreme, and an RSI cross back through 70. A break on normal volume, a star that is not at the extreme, or an RSI already inside 70 does not refuse. The card does not send an order.',
+  built: '2026-10-09T10:40:00Z'
 };
 
 function hgBuildLabel(b){

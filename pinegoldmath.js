@@ -2232,6 +2232,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (bbAcc) return bbAcc;
   var h4Why = pineGoldH4OpenVeto(rows, dir);
   if (h4Why) return h4Why;
+  var weakWhy = pineGoldWeakBreakVeto(rows, dir);
+  if (weakWhy) return weakWhy;
+  var starWhy = pineGoldStarVeto(rows, dir);
+  if (starWhy) return starWhy;
+  var rsiX = pineGoldRsiExitVeto(rows, dir);
+  if (rsiX) return rsiX;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3304,6 +3310,76 @@ function pineGoldH4OpenVeto(rows, dir){
   if (dir === 'short' && prevC < open && c > open) return 'Price crossed back through the 4-hour open. A short does not pass.';
   return null;
 }
+/* A new 20-bar extreme on less than half the average volume does not pass.
+   A bar that does not take the extreme, or a tape with no volume, does not refuse. */
+function pineGoldWeakBreakVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  var look = rows.slice(-(len + 1), -1);
+  var hi = -Infinity, lo = Infinity, vol = 0, i, v;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(pgrNum(look[i].h)) || !isFinite(pgrNum(look[i].l))) return null;
+    v = volOf(look[i]);
+    if (!(v > 0)) return null;
+    if (+look[i].h > hi) hi = +look[i].h;
+    if (+look[i].l < lo) lo = +look[i].l;
+    vol += v;
+  }
+  var avg = vol / look.length;
+  var last = rows[rows.length - 1];
+  v = volOf(last);
+  if (!(v > 0) || !isFinite(pgrNum(last.h)) || !isFinite(pgrNum(last.l)) || !(hi > lo)) return null;
+  if (dir === 'long' && +last.h > hi && v < avg * 0.5) return 'The breakout printed on weak volume. A long does not pass.';
+  if (dir === 'short' && +last.l < lo && v < avg * 0.5) return 'The breakdown printed on weak volume. A short does not pass.';
+  return null;
+}
+/* Evening star at the local high, or morning star at the local low. Anywhere else it does not refuse. */
+function pineGoldStarVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var n = rows.length, i;
+  var a = rows[n - 3], b = rows[n - 2], c = rows[n - 1];
+  if (!(pgrNum(a.c) > 0) || !(pgrNum(b.c) > 0) || !(pgrNum(c.c) > 0)) return null;
+  if (!isFinite(pgrNum(a.h)) || !isFinite(pgrNum(b.h)) || !isFinite(pgrNum(c.h))) return null;
+  var bodyA = Math.abs(pgrNum(a.c) - pgrNum(a.o)), rangeA = pgrNum(a.h) - pgrNum(a.l);
+  var bodyB = Math.abs(pgrNum(b.c) - pgrNum(b.o)), rangeB = pgrNum(b.h) - pgrNum(b.l);
+  if (!(rangeA > 0) || !(rangeB > 0)) return null;
+  if (dir === 'long'){
+    if (!(pgrNum(a.c) > pgrNum(a.o)) || bodyA < 0.6 * rangeA) return null;
+    if (bodyB > 0.35 * rangeA) return null;
+    if (!(pgrNum(c.c) < pgrNum(c.o))) return null;
+    if (!(pgrNum(c.c) < (pgrNum(a.o) + pgrNum(a.c)) / 2)) return null;
+    for (i = n - 8; i < n; i++) if (pgrNum(rows[i].h) > pgrNum(b.h)) return null;
+    return 'An evening star printed at the local high. A long does not pass.';
+  }
+  if (!(pgrNum(a.c) < pgrNum(a.o)) || bodyA < 0.6 * rangeA) return null;
+  if (bodyB > 0.35 * rangeA) return null;
+  if (!(pgrNum(c.c) > pgrNum(c.o))) return null;
+  if (!(pgrNum(c.c) > (pgrNum(a.o) + pgrNum(a.c)) / 2)) return null;
+  for (i = n - 8; i < n; i++) if (pgrNum(rows[i].l) < pgrNum(b.l)) return null;
+  return 'A morning star printed at the local low. A short does not pass.';
+}
+/* RSI(14) crossing back through 70. A reading already inside does not refuse. */
+function pineGoldRsiExitVeto(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i, c;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    closes.push(c);
+  }
+  var rsi = pgrRsi(closes, 14);
+  if (!rsi) return null;
+  var prev = rsi[rsi.length - 2], now = rsi[rsi.length - 1];
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= 70 && now < 70) return 'RSI crossed back from 70. A long does not pass.';
+  if (dir === 'short' && prev <= 30 && now > 30) return 'RSI crossed back from 30. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3888,6 +3964,9 @@ G.pineGoldTd9Veto = pineGoldTd9Veto;
 G.pineGoldComexHourVeto = pineGoldComexHourVeto;
 G.pineGoldBbAcceptVeto = pineGoldBbAcceptVeto;
 G.pineGoldH4OpenVeto = pineGoldH4OpenVeto;
+G.pineGoldWeakBreakVeto = pineGoldWeakBreakVeto;
+G.pineGoldStarVeto = pineGoldStarVeto;
+G.pineGoldRsiExitVeto = pineGoldRsiExitVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
