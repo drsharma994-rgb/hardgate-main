@@ -1945,6 +1945,78 @@ function tmRelVol(rows, dir){
   if (dir === 'long') return rvi > 50;
   return rvi < 50;
 }
+/* Coppock Curve. Weighted average of the 11-bar and 14-bar rate of change.
+   Above zero agrees with a long. A short tape does not pass. */
+function tmCoppock(rows, dir){
+  var wmaLen = 10, r1 = 11, r2 = 14;
+  if (!rows || rows.length < r2 + wmaLen || (dir !== 'long' && dir !== 'short')) return null;
+  var c = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    c.push(rows[i].c);
+  }
+  function roc(end, n){
+    if (end < n || !(c[end - n] > 0)) return NaN;
+    return ((c[end] - c[end - n]) / c[end - n]) * 100;
+  }
+  var sum = 0, w = 0, end = c.length - 1;
+  for (i = 0; i < wmaLen; i++){
+    var v = roc(end - (wmaLen - 1 - i), r1) + roc(end - (wmaLen - 1 - i), r2);
+    if (!isFinite(v)) return null;
+    var weight = i + 1;
+    sum += v * weight;
+    w += weight;
+  }
+  var cop = sum / w;
+  if (!isFinite(cop)) return null;
+  if (dir === 'long') return cop > 0;
+  return cop < 0;
+}
+/* Ehlers Laguerre RSI, gamma 0.5. Above one half agrees with a long.
+   This is not Stochastic RSI. */
+function tmLaguerre(rows, dir){
+  var gamma = 0.5;
+  if (!rows || rows.length < 16 || (dir !== 'long' && dir !== 'short')) return null;
+  if (!(rows[0].c > 0)) return null;
+  var L0 = rows[0].c, L1 = L0, L2 = L0, L3 = L0, lrsi = NaN, i;
+  for (i = 1; i < rows.length; i++){
+    var price = rows[i].c;
+    if (!(price > 0)) return null;
+    var p0 = L0, p1 = L1, p2 = L2, p3 = L3;
+    L0 = (1 - gamma) * price + gamma * p0;
+    L1 = -gamma * L0 + p0 + gamma * p1;
+    L2 = -gamma * L1 + p1 + gamma * p2;
+    L3 = -gamma * L2 + p2 + gamma * p3;
+    var cu = 0, cd = 0;
+    function side(d){ if (d > 0) cu += d; else if (d < 0) cd -= d; }
+    side(L0 - L1); side(L1 - L2); side(L2 - L3);
+    if (!(cu + cd > 0)) return null;
+    lrsi = cu / (cu + cd);
+  }
+  if (!isFinite(lrsi)) return null;
+  if (dir === 'long') return lrsi > 0.5;
+  return lrsi < 0.5;
+}
+/* Least-squares slope of the last 20 closes. A long needs it rising.
+   A flat fit does not pass. */
+function tmLinreg(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), n = len, sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, i;
+  for (i = 0; i < n; i++){
+    if (!(slice[i].c > 0)) return null;
+    sumX += i;
+    sumY += slice[i].c;
+    sumXY += i * slice[i].c;
+    sumXX += i * i;
+  }
+  var den = n * sumXX - sumX * sumX;
+  if (!(den > 0)) return null;
+  var slope = (n * sumXY - sumX * sumY) / den;
+  if (!isFinite(slope)) return null;
+  if (dir === 'long') return slope > 0;
+  return slope < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

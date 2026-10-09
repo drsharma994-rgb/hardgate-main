@@ -175,6 +175,15 @@
   var relvol = rows1 ? tmRelVol(rows1, dir) : null;
   if (relvol == null) hard.push('relative volatility unread');
   else if (!relvol) hard.push('relative volatility is against the trade');
+  var cop = rows1 ? tmCoppock(rows1, dir) : null;
+  if (cop == null) hard.push('coppock unread');
+  else if (!cop) hard.push('coppock is against the trade');
+  var lagu = rows1 ? tmLaguerre(rows1, dir) : null;
+  if (lagu == null) hard.push('laguerre unread');
+  else if (!lagu) hard.push('laguerre rsi is against the trade');
+  var slope = rows1 ? tmLinreg(rows1, dir) : null;
+  if (slope == null) hard.push('regression unread');
+  else if (!slope) hard.push('regression slope is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -402,7 +411,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'DPO, Ease of Movement and Relative Volatility agree with the earlier crypto scripts';
+  ticket.pine = 'Coppock, Laguerre RSI and the regression slope agree with the earlier crypto scripts';
   return [];
 }
 

@@ -1945,6 +1945,78 @@ function tmRelVol(rows, dir){
   if (dir === 'long') return rvi > 50;
   return rvi < 50;
 }
+/* Coppock Curve. Weighted average of the 11-bar and 14-bar rate of change.
+   Above zero agrees with a long. A short tape does not pass. */
+function tmCoppock(rows, dir){
+  var wmaLen = 10, r1 = 11, r2 = 14;
+  if (!rows || rows.length < r2 + wmaLen || (dir !== 'long' && dir !== 'short')) return null;
+  var c = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    c.push(rows[i].c);
+  }
+  function roc(end, n){
+    if (end < n || !(c[end - n] > 0)) return NaN;
+    return ((c[end] - c[end - n]) / c[end - n]) * 100;
+  }
+  var sum = 0, w = 0, end = c.length - 1;
+  for (i = 0; i < wmaLen; i++){
+    var v = roc(end - (wmaLen - 1 - i), r1) + roc(end - (wmaLen - 1 - i), r2);
+    if (!isFinite(v)) return null;
+    var weight = i + 1;
+    sum += v * weight;
+    w += weight;
+  }
+  var cop = sum / w;
+  if (!isFinite(cop)) return null;
+  if (dir === 'long') return cop > 0;
+  return cop < 0;
+}
+/* Ehlers Laguerre RSI, gamma 0.5. Above one half agrees with a long.
+   This is not Stochastic RSI. */
+function tmLaguerre(rows, dir){
+  var gamma = 0.5;
+  if (!rows || rows.length < 16 || (dir !== 'long' && dir !== 'short')) return null;
+  if (!(rows[0].c > 0)) return null;
+  var L0 = rows[0].c, L1 = L0, L2 = L0, L3 = L0, lrsi = NaN, i;
+  for (i = 1; i < rows.length; i++){
+    var price = rows[i].c;
+    if (!(price > 0)) return null;
+    var p0 = L0, p1 = L1, p2 = L2, p3 = L3;
+    L0 = (1 - gamma) * price + gamma * p0;
+    L1 = -gamma * L0 + p0 + gamma * p1;
+    L2 = -gamma * L1 + p1 + gamma * p2;
+    L3 = -gamma * L2 + p2 + gamma * p3;
+    var cu = 0, cd = 0;
+    function side(d){ if (d > 0) cu += d; else if (d < 0) cd -= d; }
+    side(L0 - L1); side(L1 - L2); side(L2 - L3);
+    if (!(cu + cd > 0)) return null;
+    lrsi = cu / (cu + cd);
+  }
+  if (!isFinite(lrsi)) return null;
+  if (dir === 'long') return lrsi > 0.5;
+  return lrsi < 0.5;
+}
+/* Least-squares slope of the last 20 closes. A long needs it rising.
+   A flat fit does not pass. */
+function tmLinreg(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), n = len, sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, i;
+  for (i = 0; i < n; i++){
+    if (!(slice[i].c > 0)) return null;
+    sumX += i;
+    sumY += slice[i].c;
+    sumXY += i * slice[i].c;
+    sumXX += i * i;
+  }
+  var den = n * sumXX - sumX * sumX;
+  if (!(den > 0)) return null;
+  var slope = (n * sumXY - sumX * sumY) / den;
+  if (!isFinite(slope)) return null;
+  if (dir === 'long') return slope > 0;
+  return slope < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -4367,6 +4439,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var relvol = rows1 ? tmRelVol(rows1, dir) : null;
   if (relvol == null) hard.push('relative volatility unread');
   else if (!relvol) hard.push('relative volatility is against the trade');
+  var cop = rows1 ? tmCoppock(rows1, dir) : null;
+  if (cop == null) hard.push('coppock unread');
+  else if (!cop) hard.push('coppock is against the trade');
+  var lagu = rows1 ? tmLaguerre(rows1, dir) : null;
+  if (lagu == null) hard.push('laguerre unread');
+  else if (!lagu) hard.push('laguerre rsi is against the trade');
+  var slope = rows1 ? tmLinreg(rows1, dir) : null;
+  if (slope == null) hard.push('regression unread');
+  else if (!slope) hard.push('regression slope is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -4594,7 +4675,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'DPO, Ease of Movement and Relative Volatility agree with the earlier crypto scripts';
+  ticket.pine = 'Coppock, Laguerre RSI and the regression slope agree with the earlier crypto scripts';
   return [];
 }
 
@@ -6646,7 +6727,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero, price outside the Ichimoku cloud on the trade side, True Strength Index on the trade side of zero, and the Chaikin Oscillator on the trade side of zero, the Detrended Price Oscillator on the trade side of zero, Ease of Movement with the trade, and Relative Volatility on the trade side of 50. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero, price outside the Ichimoku cloud on the trade side, True Strength Index on the trade side of zero, and the Chaikin Oscillator on the trade side of zero, the Detrended Price Oscillator on the trade side of zero, Ease of Movement with the trade, and Relative Volatility on the trade side of 50, the Coppock Curve on the trade side of zero, Laguerre RSI on the trade side of one half, and the 20-bar regression slope with the trade. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -7121,6 +7202,9 @@ W.tmChaikin = tmChaikin;
 W.tmDpo = tmDpo;
 W.tmEase = tmEase;
 W.tmRelVol = tmRelVol;
+W.tmCoppock = tmCoppock;
+W.tmLaguerre = tmLaguerre;
+W.tmLinreg = tmLinreg;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
