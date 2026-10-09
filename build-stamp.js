@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1211',
-  pack: 'Gold Scalp and OmniGold refuse a failed London or New York opening-range break, a fresh fair-value gap in the way of a scalp, and unswept equal highs or lows. The earlier gold-tape refusals still apply. A missing reading does not refuse. The card does not send an order.',
-  built: '2026-10-09T00:50:00Z'
+  version: 'hg-v1212',
+  pack: 'Gold Scalp and OmniGold refuse a breaker block that faces the trade, a volume imbalance in the way of a scalp, and silver SMT against the trade when silver is loaded. No breaker, no gap, or unread silver does not refuse. The earlier gold-tape refusals still apply. The card does not send an order.',
+  built: '2026-10-09T00:55:00Z'
 };
 
 function hgBuildLabel(b){

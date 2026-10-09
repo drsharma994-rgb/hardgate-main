@@ -2031,6 +2031,14 @@ function pineGoldTapeVeto(rows, dir, opts){
   }
   var eqWhy = pineGoldEqualPool(rows, dir);
   if (eqWhy) return eqWhy;
+  var brWhy = pineGoldBreakerVeto(rows, dir);
+  if (brWhy) return brWhy;
+  if (mode === 'scalp'){
+    var viWhy = pineGoldVolImbalance(rows, dir);
+    if (viWhy) return viWhy;
+    var smtWhy = pineGoldSilverSmt(rows, dir, opts.silverRows);
+    if (smtWhy) return smtWhy;
+  }
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2163,6 +2171,56 @@ function pineGoldEqualPool(rows, dir){
       }
     }
   }catch(eEq){}
+  return null;
+}
+function pineGoldCore(){
+  var C = G.HG_GoldCoreEngine;
+  if (typeof C !== 'function') return null;
+  try{ return new C(); }catch(eC){ return null; }
+}
+/* A breaker only refuses while price is actually back inside it, and only
+   when the breaker faces the trade. No breaker, or a breaker that agrees, passes. */
+function pineGoldBreakerVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectBreakerBlock !== 'function') return null;
+  var found = null;
+  try{ found = core.detectBreakerBlock(rows); }catch(eBr){ return null; }
+  if (!found || found.retesting !== true) return null;
+  if (dir === 'long' && found.type === 'BEARISH_BREAKER') return 'Price is retesting a bearish breaker block.';
+  if (dir === 'short' && found.type === 'BULLISH_BREAKER') return 'Price is retesting a bullish breaker block.';
+  return null;
+}
+/* The last body-gap in the last eight bars. $0.80 is the library's own
+   minimum. An old gap, or none, does not refuse. */
+function pineGoldVolImbalance(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectVolumeImbalance !== 'function') return null;
+  var vi = null;
+  try{ vi = core.detectVolumeImbalance(rows); }catch(eVi){ return null; }
+  if (!vi || !(vi.gapTop > vi.gapBottom)) return null;
+  var atrV = pineGoldBarAtr(rows);
+  var c = pgrNum(rows[rows.length - 1] && rows[rows.length - 1].c);
+  if (!isFinite(atrV) || !isFinite(c)) return null;
+  if (dir === 'long' && vi.type === 'BEARISH_VI' && c < vi.gapTop){
+    if (c >= vi.gapBottom) return 'Price is inside a bearish volume imbalance.';
+    if (vi.gapBottom - c <= 0.5 * atrV) return 'A bearish volume imbalance sits in the way of this long.';
+  }
+  if (dir === 'short' && vi.type === 'BULLISH_VI' && c > vi.gapBottom){
+    if (c <= vi.gapTop) return 'Price is inside a bullish volume imbalance.';
+    if (c - vi.gapTop <= 0.5 * atrV) return 'A bullish volume imbalance sits in the way of this short.';
+  }
+  return null;
+}
+/* Silver must be loaded. Unread silver does not refuse. */
+function pineGoldSilverSmt(rows, dir, silverRows){
+  if (!silverRows || silverRows.length < 5) return null;
+  var core = pineGoldCore();
+  if (!core || typeof core.evaluateTripleSmt !== 'function') return null;
+  var smt = null;
+  try{ smt = core.evaluateTripleSmt(rows, silverRows); }catch(eSm){ return null; }
+  if (!smt || smt.unread) return null;
+  if (dir === 'long' && smt.tripleSmtBearish) return 'Silver confirmed the high. Bearish SMT.';
+  if (dir === 'short' && smt.tripleSmtBullish) return 'Silver refused the low. Bullish SMT.';
   return null;
 }
 

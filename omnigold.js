@@ -14760,7 +14760,7 @@ terse status, and never launches a first-time scan on a global refresh.
               var tapeFn = gfn('pineGoldTapeVeto');
               if (tapeFn){
                 try{
-                  var whyT = tapeFn(rows, c.dir, { mode: (cfg && cfg.label === 'SWING') ? 'swing' : 'scalp', now: Date.now(), macro: (shared && shared.macro) || null });
+                  var whyT = tapeFn(rows, c.dir, { mode: (cfg && cfg.label === 'SWING') ? 'swing' : 'scalp', now: Date.now(), macro: (shared && shared.macro) || null, silverRows: (ogRdW && ogRdW.__hgSilverRows) || null });
                   if (whyT){
                     c.pineBlock = whyT;
                     if (c.why && String(c.why).indexOf(whyT) < 0) c.why = String(c.why) + ' — ' + whyT;

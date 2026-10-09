@@ -3220,6 +3220,12 @@ async function runScan(ui, scanSt){
       legs.push('goldRankSetups unavailable — ordered by grade/killzone only');
     }
     try{
+      if (!W.__hgSilverRows && typeof W.getSilverCandles === 'function'){
+        var sv0 = await W.getSilverCandles('15m', 120);
+        if (sv0 && sv0.rows && sv0.rows.length) W.__hgSilverRows = sv0.rows;
+      }
+    }catch(eSv0){}
+    try{
       var psFn = gfn('pineGoldLayerStates'), blkFn = gfn('pineGoldBlocksLead'), tapeFn = gfn('pineGoldTapeVeto');
       var psLead = (psFn && gold.rows15m && gold.rows15m.length) ? psFn(gold.rows15m) : null;
       var pineHeld = 0;
@@ -3228,7 +3234,7 @@ async function runScan(ui, scanSt){
           if (!ranked[i] || ranked[i].demoted) continue;
           var whyP = (psLead && psLead.ok && blkFn) ? blkFn(psLead, ranked[i].dir) : null;
           if (!whyP && tapeFn){
-            try{ whyP = tapeFn(gold.rows15m, ranked[i].dir, { mode: 'scalp', now: Date.now(), macro: ctx.macro }); }
+            try{ whyP = tapeFn(gold.rows15m, ranked[i].dir, { mode: 'scalp', now: Date.now(), macro: ctx.macro, silverRows: W.__hgSilverRows }); }
             catch(eTv){ whyP = null; }
           }
           if (!whyP) continue;
@@ -3252,7 +3258,7 @@ async function runScan(ui, scanSt){
     try{
       if (typeof W.hgGoldInstApply === 'function'){
         try{
-          if (typeof W.getSilverCandles === 'function'){
+          if (!W.__hgSilverRows && typeof W.getSilverCandles === 'function'){
             var sv = await W.getSilverCandles('15m', 120);
             if (sv && sv.rows && sv.rows.length) W.__hgSilverRows = sv.rows;
           }
@@ -3834,7 +3840,7 @@ function goldscalpMountInto(el, scanSt, cfg){
       + 'killzone) are demoted and held to a +2 tally bar, counter-trend entries against a sloping 200-EMA-15m/4H stack '
       + 'are demoted unless they are sweep-reclaims, a realized TP1 under 1.2R after structure-snapping drops the setup, '
       + 'Kaufman-ER chop (&lt; 0.25) demotes mean-reversion retests, and a high-impact news window vetoes NEW convictions '
-      + '— every gate names its reason on the card or on a held-back line below. A lead is also refused when the gold tape says so: a scalp long in premium or short in discount without a sweep, a fade of an Asian range that already expanded by 1%, the London fix in London local time, a continuation after the day has used its average range, gold RSI divergence against the trade, a real-rate headwind without a sweep, a chase two sigma beyond session VWAP, a long into an unswept prior-day high or a short into an unswept prior-day low, a round-dollar rejection against the trade, a failed London or New York opening-range break, a fresh fair-value gap in the way, or unswept equal highs or lows. A short history does not refuse. The card does not send an order.</div>')
+      + '— every gate names its reason on the card or on a held-back line below. A lead is also refused when the gold tape says so: a scalp long in premium or short in discount without a sweep, a fade of an Asian range that already expanded by 1%, the London fix in London local time, a continuation after the day has used its average range, gold RSI divergence against the trade, a real-rate headwind without a sweep, a chase two sigma beyond session VWAP, a long into an unswept prior-day high or a short into an unswept prior-day low, a round-dollar rejection against the trade, a failed London or New York opening-range break, a fresh fair-value gap in the way, unswept equal highs or lows, a breaker block facing the trade, a volume imbalance in the way, or silver SMT against the trade when silver is loaded. A short history does not refuse. The card does not send an order.</div>')
     : '';
   var emptyMsg = cfg.emptyMsg || 'no A-grade confluence right now — gold respects levels; wait for the sweep.';
   try{
