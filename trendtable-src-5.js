@@ -292,6 +292,15 @@
   var vah = rows1 ? tmVahLost(rows1, dir) : null;
   if (vah == null) hard.push('value area unread');
   else if (!vah) hard.push('price lost the value area');
+  var stoch = rows1 ? tmStochCross(rows1, dir) : null;
+  if (stoch == null) hard.push('stochastic unread');
+  else if (!stoch) hard.push('stochastic crossed against the trade from the extreme');
+  var h4 = rows1 ? tmH4Open(rows1, dir) : null;
+  if (h4 == null) hard.push('4h open unread');
+  else if (!h4) hard.push('price lost the 4h open');
+  var naked = rows1 ? tmNakedPoc(rows1, dir) : null;
+  if (naked == null) hard.push('prior point of control unread');
+  else if (!naked) hard.push('price lost yesterday point of control');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

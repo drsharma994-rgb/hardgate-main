@@ -282,14 +282,14 @@ console.log('== 6) no gate names pine:bprWith, no threshold moves ==');
 /* ====================================================================
    § 7 ship stamps
    ==================================================================== */
-console.log('== 7) build stamps say hg-v1248 ==');
+console.log('== 7) build stamps say hg-v1249 ==');
 {
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1248'/.test(bs), 'build-stamp.js version is hg-v1248');
+  assert(/version:\s*'hg-v1249'/.test(bs), 'build-stamp.js version is hg-v1249');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1248'/.test(sw), 'sw.js HG_CACHE is hg-v1248');
+  assert(/HG_CACHE\s*=\s*'hg-v1249'/.test(sw), 'sw.js HG_CACHE is hg-v1249');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1248/.test(tt), 'trendtable.js header reads hg-v1248');
+  assert(/hg-v1249/.test(tt), 'trendtable.js header reads hg-v1249');
 }
 
 console.log('\nhg-v1203 BPR: all § passed');

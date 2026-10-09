@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1248',
-  pack: 'Trend Matrix also refuses a wick back through a Camarilla level, a Kijun lost on this bar, and a value area lost on this bar. No prior day, a Kijun already lost, or a short session does not refuse. The card does not send an order.',
-  built: '2026-10-09T08:10:00Z'
+  version: 'hg-v1249',
+  pack: 'Trend Matrix also refuses a slow-stochastic cross down from above 80, a 4-hour open lost on this bar, and yesterday point of control lost on this bar. A cross that is not at the extreme, one bar in the block, or no prior day does not refuse. The card does not send an order.',
+  built: '2026-10-09T08:25:00Z'
 };
 
 function hgBuildLabel(b){

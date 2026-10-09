@@ -2988,6 +2988,100 @@ function tmVahLost(rows, dir){
   if (dir === 'short' && prevC < val && px > val) return false;
   return true;
 }
+/* Slow stochastic. A cross of %K back under %D from above 80 does not pass as a long.
+   A cross that is not at the extreme does not refuse. */
+function tmStochCross(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 6 || (dir !== 'long' && dir !== 'short')) return null;
+  var raw = [], i, j, hh, ll;
+  for (i = len - 1; i < rows.length; i++){
+    hh = -Infinity; ll = Infinity;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(+rows[j].h) || !isFinite(+rows[j].l) || !(+rows[j].c > 0)) return null;
+      if (+rows[j].h > hh) hh = +rows[j].h;
+      if (+rows[j].l < ll) ll = +rows[j].l;
+    }
+    raw.push(hh > ll ? 100 * (+rows[i].c - ll) / (hh - ll) : 50);
+  }
+  if (raw.length < 6) return null;
+  var ks = [];
+  for (i = 2; i < raw.length; i++) ks.push((raw[i] + raw[i - 1] + raw[i - 2]) / 3);
+  if (ks.length < 4) return null;
+  var n = ks.length - 1;
+  var dNow = (ks[n] + ks[n - 1] + ks[n - 2]) / 3;
+  var dPrev = (ks[n - 1] + ks[n - 2] + ks[n - 3]) / 3;
+  if (dir === 'long' && ks[n - 1] >= dPrev && ks[n] < dNow && ks[n - 1] >= 80) return false;
+  if (dir === 'short' && ks[n - 1] <= dPrev && ks[n] > dNow && ks[n - 1] <= 20) return false;
+  return true;
+}
+/* The open of the current 4-hour block. Losing it on this bar does not pass.
+   Fewer than two bars in the block does not refuse. */
+function tmH4Open(rows, dir){
+  if (!rows || !rows.length || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var start = Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), Math.floor(when.getUTCHours() / 4) * 4);
+  var block = [], i, ms;
+  for (i = 0; i < rows.length; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms >= start) block.push(rows[i]);
+  }
+  if (block.length < 2) return true;
+  var open = +block[0].o, prevC = +block[block.length - 2].c, c = +block[block.length - 1].c;
+  if (!(open > 0) || !(prevC > 0) || !(c > 0)) return null;
+  if (dir === 'long' && prevC > open && c < open) return false;
+  if (dir === 'short' && prevC < open && c > open) return false;
+  return true;
+}
+/* Yesterday point of control. Losing it on this bar does not pass.
+   No prior day does not refuse. Missing volume does not pass. */
+function tmNakedPoc(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return true;
+  var px = +rows[rows.length - 1].c;
+  if (!(px > 0)) return null;
+  var step = px * 0.001, bins = {}, best = null, vol = 0, n = 0, b, v, tp, bin;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    b = rows[i];
+    v = +b.v;
+    if (!(v > 0) || !isFinite(+b.h) || !isFinite(+b.l) || !(+b.c > 0)) return null;
+    tp = (+b.h + +b.l + +b.c) / 3;
+    bin = Math.round(tp / step);
+    bins[bin] = (bins[bin] || 0) + v;
+    if (bins[bin] > vol){ vol = bins[bin]; best = bin; }
+    n++;
+  }
+  if (n < 4 || best == null) return true;
+  var poc = best * step;
+  var prevC = +rows[rows.length - 2].c;
+  if (!(prevC > 0)) return null;
+  if (dir === 'long' && prevC > poc && px < poc) return false;
+  if (dir === 'short' && prevC < poc && px > poc) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
