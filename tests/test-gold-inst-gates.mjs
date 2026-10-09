@@ -181,6 +181,28 @@ console.log('\n== a tier-1 print on this bar is a fade, not a lock ==');
      'the news lock does not delete the exhaustion fade (' + ((fade && fade.reason) || 'kept') + ')');
 }
 
+console.log('\n== DXY Asia box needs highs, not a close-only dollar series ==');
+{
+  const W = boot();
+  const day = Math.floor(Date.UTC(2026, 0, 6) / 1000);
+  const gold = [];
+  const dxy = [];
+  for (let i = 0; i < 48; i++){
+    const t = day - 4 * 3600 + i * 900;
+    gold.push({ t: t, o: 2600, h: 2602, l: 2598, c: 2600, v: 100 });
+    dxy.push({ t: t, o: 104.1, h: 104.2, l: 104.0, c: 104.1, v: 100 });
+  }
+  gold.push({ t: day + 8 * 3600, o: 2600, h: 2603, l: 2594, c: 2601, v: 200 });
+  dxy.push({ t: day + 8 * 3600, o: 104.1, h: 104.15, l: 104.05, c: 104.1, v: 100 });
+  const hit = W.hgGoldPart6SmtSweep(gold, dxy);
+  ok(hit && hit.ok === true && hit.dir === 'long',
+     'gold swept the Asia low and DXY did not take its Asia high (' + (hit && hit.why) + ')');
+  const bare = dxy.map(function(b){ return { t: b.t, c: b.c }; });
+  const unread = W.hgGoldPart6SmtSweep(gold, bare);
+  ok(unread && unread.ok !== true && /unread/i.test(String(unread.why || '')),
+     'a close-only dollar series stays unread (' + (unread && unread.why) + ')');
+}
+
 console.log('\n== ATR floor is 1.5×, never a cap ==');
 {
   const W = boot();

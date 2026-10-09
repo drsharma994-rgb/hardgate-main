@@ -3108,6 +3108,35 @@ async function runScan(ui, scanSt){
       scalpBundle.oiRows = ctx.perpNative.oi;
       scalpBundle.fundingRows = ctx.perpNative.funding;
     }
+    /* Free tapes the scalp engines already know how to read, fetched BEFORE
+       the mint. The daily dollar series on the macro object is close-only, so
+       it cannot draw an Asia box. Yahoo DX-Y.NYB 15m can. Silver is the other
+       metal. A failed fetch leaves the field absent — it is not invented. */
+    try{
+      var silFn = gfn('getSilverCandles');
+      var freeFn = gfn('getFreeOHLC');
+      var freeWaits = [];
+      if (silFn){
+        freeWaits.push(Promise.resolve().then(function(){ return silFn('15m', 160); }).then(function(sv){
+          if (sv && sv.rows && sv.rows.length >= 20){
+            scalpBundle.silverRows = sv.rows;
+            scalpBundle.xagCandles = sv.rows;
+            if (gold.rows15m && gold.rows15m.length) scalpBundle.xauCandles = gold.rows15m;
+            if (typeof W !== 'undefined' && W) W.__hgSilverRows = sv.rows;
+          }
+        }).catch(function(){}));
+      }
+      if (freeFn){
+        freeWaits.push(Promise.resolve().then(function(){ return freeFn('DX-Y.NYB', '15m'); }).then(function(dxy){
+          if (dxy && dxy.rows && dxy.rows.length >= 20) scalpBundle.dxyIntraday = dxy.rows;
+        }).catch(function(){}));
+      }
+      if (freeWaits.length){
+        await Promise.race([Promise.all(freeWaits), new Promise(function(r){ setTimeout(r, 8000); })]);
+      }
+      if (scalpBundle.dxyIntraday) legs.push('DXY 15m (Yahoo DX-Y.NYB) ' + scalpBundle.dxyIntraday.length + ' bars');
+      if (scalpBundle.silverRows) legs.push('silver 15m ' + scalpBundle.silverRows.length + ' bars');
+    }catch(eFree){}
     if (gold.rows15m.length){
       var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)
         : (stRoute ? stGoldVenueLabel(gold.source) : venueLabel(gold.source));
