@@ -2184,6 +2184,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (kelWhy) return kelWhy;
   var dispWhy = pineGoldDisplacementVeto(rows, dir);
   if (dispWhy) return dispWhy;
+  var bbWhy = pineGoldBbFailVeto(rows, dir);
+  if (bbWhy) return bbWhy;
+  var openWhy = pineGoldDayOpenVeto(rows, dir);
+  if (openWhy) return openWhy;
+  var midWhy = pineGoldMidVeto(rows, dir);
+  if (midWhy) return midWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2698,6 +2704,70 @@ function pineGoldDisplacementVeto(rows, dir){
   if (!isFinite(o) || !isFinite(c) || !(atrV > 0)) return null;
   if (dir === 'long' && o - c >= 1.2 * atrV) return 'The last candle is a bearish displacement. A long does not stand in front of it.';
   if (dir === 'short' && c - o >= 1.2 * atrV) return 'The last candle is a bullish displacement. A short does not stand in front of it.';
+  return null;
+}
+/* A wick through the 20, 2 band that closes back inside. A band narrower
+   than $4 is noise and does not refuse. A close that stays outside does not refuse. */
+function pineGoldBbFailVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len) return null;
+  var slice = rows.slice(-len), sum = 0, i, c, d;
+  for (i = 0; i < len; i++){
+    c = pgrNum(slice[i].c);
+    if (!(c > 0)) return null;
+    sum += c;
+  }
+  var mean = sum / len, v = 0;
+  for (i = 0; i < len; i++){ d = pgrNum(slice[i].c) - mean; v += d * d; }
+  var sd = Math.sqrt(v / len);
+  if (!(sd > 0)) return null;
+  var upper = mean + 2 * sd, lower = mean - 2 * sd;
+  if (upper - lower < 4) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), cl = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(cl)) return null;
+  if (dir === 'long' && h > upper && cl <= upper) return 'The upper Bollinger band was pierced and closed back inside.';
+  if (dir === 'short' && l < lower && cl >= lower) return 'The lower Bollinger band was pierced and closed back inside.';
+  return null;
+}
+/* The first open of this UTC day. Price was on the trade side of it and
+   the last close crossed back. One bar for the day does not refuse. */
+function pineGoldDayOpenVeto(rows, dir){
+  if (!rows || rows.length < 4) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var day = new Date(t).toISOString().slice(0, 10);
+  var open = NaN, n = 0, i, b, tb, key;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    key = new Date(tb).toISOString().slice(0, 10);
+    if (key !== day) continue;
+    if (!isFinite(open)) open = pgrNum(b.o);
+    n++;
+  }
+  if (!(open > 0) || n < 2) return null;
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(last.c);
+  if (!isFinite(prevC) || !isFinite(c)) return null;
+  if (dir === 'long' && prevC > open && c < open) return 'Price lost the daily open. A long does not pass.';
+  if (dir === 'short' && prevC < open && c > open) return 'Price crossed back above the daily open. A short does not pass.';
+  return null;
+}
+/* Yesterday's midpoint. The bar opened on the trade side and closed back
+   through it. A prior day smaller than $8 does not refuse. */
+function pineGoldMidVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8 || !rows || !rows.length) return null;
+  var mid = (prior.hi + prior.lo) / 2;
+  var last = rows[rows.length - 1];
+  var o = pgrNum(last.o), h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c) || !(mid > 0)) return null;
+  if (dir === 'long' && o > mid && c < mid) return 'Price lost yesterday\'s midpoint. A long does not pass.';
+  if (dir === 'short' && o < mid && c > mid) return 'Price crossed back through yesterday\'s midpoint. A short does not pass.';
   return null;
 }
 
@@ -3260,6 +3330,9 @@ G.pineGoldGannVeto = pineGoldGannVeto;
 G.pineGoldCprVeto = pineGoldCprVeto;
 G.pineGoldKeltnerVeto = pineGoldKeltnerVeto;
 G.pineGoldDisplacementVeto = pineGoldDisplacementVeto;
+G.pineGoldBbFailVeto = pineGoldBbFailVeto;
+G.pineGoldDayOpenVeto = pineGoldDayOpenVeto;
+G.pineGoldMidVeto = pineGoldMidVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;

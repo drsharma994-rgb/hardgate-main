@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1229',
-  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a wick back inside the central pivot range, a chase more than two ATR beyond the 20 EMA unless a sweep just printed, and a last candle that is a displacement against the trade. A close through the pivot, a price inside the channel, or a small candle does not refuse. The card does not send an order.',
-  built: '2026-10-09T03:50:00Z'
+  version: 'hg-v1230',
+  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a wick through the Bollinger band that closes back inside, a last close that crosses back through the daily open, and a last close that crosses back through yesterday midpoint. A close that stays outside the band, a hold of the open, or a prior day under $8 does not refuse. The card does not send an order.',
+  built: '2026-10-09T04:00:00Z'
 };
 
 function hgBuildLabel(b){
