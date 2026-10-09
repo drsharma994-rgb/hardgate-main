@@ -2078,6 +2078,87 @@ function tmKlinger(rows, dir){
   if (dir === 'long') return kvo > 0;
   return kvo < 0;
 }
+function tmSeedEma(values, len){
+  if (!values || !values.length) return null;
+  var k = 2 / (len + 1), ema = null, out = [], i;
+  for (i = 0; i < values.length; i++){
+    if (!isFinite(values[i])) return null;
+    ema = ema == null ? values[i] : (values[i] * k + ema * (1 - k));
+    out.push(ema);
+  }
+  return out;
+}
+/* Stochastic Momentum Index, 10/3/3. Above zero agrees with a long.
+   A flat high-low range does not pass. */
+function tmSmi(rows, dir){
+  var len = 10, smooth = 3;
+  if (!rows || rows.length < len + 12 || (dir !== 'long' && dir !== 'short')) return null;
+  var diff = [], rng = [], i, k, hi, lo;
+  for (i = len - 1; i < rows.length; i++){
+    hi = -Infinity;
+    lo = Infinity;
+    for (k = i - len + 1; k <= i; k++){
+      if (!isFinite(rows[k].h) || !isFinite(rows[k].l) || !(rows[k].c > 0)) return null;
+      if (rows[k].h > hi) hi = rows[k].h;
+      if (rows[k].l < lo) lo = rows[k].l;
+    }
+    if (!(hi > lo)) return null;
+    diff.push(rows[i].c - (hi + lo) / 2);
+    rng.push(hi - lo);
+  }
+  var d2 = tmSeedEma(tmSeedEma(diff, smooth), smooth);
+  var r2 = tmSeedEma(tmSeedEma(rng, smooth), smooth);
+  if (!d2 || !r2 || !(r2[r2.length - 1] > 0)) return null;
+  var smi = 200 * d2[d2.length - 1] / r2[r2.length - 1];
+  if (!isFinite(smi) || smi === 0) return false;
+  if (dir === 'long') return smi > 0;
+  return smi < 0;
+}
+/* Triple EMA, 21. The TEMA itself has to be moving with the trade.
+   A flat TEMA does not pass. */
+function tmTema(rows, dir){
+  var len = 21;
+  if (!rows || rows.length < len * 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  var e1 = tmSeedEma(closes, len);
+  var e2 = e1 ? tmSeedEma(e1, len) : null;
+  var e3 = e2 ? tmSeedEma(e2, len) : null;
+  if (!e1 || !e3) return null;
+  var n = closes.length - 1;
+  var now = 3 * e1[n] - 3 * e2[n] + e3[n];
+  var prev = 3 * e1[n - 1] - 3 * e2[n - 1] + e3[n - 1];
+  if (!isFinite(now) || !isFinite(prev) || now === prev) return false;
+  if (dir === 'long') return now > prev;
+  return now < prev;
+}
+/* Elder Impulse. A long does not pass when the 13 EMA and the MACD histogram
+   are both falling. A short does not pass when both are rising. */
+function tmImpulse(rows, dir){
+  if (!rows || rows.length < 35 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  var ema = tmSeedEma(closes, 13);
+  var e12 = tmSeedEma(closes, 12);
+  var e26 = tmSeedEma(closes, 26);
+  if (!ema || !e12 || !e26) return null;
+  var macd = [], n = closes.length;
+  for (i = 0; i < n; i++) macd.push(e12[i] - e26[i]);
+  var sig = tmSeedEma(macd, 9);
+  if (!sig) return null;
+  var last = n - 1;
+  var hist = macd[last] - sig[last];
+  var histPrev = macd[last - 1] - sig[last - 1];
+  if (!isFinite(hist) || !isFinite(histPrev)) return null;
+  if (dir === 'long') return !(ema[last] < ema[last - 1] && hist < histPrev);
+  return !(ema[last] > ema[last - 1] && hist > histPrev);
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

@@ -193,6 +193,15 @@
   var kling = rows1 ? tmKlinger(rows1, dir) : null;
   if (kling == null) hard.push('klinger unread');
   else if (!kling) hard.push('klinger volume is against the trade');
+  var smi = rows1 ? tmSmi(rows1, dir) : null;
+  if (smi == null) hard.push('smi unread');
+  else if (!smi) hard.push('stochastic momentum is against the trade');
+  var tema = rows1 ? tmTema(rows1, dir) : null;
+  if (tema == null) hard.push('tema unread');
+  else if (!tema) hard.push('triple ema is against the trade');
+  var impulse = rows1 ? tmImpulse(rows1, dir) : null;
+  if (impulse == null) hard.push('impulse unread');
+  else if (!impulse) hard.push('elder impulse is sloping against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

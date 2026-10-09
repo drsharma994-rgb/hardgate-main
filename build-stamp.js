@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1236',
-  pack: 'Trend Matrix also refuses a setup when Williams %R is on the wrong side of -50, Balance of Power is against the trade, or the Klinger volume oscillator is on the wrong side of zero. A short tape, a flat range, or missing volume does not pass. The SMC core mark stays record-only. The card does not send an order.',
-  built: '2026-10-09T05:20:00Z'
+  version: 'hg-v1237',
+  pack: 'Trend Matrix also refuses a setup when the Stochastic Momentum Index is on the wrong side of zero, the triple EMA is not moving with the trade, or Elder Impulse is sloping against it. A short tape or a flat TEMA does not pass. The card does not send an order.',
+  built: '2026-10-09T05:35:00Z'
 };
 
 function hgBuildLabel(b){

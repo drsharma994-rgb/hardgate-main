@@ -2078,6 +2078,87 @@ function tmKlinger(rows, dir){
   if (dir === 'long') return kvo > 0;
   return kvo < 0;
 }
+function tmSeedEma(values, len){
+  if (!values || !values.length) return null;
+  var k = 2 / (len + 1), ema = null, out = [], i;
+  for (i = 0; i < values.length; i++){
+    if (!isFinite(values[i])) return null;
+    ema = ema == null ? values[i] : (values[i] * k + ema * (1 - k));
+    out.push(ema);
+  }
+  return out;
+}
+/* Stochastic Momentum Index, 10/3/3. Above zero agrees with a long.
+   A flat high-low range does not pass. */
+function tmSmi(rows, dir){
+  var len = 10, smooth = 3;
+  if (!rows || rows.length < len + 12 || (dir !== 'long' && dir !== 'short')) return null;
+  var diff = [], rng = [], i, k, hi, lo;
+  for (i = len - 1; i < rows.length; i++){
+    hi = -Infinity;
+    lo = Infinity;
+    for (k = i - len + 1; k <= i; k++){
+      if (!isFinite(rows[k].h) || !isFinite(rows[k].l) || !(rows[k].c > 0)) return null;
+      if (rows[k].h > hi) hi = rows[k].h;
+      if (rows[k].l < lo) lo = rows[k].l;
+    }
+    if (!(hi > lo)) return null;
+    diff.push(rows[i].c - (hi + lo) / 2);
+    rng.push(hi - lo);
+  }
+  var d2 = tmSeedEma(tmSeedEma(diff, smooth), smooth);
+  var r2 = tmSeedEma(tmSeedEma(rng, smooth), smooth);
+  if (!d2 || !r2 || !(r2[r2.length - 1] > 0)) return null;
+  var smi = 200 * d2[d2.length - 1] / r2[r2.length - 1];
+  if (!isFinite(smi) || smi === 0) return false;
+  if (dir === 'long') return smi > 0;
+  return smi < 0;
+}
+/* Triple EMA, 21. The TEMA itself has to be moving with the trade.
+   A flat TEMA does not pass. */
+function tmTema(rows, dir){
+  var len = 21;
+  if (!rows || rows.length < len * 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  var e1 = tmSeedEma(closes, len);
+  var e2 = e1 ? tmSeedEma(e1, len) : null;
+  var e3 = e2 ? tmSeedEma(e2, len) : null;
+  if (!e1 || !e3) return null;
+  var n = closes.length - 1;
+  var now = 3 * e1[n] - 3 * e2[n] + e3[n];
+  var prev = 3 * e1[n - 1] - 3 * e2[n - 1] + e3[n - 1];
+  if (!isFinite(now) || !isFinite(prev) || now === prev) return false;
+  if (dir === 'long') return now > prev;
+  return now < prev;
+}
+/* Elder Impulse. A long does not pass when the 13 EMA and the MACD histogram
+   are both falling. A short does not pass when both are rising. */
+function tmImpulse(rows, dir){
+  if (!rows || rows.length < 35 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  var ema = tmSeedEma(closes, 13);
+  var e12 = tmSeedEma(closes, 12);
+  var e26 = tmSeedEma(closes, 26);
+  if (!ema || !e12 || !e26) return null;
+  var macd = [], n = closes.length;
+  for (i = 0; i < n; i++) macd.push(e12[i] - e26[i]);
+  var sig = tmSeedEma(macd, 9);
+  if (!sig) return null;
+  var last = n - 1;
+  var hist = macd[last] - sig[last];
+  var histPrev = macd[last - 1] - sig[last - 1];
+  if (!isFinite(hist) || !isFinite(histPrev)) return null;
+  if (dir === 'long') return !(ema[last] < ema[last - 1] && hist < histPrev);
+  return !(ema[last] > ema[last - 1] && hist > histPrev);
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -2282,7 +2363,6 @@ function trendScore(rows1d, rows4h){
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
-
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -2961,7 +3041,6 @@ function trendmxCardStack(r, dir){
       style: 'swing', asset: 'crypto', ticker: ticker,
       clean: !!(gate && gate.clean7),
       nearClean: !!(gate && gate.nearClean),
-
       gatesPassed: gate ? gate.gatesPassed : undefined,
       gatesTotal: 7,
       tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
@@ -3348,7 +3427,6 @@ function trendmxFlowScan(rows){
       if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
     });
   }
-
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -3785,7 +3863,6 @@ function tmVolumeProfile(rows){
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
   var pivots = [];
-
   for (var i = 2; i < rows.length - 2; i++){
     if (dir === 'long'){
       if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
@@ -4327,7 +4404,6 @@ async function trendmxFormOne(ticket, row, ctx){
     var n = rows4.length - 1;
     if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
-
     var lastHigh = null, lastLow = null, si;
     for (si = 0; si < swings.length; si++){
       if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
@@ -4523,6 +4599,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var kling = rows1 ? tmKlinger(rows1, dir) : null;
   if (kling == null) hard.push('klinger unread');
   else if (!kling) hard.push('klinger volume is against the trade');
+  var smi = rows1 ? tmSmi(rows1, dir) : null;
+  if (smi == null) hard.push('smi unread');
+  else if (!smi) hard.push('stochastic momentum is against the trade');
+  var tema = rows1 ? tmTema(rows1, dir) : null;
+  if (tema == null) hard.push('tema unread');
+  else if (!tema) hard.push('triple ema is against the trade');
+  var impulse = rows1 ? tmImpulse(rows1, dir) : null;
+  if (impulse == null) hard.push('impulse unread');
+  else if (!impulse) hard.push('elder impulse is sloping against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -4997,7 +5082,6 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     /* hg-v1012: the flow split, read off the stamps the scan left — the
        summary names the evidence the same way the cards do */
     if (r.flow && r.flow.verdict === 'with') flowW++;
-
     else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
@@ -5359,7 +5443,6 @@ function trendmxPerfectState(r){
    drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
 function trendmxAtrRegime(r){
   try{
-
     if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
     if (typeof hgAtrPercentile !== 'function') return null;
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
@@ -5716,7 +5799,6 @@ function trendmxFivePillars(r){
     if (r.flow.verdict === 'against') sentAgainst = true;
     if (r.flow.verdict === 'with') sentWith = true;
   }
-
   if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
     sentRead = true;
     try{
@@ -6092,7 +6174,6 @@ function trendmxTrendFormHTML(rows){
         var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
           + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
         /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
-
            minted tiers; anything below the NEAR floor (or a forming row with
            no majority, whose gate is null) is the house DRAFT ladder, never
            a fabricated 6/7 NEAR. */
@@ -6467,7 +6548,6 @@ async function trendmxPerfectEvidencePass(rows){
           if (isFinite(usd)) reads.liqClusterUsd = usd;
         }catch(eLc){ }
       }
-
         reads.venueFundingPct = +r.fundingPct;
       /* hg-v1144: venue premium = venue funding minus the Binance twin */
       if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
@@ -6810,7 +6890,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero, price outside the Ichimoku cloud on the trade side, True Strength Index on the trade side of zero, and the Chaikin Oscillator on the trade side of zero, the Detrended Price Oscillator on the trade side of zero, Ease of Movement with the trade, and Relative Volatility on the trade side of 50, the Coppock Curve on the trade side of zero, Laguerre RSI on the trade side of one half, and the 20-bar regression slope with the trade, Williams %R on the trade side of -50, Balance of Power with the trade, and the Klinger volume oscillator on the trade side of zero. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero, price outside the Ichimoku cloud on the trade side, True Strength Index on the trade side of zero, and the Chaikin Oscillator on the trade side of zero, the Detrended Price Oscillator on the trade side of zero, Ease of Movement with the trade, and Relative Volatility on the trade side of 50, the Coppock Curve on the trade side of zero, Laguerre RSI on the trade side of one half, and the 20-bar regression slope with the trade, Williams %R on the trade side of -50, Balance of Power with the trade, and the Klinger volume oscillator on the trade side of zero, Stochastic Momentum Index on the trade side of zero, a triple EMA moving with the trade, and Elder Impulse not sloping against the trade. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6878,7 +6958,6 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
-
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -7292,6 +7371,9 @@ W.tmLinreg = tmLinreg;
 W.tmWilliams = tmWilliams;
 W.tmBop = tmBop;
 W.tmKlinger = tmKlinger;
+W.tmSmi = tmSmi;
+W.tmTema = tmTema;
+W.tmImpulse = tmImpulse;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
