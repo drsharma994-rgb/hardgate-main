@@ -13646,7 +13646,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var macro = (__og && __og.shared && __og.shared.macro) || null;
     var dxy = macro ? (macro.dxyRows || macro.dxyCandles || null) : null;
     try{ hits = fn(rows, silver, dxy) || []; }catch(e){ return ''; }
-    if (!hits.length) return '<div class="note" style="margin-top:8px">OMNIGOLD CORE — no triple SMT, flight-to-safety break, or balanced price range on the last closed bar.</div>';
+    if (!hits.length) return '<div class="note" style="margin-top:8px">OMNIGOLD CORE — no triple SMT, London-fix drift, or flight-to-safety break on the last closed bar.</div>';
     var html = '<div class="note" style="margin-top:8px"><b>OMNIGOLD CORE</b>';
     for (var i = 0; i < hits.length; i++){
       var hit = hits[i];

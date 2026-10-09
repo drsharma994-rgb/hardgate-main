@@ -94,44 +94,50 @@
       }
       if (n >= 3 && hi - lo >= 3){
         var span = last.h - last.l;
-        if (span > 0 && last.l <= lo - 1 && last.c >= lo + 0.5 && last.c > last.o && (last.c - last.l) / span >= 0.55){
-          var L = hit('GS-1', 'London Judas Asian Sweep', 'long', last.c, Math.min(last.l, prev.l) - Math.max(a * 0.4, 2.8), 'Asia low was swept by at least $1 and the bar closed back inside with a rejection wick.');
+        var depthL = lo - Math.min(last.l, prev.l);
+        var depthH = Math.max(last.h, prev.h) - hi;
+        if (span > 0 && depthL >= 1.5 && depthL <= 5.5 && last.c > lo && last.c > last.o && (last.c - last.l) / span >= 0.55){
+          var L = hit('GS-1', 'London Judas Asian Sweep', 'long', last.c, Math.min(last.l, prev.l) - Math.max(a * 0.4, 2.8), 'Asia low was swept by ' + depthL.toFixed(2) + ' dollars, inside the 1.50 to 5.50 pocket, and the bar closed back inside.');
           if (L) out.push(L);
-        } else if (span > 0 && last.h >= hi + 1 && last.c <= hi - 0.5 && last.c < last.o && (last.h - last.c) / span >= 0.55){
-          var S = hit('GS-1', 'London Judas Asian Sweep', 'short', last.c, Math.max(last.h, prev.h) + Math.max(a * 0.4, 2.8), 'Asia high was swept by at least $1 and the bar closed back inside with a rejection wick.');
+        } else if (span > 0 && depthH >= 1.5 && depthH <= 5.5 && last.c < hi && last.c < last.o && (last.h - last.c) / span >= 0.55){
+          var S = hit('GS-1', 'London Judas Asian Sweep', 'short', last.c, Math.max(last.h, prev.h) + Math.max(a * 0.4, 2.8), 'Asia high was swept by ' + depthH.toFixed(2) + ' dollars, inside the 1.50 to 5.50 pocket, and the bar closed back inside.');
           if (S) out.push(S);
         }
       }
     }
-    if (hour >= 14 && hour < 16 && today){
-      var ibH = -Infinity, ibL = Infinity, ibN = 0;
+    if (hour >= 13.75 && hour <= 14.25 && today){
+      var orb = null;
       for (i = 0; i < day.length - 1; i++){
         if (dayOf(day[i]) !== today) continue;
         hv = hourOf(day[i]);
-        if (!isFinite(hv) || hv < 13.5 || hv >= 14) continue;
-        if (day[i].h > ibH) ibH = day[i].h;
-        if (day[i].l < ibL) ibL = day[i].l;
-        ibN++;
+        if (!isFinite(hv) || hv < 13.5 || hv >= 13.75) continue;
+        orb = day[i];
       }
-      if (ibN >= 1 && ibH - ibL >= 3){
-        if (last.l <= ibL - 1 && last.c >= ibL && last.c > last.o){
-          var ibLhit = hit('GS-2', 'NY Cash Initial Balance', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The NY opening half-hour low was swept by at least $1 and the bar closed back inside.');
-          if (ibLhit) out.push(ibLhit);
-        } else if (last.h >= ibH + 1 && last.c <= ibH && last.c < last.o){
-          var ibShit = hit('GS-2', 'NY Cash Initial Balance', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The NY opening half-hour high was swept by at least $1 and the bar closed back inside.');
-          if (ibShit) out.push(ibShit);
+      if (orb){
+        if (last.l < orb.l && last.c > orb.l && last.c > last.o){
+          var orbL = hit('GS-2', 'COMEX Cash Open ORB', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The 13:30 UTC cash-open low was swept and the bar closed back above it.');
+          if (orbL) out.push(orbL);
+        } else if (last.h > orb.h && last.c < orb.h && last.c < last.o){
+          var orbS = hit('GS-2', 'COMEX Cash Open ORB', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The 13:30 UTC cash-open high was swept and the bar closed back under it.');
+          if (orbS) out.push(orbS);
         }
       }
     }
     if ((hour >= 7 && hour < 10) || (hour >= 12.5 && hour < 16)){
-      var bodyPrevTop = Math.max(prev.o, prev.c), bodyPrevBot = Math.min(prev.o, prev.c);
-      var bodyTop = Math.max(last.o, last.c), bodyBot = Math.min(last.o, last.c);
-      if (last.l > bodyPrevTop && last.l - bodyPrevTop >= 0.8 && last.c > last.o){
-        var viL = hit('GS-3', 'Volume Imbalance Sniping', 'long', last.c, bodyPrevTop - Math.max(a * 0.3, 2), 'A bullish body gap of at least $0.80 is still open at the close.');
-        if (viL) out.push(viL);
-      } else if (bodyPrevBot - last.h >= 0.8 && last.c < last.o){
-        var viS = hit('GS-3', 'Volume Imbalance Sniping', 'short', last.c, bodyPrevBot + Math.max(a * 0.3, 2), 'A bearish body gap of at least $0.80 is still open at the close.');
-        if (viS) out.push(viS);
+      var gap = null, fi;
+      for (fi = rows.length - 4; fi >= 2 && fi > rows.length - 16; fi--){
+        if (rows[fi].l > rows[fi - 2].h && rows[fi].l - rows[fi - 2].h >= 0.8){ gap = { side: 'long', lo: rows[fi - 2].h, hi: rows[fi].l }; break; }
+        if (rows[fi].h < rows[fi - 2].l && rows[fi - 2].l - rows[fi].h >= 0.8){ gap = { side: 'short', lo: rows[fi].h, hi: rows[fi - 2].l }; break; }
+      }
+      var span3 = last.h - last.l;
+      if (gap && span3 > 0){
+        if (gap.side === 'long' && last.l <= gap.hi && last.c > gap.hi && last.c > last.o && (last.c - last.l) / span3 >= 0.58){
+          var fvgL = hit('GS-3', 'Micro FVG Wick', 'long', last.c, gap.lo, 'A bullish imbalance was tapped and the bar closed back out with a 58 percent wick.');
+          if (fvgL) out.push(fvgL);
+        } else if (gap.side === 'short' && last.h >= gap.lo && last.c < gap.lo && last.c < last.o && (last.h - last.c) / span3 >= 0.58){
+          var fvgS = hit('GS-3', 'Micro FVG Wick', 'short', last.c, gap.hi, 'A bearish imbalance was tapped and the bar closed back out with a 58 percent wick.');
+          if (fvgS) out.push(fvgS);
+        }
       }
     }
     return out;
@@ -157,35 +163,28 @@
         }
       }
     }
+    var hour = hourOf(last);
+    var preFix = isFinite(hour) && ((hour >= 10 && hour < 10.42) || (hour >= 14.5 && hour < 14.92));
+    if (preFix && rows.length >= 16){
+      var upDrift = last.c > last.o && rows[rows.length - 2].c > rows[rows.length - 2].o && rows[rows.length - 3].c > rows[rows.length - 3].o;
+      var dnDrift = last.c < last.o && rows[rows.length - 2].c < rows[rows.length - 2].o && rows[rows.length - 3].c < rows[rows.length - 3].o;
+      var winHi = -Infinity, winLo = Infinity, wi;
+      for (wi = rows.length - 16; wi < rows.length - 1; wi++){
+        if (rows[wi].h > winHi) winHi = rows[wi].h;
+        if (rows[wi].l < winLo) winLo = rows[wi].l;
+      }
+      if (upDrift && last.h >= winHi){
+        var fixS = hit('OG-2', 'London Fix Auction Drift', 'short', last.c, last.h + Math.max(a * 0.4, 3), 'Three rising closes ran into the high before the London fix.');
+        if (fixS) out.push(fixS);
+      } else if (dnDrift && last.l <= winLo){
+        var fixL = hit('OG-2', 'London Fix Auction Drift', 'long', last.c, last.l - Math.max(a * 0.4, 3), 'Three falling closes ran into the low before the London fix.');
+        if (fixL) out.push(fixL);
+      }
+    }
     var r = pearson(rows, dxy, 30);
     if (r != null && r > 0.15 && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4 && dxy.length >= 5 && dxy[dxy.length - 1].c > dxy[dxy.length - 5].c){
-      var fts = hit('OG-2', 'Flight-to-Safety Trend', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold and the dollar rose together. The 30-bar correlation is above +0.15.');
+      var fts = hit('OG-3', 'Flight-to-Safety Decouple', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold and the dollar rose together. The 30-bar correlation is above +0.15.');
       if (fts) out.push(fts);
-    }
-    var bull = null, bear = null, i, gap;
-    for (i = rows.length - 18; i < rows.length - 1; i++){
-      if (i < 2) continue;
-      if (rows[i].l > rows[i - 2].h){
-        gap = rows[i].l - rows[i - 2].h;
-        if (gap >= a * 0.1) bull = { lo: rows[i - 2].h, hi: rows[i].l };
-      }
-      if (rows[i].h < rows[i - 2].l){
-        gap = rows[i - 2].l - rows[i].h;
-        if (gap >= a * 0.1) bear = { lo: rows[i].h, hi: rows[i - 2].l };
-      }
-    }
-    if (bull && bear){
-      var zLo = Math.max(bull.lo, bear.lo), zHi = Math.min(bull.hi, bear.hi);
-      if (zHi - zLo >= 1 && last.l <= zHi && last.h >= zLo){
-        var prev = rows[rows.length - 2];
-        if (last.c > zHi && last.c > last.o && prev.c <= zHi){
-          var bprL = hit('OG-3', 'Balanced Price Range', 'long', last.c, zLo - Math.max(a * 0.2, 1.5), 'Price tagged the overlap of a bull gap and a bear gap and closed back above it.');
-          if (bprL) out.push(bprL);
-        } else if (last.c < zLo && last.c < last.o && prev.c >= zLo){
-          var bprS = hit('OG-3', 'Balanced Price Range', 'short', last.c, zHi + Math.max(a * 0.2, 1.5), 'Price tagged the overlap of a bull gap and a bear gap and closed back under it.');
-          if (bprS) out.push(bprS);
-        }
-      }
     }
     return out;
   }
@@ -252,31 +251,51 @@
       var ceS = hit('PG-2', 'Consequent Encroachment', 'short', last.c, gap.far, 'A fresh bearish gap was tagged at its midpoint and the bar closed back under it.');
       if (ceS) out.push(ceS);
     }
-    var highs = [], lows = [], k;
-    for (k = 2; k < rows.length - 1; k++){
-      if (rows[k].h >= rows[k - 1].h && rows[k].h >= rows[k + 1].h) highs.push({ p: rows[k].h, i: k });
-      if (rows[k].l <= rows[k - 1].l && rows[k].l <= rows[k + 1].l) lows.push({ p: rows[k].l, i: k });
-    }
-    var eqH = NaN, eqL = NaN, p, q;
-    for (p = 0; p < highs.length; p++){
-      for (q = p + 1; q < highs.length; q++){
-        if (Math.abs(highs[q].i - highs[p].i) >= 4 && Math.abs(highs[p].p - highs[q].p) <= 1.5) eqH = Math.max(highs[p].p, highs[q].p);
+    var area = valueArea(rows);
+    var prior = rows[rows.length - 2];
+    if (area && prior){
+      if (prior.c > area.vah && last.l <= area.vah && last.c > area.vah && last.c > last.o){
+        var vaL = hit('PG-3', 'Value Area High Retest', 'long', last.c, area.val, 'Price held the developing value-area high and closed back above it.');
+        if (vaL) out.push(vaL);
+      } else if (prior.c < area.val && last.h >= area.val && last.c < area.val && last.c < last.o){
+        var vaS = hit('PG-3', 'Value Area Low Retest', 'short', last.c, area.vah, 'Price held the developing value-area low and closed back under it.');
+        if (vaS) out.push(vaS);
       }
-    }
-    for (p = 0; p < lows.length; p++){
-      for (q = p + 1; q < lows.length; q++){
-        if (Math.abs(lows[q].i - lows[p].i) >= 4 && Math.abs(lows[p].p - lows[q].p) <= 1.5) eqL = Math.min(lows[p].p, lows[q].p);
-      }
-    }
-    if (isFinite(eqH) && last.h > eqH && last.c >= eqH + 0.5 && last.c > last.o){
-      var voidL = hit('PG-3', 'Resting Liquidity Void', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Equal highs were run and the bar closed beyond them.');
-      if (voidL) out.push(voidL);
-    }
-    if (isFinite(eqL) && last.l < eqL && last.c <= eqL - 0.5 && last.c < last.o){
-      var voidS = hit('PG-3', 'Resting Liquidity Void', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Equal lows were run and the bar closed beyond them.');
-      if (voidS) out.push(voidS);
     }
     return out;
+  }
+
+  function valueArea(rows){
+    var n = Math.min(rows.length, 48);
+    var slice = rows.slice(rows.length - n);
+    var lo = Infinity, hi = -Infinity, i, b;
+    for (i = 0; i < slice.length; i++){
+      if (slice[i].l < lo) lo = slice[i].l;
+      if (slice[i].h > hi) hi = slice[i].h;
+    }
+    if (!(hi > lo + 2)) return null;
+    var bins = 24, hist = [], w, idx, total = 0, poc = 0;
+    for (b = 0; b < bins; b++) hist.push(0);
+    for (i = 0; i < slice.length; i++){
+      w = slice[i].v > 0 ? slice[i].v : 1;
+      idx = Math.floor((slice[i].c - lo) / (hi - lo) * (bins - 1));
+      if (idx < 0) idx = 0;
+      if (idx >= bins) idx = bins - 1;
+      hist[idx] += w;
+    }
+    for (b = 0; b < bins; b++){ total += hist[b]; if (hist[b] > hist[poc]) poc = b; }
+    if (!(total > 0)) return null;
+    var acc = hist[poc], left = poc, right = poc, lv, rv;
+    while (acc < total * 0.7 && (left > 0 || right < bins - 1)){
+      lv = left > 0 ? hist[left - 1] : -1;
+      rv = right < bins - 1 ? hist[right + 1] : -1;
+      if (rv >= lv){ right++; acc += hist[right]; }
+      else { left--; acc += hist[left]; }
+    }
+    var binW = (hi - lo) / bins;
+    var val = lo + left * binW, vah = lo + (right + 1) * binW;
+    if (!(vah > val + 0.5)) return null;
+    return { val: val, vah: vah };
   }
 
   function gannNear(price){
@@ -320,7 +339,7 @@
     }
     dollars = Math.abs(last.c - extreme);
     var ratio = dollars > 0 ? 16 / dollars : NaN;
-    var squared = isFinite(ratio) && ratio >= 0.8 && ratio <= 1.2;
+    var squared = isFinite(ratio) && ratio >= 0.88 && ratio <= 1.12;
     var swingHi = -Infinity, swingLo = Infinity;
     for (i = rows.length - 40; i < rows.length - 1; i++){
       if (i < 0) continue;
@@ -350,6 +369,15 @@
       var gg1 = hit('GG-1', 'Sri Chakra 7-Step Cycle', dir, last.c, dir === 'long' ? last.c - risk : last.c + risk, 'All seven steps passed on this bar. Passed ' + passed + ' of 7.');
       if (gg1) out.push(gg1);
     }
+    if (gann && gann.dist <= 1.2 && isFinite(gann.level)){
+      if (last.h >= gann.level - 1.2 && last.c < gann.level && last.c < last.o){
+        var gannS = hit('GG-2', 'Gann Square of 9', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged the ' + gann.deg + ' degree Gann level and closed back under it.');
+        if (gannS) out.push(gannS);
+      } else if (last.l <= gann.level + 1.2 && last.c > gann.level && last.c > last.o){
+        var gannL = hit('GG-2', 'Gann Square of 9', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the ' + gann.deg + ' degree Gann level and closed back above it.');
+        if (gannL) out.push(gannL);
+      }
+    }
     if (squared){
       var hi16 = -Infinity, lo16 = Infinity, bi;
       for (bi = rows.length - 16; bi < rows.length; bi++){
@@ -359,33 +387,11 @@
       var mid16 = (hi16 + lo16) / 2;
       var offHigh = hi16 - last.c >= last.c - lo16;
       if (offHigh && last.c < last.o && last.c < mid16){
-        var gg2s = hit('GG-2', 'Time-Price Square', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Sixteen bars match the dollar distance, and this bar turned down from the high.');
-        if (gg2s) out.push(gg2s);
+        var gg3s = hit('GG-3', 'Time-Price Symmetry', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Bar count and dollar distance match within 12 percent, and this bar turned down.');
+        if (gg3s) out.push(gg3s);
       } else if (!offHigh && last.c > last.o && last.c > mid16){
-        var gg2l = hit('GG-2', 'Time-Price Square', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Sixteen bars match the dollar distance, and this bar turned up from the low.');
-        if (gg2l) out.push(gg2l);
-      }
-    }
-    var drives = [], k;
-    for (k = 2; k < rows.length - 1; k++){
-      if (rows[k].h >= rows[k - 1].h && rows[k].h > rows[k + 1].h) drives.push(rows[k].h - rows[k].l);
-    }
-    if (drives.length >= 3){
-      var a1 = drives[drives.length - 3], a2 = drives[drives.length - 2], a3 = drives[drives.length - 1];
-      if (a1 > a2 && a2 > a3 && last.c < last.o){
-        var gg3 = hit('GG-3', 'Three-Drive Harmonic', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Three pushes up, each smaller than the one before, and this bar closed down.');
-        if (gg3) out.push(gg3);
-      }
-    }
-    var lows = [];
-    for (k = 2; k < rows.length - 1; k++){
-      if (rows[k].l <= rows[k - 1].l && rows[k].l < rows[k + 1].l) lows.push(rows[k].h - rows[k].l);
-    }
-    if (lows.length >= 3){
-      var b1 = lows[lows.length - 3], b2 = lows[lows.length - 2], b3 = lows[lows.length - 1];
-      if (b1 > b2 && b2 > b3 && last.c > last.o){
-        var gg3L = hit('GG-3', 'Three-Drive Harmonic', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Three pushes down, each smaller than the one before, and this bar closed up.');
-        if (gg3L) out.push(gg3L);
+        var gg3l = hit('GG-3', 'Time-Price Symmetry', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Bar count and dollar distance match within 12 percent, and this bar turned up.');
+        if (gg3l) out.push(gg3l);
       }
     }
     return out;
