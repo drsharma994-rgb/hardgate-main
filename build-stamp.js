@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1218',
-  pack: 'Trend Matrix also requires two Heikin Ashi candles, the Elder Force Index, and Know Sure Thing to agree with the trade. Missing volume or a short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
-  built: '2026-10-09T01:55:00Z'
+  version: 'hg-v1219',
+  pack: 'Trend Matrix also requires MACD, the Donchian midpoint, and Chande Momentum to agree with the trade. A flat channel or a short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
+  built: '2026-10-09T02:05:00Z'
 };
 
 function hgBuildLabel(b){

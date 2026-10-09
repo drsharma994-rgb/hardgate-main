@@ -148,6 +148,15 @@
   var kst = rows1 ? tmKst(rows1, dir) : null;
   if (kst == null) hard.push('kst unread');
   else if (!kst) hard.push('know sure thing is against the trade');
+  var macd = rows1 ? tmMacd(rows1, dir) : null;
+  if (macd == null) hard.push('macd unread');
+  else if (!macd) hard.push('macd is against the trade');
+  var don = rows1 ? tmDonchian(rows1, dir) : null;
+  if (don == null) hard.push('donchian unread');
+  else if (!don) hard.push('price is on the wrong side of the donchian midpoint');
+  var cmo = rows1 ? tmCmo(rows1, dir) : null;
+  if (cmo == null) hard.push('chande unread');
+  else if (!cmo) hard.push('chande momentum is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -375,7 +384,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'Heikin Ashi, Force Index and Know Sure Thing agree with the earlier crypto scripts';
+  ticket.pine = 'MACD, Donchian and Chande Momentum agree with the earlier crypto scripts';
   return [];
 }
 
