@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1280',
-  pack: 'Four reads that were not already on the desks. Gold Scalp fades the 06:00 UTC open only between 09:15 and 09:45 UTC, and only after a 1.5-range stretch and a turn back. OmniGold adds a silver lead, unread when silver did not rise more than 1.5 percent while gold rose less than 0.6 percent. Pine Gold tags the finished session value area, not the one still building. Ganesh Gold turns at Lucas 11, 18, 29, 47, or 76 bars from the swing. Lucas 7 stays with the eight-bar square. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
-  built: '2026-10-09T16:50:00Z'
+  version: 'hg-v1281',
+  pack: 'Five reads that were not already on the desks. Gold Scalp fades the 15:00 UTC open only between 15:05 and 15:30 UTC, after a 1.2-range stretch and a turn back. OmniGold adds a real-yield drop over three prints, and a missing real-yield series is not treated as a falling yield. Pine Gold tags an untested prior-session point of control, and it releases a 20-bar Donchian range only after that range sat inside the Keltner band. Ganesh Gold tags the 137.5 degree angle and requires a close back away from it. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
+  built: '2026-10-09T17:10:00Z'
 };
 
 function hgBuildLabel(b){

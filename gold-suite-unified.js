@@ -288,6 +288,23 @@
         }
       }
     }
+    if (isFinite(hour) && hour >= 15.08 && hour <= 15.5 && today && !paceDead(__pace)){
+      var fixOpen = NaN, pi, ph;
+      for (pi = 0; pi < day.length - 1; pi++){
+        if (dayOf(day[pi]) !== today) continue;
+        ph = hourOf(day[pi]);
+        if (isFinite(ph) && ph >= 15 && ph < 15.25){ fixOpen = day[pi].o; break; }
+      }
+      if (isFinite(fixOpen) && Math.abs(last.c - fixOpen) >= a * 1.2){
+        if (last.c > fixOpen && last.c < last.o){
+          var pmS = hit('GS-9', 'London PM Fix', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Between 15:05 and 15:30 UTC price was at least 1.2 times the average range above the 15:00 UTC open, and this bar closed back toward it.');
+          if (pmS) out.push(pmS);
+        } else if (last.c < fixOpen && last.c > last.o){
+          var pmL = hit('GS-9', 'London PM Fix', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Between 15:05 and 15:30 UTC price was at least 1.2 times the average range under the 15:00 UTC open, and this bar closed back toward it.');
+          if (pmL) out.push(pmL);
+        }
+      }
+    }
     return out;
   }
 
@@ -405,6 +422,11 @@
           if (sl) out.push(sl);
         }
       }
+    }
+    var realY = rowsOf(extra.realYields);
+    if (realY.length >= 3 && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4 && realY[realY.length - 1].c < realY[realY.length - 3].c){
+      var ry = hit('OG-10', 'Real Yield', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'The real-yield series fell over three prints and this gold bar closed up. A missing real-yield series is not a falling yield.');
+      if (ry) out.push(ry);
     }
     return out;
   }
@@ -535,6 +557,26 @@
         if (psS) out.push(psS);
       }
     }
+    var naked = nakedPoc(priorBars, rows);
+    if (naked != null){
+      if (last.l <= naked && last.c > naked && last.c > last.o){
+        var npL = hit('PG-9', 'Naked Session POC', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The finished session point of control had not been traded this session, and this bar closed back above it.');
+        if (npL) out.push(npL);
+      } else if (last.h >= naked && last.c < naked && last.c < last.o){
+        var npS = hit('PG-9', 'Naked Session POC', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The finished session point of control had not been traded this session, and this bar closed back under it.');
+        if (npS) out.push(npS);
+      }
+    }
+    var coil = donchianRelease(rows);
+    if (coil && !paceDead(__pace)){
+      if (coil === 'long'){
+        var dcL = hit('PG-10', 'Donchian Keltner Release', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The prior 20 bars sat inside the Keltner band, and this bar closed above that range.');
+        if (dcL) out.push(dcL);
+      } else {
+        var dcS = hit('PG-10', 'Donchian Keltner Release', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The prior 20 bars sat inside the Keltner band, and this bar closed under that range.');
+        if (dcS) out.push(dcS);
+      }
+    }
     return out;
   }
 
@@ -569,6 +611,45 @@
     var end = i;
     while (i >= 0 && sessOf(rows[i]) === prev) i--;
     return rows.slice(i + 1, end + 1);
+  }
+
+  function nakedPoc(prior, rows){
+    if (!prior || prior.length < 8 || !rows || rows.length < 2) return null;
+    var buckets = {}, i, key, w, best = -1, poc = NaN, seen = false;
+    function sessOf(b){
+      var h = hourOf(b);
+      if (!isFinite(h)) return '';
+      return h < 7 ? 'ASIA' : (h < 12.5 ? 'LONDON' : (h < 20 ? 'NY' : 'OFF'));
+    }
+    for (i = 0; i < prior.length; i++){
+      key = Math.round(prior[i].c);
+      w = prior[i].v > 0 ? prior[i].v : 1;
+      buckets[key] = (buckets[key] || 0) + w;
+      if (buckets[key] > best){ best = buckets[key]; poc = key; }
+    }
+    if (!isFinite(poc)) return null;
+    var cur = sessOf(rows[rows.length - 1]);
+    for (i = rows.length - 2; i >= 0; i--){
+      if (sessOf(rows[i]) !== cur) break;
+      if (rows[i].l <= poc && rows[i].h >= poc) seen = true;
+    }
+    return seen ? null : poc;
+  }
+
+  function donchianRelease(rows){
+    if (!rows || rows.length < 22) return null;
+    var i, hi = -Infinity, lo = Infinity, ema, a = atr(rows, 14), last = rows[rows.length - 1];
+    if (!(a > 0)) return null;
+    for (i = rows.length - 21; i < rows.length - 1; i++){
+      if (rows[i].h > hi) hi = rows[i].h;
+      if (rows[i].l < lo) lo = rows[i].l;
+    }
+    ema = rows[rows.length - 21].c;
+    for (i = rows.length - 20; i < rows.length - 1; i++) ema = ema + (2 / 21) * (rows[i].c - ema);
+    if (!(hi <= ema + 1.5 * a && lo >= ema - 1.5 * a && hi > lo)) return null;
+    if (last.c > hi && last.c > last.o) return 'long';
+    if (last.c < lo && last.c < last.o) return 'short';
+    return null;
   }
 
   function priorSessionMean(bands){
@@ -815,6 +896,16 @@
     } else if (lucasLo && last.c > last.o && last.c > loV){
       var luL = hit('GG-8', 'Lucas Time Spiral', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'The swing low is ' + fromLo + ' bars back, within one bar of Lucas ' + lucasLo + ', and this bar turned up.');
       if (luL) out.push(luL);
+    }
+    var leaf = gannAngles(last.c, [137.5]);
+    if (leaf && leaf.dist <= 1.2){
+      if (last.h >= leaf.level - 1.2 && last.c < leaf.level && last.c < last.o){
+        var lfS = hit('GG-9', 'Golden Angle', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged the 137.5 degree Gann angle and closed back under it.');
+        if (lfS) out.push(lfS);
+      } else if (last.l <= leaf.level + 1.2 && last.c > leaf.level && last.c > last.o){
+        var lfL = hit('GG-9', 'Golden Angle', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the 137.5 degree Gann angle and closed back above it.');
+        if (lfL) out.push(lfL);
+      }
     }
     return out;
   }
