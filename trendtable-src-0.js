@@ -2381,6 +2381,75 @@ function tmInsideFail(rows, dir){
   if (dir === 'short' && +last.l < +m.l && +last.c >= +m.l && +last.c > +last.o) return false;
   return true;
 }
+/* Price makes a higher high while On-Balance Volume makes a lower high.
+   That refuses a long. The mirror refuses a short. One swing does not refuse.
+   Missing volume does not pass. */
+function tmObvDiv(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var obv = 0, series = [0], i;
+  for (i = 1; i < rows.length; i++){
+    if (!(+rows[i].v > 0) || !(+rows[i].c > 0) || !(+rows[i - 1].c > 0)) return null;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    if (+rows[i].c > +rows[i - 1].c) obv += +rows[i].v;
+    else if (+rows[i].c < +rows[i - 1].c) obv -= +rows[i].v;
+    series.push(obv);
+  }
+  var sw = tmFractals(rows);
+  if (!sw) return null;
+  var pair = dir === 'long' ? sw.highs : sw.lows;
+  if (pair.length < 2) return true;
+  var a = pair[pair.length - 2], b = pair[pair.length - 1];
+  if (dir === 'long' && rows[b].h > rows[a].h && series[b] < series[a]) return false;
+  if (dir === 'short' && rows[b].l < rows[a].l && series[b] > series[a]) return false;
+  return true;
+}
+/* The UTC day open. Losing it on this bar does not pass.
+   Fewer than two bars in the session does not refuse. */
+function tmDayOpen(rows, dir){
+  if (!rows || !rows.length || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var sess = [], i, key;
+  for (i = 0; i < rows.length; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key === today) sess.push(rows[i]);
+  }
+  if (sess.length < 2) return true;
+  var open = +sess[0].o;
+  var prevC = +sess[sess.length - 2].c;
+  var c = +sess[sess.length - 1].c;
+  if (!(open > 0) || !(prevC > 0) || !(c > 0)) return null;
+  if (dir === 'long' && prevC > open && c < open) return false;
+  if (dir === 'short' && prevC < open && c > open) return false;
+  return true;
+}
+/* A wick through the next round step that closes back through it, against the trade.
+   Price not at a round step does not refuse. */
+function tmRound(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!(c > 0) || !isFinite(h) || !isFinite(l) || !isFinite(o)) return null;
+  var mag = Math.pow(10, Math.floor(Math.log10(c)));
+  var step = mag / 10;
+  if (!(step > 0)) return null;
+  if (dir === 'long' && c < o){
+    var up = Math.floor(h / step) * step;
+    if (h > up && c < up && up > 0) return false;
+  }
+  if (dir === 'short' && c > o){
+    var dn = Math.ceil(l / step) * step;
+    if (l < dn && c > dn && dn > 0) return false;
+  }
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

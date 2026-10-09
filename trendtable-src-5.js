@@ -229,6 +229,15 @@
   var inside = rows1 ? tmInsideFail(rows1, dir) : null;
   if (inside == null) hard.push('inside bar unread');
   else if (!inside) hard.push('an inside bar broke and closed back inside');
+  var obvDiv = rows1 ? tmObvDiv(rows1, dir) : null;
+  if (obvDiv == null) hard.push('obv divergence unread');
+  else if (!obvDiv) hard.push('on-balance volume diverged against the trade');
+  var dayOpen = rows1 ? tmDayOpen(rows1, dir) : null;
+  if (dayOpen == null) hard.push('day open unread');
+  else if (!dayOpen) hard.push('price lost the day open');
+  var round = rows1 ? tmRound(rows1, dir) : null;
+  if (round == null) hard.push('round level unread');
+  else if (!round) hard.push('a round level was pierced and closed back through');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

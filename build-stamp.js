@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1241',
-  pack: 'Trend Matrix also refuses a wick back inside yesterday high or low, a candle that engulfs the prior body, and an inside bar that breaks the mother bar and closes back inside. A close through, a small candle, or no inside bar does not refuse. The Pine marks still ride the ledger. The card does not send an order.',
-  built: '2026-10-09T06:25:00Z'
+  version: 'hg-v1242',
+  pack: 'Trend Matrix also refuses On-balance volume divergence, a UTC day open lost on this bar, and a wick back through a round level. One swing, a one-bar session, or price away from a round step does not refuse. The card does not send an order.',
+  built: '2026-10-09T06:40:00Z'
 };
 
 function hgBuildLabel(b){
