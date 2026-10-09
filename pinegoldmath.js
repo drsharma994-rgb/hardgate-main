@@ -2274,6 +2274,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (vahWhy) return vahWhy;
   var nyOrb = pineGoldNyOrbVeto(rows, dir);
   if (nyOrb) return nyOrb;
+  var aoWhy = pineGoldAoVeto(rows, dir);
+  if (aoWhy) return aoWhy;
+  var wkWhy = pineGoldWeekHighVeto(rows, dir);
+  if (wkWhy) return wkWhy;
+  var diWhy = pineGoldDiCrossVeto(rows, dir);
+  if (diWhy) return diWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3935,6 +3941,97 @@ function pineGoldNyOrbVeto(rows, dir){
   if (dir === 'short' && l < lo && c >= lo && c > o) return 'The New York cash range was pierced and closed back over.';
   return null;
 }
+/* Awesome Oscillator, SMA 5 of the median minus SMA 34. Crossing under zero does not pass.
+   Staying on one side does not refuse. */
+function pineGoldAoVeto(rows, dir){
+  var fast = 5, slow = 34;
+  if (!rows || rows.length < slow + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var med = [], i, h, l;
+  for (i = 0; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l);
+    if (!isFinite(h) || !isFinite(l)) return null;
+    med.push((h + l) / 2);
+  }
+  function sma(end, len){
+    if (end < len - 1) return NaN;
+    var s = 0, k;
+    for (k = end - len + 1; k <= end; k++) s += med[k];
+    return s / len;
+  }
+  var n = med.length - 1;
+  var now = sma(n, fast) - sma(n, slow);
+  var before = sma(n - 1, fast) - sma(n - 1, slow);
+  if (!isFinite(now) || !isFinite(before)) return null;
+  if (dir === 'long' && before >= 0 && now < 0) return 'Awesome Oscillator crossed under zero. A long does not pass.';
+  if (dir === 'short' && before <= 0 && now > 0) return 'Awesome Oscillator crossed over zero. A short does not pass.';
+  return null;
+}
+/* Last week's high. A wick back inside it does not pass.
+   No prior week, or a week under $20, does not refuse. */
+function pineGoldWeekHighVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var midnight = Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate());
+  var weekStart = midnight - ((when.getUTCDay() + 6) % 7) * 86400000;
+  var priorStart = weekStart - 7 * 86400000;
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms < priorStart || ms >= weekStart) continue;
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || hi - lo < 20) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'Last week high was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'Last week low was pierced and closed back over.';
+  return null;
+}
+/* +DI crossing under -DI. A pair that was already on the wrong side does not refuse. A flat range does not pass. */
+function pineGoldDiCrossVeto(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 3 || (dir !== 'long' && dir !== 'short')) return null;
+  var trs = [], plus = [], minus = [], i, h, l, pc, up, dn, tr;
+  for (i = 1; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l); pc = pgrNum(rows[i - 1].c);
+    if (!isFinite(h) || !isFinite(l) || !(pc > 0) || !(pgrNum(rows[i].c) > 0)) return null;
+    up = h - pgrNum(rows[i - 1].h);
+    dn = pgrNum(rows[i - 1].l) - l;
+    plus.push(up > dn && up > 0 ? up : 0);
+    minus.push(dn > up && dn > 0 ? dn : 0);
+    tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+    trs.push(tr);
+  }
+  function wilder(src, end){
+    if (end < len - 1) return NaN;
+    var s = 0, k;
+    for (k = 0; k < len; k++) s += src[k];
+    for (k = len; k <= end; k++) s = s - s / len + src[k];
+    return s;
+  }
+  var n = trs.length - 1;
+  var tr0 = wilder(trs, n - 1), tr1 = wilder(trs, n);
+  if (!(tr0 > 0) || !(tr1 > 0)) return null;
+  var p0 = 100 * wilder(plus, n - 1) / tr0, m0 = 100 * wilder(minus, n - 1) / tr0;
+  var p1 = 100 * wilder(plus, n) / tr1, m1 = 100 * wilder(minus, n) / tr1;
+  if (!isFinite(p0) || !isFinite(m0) || !isFinite(p1) || !isFinite(m1)) return null;
+  if (dir === 'long' && p0 >= m0 && p1 < m1) return '+DI crossed under -DI. A long does not pass.';
+  if (dir === 'short' && m0 >= p0 && m1 < p1) return '-DI crossed under +DI. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -4540,6 +4637,9 @@ G.pineGoldNakedPocVeto = pineGoldNakedPocVeto;
 G.pineGoldCmfVeto = pineGoldCmfVeto;
 G.pineGoldVahVeto = pineGoldVahVeto;
 G.pineGoldNyOrbVeto = pineGoldNyOrbVeto;
+G.pineGoldAoVeto = pineGoldAoVeto;
+G.pineGoldWeekHighVeto = pineGoldWeekHighVeto;
+G.pineGoldDiCrossVeto = pineGoldDiCrossVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
