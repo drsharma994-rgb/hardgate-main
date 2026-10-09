@@ -319,6 +319,15 @@
   var ny = rows1 ? tmNySweep(rows1, dir) : null;
   if (ny == null) hard.push('new york hour unread');
   else if (!ny) hard.push('the New York hour was swept and closed back inside');
+  var london = rows1 ? tmLondonSweep(rows1, dir) : null;
+  if (london == null) hard.push('london hour unread');
+  else if (!london) hard.push('the London hour was swept and closed back inside');
+  var ema50 = rows1 ? tmEma50(rows1, dir) : null;
+  if (ema50 == null) hard.push('ema 50 unread');
+  else if (!ema50) hard.push('price lost the 50 EMA');
+  var don55 = rows1 ? tmDonchian55(rows1, dir) : null;
+  if (don55 == null) hard.push('donchian unread');
+  else if (!don55) hard.push('the 55-bar extreme was pierced and closed back inside');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

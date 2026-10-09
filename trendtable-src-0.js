@@ -3244,6 +3244,76 @@ function tmNySweep(rows, dir){
   if (dir === 'short' && l < lo && c >= lo && c > o) return false;
   return true;
 }
+/* The 07:00 UTC hour. After 08:00, a wick back inside that hour does not pass.
+   Before 08:00, or no such bar, it does not refuse. */
+function tmLondonSweep(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  if (when.getUTCHours() < 8) return true;
+  var day = when.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms, at;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    at = new Date(ms);
+    if (at.toISOString().slice(0, 10) !== day || at.getUTCHours() !== 7) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.0015) return true;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return false;
+  if (dir === 'short' && l < lo && c >= lo && c > o) return false;
+  return true;
+}
+/* The 50 EMA. Losing it on this bar does not pass. A close already through it does not refuse. */
+function tmEma50(rows, dir){
+  var len = 50;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(+rows[i].c > 0)) return null;
+    closes.push(+rows[i].c);
+  }
+  var ema = tmSeedEma(closes, len);
+  if (!ema) return null;
+  var n = closes.length - 1;
+  if (dir === 'long' && closes[n - 1] >= ema[n - 1] && closes[n] < ema[n]) return false;
+  if (dir === 'short' && closes[n - 1] <= ema[n - 1] && closes[n] > ema[n]) return false;
+  return true;
+}
+/* A wick through the prior 55-bar extreme that closes back inside, against the trade.
+   A close through the extreme does not refuse. */
+function tmDonchian55(rows, dir){
+  var len = 55;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var look = rows.slice(-(len + 1), -1);
+  var hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(+look[i].h) || !isFinite(+look[i].l) || !(+look[i].c > 0)) return null;
+    if (+look[i].h > hi) hi = +look[i].h;
+    if (+look[i].l < lo) lo = +look[i].l;
+  }
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0) || !(hi > lo)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return false;
+  if (dir === 'short' && l < lo && c >= lo && c > o) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
