@@ -3220,25 +3220,33 @@ async function runScan(ui, scanSt){
       legs.push('goldRankSetups unavailable — ordered by grade/killzone only');
     }
     try{
-      var psFn = gfn('pineGoldLayerStates'), blkFn = gfn('pineGoldBlocksLead');
-      if (psFn && blkFn && gold.rows15m && gold.rows15m.length){
-        var psLead = psFn(gold.rows15m);
-        if (psLead && psLead.ok){
-          for (i = 0; i < ranked.length; i++){
-            if (!ranked[i] || ranked[i].demoted) continue;
-            var whyP = blkFn(psLead, ranked[i].dir);
-            if (!whyP) continue;
-            ranked[i].demoted = true;
-            ranked[i].pineBlock = whyP;
-            if (!Array.isArray(ranked[i].stamps)) ranked[i].stamps = [];
-            if (ranked[i].stamps.indexOf('PINE AGAINST') < 0) ranked[i].stamps.push('PINE AGAINST');
+      var psFn = gfn('pineGoldLayerStates'), blkFn = gfn('pineGoldBlocksLead'), tapeFn = gfn('pineGoldTapeVeto');
+      var psLead = (psFn && gold.rows15m && gold.rows15m.length) ? psFn(gold.rows15m) : null;
+      var pineHeld = 0;
+      if (gold.rows15m && gold.rows15m.length && (tapeFn || (psLead && psLead.ok && blkFn))){
+        for (i = 0; i < ranked.length; i++){
+          if (!ranked[i] || ranked[i].demoted) continue;
+          var whyP = (psLead && psLead.ok && blkFn) ? blkFn(psLead, ranked[i].dir) : null;
+          if (!whyP && tapeFn){
+            try{ whyP = tapeFn(gold.rows15m, ranked[i].dir, { mode: 'scalp', now: Date.now(), macro: ctx.macro }); }
+            catch(eTv){ whyP = null; }
           }
-          best = null;
-          for (i = 0; i < ranked.length; i++){
-            if (ranked[i] && !ranked[i].demoted && !ranked[i].vetoed){ best = ranked[i]; break; }
-          }
+          if (!whyP) continue;
+          ranked[i].demoted = true;
+          ranked[i].pineBlock = whyP;
+          if (!Array.isArray(ranked[i].stamps)) ranked[i].stamps = [];
+          if (ranked[i].stamps.indexOf('PINE AGAINST') < 0) ranked[i].stamps.push('PINE AGAINST');
+          var gnP = Array.isArray(ranked[i].gateNotes) ? ranked[i].gateNotes.slice() : [];
+          if (gnP.indexOf(whyP) < 0) gnP.push(whyP);
+          ranked[i].gateNotes = gnP;
+          pineHeld++;
+        }
+        best = null;
+        for (i = 0; i < ranked.length; i++){
+          if (ranked[i] && !ranked[i].demoted && !ranked[i].vetoed){ best = ranked[i]; break; }
         }
       }
+      if (pineHeld) legs.push('PINE AGAINST — ' + pineHeld + ' scalp' + (pineHeld === 1 ? '' : 's') + ' cannot lead');
     }catch(ePine){}
     var instHtml = '';
     try{
@@ -3826,7 +3834,7 @@ function goldscalpMountInto(el, scanSt, cfg){
       + 'killzone) are demoted and held to a +2 tally bar, counter-trend entries against a sloping 200-EMA-15m/4H stack '
       + 'are demoted unless they are sweep-reclaims, a realized TP1 under 1.2R after structure-snapping drops the setup, '
       + 'Kaufman-ER chop (&lt; 0.25) demotes mean-reversion retests, and a high-impact news window vetoes NEW convictions '
-      + '— every gate names its reason on the card or on a held-back line below.</div>')
+      + '— every gate names its reason on the card or on a held-back line below. A lead is also refused when the gold tape says so: a scalp long in premium or short in discount without a sweep, a fade of an Asian range that already expanded by 1%, the London fix in London local time, a continuation after the day has used its average range, gold RSI divergence against the trade, or a real-rate headwind without a sweep. A short history does not refuse. The card does not send an order.</div>')
     : '';
   var emptyMsg = cfg.emptyMsg || 'no A-grade confluence right now — gold respects levels; wait for the sweep.';
   try{

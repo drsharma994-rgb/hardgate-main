@@ -223,10 +223,10 @@ const firstWindow = (W, fn, opts, rows, from, want) => {
 {
   const W = boot(MATH_BASE.concat(['gold-extra-strategies.js']));
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 23 && T.slice(0, 8).map(l => l.id).join(',') === OLD8.join(',') && T.slice(8, 12).map(l => l.id).join(',') === NEW4.join(',') && T[22].id === 'bpr', 'the eight earlier layers lead the table, the four hg-v1167 ones follow (twenty-three total since hg-v1202 appended BPR at position 22, Williams/TRIX/Fisher at 12-14, hg-v1173 formation family at 15-21) (' + T.map(l => l.id).join(' · ') + ')');
+  assert(T.length === 24 && T.slice(0, 8).map(l => l.id).join(',') === OLD8.join(',') && T.slice(8, 12).map(l => l.id).join(',') === NEW4.join(',') && T[22].id === 'bpr' && T[23].id === 'ote', 'the eight earlier layers lead the table, the four hg-v1167 ones follow, and OTE is last (' + T.map(l => l.id).join(' · ') + ')');
   assert(NEW4.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function')), 'each of the four has its detector exported');
   assert(T.find(l => l.id === 'cci').twin === 'CCI-EXTREME' && ['chandelier', 'hullma', 'aroon'].every(id => T.find(l => l.id === id).twin === null) && T.filter(l => l.twin).length === 2, 'the CCI re-entry names its exact OMNIGOLD twin CCI-EXTREME; the other three name none (two twins in the table with ICHI-KUMO)');
-  assert(!T.some(l => /squeeze/i.test(l.id)) && W.PINE_GOLD_LAYERS.some(l => l.id === 'squeeze'), 'no TTM squeeze in the record table: the ten-layer table already carries Squeeze Mom');
+  assert(W.PINE_GOLD_LAYERS.some(l => l.id === 'squeeze') && T.filter(l => l.id === 'squeeze').length === 1, 'Squeeze Mom stays in the ten-layer table, and the later record-only TTM port is a single row');
   assert(Array.isArray(W.PINE_GOLD_MAJORITY_IDS) && W.PINE_GOLD_MAJORITY_IDS.join(',') === OLD5.join(','), 'the majority mark keeps its hg-v1165 population: the five hg-v1164 layers');
   const full = tapeEnding(WED, 600, 900, 11, 24, 0);
   const found = {};
@@ -324,12 +324,12 @@ const firstWindow = (W, fn, opts, rows, from, want) => {
   const sf = W.pineGoldLayerStates(flat);
   assert(NEW4.every(id => sf[id] === null), 'a dead-flat tape reads none of the four (a Hull slope of zero, a CCI of zero, Aroon up equal to down, no trail crossed)');
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
-  assert(Object.keys(mL).length === 16 && NEW4.every(id => mL['pine:' + id + 'With'] === true && mS['pine:' + id + 'With'] === false) && mL['pine:majorityWith'] === true, 'sixteen marks since hg-v1171: the hg-v1167 four WITH on a long, AGAINST on a short, the majority still the five');
+  assert(Object.keys(mL).length > 16 && mL['pine:oteWith'] === true && NEW4.every(id => mL['pine:' + id + 'With'] === true && mS['pine:' + id + 'With'] === false) && mL['pine:majorityWith'] === true, 'the hg-v1167 four stay WITH on a long, OTE agrees, and the majority is still the five');
   const onlyNew = Object.assign({ ok: true, readable: 4, allLong: 4, allShort: 0, agreeLong: 0, agreeShort: 0 }, Object.fromEntries(OLD8.map(id => [id, null])), Object.fromEntries(NEW4.map(id => [id, 'long'])));
   const mo = W.pineGoldPineMarks(onlyNew, 'long');
   assert(Object.keys(mo).length === 4 && mo['pine:majorityWith'] === undefined, 'the four alone never move the majority mark (absent)');
   const html = W.pineGoldStackLineHtml(su, mL);
-  assert(/\d+ of 23 gold Pine layers readable/.test(html) && /Chandelier Exit<\/b> LONG/.test(html) && /Hull MA Turn<\/b> LONG/.test(html) && /CCI Re-entry<\/b> LONG/.test(html) && /Aroon Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the four new states and names the majority population (twenty-three total since hg-v1202)');
+  assert(/\d+ of 24 gold Pine layers readable/.test(html) && /Chandelier Exit<\/b> LONG/.test(html) && /Hull MA Turn<\/b> LONG/.test(html) && /CCI Re-entry<\/b> LONG/.test(html) && /Aroon Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the four new states and names the majority population (twenty-four total since hg-v1207)');
   /* the twin record: quoted through the one home, not past the veto bar */
   const rec = W.hgGoldSiblingRecord('cci');
   assert(rec && rec.twin === 'CCI-EXTREME' && rec.settled === 322 && rec.n === 327 && typeof rec.zBreakeven === 'number' && rec.zBreakeven > -2 && W.hgGoldSiblingVetoed('cci') === false, 'hgGoldSiblingRecord(cci) quotes CCI-EXTREME: gate-clear n=327, 322 settled, z ' + (rec && rec.zBreakeven) + ' — inside the noise, not a measured failure, so the port is allowed (hg-v934)');
@@ -399,7 +399,7 @@ const cardOf = (html, label) => { const i = html.indexOf('· ' + label + ' · Gr
   assert(/OMNIGOLD CCI-EXTREME, gate-clear n=327, 322 settled, −0\.033R net at XM, z \+0\.20/.test(cciCard) && /OMNIGOLD’s gates and 1h horizon/.test(cciCard), 'the CCI card quotes its twin\'s gate-clear record through hgGoldSiblingRecord, attributed to OMNIGOLD\'s gates and horizon');
   assert(!/Nearest measured twin/.test(arCard) && !/Nearest OMNIGOLD mechanic/.test(arCard), 'the Aroon card, with no twin, quotes none');
   assert(/4 RECORD-ONLY Pine layers on this scan/.test(r.html), 'the board names the four record-only rows once');
-  assert(/\d+ of 23 gold Pine layers readable/.test(r.html), 'every GOLD PINE card prints the PINE STACK line over twenty-three layers (hg-v1202)');
+  assert(/\d+ of 24 gold Pine layers readable/.test(r.html), 'every GOLD PINE card prints the PINE STACK line over twenty-four layers (hg-v1207)');
 }
 
 /* ------------------------------------------------------------------ 5 */

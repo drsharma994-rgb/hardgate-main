@@ -14747,7 +14747,27 @@ terse status, and never launches a first-time scan on a global refresh.
             if (ogRdIr){ im = ogRdIm(ogRdIr, c.dir); for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } } c.indReads = ogRdIr; }
             if (ogRdPs){ var pm = ogRdPm(ogRdPs, c.dir); for (k in pm){ if (Object.prototype.hasOwnProperty.call(pm, k) && (pm[k] === true || pm[k] === false)){ m[k] = pm[k]; any = true; } } c.pineStates = ogRdPs;
               var blk = gfn('pineGoldBlocksLead');
-              if (blk){ var whyP = blk(ogRdPs, c.dir); if (whyP) c.pineBlock = whyP; }
+              if (blk){
+                var whyP = blk(ogRdPs, c.dir);
+                if (whyP){
+                  c.pineBlock = whyP;
+                  if (c.why && String(c.why).indexOf(whyP) < 0) c.why = String(c.why) + ' — ' + whyP;
+                  else if (!c.why) c.why = whyP;
+                }
+              }
+            }
+            if (!c.pineBlock){
+              var tapeFn = gfn('pineGoldTapeVeto');
+              if (tapeFn){
+                try{
+                  var whyT = tapeFn(rows, c.dir, { mode: (cfg && cfg.label === 'SWING') ? 'swing' : 'scalp', now: Date.now(), macro: (shared && shared.macro) || null });
+                  if (whyT){
+                    c.pineBlock = whyT;
+                    if (c.why && String(c.why).indexOf(whyT) < 0) c.why = String(c.why) + ' — ' + whyT;
+                    else if (!c.why) c.why = whyT;
+                  }
+                }catch(eTv){}
+              }
             }
             return any ? m : undefined;
           } catch (eRo) { return undefined; }
@@ -15860,7 +15880,27 @@ terse status, and never launches a first-time scan on a global refresh.
     var last = prefix[prefix.length - 1];
     var hits = hgOgDetect(prefix, { nowSec: last ? num(last.t) : undefined });
     if (!hits || !hits.length) return null;
-    var cands = hgOgEvaluate(prefix, hits, hgOgXmBtExtra(prefix, cfg), cfg);
+    var extraBt = hgOgXmBtExtra(prefix, cfg);
+    var cands = hgOgEvaluate(prefix, hits, extraBt, cfg);
+    try{
+      var tapeFn = gfn('pineGoldTapeVeto');
+      if (tapeFn){
+        var btNow = last ? num(last.t) : NaN;
+        if (isFinite(btNow) && btNow > 0 && btNow < 1e12) btNow = btNow * 1000;
+        for (var ti = 0; ti < cands.length; ti++){
+          if (!cands[ti] || cands[ti].pineBlock) continue;
+          var whyBt = null;
+          try{
+            whyBt = tapeFn(prefix, cands[ti].dir, {
+              mode: (cfg && cfg.label === 'SWING') ? 'swing' : 'scalp',
+              now: isFinite(btNow) ? btNow : undefined,
+              macro: extraBt && extraBt.macro
+            });
+          }catch(eBtV){ whyBt = null; }
+          if (whyBt) cands[ti].pineBlock = whyBt;
+        }
+      }
+    }catch(eTapeBt){}
     var pick = hgOgPickFor(cands, cfg.label, hgOgTapeDir(prefix));
     var live = last ? fin(last.c) : NaN;
     return hgOgXmSlim(pick, live);

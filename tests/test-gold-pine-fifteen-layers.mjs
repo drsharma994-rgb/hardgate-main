@@ -49,14 +49,15 @@ console.log('== 1) three series helpers + three ports + three table entries ==')
   assert(typeof W.pineGoldFisherSeries === 'function' && typeof W.pineGoldFisherZero === 'function',
     'Fisher Transform: series helper and port both exported');
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 23, 'twenty-three record-only layers since hg-v1202 — hg-v1173 formation family + BPR follow the hg-v1171 trio (' + T.length + ')');
+  assert(T.length === 24, 'twenty-four record-only layers since hg-v1207 — OTE follows BPR (' + T.length + ')');
   const OLD12 = ['supertrend','ichimoku','donchian','emacross','keltner','macd','psar','stoch','chandelier','hullma','cci','aroon'];
   const NEW3 = ['williams','trix','fisher'];
   assert(T.slice(0, 12).map(l => l.id).join(',') === OLD12.join(','), 'the twelve earlier layers lead the table');
   assert(T.slice(12, 15).map(l => l.id).join(',') === NEW3.join(','), 'the three hg-v1171 layers follow at positions 12/13/14');
   assert(T.slice(15, 18).map(l => l.id).join(',') === 'adx,heikin,sessvwap', 'hg-v1173 price-only confirmation ports follow at 15/16/17');
   assert(T.slice(18, 22).map(l => l.id).join(',') === 'qqe,squeeze,wavwap,efficiency', 'hg-v1173 formation family follows at 18/19/20/21');
-  assert(T[22] && T[22].id === 'bpr', 'the hg-v1202 BPR layer follows at position 22');
+  assert(T[22] && T[22].id === 'bpr', 'the hg-v1202 BPR layer stays at position 22');
+  assert(T[23] && T[23].id === 'ote', 'the hg-v1207 OTE layer follows at position 23');
   assert(NEW3.every(id => {
     const l = T.find(x => x.id === id);
     return l && typeof W[l.fn] === 'function';
