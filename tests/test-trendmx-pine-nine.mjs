@@ -202,15 +202,23 @@ console.log('== 6) no gate module reads a new pineCipher/pineRangeFilter/pineNwE
 /* ====================================================================
    § 7 ship stamps
    ==================================================================== */
-console.log('== 7) build stamps say hg-v1287 ==');
+console.log('== 7) build stamps are version-agnostic (reads build-stamp as the source of truth) ==');
 {
-  const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1287'/.test(bs), 'build-stamp.js version is hg-v1287');
+  /* hg-v1289: this guard used to hardcode hg-v1287 by text — the hg-v956
+     textual-pin failure, which turned every subsequent release red (hg-v1288
+     already shipped past it). The shared `tests/helpers/build-version.mjs`
+     exists for exactly this: ONE place reads build-stamp.js so a pack bump
+     costs one edit, not thirty. The invariant this test actually guards is
+     that sw.js, trendtable.js and the cachebuster all AGREE with
+     build-stamp.js — not that any of them equals a fixed string. */
+  const { HG_VER, swCacheOk } = await import('./helpers/build-version.mjs');
+  assert(/^hg-v\d+/.test(HG_VER), 'build-stamp.js has a readable version (' + HG_VER + ')');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1287'/.test(sw), 'sw.js HG_CACHE is hg-v1287');
+  assert(swCacheOk(sw), 'sw.js HG_CACHE matches build-stamp (' + HG_VER + ')');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1287/.test(tt), 'trendtable.js header reads hg-v1287');
-  assert(/v=1287/.test(tt), 'trendtable.js loader cachebuster reads v=1287');
+  assert(new RegExp(HG_VER).test(tt), 'trendtable.js header reads ' + HG_VER);
+  const verDigits = HG_VER.replace(/^hg-v/, '');
+  assert(new RegExp('v=' + verDigits).test(tt), 'trendtable.js loader cachebuster reads v=' + verDigits);
 }
 
 /* ====================================================================

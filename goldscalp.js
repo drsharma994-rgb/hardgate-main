@@ -3456,7 +3456,33 @@ async function runScan(ui, scanSt){
            server. An unreadable table is NO measured mechanic: fail closed. */
         if (!leadOnlyA){ /* lever OFF: the lead-set demote is withheld, the checks below stand */ }
         else if (!leadKeysA) whyA.push('ACCURACY — the edge table is unreadable, so no mechanic on this desk is measured to lead. This is not the scalp.');
-        else if (leadKeysA.indexOf(sk) < 0) whyA.push('ACCURACY — only ' + gsLeadKeysLabel(leadKeysA) + ' has held up on this desk\'s own measured record. This is not the scalp.');
+        else if (leadKeysA.indexOf(sk) < 0){
+          /* hg-v1289: distinguish truly-unmeasured mechanics (no row in the
+             edge table at all) from measured-but-not-prefer rows. The hg-v1098
+             instruction was "lead only on measured mechanics with a prefer
+             record" — defensible when every stratKey in the mint had a row.
+             The 14 hg-v1270+ GS strategies (gs2–gs14) and any future mint have
+             NO row at all; the three-state hg-v989 rule says absence is not
+             negative evidence, so a row-less stratKey is not what hg-v1098
+             asked us to withhold. A measured neutral/demote/suppress row still
+             demotes (hg-v1098 preserved on measured mechanics). An unmeasured
+             mechanic is left to the geometry, macro and real-yield checks
+             below in this same loop — the hg-v1156 claim that only those two
+             mechanics have HELD UP is TRUE OF MEASURED mechanics, not of
+             mechanics the ledger has never judged. */
+          var T2 = (typeof W !== 'undefined' && W) ? W.HG_GOLD_SETUP_EDGE : null;
+          var hasRow = !!(T2 && T2.scalp && Object.prototype.hasOwnProperty.call(T2.scalp, sk));
+          if (hasRow){
+            whyA.push('ACCURACY — only ' + gsLeadKeysLabel(leadKeysA) + ' has held up on this desk\'s own measured record. This is not the scalp.');
+          } else {
+            /* UNMEASURED — stamp a chip so the reader sees why the leader is
+               a new mechanic rather than one of the two prefer rows. The
+               stamp is non-demoting: the card can still be demoted by the
+               geometry/macro/real-yield checks below, or by any other leg. */
+            if (!Array.isArray(ac.stamps)) ac.stamps = [];
+            if (ac.stamps.indexOf('UNMEASURED') < 0) ac.stamps.push('UNMEASURED');
+          }
+        }
         var dirA = String(ac.dir || '');
         var entryA = +ac.entry, stopA = +ac.stop, t1A = +ac.t1;
         if (dirA === 'long' || dirA === 'short'){

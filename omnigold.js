@@ -10654,8 +10654,26 @@ terse status, and never launches a first-time scan on a global refresh.
        venue and age. The hold was previously a bare count, so a record that
        could not expire (its venue had left the feed chain, see conviction-lock
        hg-v941) held three desks while reading exactly like a position someone
-       had just taken. An age on the line makes that visible on sight. */
-    var out = { n: 0, keys: [], rows: [] };
+       had just taken. An age on the line makes that visible on sight.
+
+       hg-v1289: hg-v941 fixed the TTL inside `applyHardgateConvictionLock`
+       (conviction-lock.js), but that function only runs when the OWNING desk
+       scans (GOLD SCALP's 90-min clock, hg-v965; GOLD SWING's own refresh).
+       OMNIGOLD reads `store.live` directly, so an orphan or stale record held
+       all three gold desks (one-at-a-time) through hg-v930 until the owner's
+       next scan. The resolution preserves hg-v941's disclosure (rows carry
+       every live record with its age, visible on the panel) and adds `.stale`
+       so the gate can stop asking a known-expired record to hold the desk:
+       the one-at-a-time counter (`nFresh`) excludes stale rows while `n` and
+       `rows` stay complete. A SCALP record is stale past its 90-min TTL
+       (goldscalp.js CONVICTION_TTL_MS); a SWING record past 5 days
+       (conviction-lock SWING_EXPIRY_MS). A record without `issuedAt` has
+       unknowable age and is NOT marked stale (hg-v989 three-state, hg-v941
+       "age not recorded"); the owning desk's scan drops malformed records at
+       applyHardgateConvictionLock line 379-383. */
+    var SCALP_TTL = 90 * 60 * 1000;
+    var SWING_TTL = 5 * 24 * 60 * 60 * 1000;
+    var out = { n: 0, nFresh: 0, keys: [], rows: [] };
     var now = (isFinite(+nowMs) && +nowMs > 0) ? +nowMs : Date.now();
     try{
       for (var i = 0; i < OG_CONVICTION_KEYS.length; i++){
@@ -10665,18 +10683,29 @@ terse status, and never launches a first-time scan on a global refresh.
         var j = null;
         try { j = JSON.parse(raw); } catch (eP) { j = null; }
         if (!j || !j.live || typeof j.live !== 'object') continue;
+        var isSwingStore = (OG_CONVICTION_KEYS[i] === 'hgGoldswingConviction');
+        var ttl = isSwingStore ? SWING_TTL : SCALP_TTL;
         for (var k in j.live){
           if (!Object.prototype.hasOwnProperty.call(j.live, k)) continue;
           out.n++; out.keys.push(String(k));
           var rec = j.live[k] || {};
           var at = fin(rec.issuedAt);   /* fin: a missing stamp is NaN, never epoch 0 */
+          var ageMs = isFinite(at) ? Math.max(0, now - at) : null;
+          /* hg-v1289: a record with a readable issuedAt older than its TTL is
+             STALE for the gate but still kept on the row list so the panel
+             shows what is held. No-issuedAt records are not stale (unknowable
+             age); the owning desk's scan drops them if malformed. */
+          var stale = (isFinite(at) && (now - at) > ttl);
+          if (!stale) out.nFresh++;
           out.rows.push({
             key: String(k),
             store: OG_CONVICTION_KEYS[i],
-            desk: (OG_CONVICTION_KEYS[i] === 'hgGoldswingConviction') ? 'SWING' : 'SCALP',
+            desk: isSwingStore ? 'SWING' : 'SCALP',
             sym: rec.sym || null, dir: rec.dir || null, venue: rec.venue || null,
             issuedAt: isFinite(at) ? at : null,
-            ageMs: isFinite(at) ? Math.max(0, now - at) : null
+            ageMs: ageMs,
+            stale: !!stale,
+            ttlMs: ttl
           });
         }
       }
@@ -10709,7 +10738,12 @@ terse status, and never launches a first-time scan on a global refresh.
         } else {
           age = ' \u2014 age not recorded';
         }
-        out.push('<div>' + esc(bits.join(' \u00b7 ')) + esc(age) + '</div>');
+        /* hg-v1289: a stale row is kept on the panel (hg-v941 disclosure) but
+           named as past-TTL, so a reader sees the orphan rather than silently
+           dropping it. The one-at-a-time gate reads o.nFresh and no longer
+           holds the desk on stale rows. */
+        var staleSuffix = (r.stale === true) ? ' \u2014 STALE (past TTL)' : '';
+        out.push('<div>' + esc(bits.join(' \u00b7 ')) + esc(age + staleSuffix) + '</div>');
       }
       return '<div class="og-holding" style="margin-top:4px;opacity:.9">'
         + '<b>What is holding:</b>' + out.join('') + '</div>';
@@ -10723,11 +10757,19 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgOneAtATimeGate(open){
     if (!OG_ONE_AT_A_TIME) return null;
     var o = open || hgOgOpenGoldConvictions();
-    var free = !(o && o.n > 0);
+    /* hg-v1289: read nFresh (stale-aware), not n. hg-v941 kept every row on
+       o.rows so the panel shows what is held with its age; hg-v1289 adds
+       o.stale per row and o.nFresh across rows so the hold releases on a
+       record whose own TTL has passed, even when the owning desk has not yet
+       scanned to delete it. nFresh falls back to n when the stale split did
+       not run (older callers that constructed `open` themselves) — the gate
+       is unchanged in that path. */
+    var nHold = (o && typeof o.nFresh === 'number') ? o.nFresh : ((o && o.n) || 0);
+    var free = !(nHold > 0);
     return { key: 'one-at-a-time', hard: true, pass: free,
       why: free
         ? 'no gold conviction is live — this desk takes one position at a time'
-        : (o.n + ' gold conviction' + (o.n === 1 ? ' is' : 's are') + ' already live'
+        : (nHold + ' gold conviction' + (nHold === 1 ? ' is' : 's are') + ' already live'
            + ' — HELD. The walk publishes 59.4 plans a day on one instrument and holds 57'
            + ' at once, which is one bet at 57x size; taken one at a time the SCALP ticket'
            + ' book is +0.148R at the conservative fill bound and +0.416R at the other,'
