@@ -2517,6 +2517,80 @@ function tmFibLost(rows, dir){
   if (prev <= fibS && c > fibS) return false;
   return true;
 }
+/* A climax bar: volume at least twice the prior 20-bar average, closing against
+   the trade, with the rejection wick at least half the range. A normal bar does not refuse. */
+function tmClimax(rows, dir){
+  if (!rows || rows.length < 22 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var prior = rows.slice(-21, -1);
+  var sum = 0, i;
+  for (i = 0; i < prior.length; i++){
+    if (!(+prior[i].v > 0)) return null;
+    sum += +prior[i].v;
+  }
+  if (!(+last.v > 0) || !(+last.c > 0) || !isFinite(+last.o) || !isFinite(+last.h) || !isFinite(+last.l)) return null;
+  var avg = sum / prior.length;
+  if (!(avg > 0) || +last.v < avg * 2) return true;
+  var range = +last.h - +last.l;
+  if (!(range > 0)) return null;
+  if (dir === 'long' && +last.c < +last.o && (+last.h - Math.max(+last.o, +last.c)) >= range * 0.5) return false;
+  if (dir === 'short' && +last.c > +last.o && (Math.min(+last.o, +last.c) - +last.l) >= range * 0.5) return false;
+  return true;
+}
+/* Monday 00:00 UTC open. Losing it on this bar does not pass.
+   If that open is not in the tape, it does not refuse. */
+function tmWeekOpen(rows, dir){
+  if (!rows || !rows.length || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var day = new Date(lastMs);
+  var monday = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
+  var week = [], i, ms;
+  for (i = 0; i < rows.length; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms >= monday) week.push(rows[i]);
+  }
+  if (week.length < 2) return true;
+  var open = +week[0].o, prevC = +week[week.length - 2].c, c = +week[week.length - 1].c;
+  if (!(open > 0) || !(prevC > 0) || !(c > 0)) return null;
+  if (dir === 'long' && prevC > open && c < open) return false;
+  if (dir === 'short' && prevC < open && c > open) return false;
+  return true;
+}
+/* MACD histogram divergence. A higher high with a lower histogram does not pass
+   as a long. One swing does not refuse. */
+function tmMacdDiv(rows, dir){
+  if (!rows || rows.length < 40 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(+rows[i].c > 0) || !isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    closes.push(+rows[i].c);
+  }
+  var e12 = tmSeedEma(closes, 12), e26 = tmSeedEma(closes, 26);
+  if (!e12 || !e26) return null;
+  var macd = [];
+  for (i = 0; i < closes.length; i++) macd.push(e12[i] - e26[i]);
+  var sig = tmSeedEma(macd, 9);
+  if (!sig) return null;
+  var hist = [];
+  for (i = 0; i < macd.length; i++) hist.push(macd[i] - sig[i]);
+  var sw = tmFractals(rows);
+  if (!sw) return null;
+  var pair = dir === 'long' ? sw.highs : sw.lows;
+  if (pair.length < 2) return true;
+  var a = pair[pair.length - 2], b = pair[pair.length - 1];
+  if (!isFinite(hist[a]) || !isFinite(hist[b])) return true;
+  if (dir === 'long' && rows[b].h > rows[a].h && hist[b] < hist[a]) return false;
+  if (dir === 'short' && rows[b].l < rows[a].l && hist[b] > hist[a]) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

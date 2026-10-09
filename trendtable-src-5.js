@@ -247,6 +247,15 @@
   var fib = rows1 ? tmFibLost(rows1, dir) : null;
   if (fib == null) hard.push('fib unread');
   else if (!fib) hard.push('price lost the 61.8 of the last swing');
+  var climax = rows1 ? tmClimax(rows1, dir) : null;
+  if (climax == null) hard.push('climax unread');
+  else if (!climax) hard.push('a climax bar closed against the trade');
+  var week = rows1 ? tmWeekOpen(rows1, dir) : null;
+  if (week == null) hard.push('week open unread');
+  else if (!week) hard.push('price lost the weekly open');
+  var macdDiv = rows1 ? tmMacdDiv(rows1, dir) : null;
+  if (macdDiv == null) hard.push('macd divergence unread');
+  else if (!macdDiv) hard.push('macd histogram diverged against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
