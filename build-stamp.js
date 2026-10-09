@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1260',
-  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse an MFI cross back through 80, a Williams %R cross back through -20, and a wick back inside the prior 4-hour block. A reading already inside the extreme, no volume, or a block under $8 does not refuse. The card does not send an order.',
-  built: '2026-10-09T11:10:00Z'
+  version: 'hg-v1261',
+  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a close back inside the Keltner band after the previous close was outside it, a wick back inside a 20-bar regression channel, and a daily pivot point lost on this bar. A close that never left the band, a channel under $8, or a pivot already lost does not refuse. The card does not send an order.',
+  built: '2026-10-09T11:25:00Z'
 };
 
 function hgBuildLabel(b){

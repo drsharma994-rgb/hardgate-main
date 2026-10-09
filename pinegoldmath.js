@@ -2250,6 +2250,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (willWhy) return willWhy;
   var h4sWhy = pineGoldH4SweepVeto(rows, dir);
   if (h4sWhy) return h4sWhy;
+  var keltA = pineGoldKeltAcceptVeto(rows, dir);
+  if (keltA) return keltA;
+  var regWhy = pineGoldRegressVeto(rows, dir);
+  if (regWhy) return regWhy;
+  var ppWhy = pineGoldPpLostVeto(rows, dir);
+  if (ppWhy) return ppWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3534,6 +3540,75 @@ function pineGoldH4SweepVeto(rows, dir){
   if (dir === 'short' && l < lo && c >= lo && c > o) return 'The prior 4-hour block was pierced and closed back over.';
   return null;
 }
+/* A close back inside the Keltner band after the previous close was outside it.
+   A close that never left the band, or a band under $4, does not refuse. */
+function pineGoldKeltAcceptVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1), closes = [], i, atr = 0, pc, tr, c;
+  for (i = 0; i < prior.length; i++){
+    c = pgrNum(prior[i].c);
+    if (!(c > 0) || !isFinite(pgrNum(prior[i].h)) || !isFinite(pgrNum(prior[i].l))) return null;
+    closes.push(c);
+  }
+  for (i = 1; i < prior.length; i++){
+    pc = closes[i - 1];
+    tr = Math.max(pgrNum(prior[i].h) - pgrNum(prior[i].l), Math.abs(pgrNum(prior[i].h) - pc), Math.abs(pgrNum(prior[i].l) - pc));
+    atr += tr;
+  }
+  atr = atr / (prior.length - 1);
+  if (!(atr > 0) || atr * 4 < 4) return null;
+  var k = 2 / (len + 1), ema = null;
+  for (i = 0; i < closes.length; i++) ema = ema == null ? closes[i] : (closes[i] * k + ema * (1 - k));
+  var prevC = closes[closes.length - 1], now = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(now)) return null;
+  if (dir === 'long' && prevC > ema + 2 * atr && now <= ema + 2 * atr) return 'Price closed back inside the upper Keltner band.';
+  if (dir === 'short' && prevC < ema - 2 * atr && now >= ema - 2 * atr) return 'Price closed back inside the lower Keltner band.';
+  return null;
+}
+/* A wick back inside a 20-bar regression channel. A close through it, or a channel under $8, does not refuse. */
+function pineGoldRegressVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1);
+  var sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, i, y;
+  for (i = 0; i < prior.length; i++){
+    y = pgrNum(prior[i].c);
+    if (!(y > 0)) return null;
+    sumX += i; sumY += y; sumXY += i * y; sumXX += i * i;
+  }
+  var n = prior.length;
+  var den = n * sumXX - sumX * sumX;
+  if (!(den > 0)) return null;
+  var slope = (n * sumXY - sumX * sumY) / den;
+  var intercept = (sumY - slope * sumX) / n;
+  var acc = 0, fit;
+  for (i = 0; i < n; i++){
+    fit = intercept + slope * i;
+    acc += (pgrNum(prior[i].c) - fit) * (pgrNum(prior[i].c) - fit);
+  }
+  var sd = Math.sqrt(acc / n);
+  if (!(sd > 0) || sd * 4 < 8) return null;
+  var last = rows[rows.length - 1];
+  var edge = intercept + slope * n;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > edge + 2 * sd && c <= edge + 2 * sd && c < o) return 'The regression channel was pierced and closed back under.';
+  if (dir === 'short' && l < edge - 2 * sd && c >= edge - 2 * sd && c > o) return 'The regression channel was pierced and closed back over.';
+  return null;
+}
+/* Yesterday pivot point. Losing it on this close does not pass.
+   A close already through it, or a prior day under $8, does not refuse. */
+function pineGoldPpLostVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8 || !rows || rows.length < 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(rows[rows.length - 1].c);
+  if (!(prevC > 0) || !(c > 0)) return null;
+  var pp = (prior.hi + prior.lo + prior.c) / 3;
+  if (dir === 'long' && prevC > pp && c < pp) return 'Price lost the daily pivot point. A long does not pass.';
+  if (dir === 'short' && prevC < pp && c > pp) return 'Price reclaimed the daily pivot point. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -4127,6 +4202,9 @@ G.pineGoldDonchian55Veto = pineGoldDonchian55Veto;
 G.pineGoldMfiExitVeto = pineGoldMfiExitVeto;
 G.pineGoldWillExitVeto = pineGoldWillExitVeto;
 G.pineGoldH4SweepVeto = pineGoldH4SweepVeto;
+G.pineGoldKeltAcceptVeto = pineGoldKeltAcceptVeto;
+G.pineGoldRegressVeto = pineGoldRegressVeto;
+G.pineGoldPpLostVeto = pineGoldPpLostVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
