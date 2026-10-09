@@ -1805,6 +1805,72 @@ function tmCmo(rows, dir){
   if (dir === 'long') return cmo > 0;
   return cmo < 0;
 }
+/* Ichimoku cloud at this bar is the span pair from 26 bars ago.
+   Price has to be above both spans for a long, and below both for a short. */
+function tmKumo(rows, dir){
+  if (!rows || rows.length < 80 || (dir !== 'long' && dir !== 'short')) return null;
+  var back = rows.length - 1 - 26;
+  if (back < 51) return null;
+  var ten = tmHlMid(rows, back, 9);
+  var kij = tmHlMid(rows, back, 26);
+  var spanB = tmHlMid(rows, back, 52);
+  if (!isFinite(ten) || !isFinite(kij) || !isFinite(spanB)) return null;
+  var spanA = (ten + kij) / 2;
+  var px = rows[rows.length - 1].c;
+  if (!(px > 0)) return null;
+  if (dir === 'long') return px > spanA && px > spanB;
+  return px < spanA && px < spanB;
+}
+/* Blau True Strength Index, 25 then 13. Above zero agrees with a long. */
+function tmTsi(rows, dir){
+  var slow = 25, fast = 13;
+  if (!rows || rows.length < slow + fast + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var pc = [], abs = [], i, delta;
+  for (i = 1; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !isFinite(rows[i - 1].c)) return null;
+    delta = rows[i].c - rows[i - 1].c;
+    pc.push(delta);
+    abs.push(Math.abs(delta));
+  }
+  function twice(values){
+    var e1 = tmEmaSeed(values, slow);
+    if (!e1) return null;
+    var finite = [], k;
+    for (k = 0; k < e1.length; k++) if (isFinite(e1[k])) finite.push(e1[k]);
+    if (finite.length < fast + 1) return null;
+    var e2 = tmEmaSeed(finite, fast);
+    if (!e2) return null;
+    var last = e2[e2.length - 1];
+    return isFinite(last) ? last : null;
+  }
+  var num = twice(pc), den = twice(abs);
+  if (num == null || den == null || !(Math.abs(den) > 0)) return null;
+  var tsi = 100 * num / den;
+  if (!isFinite(tsi)) return null;
+  if (dir === 'long') return tsi > 0;
+  return tsi < 0;
+}
+/* Chaikin Oscillator. Fast accumulation average minus the slow one.
+   Missing volume does not pass. */
+function tmChaikin(rows, dir){
+  if (!rows || rows.length < 14 || (dir !== 'long' && dir !== 'short')) return null;
+  var adl = 0, series = [], i, b, range, mfm;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    if (!isFinite(b.h) || !isFinite(b.l) || !isFinite(b.c) || !(b.v > 0)) return null;
+    range = b.h - b.l;
+    mfm = range > 0 ? (((b.c - b.l) - (b.h - b.c)) / range) : 0;
+    adl += mfm * b.v;
+    series.push(adl);
+  }
+  var fast = tmEmaSeed(series, 3), slowE = tmEmaSeed(series, 10);
+  if (!fast || !slowE) return null;
+  var f = fast[fast.length - 1], s = slowE[slowE.length - 1];
+  if (!isFinite(f) || !isFinite(s)) return null;
+  var osc = f - s;
+  if (dir === 'long') return osc > 0;
+  return osc < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

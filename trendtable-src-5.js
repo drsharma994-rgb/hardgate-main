@@ -157,6 +157,15 @@
   var cmo = rows1 ? tmCmo(rows1, dir) : null;
   if (cmo == null) hard.push('chande unread');
   else if (!cmo) hard.push('chande momentum is against the trade');
+  var kumo = rows1 ? tmKumo(rows1, dir) : null;
+  if (kumo == null) hard.push('cloud unread');
+  else if (!kumo) hard.push('price is inside or through the wrong side of the cloud');
+  var tsi = rows1 ? tmTsi(rows1, dir) : null;
+  if (tsi == null) hard.push('true strength unread');
+  else if (!tsi) hard.push('true strength is against the trade');
+  var chaikin = rows1 ? tmChaikin(rows1, dir) : null;
+  if (chaikin == null) hard.push('chaikin unread');
+  else if (!chaikin) hard.push('chaikin oscillator is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -384,7 +393,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'MACD, Donchian and Chande Momentum agree with the earlier crypto scripts';
+  ticket.pine = 'Ichimoku cloud, True Strength Index and Chaikin Oscillator agree with the earlier crypto scripts';
   return [];
 }
 
