@@ -617,7 +617,7 @@ function ggCoreHtml(rows){
   if (typeof fn !== 'function') return '';
   var hits = [];
   try{ hits = fn(rows, null) || []; }catch(e){ return ''; }
-  if (!hits.length) return '<div class="note" style="margin-top:8px">GANESH CORE — no seven-step pass, time-price square, or three-drive on the last closed bar.</div>';
+  if (!hits.length) return '<div class="note" style="margin-top:8px">GANESH CORE — no seven-step pass, Gann square rejection, time-price square, or 3-hour boundary turn on the last closed bar.</div>';
   var html = '<div class="panel" style="margin-top:8px"><h3>GANESH CORE</h3>';
   for (var i = 0; i < hits.length; i++){
     var h = hits[i];

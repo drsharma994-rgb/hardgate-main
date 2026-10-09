@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1271',
-  pack: 'GOLD CORE STRATEGIES GUARDED - the twelve core gold strategies hg-v1270 shipped (GS/OG/PG/GG x 3) had no guard and the new module was missing from the service-worker precache, leaving check-production red on main. tests/test-gold-core-strategies.mjs pins the contract (four desks, twelve ids, 2.5R targets, correct stop sides, thin/empty/junk tapes form nothing, forDesk routing) and gold-suite-unified.js is now precached. Also carries the Each gold desk now runs its own three strategies. Gold Scalp: London Judas, NY opening half-hour, and a body-gap snipe. OmniGold: silver divergence, flight-to-safety, and a balanced price range. Pine Gold: session VWAP bands, a fresh gap midpoint, and equal highs or lows. Ganesh Gold: the seven-step cycle, a time-price square, and a three-drive. A missing series stays unread. No pattern means no card. The card does not send an order.',
-  built: '2026-10-09T14:05:00Z'
+  version: 'hg-v1278',
+  pack: 'One new read on each gold desk, on top of the participation layer. Gold Scalp raids the prior day only when that day is on the tape, the sweep is 1.50 to 5.50 dollars, and the print is not dead volume. OmniGold adds a yield lead, unread when the yield series is missing. Pine Gold tags the finished session average, and a dead print withholds it. Ganesh Gold adds an eight-bar square, separate from the sixteen-bar square. Every target stays 2.5R. The card does not send an order.',
+  built: '2026-10-09T16:10:00Z'
 };
 
 function hgBuildLabel(b){

@@ -9,6 +9,11 @@
        stop, target, why) with entry/stop on the correct side and a 2.5R target
      - honesty: an empty / null / thin / junk tape returns NO hits and never
        throws (a missing series stays unread)
+     - hg-v1276 participation: every hit carries `pace` (the confirming bar
+       over the 20-bar readable median) and states it in the why; the four
+       five session-raid detections WITHHOLD on a readable dead pace (nobody
+       defended the sweep); a volume-deaf feed fails OPEN with pace null;
+       level reads carry the number without a bar
      - the four desks read HG_GoldSuite
 
    Run: node tests/test-gold-core-strategies.mjs */
@@ -118,6 +123,45 @@ console.log('== honesty: thin, empty, null and junk tapes form nothing and never
     try { res = S[d](junk, junk); } catch (e) { threw = true; }
     ok(!threw && Array.isArray(res) && res.length === 0, d + ' refuses a junk bar without throwing (unread, never a fabricated hit)');
   }
+}
+
+console.log('== participation: raid sweeps need a defended print, level reads carry the number ==');
+{
+  const S = W.HG_GoldSuite;
+  const tape = londonTape();
+  const g1 = S.scalpHits(tape, tape).find(h => h.id === 'GS-1');
+  ok(g1 && g1.pace === 1 && /participation 1\.00/.test(g1.why),
+    'a flat-volume raid carries pace 1.00 and states it in the why');
+  /* the same sweep, confirming bar at 0.2x the median: nobody defended it */
+  const dead = londonTape(); dead[dead.length - 1].v = 20;
+  const gsDead = S.scalpHits(dead, dead);
+  ok(!gsDead.some(h => h.id === 'GS-1'),
+    'a raid sweep on 0.2x participation is WITHHELD — a sweep nobody came to');
+  /* volume-deaf feed: every bar v=0 — the layer cannot speak and never bites */
+  const deaf = londonTape().map(b => Object.assign({}, b, { v: 0 }));
+  const g1d = S.scalpHits(deaf, deaf).find(h => h.id === 'GS-1');
+  ok(g1d && g1d.pace === null && !/participation/.test(g1d.why),
+    'a volume-deaf feed fails OPEN — the hit stands and pace is not fabricated');
+  /* the London-fix drift is a level read, not a raid: dead pace carries, never bars */
+  const fixTape = (lastV) => {
+    const rows = [];
+    for (let i = 0; i < 17; i++) rows.push({ t: T0 + i * 900000, o: 2599.5, h: 2601, l: 2599, c: 2600, v: 100 });
+    rows.push({ t: T0 + 17 * 900000, o: 2600, h: 2602.5, l: 2600, c: 2602, v: 100 });
+    rows.push({ t: T0 + 18 * 900000, o: 2602, h: 2604, l: 2601.5, c: 2603.5, v: 100 });
+    rows.push({ t: Date.UTC(2026, 0, 6, 14, 45), o: 2603.5, h: 2605.5, l: 2603, c: 2605, v: lastV });
+    return rows;
+  };
+  const o2 = S.omniHits(fixTape(100), null, null).find(h => h.id === 'OG-2');
+  ok(o2 && o2.dir === 'short' && o2.pace === 1,
+    'the London-fix drift fires on a clean tape and carries pace 1.00');
+  const o2d = S.omniHits(fixTape(15), null, null).find(h => h.id === 'OG-2');
+  ok(o2d && o2d.dir === 'short' && o2d.pace === 0.15 && !/participation 1\.00/.test(o2d.why),
+    'a level read on dead pace still forms and carries 0.15x instead of a bar');
+  const src = read('gold-suite-unified.js');
+  ok(/var PACE_WIN = 20, PACE_MIN_READ = 10, PACE_DEAD = 0\.5;/.test(src),
+    'the participation priors are stated: 20-bar median, 10 readable prints, 0.5x dead');
+  ok((src.match(/\bpaceDead\(/g) || []).length === 8,
+    'paceDead is defined once and consulted by the session-raid detections (GS-1, GS-2, GS-4, GS-5, GS-6, PG-1, PG-6)');
 }
 
 console.log('== the four desks read the suite ==');
