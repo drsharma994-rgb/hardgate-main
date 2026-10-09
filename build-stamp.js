@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1216',
-  pack: 'Trend Matrix also requires CCI, the Choppiness Index, and Relative Vigor to agree with the trade. Chop above 61.8 does not pass. A short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
-  built: '2026-10-09T01:35:00Z'
+  version: 'hg-v1217',
+  pack: 'Trend Matrix also requires TRIX, the Ultimate Oscillator, and On-Balance Volume to agree with the trade. Missing volume or a short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
+  built: '2026-10-09T01:45:00Z'
 };
 
 function hgBuildLabel(b){

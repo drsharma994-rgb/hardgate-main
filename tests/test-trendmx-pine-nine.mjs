@@ -200,15 +200,15 @@ console.log('== 6) no gate module reads a new pineCipher/pineRangeFilter/pineNwE
 /* ====================================================================
    § 7 ship stamps
    ==================================================================== */
-console.log('== 7) build stamps say hg-v1216 ==');
+console.log('== 7) build stamps say hg-v1217 ==');
 {
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1216'/.test(bs), 'build-stamp.js version is hg-v1216');
+  assert(/version:\s*'hg-v1217'/.test(bs), 'build-stamp.js version is hg-v1217');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1216'/.test(sw), 'sw.js HG_CACHE is hg-v1216');
+  assert(/HG_CACHE\s*=\s*'hg-v1217'/.test(sw), 'sw.js HG_CACHE is hg-v1217');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1216/.test(tt), 'trendtable.js header reads hg-v1216');
-  assert(/v=1216/.test(tt), 'trendtable.js loader cachebuster reads v=1216');
+  assert(/hg-v1217/.test(tt), 'trendtable.js header reads hg-v1217');
+  assert(/v=1217/.test(tt), 'trendtable.js loader cachebuster reads v=1217');
 }
 
 /* ====================================================================

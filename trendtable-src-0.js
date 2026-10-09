@@ -1603,6 +1603,80 @@ function tmRvi(rows, dir){
   if (dir === 'long') return rvi > 0 && rvi + 1e-8 >= signal;
   return rvi < 0 && rvi <= signal + 1e-8;
 }
+/* TRIX, length 15. Triple-smoothed rate of change. Above zero agrees
+   with a long. Below zero agrees with a short. A short tape does not pass. */
+function tmTrix(rows, dir){
+  var len = 15;
+  if (!rows || rows.length < len * 3 + 5 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  function nextEma(values){
+    var finite = [], k;
+    for (k = 0; k < values.length; k++) if (isFinite(values[k])) finite.push(values[k]);
+    if (finite.length < len + 2) return null;
+    return tmEmaSeed(finite, len);
+  }
+  var e1 = nextEma(closes);
+  var e2 = e1 ? nextEma(e1) : null;
+  var e3 = e2 ? nextEma(e2) : null;
+  if (!e3) return null;
+  var n = e3.length - 1;
+  var last = e3[n], prev = e3[n - 1], older = e3[n - 2];
+  if (!(last > 0) || !(prev > 0) || !(older > 0)) return null;
+  var now = (last - prev) / prev;
+  var before = (prev - older) / older;
+  if (!isFinite(now) || !isFinite(before)) return null;
+  if (dir === 'long') return now > 0;
+  return now < 0;
+}
+/* Larry Williams Ultimate Oscillator, 7/14/28. Above 50 agrees with a long. */
+function tmUltimate(rows, dir){
+  var slow = 28;
+  if (!rows || rows.length < slow + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var bp = [], tr = [], i, bar, prevC, low, high;
+  for (i = 1; i < rows.length; i++){
+    bar = rows[i]; prevC = rows[i - 1].c;
+    if (!isFinite(bar.h) || !isFinite(bar.l) || !isFinite(bar.c) || !isFinite(prevC)) return null;
+    low = Math.min(bar.l, prevC);
+    high = Math.max(bar.h, prevC);
+    bp.push(bar.c - low);
+    tr.push(high - low);
+  }
+  function avg(n){
+    if (bp.length < n) return NaN;
+    var b = 0, t = 0, k;
+    for (k = bp.length - n; k < bp.length; k++){ b += bp[k]; t += tr[k]; }
+    if (!(t > 0)) return NaN;
+    return b / t;
+  }
+  var a7 = avg(7), a14 = avg(14), a28 = avg(28);
+  if (!isFinite(a7) || !isFinite(a14) || !isFinite(a28)) return null;
+  var uo = 100 * ((4 * a7) + (2 * a14) + a28) / 7;
+  if (!isFinite(uo)) return null;
+  if (dir === 'long') return uo > 50;
+  return uo < 50;
+}
+/* On-balance volume over the last 10 closes. Volume has to be real.
+   A long needs the line higher than it was 10 bars ago. */
+function tmObv(rows, dir){
+  var look = 10;
+  if (!rows || rows.length < look + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var obv = 0, series = [0], i;
+  for (i = 1; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !isFinite(rows[i - 1].c) || !(rows[i].v > 0)) return null;
+    if (rows[i].c > rows[i - 1].c) obv += rows[i].v;
+    else if (rows[i].c < rows[i - 1].c) obv -= rows[i].v;
+    series.push(obv);
+  }
+  var now = series[series.length - 1];
+  var then = series[series.length - 1 - look];
+  if (!isFinite(now) || !isFinite(then)) return null;
+  if (dir === 'long') return now > then;
+  return now < then;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

@@ -130,6 +130,15 @@
   var rvi = rows1 ? tmRvi(rows1, dir) : null;
   if (rvi == null) hard.push('vigor unread');
   else if (!rvi) hard.push('relative vigor is against the trade');
+  var trix = rows1 ? tmTrix(rows1, dir) : null;
+  if (trix == null) hard.push('trix unread');
+  else if (!trix) hard.push('trix is against the trade');
+  var ult = rows1 ? tmUltimate(rows1, dir) : null;
+  if (ult == null) hard.push('ultimate oscillator unread');
+  else if (!ult) hard.push('ultimate oscillator is against the trade');
+  var obv = rows1 ? tmObv(rows1, dir) : null;
+  if (obv == null) hard.push('on-balance volume unread');
+  else if (!obv) hard.push('on-balance volume is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -357,7 +366,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'CCI, Choppiness and Relative Vigor agree with the earlier crypto scripts';
+  ticket.pine = 'TRIX, Ultimate Oscillator and On-Balance Volume agree with the earlier crypto scripts';
   return [];
 }
 
