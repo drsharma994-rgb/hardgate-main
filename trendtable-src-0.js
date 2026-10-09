@@ -1528,6 +1528,81 @@ function tmAlligator(rows, dir){
   if (dir === 'long') return px > lips && lips > teeth && teeth > jaw;
   return px < lips && lips < teeth && teeth < jaw;
 }
+/* Commodity Channel Index, 20. Above zero agrees with a long.
+   Below zero agrees with a short. A flat tape is not a pass. */
+function tmCci(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), tp = [], i, sum = 0;
+  for (i = 0; i < slice.length; i++){
+    if (!isFinite(slice[i].h) || !isFinite(slice[i].l) || !isFinite(slice[i].c)) return null;
+    tp.push((slice[i].h + slice[i].l + slice[i].c) / 3);
+    sum += tp[i];
+  }
+  var mean = sum / len, dev = 0;
+  for (i = 0; i < len; i++) dev += Math.abs(tp[i] - mean);
+  dev /= len;
+  if (!(dev > 0)) return false;
+  var cci = (tp[len - 1] - mean) / (0.015 * dev);
+  if (!isFinite(cci)) return null;
+  if (dir === 'long') return cci > 0;
+  return cci < 0;
+}
+/* Dreiss Choppiness Index, 14. Above 61.8 is chop, so neither side passes.
+   The number does not care about direction. A short tape does not pass. */
+function tmChop(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var start = rows.length - len, sum = 0, hi = -Infinity, lo = Infinity, i, bar, prev, tr;
+  for (i = start; i < rows.length; i++){
+    bar = rows[i]; prev = rows[i - 1];
+    if (!isFinite(bar.h) || !isFinite(bar.l) || !isFinite(bar.c) || !isFinite(prev.c)) return null;
+    tr = Math.max(bar.h - bar.l, Math.abs(bar.h - prev.c), Math.abs(bar.l - prev.c));
+    if (!(tr >= 0)) return null;
+    sum += tr;
+    if (bar.h > hi) hi = bar.h;
+    if (bar.l < lo) lo = bar.l;
+  }
+  if (!(hi > lo) || !(sum > 0)) return false;
+  var chop = 100 * Math.log10(sum / (hi - lo)) / Math.log10(len);
+  if (!isFinite(chop)) return null;
+  return chop < 61.8;
+}
+/* Ehlers Relative Vigor Index, length 10. A long needs it above zero
+   and not under its signal line. */
+function tmRvi(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 6 || (dir !== 'long' && dir !== 'short')) return null;
+  var co = [], hl = [], i, span;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].o) || !isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return null;
+    co.push(rows[i].c - rows[i].o);
+    span = rows[i].h - rows[i].l;
+    hl.push(span > 0 ? span : 0);
+  }
+  function swma(arr, end){
+    if (end < 3) return NaN;
+    return (arr[end] + 2 * arr[end - 1] + 2 * arr[end - 2] + arr[end - 3]) / 6;
+  }
+  var rvis = [];
+  for (i = 3; i < rows.length; i++){
+    var num = 0, den = 0, k, sn, sd;
+    if (i < 3 + len - 1){ rvis.push(NaN); continue; }
+    for (k = i - len + 1; k <= i; k++){
+      sn = swma(co, k); sd = swma(hl, k);
+      if (!isFinite(sn) || !isFinite(sd)) return null;
+      num += sn; den += sd;
+    }
+    rvis.push(den > 0 ? num / den : 0);
+  }
+  var n = rvis.length - 1;
+  if (n < 3 || !isFinite(rvis[n]) || !isFinite(rvis[n - 1]) || !isFinite(rvis[n - 2]) || !isFinite(rvis[n - 3])) return null;
+  var rvi = rvis[n];
+  var signal = (rvis[n] + 2 * rvis[n - 1] + 2 * rvis[n - 2] + rvis[n - 3]) / 6;
+  if (!isFinite(signal)) return null;
+  if (dir === 'long') return rvi > 0 && rvi + 1e-8 >= signal;
+  return rvi < 0 && rvi <= signal + 1e-8;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

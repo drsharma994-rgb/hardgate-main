@@ -1528,6 +1528,81 @@ function tmAlligator(rows, dir){
   if (dir === 'long') return px > lips && lips > teeth && teeth > jaw;
   return px < lips && lips < teeth && teeth < jaw;
 }
+/* Commodity Channel Index, 20. Above zero agrees with a long.
+   Below zero agrees with a short. A flat tape is not a pass. */
+function tmCci(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), tp = [], i, sum = 0;
+  for (i = 0; i < slice.length; i++){
+    if (!isFinite(slice[i].h) || !isFinite(slice[i].l) || !isFinite(slice[i].c)) return null;
+    tp.push((slice[i].h + slice[i].l + slice[i].c) / 3);
+    sum += tp[i];
+  }
+  var mean = sum / len, dev = 0;
+  for (i = 0; i < len; i++) dev += Math.abs(tp[i] - mean);
+  dev /= len;
+  if (!(dev > 0)) return false;
+  var cci = (tp[len - 1] - mean) / (0.015 * dev);
+  if (!isFinite(cci)) return null;
+  if (dir === 'long') return cci > 0;
+  return cci < 0;
+}
+/* Dreiss Choppiness Index, 14. Above 61.8 is chop, so neither side passes.
+   The number does not care about direction. A short tape does not pass. */
+function tmChop(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var start = rows.length - len, sum = 0, hi = -Infinity, lo = Infinity, i, bar, prev, tr;
+  for (i = start; i < rows.length; i++){
+    bar = rows[i]; prev = rows[i - 1];
+    if (!isFinite(bar.h) || !isFinite(bar.l) || !isFinite(bar.c) || !isFinite(prev.c)) return null;
+    tr = Math.max(bar.h - bar.l, Math.abs(bar.h - prev.c), Math.abs(bar.l - prev.c));
+    if (!(tr >= 0)) return null;
+    sum += tr;
+    if (bar.h > hi) hi = bar.h;
+    if (bar.l < lo) lo = bar.l;
+  }
+  if (!(hi > lo) || !(sum > 0)) return false;
+  var chop = 100 * Math.log10(sum / (hi - lo)) / Math.log10(len);
+  if (!isFinite(chop)) return null;
+  return chop < 61.8;
+}
+/* Ehlers Relative Vigor Index, length 10. A long needs it above zero
+   and not under its signal line. */
+function tmRvi(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 6 || (dir !== 'long' && dir !== 'short')) return null;
+  var co = [], hl = [], i, span;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].o) || !isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return null;
+    co.push(rows[i].c - rows[i].o);
+    span = rows[i].h - rows[i].l;
+    hl.push(span > 0 ? span : 0);
+  }
+  function swma(arr, end){
+    if (end < 3) return NaN;
+    return (arr[end] + 2 * arr[end - 1] + 2 * arr[end - 2] + arr[end - 3]) / 6;
+  }
+  var rvis = [];
+  for (i = 3; i < rows.length; i++){
+    var num = 0, den = 0, k, sn, sd;
+    if (i < 3 + len - 1){ rvis.push(NaN); continue; }
+    for (k = i - len + 1; k <= i; k++){
+      sn = swma(co, k); sd = swma(hl, k);
+      if (!isFinite(sn) || !isFinite(sd)) return null;
+      num += sn; den += sd;
+    }
+    rvis.push(den > 0 ? num / den : 0);
+  }
+  var n = rvis.length - 1;
+  if (n < 3 || !isFinite(rvis[n]) || !isFinite(rvis[n - 1]) || !isFinite(rvis[n - 2]) || !isFinite(rvis[n - 3])) return null;
+  var rvi = rvis[n];
+  var signal = (rvis[n] + 2 * rvis[n - 1] + 2 * rvis[n - 2] + rvis[n - 3]) / 6;
+  if (!isFinite(signal)) return null;
+  if (dir === 'long') return rvi > 0 && rvi + 1e-8 >= signal;
+  return rvi < 0 && rvi <= signal + 1e-8;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3896,6 +3971,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var gator = rows1 ? tmAlligator(rows1, dir) : null;
   if (gator == null) hard.push('alligator unread');
   else if (!gator) hard.push('alligator is not feeding with the trade');
+  var cci = rows1 ? tmCci(rows1, dir) : null;
+  if (cci == null) hard.push('cci unread');
+  else if (!cci) hard.push('cci is against the trade');
+  var chop = rows1 ? tmChop(rows1, dir) : null;
+  if (chop == null) hard.push('choppiness unread');
+  else if (!chop) hard.push('choppiness is above 61.8');
+  var rvi = rows1 ? tmRvi(rows1, dir) : null;
+  if (rvi == null) hard.push('vigor unread');
+  else if (!rvi) hard.push('relative vigor is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -4123,7 +4207,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'Awesome Oscillator, Money Flow Index and Alligator agree with the earlier crypto scripts';
+  ticket.pine = 'CCI, Choppiness and Relative Vigor agree with the earlier crypto scripts';
   return [];
 }
 
@@ -6175,7 +6259,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6632,6 +6716,9 @@ W.tmVortex = tmVortex;
 W.tmAwesome = tmAwesome;
 W.tmMfi = tmMfi;
 W.tmAlligator = tmAlligator;
+W.tmCci = tmCci;
+W.tmChop = tmChop;
+W.tmRvi = tmRvi;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

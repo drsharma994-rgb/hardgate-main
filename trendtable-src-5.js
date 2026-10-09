@@ -121,6 +121,15 @@
   var gator = rows1 ? tmAlligator(rows1, dir) : null;
   if (gator == null) hard.push('alligator unread');
   else if (!gator) hard.push('alligator is not feeding with the trade');
+  var cci = rows1 ? tmCci(rows1, dir) : null;
+  if (cci == null) hard.push('cci unread');
+  else if (!cci) hard.push('cci is against the trade');
+  var chop = rows1 ? tmChop(rows1, dir) : null;
+  if (chop == null) hard.push('choppiness unread');
+  else if (!chop) hard.push('choppiness is above 61.8');
+  var rvi = rows1 ? tmRvi(rows1, dir) : null;
+  if (rvi == null) hard.push('vigor unread');
+  else if (!rvi) hard.push('relative vigor is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -348,7 +357,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'Awesome Oscillator, Money Flow Index and Alligator agree with the earlier crypto scripts';
+  ticket.pine = 'CCI, Choppiness and Relative Vigor agree with the earlier crypto scripts';
   return [];
 }
 
