@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1224',
-  pack: 'OmniGold and Gold Scalp also refuse a setup on a failed 30-minute initial balance, volume delta still fighting the trade, or a point of control that has trapped that side. Unread volume does not refuse. A close clean through the box does not refuse. The earlier gold tape rules still apply. The card does not send an order.',
-  built: '2026-10-09T02:55:00Z'
+  version: 'hg-v1225',
+  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a scalp that is more than one ATR through the New York midnight open, a scalp that fades an Asian session which already expanded, and a last candle whose wick rejected the trade. No midnight bar, a quiet Asia, or a normal candle does not refuse. Ganesh Gold now reads the same gold tape as the other two desks. The card does not send an order.',
+  built: '2026-10-09T03:10:00Z'
 };
 
 function hgBuildLabel(b){

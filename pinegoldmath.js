@@ -2149,11 +2149,17 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (smtWhy) return smtWhy;
     var ibWhy = pineGoldIbVeto(rows, dir);
     if (ibWhy) return ibWhy;
+    var nymoWhy = pineGoldNymoVeto(rows, dir);
+    if (nymoWhy) return nymoWhy;
+    var asiaWhy = pineGoldAsiaDriftVeto(rows, dir);
+    if (asiaWhy) return asiaWhy;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
   var pocWhy = pineGoldPocVeto(rows, dir);
   if (pocWhy) return pocWhy;
+  var wickWhy = pineGoldWickVeto(rows, dir);
+  if (wickWhy) return wickWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2386,6 +2392,50 @@ function pineGoldPocVeto(rows, dir){
   if (dir === 'long' && poc.trappedSide === 'TRAPPED_LONGS') return 'The point of control rose and price is back under it.';
   if (dir === 'short' && poc.trappedSide === 'TRAPPED_SHORTS') return 'The point of control fell and price is back over it.';
   return null;
+}
+/* New York midnight open. A long more than one ATR above it, or a short
+   more than one ATR below it, is chasing the day. No midnight bar does not refuse. */
+function pineGoldNymoVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateTrueDayOpen !== 'function' || !rows || !rows.length) return null;
+  var day = null;
+  try{ day = core.calculateTrueDayOpen(rows); }catch(eNy){ return null; }
+  if (!day || day.unread || !(day.nymo > 0)) return null;
+  var atrV = pineGoldBarAtr(rows);
+  if (!(atrV > 0) && rows.length >= 16 && typeof core.calculateAtr === 'function'){
+    try{ atrV = core.calculateAtr(rows, 14); }catch(eAt){ atrV = NaN; }
+  }
+  if (!(atrV > 0)) return null;
+  var c = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(c)) return null;
+  if (dir === 'long' && c > day.nymo + atrV) return 'Price is more than one ATR above the New York midnight open.';
+  if (dir === 'short' && c < day.nymo - atrV) return 'Price is more than one ATR below the New York midnight open.';
+  return null;
+}
+/* Asian session already expanded and drifted. A scalp does not fade that
+   drift. A quiet Asia, or an unread one, does not refuse. */
+function pineGoldAsiaDriftVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.classifyAsianRegime !== 'function' || !rows || !rows.length) return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  var reg = null;
+  try{ reg = core.classifyAsianRegime(rows, px); }catch(eAs){ return null; }
+  if (!reg || reg.regime !== 'EXPANSION_TREND') return null;
+  if (dir === 'long' && reg.drift === 'DOWN') return 'Asia already trended down. A scalp does not fade it.';
+  if (dir === 'short' && reg.drift === 'UP') return 'Asia already trended up. A scalp does not fade it.';
+  return null;
+}
+/* The last candle's wick against the trade took most of the range.
+   A normal candle does not refuse. */
+function pineGoldWickVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateFootprintAbsorption !== 'function' || !rows || !rows.length) return null;
+  var against = dir === 'long' ? 'short' : 'long';
+  var fp = null;
+  try{ fp = core.calculateFootprintAbsorption(rows[rows.length - 1], against); }catch(eWk){ return null; }
+  if (!fp || fp.absorbed !== true) return null;
+  if (dir === 'long') return 'The last candle rejected higher. The upper wick took most of the range.';
+  return 'The last candle rejected lower. The lower wick took most of the range.';
 }
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
@@ -2932,6 +2982,9 @@ G.pineGoldTapeVeto = pineGoldTapeVeto;
 G.pineGoldIbVeto = pineGoldIbVeto;
 G.pineGoldCvdVeto = pineGoldCvdVeto;
 G.pineGoldPocVeto = pineGoldPocVeto;
+G.pineGoldNymoVeto = pineGoldNymoVeto;
+G.pineGoldAsiaDriftVeto = pineGoldAsiaDriftVeto;
+G.pineGoldWickVeto = pineGoldWickVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;

@@ -307,7 +307,7 @@ async function ganeshGoldEval(style){
     sweptSell: sweptSell, sweptBuy: sweptBuy, disp: disp, mssUp: mssUp, mssDown: mssDown,
     fvg: fvg, ob: ob, zone: zone, retest: retest, vw: vw, atrRegime: atrRegime, vp: vp,
     sq: sq, dxT: dxT, tnxT: tnxT, news: news, sess: sess, lastT: lastT, rangeHi: rangeHi, rangeLo: rangeLo,
-    tapeNote: tapeNote };
+    tapeNote: tapeNote, rows: ex };
   return { ok: true, ev: ev };
 }
 
@@ -447,6 +447,24 @@ async function ganeshGoldScan(opts){
       return plan;
     }
     pL = ggInstHold(pL); pS = ggInstHold(pS);
+    function ggTapeHold(plan){
+      if (!plan || typeof W.pineGoldTapeVeto !== 'function' || !ev.rows) return plan;
+      var why = null;
+      try{
+        why = W.pineGoldTapeVeto(ev.rows, plan.dir, {
+          mode: style === 'swing' ? 'swing' : 'scalp',
+          now: ev.lastT,
+          macro: (ev.feeds && ev.feeds.macro) || null,
+          silverRows: W.__hgSilverRows || null
+        });
+      }catch(eTp){ why = null; }
+      if (!why) return plan;
+      plan.pineBlock = plan.pineBlock || why;
+      plan.held = plan.held || why;
+      if (plan.tier === 'TICKET') plan.tier = 'WATCH';
+      return plan;
+    }
+    pL = ggTapeHold(pL); pS = ggTapeHold(pS);
     try{
       if (gsAudit && gsAudit.qualified && typeof W.HG_quantEmit === 'function'){
         var gsSide = gsAudit.direction === 'BEAR' ? pS : pL;
