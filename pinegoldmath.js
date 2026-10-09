@@ -2173,6 +2173,8 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (fibWhy) return fibWhy;
     var vwapLost = pineGoldVwapLostVeto(rows, dir);
     if (vwapLost) return vwapLost;
+    var r2Why = pineGoldR2Veto(rows, dir);
+    if (r2Why) return r2Why;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
@@ -2214,6 +2216,10 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (cciWhy) return cciWhy;
   var engWhy = pineGoldEngulfVeto(rows, dir);
   if (engWhy) return engWhy;
+  var kijWhy = pineGoldKijunVeto(rows, dir);
+  if (kijWhy) return kijWhy;
+  var macdWhy = pineGoldMacdVeto(rows, dir);
+  if (macdWhy) return macdWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3068,6 +3074,66 @@ function pineGoldEngulfVeto(rows, dir){
   if (dir === 'short' && c > o && o <= bot && c >= top) return 'A bullish candle engulfed the prior body. A short does not pass.';
   return null;
 }
+/* Floor pivot R2 and S2. A wick through R2 that closes back under does not
+   pass as a long. A close through it does not refuse. */
+function pineGoldR2Veto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var pp = (prior.hi + prior.lo + prior.c) / 3;
+  var span = prior.hi - prior.lo;
+  if (!(span >= 8)) return null;
+  var r2 = pp + span, s2 = pp - span;
+  if (dir === 'long' && h > r2 && c <= r2) return 'R2 was pierced and closed back under.';
+  if (dir === 'short' && l < s2 && c >= s2) return 'S2 was pierced and closed back over.';
+  return null;
+}
+/* The 26-bar midpoint. Losing it on this bar does not pass.
+   A close that was already on the other side does not refuse. */
+function pineGoldKijunVeto(rows, dir){
+  var len = 26;
+  if (!rows || rows.length < len + 2) return null;
+  function kijun(end){
+    var hi = -Infinity, lo = Infinity, i;
+    for (i = end - len + 1; i <= end; i++){
+      if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))) return NaN;
+      if (+rows[i].h > hi) hi = +rows[i].h;
+      if (+rows[i].l < lo) lo = +rows[i].l;
+    }
+    return (hi + lo) / 2;
+  }
+  var n = rows.length - 1;
+  var prevK = kijun(n - 1), nowK = kijun(n);
+  var prevC = pgrNum(rows[n - 1].c), c = pgrNum(rows[n].c);
+  if (!isFinite(prevK) || !isFinite(nowK) || !isFinite(prevC) || !isFinite(c)) return null;
+  if (dir === 'long' && prevC >= prevK && c < nowK) return 'Price lost the 26-bar midpoint. A long does not pass.';
+  if (dir === 'short' && prevC <= prevK && c > nowK) return 'Price reclaimed the 26-bar midpoint. A short does not pass.';
+  return null;
+}
+/* MACD 12, 26 crossing zero on this bar. Staying on one side does not refuse. */
+function pineGoldMacdVeto(rows, dir){
+  if (!rows || rows.length < 30) return null;
+  function ema(len){
+    var k = 2 / (len + 1), out = [], v = null, i, c;
+    for (i = 0; i < rows.length; i++){
+      c = pgrNum(rows[i].c);
+      if (!(c > 0)) return null;
+      v = v == null ? c : (c * k + v * (1 - k));
+      out.push(v);
+    }
+    return out;
+  }
+  var fast = ema(12), slow = ema(26);
+  if (!fast || !slow) return null;
+  var n = rows.length - 1;
+  var prev = fast[n - 1] - slow[n - 1];
+  var now = fast[n] - slow[n];
+  if (dir === 'long' && prev >= 0 && now < 0) return 'MACD just crossed under zero. A long does not pass.';
+  if (dir === 'short' && prev <= 0 && now > 0) return 'MACD just crossed over zero. A short does not pass.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3643,6 +3709,9 @@ G.pineGoldEmaCrossVeto = pineGoldEmaCrossVeto;
 G.pineGoldSupertrendVeto = pineGoldSupertrendVeto;
 G.pineGoldCciVeto = pineGoldCciVeto;
 G.pineGoldEngulfVeto = pineGoldEngulfVeto;
+G.pineGoldR2Veto = pineGoldR2Veto;
+G.pineGoldKijunVeto = pineGoldKijunVeto;
+G.pineGoldMacdVeto = pineGoldMacdVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
