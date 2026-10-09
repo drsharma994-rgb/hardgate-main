@@ -1,7 +1,20 @@
 /**
- * HARDGATE gold suite. Twelve core strategies, four desks, no shared rule.
+ * HARDGATE gold suite. Sixteen core strategies, four desks, no shared rule.
  * A missing series stays unread. A quiet bar returns nothing.
  * This file does not replace a tab.
+ *
+ * THE PARTICIPATION LAYER (hg-v1276). Every hit carries `pace` — the
+ * confirming bar's volume over the MEDIAN of the last PACE_WIN readable
+ * bars on the same tape (null when the feed is volume-deaf: a number is
+ * never fabricated, and nothing is withheld from a feed that cannot
+ * speak — the hg-v700 rule). The four session-raid detections — GS-1
+ * Judas, GS-2 cash-open ORB, GS-4 London-NY overlap, GS-5 dual 
+ * boundary, PG-1 band pierce —
+ * require a DEFENDED print (GS-5 dual boundary joined the set with hg-v1277): a readable pace under PACE_DEAD is a sweep
+ * nobody came to, and the hit is withheld, the same honesty as a quiet
+ * bar. Level and shape reads (Gann, value area, SMT, ratio bands) carry
+ * the number without a bar: their premises are not participation.
+ * The why sentence states the participation whenever it is readable.
  */
 (function (root) {
   'use strict';
@@ -56,7 +69,10 @@
     if (dir === 'long' && !(stop < entry)) return null;
     if (dir === 'short' && !(stop > entry)) return null;
     var target = dir === 'long' ? entry + risk * 2.5 : entry - risk * 2.5;
-    return { id: id, name: name, dir: dir, entry: +entry.toFixed(2), stop: +stop.toFixed(2), target: +target.toFixed(2), why: why };
+    /* hg-v1276: the participation the confirming bar printed, stated on the
+       hit when readable — null when the feed cannot speak (never a guess). */
+    var pcsay = (__pace != null) ? ' \u00b7 participation ' + __pace.toFixed(2) + '\u00d7 the 20-bar median' : '';
+    return { id: id, name: name, dir: dir, entry: +entry.toFixed(2), stop: +stop.toFixed(2), target: +target.toFixed(2), why: why + pcsay, pace: (__pace != null) ? __pace : null };
   }
   function pearson(gold, other, n){
     if (!gold || !other || gold.length < n || other.length < n) return null;
@@ -72,6 +88,31 @@
     return nume / Math.sqrt(dg * dd);
   }
 
+  /* hg-v1276: THE PARTICIPATION LAYER — median volume of the last PACE_WIN
+     readable bars; pace = the confirming bar's volume over that median.
+     Readable means: at least PACE_MIN_READ positive volumes in the window
+     and a positive print on the confirming bar itself. Anything less ->
+     null, and null never withholds and never fabricates. */
+  var PACE_WIN = 20, PACE_MIN_READ = 10, PACE_DEAD = 0.5;
+  var __pace = null;
+  function paceOf(rows){
+    if (!rows || rows.length < PACE_MIN_READ) return null;
+    var vols = [], i, b;
+    for (i = rows.length - 1; i >= 0 && vols.length < PACE_WIN; i--){
+      b = rows[i];
+      if (b && b.v > 0) vols.push(b.v);
+    }
+    if (vols.length < PACE_MIN_READ) return null;
+    var last = rows[rows.length - 1];
+    if (!last || !(last.v > 0)) return null;
+    vols.sort(function(x, y){ return x - y; });
+    var mid = vols.length % 2 ? vols[(vols.length - 1) / 2]
+            : (vols[vols.length / 2 - 1] + vols[vols.length / 2]) / 2;
+    if (!(mid > 0)) return null;
+    return Math.round(last.v / mid * 100) / 100;
+  }
+  function paceDead(pc){ return pc != null && pc < PACE_DEAD; }
+
   function scalpHits(raw, dayRaw){
     var rows = rowsOf(raw);
     var day = rowsOf(dayRaw || raw);
@@ -82,6 +123,7 @@
     if (!isFinite(hour)) return out;
     var a = atr(rows, 14);
     if (!(a > 0)) return out;
+    __pace = paceOf(rows);
     var today = dayOf(last), i, hv, hi = -Infinity, lo = Infinity, n = 0;
     if (hour >= 7 && hour < 10 && today){
       for (i = 0; i < day.length - 1; i++){
@@ -92,7 +134,10 @@
         if (day[i].l < lo) lo = day[i].l;
         n++;
       }
-      if (n >= 3 && hi - lo >= 3){
+      /* hg-v1276: a raid sweep must be a DEFENDED print — a readable
+         participation under PACE_DEAD is a sweep nobody came to, and the
+         hit is withheld (a volume-deaf feed fails open above). */
+      if (n >= 3 && hi - lo >= 3 && !paceDead(__pace)){
         var span = last.h - last.l;
         var depthL = lo - Math.min(last.l, prev.l);
         var depthH = Math.max(last.h, prev.h) - hi;
@@ -113,7 +158,8 @@
         if (!isFinite(hv) || hv < 13.5 || hv >= 13.75) continue;
         orb = day[i];
       }
-      if (orb){
+      /* hg-v1276: the cash-open raid needs its defended print too. */
+      if (orb && !paceDead(__pace)){
         if (last.l < orb.l && last.c > orb.l && last.c > last.o){
           var orbL = hit('GS-2', 'COMEX Cash Open ORB', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The 13:30 UTC cash-open low was swept and the bar closed back above it.');
           if (orbL) out.push(orbL);
@@ -151,7 +197,8 @@
         lonN++;
       }
       var span4 = last.h - last.l;
-      if (lonN >= 3 && lonHi - lonLo >= 3 && span4 >= 1){
+      /* hg-v1276: the overlap sweep is a raid — defended print required. */
+      if (lonN >= 3 && lonHi - lonLo >= 3 && span4 >= 1 && !paceDead(__pace)){
         var daerL = (Math.min(last.o, last.c) - last.l) / span4;
         var daerS = (last.h - Math.max(last.o, last.c)) / span4;
         if (last.l < lonLo && last.c > lonLo && last.c > last.o && daerL >= 0.65){
@@ -163,7 +210,9 @@
         }
       }
     }
-    if (hour >= 7 && hour < 10 && today && n >= 3 && hi - lo >= 3){
+    /* hg-v1277: the dual boundary is a raid too — a readable dead pace
+       withholds it (same defended-print rule as GS-1/GS-2/GS-4). */
+    if (hour >= 7 && hour < 10 && today && n >= 3 && hi - lo >= 3 && !paceDead(__pace)){
       var tookHigh = false, tookLow = false, bi;
       for (bi = Math.max(0, rows.length - 8); bi < rows.length - 1; bi++){
         if (rows[bi].h > hi) tookHigh = true;
@@ -188,6 +237,7 @@
     var last = rows[rows.length - 1], back = rows[rows.length - 3];
     var a = atr(rows, 14);
     if (!(a > 0) || !back) return out;
+    __pace = paceOf(rows);
     if (silver.length >= 5 && dxy.length >= 5){
       var s0 = silver[silver.length - 1], s1 = silver[silver.length - 3];
       var d0 = dxy[dxy.length - 1], d1 = dxy[dxy.length - 3];
@@ -292,9 +342,12 @@
     if (rows.length < 20) return out;
     var last = rows[rows.length - 1], a = atr(rows, 14);
     if (!(a > 0)) return out;
+    __pace = paceOf(rows);
     var bands = sessionBands(rows);
     var band = bands.length ? bands[bands.length - 1] : null;
-    if (band && band.dev >= 1 && bands.length >= 4){
+    /* hg-v1276: the band pierce is a raid — a readable dead pace withholds
+       it (the level/shape reads below carry the number without a bar). */
+    if (band && band.dev >= 1 && bands.length >= 4 && !paceDead(__pace)){
       if (last.l <= band.dn2 && last.c > band.dn2 && last.c > last.o){
         var risk = last.c - (last.l - Math.max(a * 0.35, 2.5));
         var reward = band.mean - last.c;
@@ -444,6 +497,7 @@
     if (rows.length < 35) return out;
     var last = rows[rows.length - 1], a = atr(rows, 14);
     if (!(a > 0)) return out;
+    __pace = paceOf(rows);
     var hour = hourOf(last), today = dayOf(last);
     var kill = isFinite(hour) && ((hour >= 7.5 && hour <= 8.75) || (hour >= 14 && hour <= 15.25));
     var ib = isFinite(hour) && ((hour >= 7 && hour < 7.5) || (hour >= 13.5 && hour < 14));

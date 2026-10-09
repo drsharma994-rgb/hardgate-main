@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1276',
-  pack: 'Three more gold reads that stay quiet when the series is missing. Gold Scalp adds a dual Asia-boundary flush: an earlier bar must take one side, and this bar must take the other and close back inside. Pine Gold adds a shallow order-block touch of no more than 38.2 percent. Ganesh Gold adds a rejection of the 108 and 144 degree Gann angles. A physical-bullion premium and a gold-plus-crude stagflation read exist, and both stay unread until a separate bullion print, a crude series, and a yield series are actually present. Every target stays 2.5R. The card does not send an order.',
-  built: '2026-10-09T15:40:00Z'
+  version: 'hg-v1277',
+  pack: 'THE PARTICIPATION LAYER - every gold core hit now carries the defended print. The twenty-one core strategies all share one premise - something was swept, tapped or reclaimed - and none of them read the tape volume, though every bar parses it. paceOf reads the confirming bar over the MEDIAN of the last 20 readable bars (10 positive prints required, and a positive print on the confirming bar itself); every hit carries pace - a number when the tape can speak, null when it cannot, never fabricated - and the why sentence states the participation whenever readable, so every desk card shows it with no consumer edit. The five session-raid detections REQUIRE a defended print: a readable pace under 0.5x withholds GS-1 Judas, GS-2 cash-open ORB, GS-4 London-NY overlap, GS-5 dual Asia boundary and PG-1 band pierce - a sweep nobody came to is withheld, the same honesty as a quiet bar. Level and shape reads (SMT, fix drift, ratio band, consequent encroachment, value area, ribbon, Gann, chakra, shallow block) carry the number without a bar: their premises are not participation. A volume-deaf feed fails open and claims nothing. The guard test pins the contract, proven failing pre-fix. Carries v1276 (version collision): three more gold reads that stay quiet when the series is missing - dual Asia-boundary flush, shallow order block, 108/144 Gann angles, plus physical bullion premium and stagflation shock - all through the same hit seam, so the new hits carry pace automatically.',
+  built: '2026-10-09T16:30:00Z'
 };
 
 function hgBuildLabel(b){
