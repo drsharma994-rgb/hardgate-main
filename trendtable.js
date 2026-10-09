@@ -1,4 +1,4 @@
-/* HARDGATE trendtable loader. hg-v1259. */
+/* HARDGATE trendtable loader. hg-v1260. */
 (function () {
   var n = 12, acc = '', i = 0;
   function step() {
@@ -7,7 +7,7 @@
       catch (e) { try { console.error('trendtable assemble', e); } catch (e2) {} }
       return;
     }
-    fetch('trendtable-src-' + i + '.js?v=1259', { cache: 'no-store' }).then(function (r) {
+    fetch('trendtable-src-' + i + '.js?v=1260', { cache: 'no-store' }).then(function (r) {
       if (!r.ok) throw new Error('trendtable part ' + i + ' ' + r.status);
       return r.text();
     }).then(function (t) { acc += t; i += 1; step(); }).catch(function (e) {

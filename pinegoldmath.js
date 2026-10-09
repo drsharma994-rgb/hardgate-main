@@ -2244,6 +2244,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (stochX) return stochX;
   var donWhy = pineGoldDonchian55Veto(rows, dir);
   if (donWhy) return donWhy;
+  var mfiWhy = pineGoldMfiExitVeto(rows, dir);
+  if (mfiWhy) return mfiWhy;
+  var willWhy = pineGoldWillExitVeto(rows, dir);
+  if (willWhy) return willWhy;
+  var h4sWhy = pineGoldH4SweepVeto(rows, dir);
+  if (h4sWhy) return h4sWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3449,6 +3455,85 @@ function pineGoldDonchian55Veto(rows, dir){
   if (dir === 'short' && l < lo && c >= lo && c > o) return 'The 55-bar low was pierced and closed back over.';
   return null;
 }
+/* MFI(14) crossing back through 80. A reading already inside, or a tape with no volume, does not refuse. */
+function pineGoldMfiExitVeto(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  var pos = [], neg = [], i, tp, prev, v, mf;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l)) || !(pgrNum(rows[i].c) > 0)) return null;
+    v = volOf(rows[i]);
+    if (!(v > 0)) return null;
+    tp = (pgrNum(rows[i].h) + pgrNum(rows[i].l) + pgrNum(rows[i].c)) / 3;
+    if (i === 0){ prev = tp; continue; }
+    mf = tp * v;
+    pos.push(tp > prev ? mf : 0);
+    neg.push(tp < prev ? mf : 0);
+    prev = tp;
+  }
+  function at(end){
+    if (end < len - 1) return NaN;
+    var p = 0, n = 0, k;
+    for (k = end - len + 1; k <= end; k++){ p += pos[k]; n += neg[k]; }
+    if (p + n === 0) return NaN;
+    return n === 0 ? 100 : 100 - 100 / (1 + p / n);
+  }
+  var end = pos.length - 1;
+  var now = at(end), before = at(end - 1);
+  if (!isFinite(now) || !isFinite(before)) return null;
+  if (dir === 'long' && before >= 80 && now < 80) return 'MFI crossed back from 80. A long does not pass.';
+  if (dir === 'short' && before <= 20 && now > 20) return 'MFI crossed back from 20. A short does not pass.';
+  return null;
+}
+/* Williams %R crossing back through -20. A reading already inside does not refuse. */
+function pineGoldWillExitVeto(rows, dir){
+  if (!rows || rows.length < 16 || (dir !== 'long' && dir !== 'short')) return null;
+  var w = pgrWilliamsSeries(rows, 14);
+  if (!w) return null;
+  var prev = w[w.length - 2], now = w[w.length - 1];
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= -20 && now < -20) return 'Williams %R crossed back from -20. A long does not pass.';
+  if (dir === 'short' && prev <= -80 && now > -80) return 'Williams %R crossed back from -80. A short does not pass.';
+  return null;
+}
+/* The completed 4-hour block before this one. A wick back inside it does not pass.
+   No prior block, or a block under $8, does not refuse. */
+function pineGoldH4SweepVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var start = Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), Math.floor(when.getUTCHours() / 4) * 4);
+  var prior = start - 4 * 3600 * 1000;
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms < prior || ms >= start) continue;
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 8) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The prior 4-hour block was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The prior 4-hour block was pierced and closed back over.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -4039,6 +4124,9 @@ G.pineGoldRsiExitVeto = pineGoldRsiExitVeto;
 G.pineGoldExtVeto = pineGoldExtVeto;
 G.pineGoldStochExitVeto = pineGoldStochExitVeto;
 G.pineGoldDonchian55Veto = pineGoldDonchian55Veto;
+G.pineGoldMfiExitVeto = pineGoldMfiExitVeto;
+G.pineGoldWillExitVeto = pineGoldWillExitVeto;
+G.pineGoldH4SweepVeto = pineGoldH4SweepVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
