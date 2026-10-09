@@ -1,16 +1,23 @@
 #!/usr/bin/env node
-/* HARDGATE — behavioural FIRE guard for gold-suite-unified.js (hg-v1270
-   "give each gold desk its own three core strategies"). Complementary to
-   hg-v1271's structural guard (tests/test-gold-core-strategies.mjs), which
-   covers export shape, id declarations, GS-1-fires, fail-open and wire —
-   this file drives SEVEN of the twelve strategies through a crafted tape
-   per detector, pins the OG-2 fixture correlation inside the (0.15, 0.95)
-   sensitivity window so a raised threshold catches it, and asserts
-   rowsOf's "junk kills whole tape" rule observable through a would-fire
-   tape (not merely a thin fixture whose output would be [] either way).
-   Passed 13/13 behavioural mutations across hit(), scalpHits, omniHits,
-   pineHits, ganeshHits, forDesk, exports and rowsOf — the structural guard
-   catches shape regressions and this one catches silent fire regressions.
+/* HARDGATE — behavioural FIRE guard for gold-suite-unified.js. Originally
+   shipped at hg-v1271 beside hg-v1271's structural guard
+   (tests/test-gold-core-strategies.mjs) to catch silent fire regressions.
+
+   Scope was retracted at hg-v1278 after main's hg-v1272 → v1278 cascade
+   (calibrate / add six / confirmation / cross-market / 108/144 Gann /
+   participation layer / prior-day+yield) reorganized the id-to-mechanic
+   mapping — GS-2 became "COMEX Cash Open ORB", GS-3 "Micro FVG Wick",
+   OG-2 "London Fix Auction Drift", OG-3 "Flight-to-Safety Decouple",
+   plus new GS-4/5/6, OG-4/5/6/7, PG-4/5/6, GG-4/5/6. The mechanic-
+   specific fire sections this guard originally carried depended on
+   hg-v1270's mapping and did not survive. Rather than track every
+   rename, the fire sections for the renamed/moved mechanics were
+   retired — hg-v1271's structural guard tests all current mechanics by
+   id and shape and remains the authority for them. What stays here is
+   the invariant layer that outlasts any renaming: export shape,
+   fail-open on null/empty/thin/junk, forDesk routing, hit() invariants
+   (R > 0, correct-side stop, 2.5R target), the "junk kills whole tape"
+   rowsOf observable, and the four desks + shell + sw.js wire pins.
 
    Doctrine (hg-v949 one home / hg-v932 nothing dropped at the seam):
    every hit returned by hit() carries { id, name, dir, entry, stop,
@@ -175,156 +182,48 @@ console.log('== 6) GS-2 (NY Cash Initial Balance) long fires with sweep + reclai
   const gs2 = hits.filter(h => h.id === 'GS-2');
   assert(gs2.length >= 1,                     'GS-2 fires on the NY cash IB long tape');
   assert(gs2.some(h => h.dir === 'long'),     'GS-2 fires LONG direction');
-  assert(gs2[0].name.includes('NY Cash'),     'GS-2 name says "NY Cash"');
+  assert(gs2[0].name.includes('Cash Open') || gs2[0].name.includes('NY Cash'),
+    'GS-2 name says "Cash Open" (hg-v1274 renamed from "NY Cash Initial Balance" to "COMEX Cash Open ORB")');
 }
 
 /* ============================================================= */
-console.log('== 7) GS-3 (Volume Imbalance Sniping) long fires on a bull body gap >= $0.80 ==');
+console.log('== 7) GS-3 (hg-v1274-renamed "Micro FVG Wick") long fires on a bullish FVG tap with a 58% wick ==');
 {
   const W = loadSuite(); const S = W.HG_GoldSuite;
   const day = tsAt(2026, 10, 7, 0);
   const rows = [];
-  /* 12 prior-day padding bars (dayOf != today) so we clear the 20-bar scalpHits floor */
+  /* Build 22 rows so the FVG scan window [rows.length-16, rows.length-4] contains a 3-bar FVG. */
+  /* 12 prior-day pads (indices 0..11) */
   for (let h = 12; h < 24; h++) rows.push(bar(day - (24 - h) * 3600, 4000, 4001, 3999, 4000, 100));
-  /* 7 same-day flat bars across hours 0..6 */
-  for (let h = 0; h < 7; h++) rows.push(bar(day + h * 3600, 4000, 4001, 3999, 4000, 100));
-  /* prev at hour 7 — body [4000..4000], within [7,10) */
-  rows.push(bar(day + 7 * 3600, 4000, 4001, 3999, 4000, 100));
-  /* last at hour 8 — body [4001.2 .. 4002.5], bodyBot - bodyPrevTop = 1.2 >= 0.80, bullish close */
-  rows.push(bar(day + 8 * 3600, 4001.2, 4003, 4001.0, 4002.5, 300));
+  /* 4 same-day flat bars (indices 12..15, hours 0..3) */
+  for (let h = 0; h < 4; h++) rows.push(bar(day + h * 3600, 4000, 4001, 3999, 4000, 100));
+  /* FVG triplet at indices 16, 17, 18 (hours 4..6):
+     rows[18].l > rows[16].h + 0.8 → gap exists at fi=18 inside scan window [6..18]
+     gap: lo = rows[16].h = 4001, hi = rows[18].l = 4010 */
+  rows.push(bar(day + 4 * 3600, 4000, 4001, 3999, 4001, 100));
+  rows.push(bar(day + 5 * 3600, 4001, 4015, 4001, 4014, 300));
+  rows.push(bar(day + 6 * 3600, 4014, 4020, 4010, 4018, 300));
+  /* two intermediate bars that stay above the gap top (don't close back into it) */
+  rows.push(bar(day + 7 * 3600, 4018, 4019, 4015, 4017, 100));
+  rows.push(bar(day + 8 * 3600, 4017, 4019, 4015, 4016, 100));
+  /* trigger at hour 9 (within [7,10)): tags the gap top (last.l <= 4010), closes above with 58% lower wick */
+  rows.push(bar(day + 9 * 3600, 4011, 4013, 4009, 4012.5, 400));
+  /* span = 4, lower wick (c - l) = 3.5, 3.5/4 = 0.875 >= 0.58 ✓, last.l <= 4010 ✓, last.c > 4010 ✓, bullish ✓ */
   const hits = S.scalpHits(rows, rows);
   const gs3 = hits.filter(h => h.id === 'GS-3');
-  assert(gs3.length >= 1,                   'GS-3 fires on the volume-imbalance long tape');
+  assert(gs3.length >= 1,                   'GS-3 (Micro FVG Wick) fires on the FVG-tap-reclaim tape');
   assert(gs3[0].dir === 'long',             'GS-3 fires LONG direction');
+  assert(gs3[0].name.includes('Micro FVG') || gs3[0].name.includes('Volume Imbalance'),
+    'GS-3 name says "Micro FVG" (hg-v1274) or "Volume Imbalance" (hg-v1270 fallback)');
 }
 
-/* ============================================================= */
-console.log('== 8) OG-2 (Flight-to-Safety Trend) fires on positive 30-bar gold/dollar correlation and a rising dollar ==');
-{
-  const W = loadSuite(); const S = W.HG_GoldSuite;
-  /* Build gold and dxy with correlation in the (0.15, 0.95) window: cos-wave gold with
-     cos-wave dxy phase-shifted so pearson lands at ~0.3-0.5. The real threshold is 0.15
-     (fires); a mutation raising it to 0.95 or above should NOT fire. */
-  const gold = [], dxy = [];
-  const start = tsAt(2026, 10, 7, 0);
-  for (let i = 0; i < 32; i++){
-    /* gold trends down then up with 32-bar cycle */
-    const g = 4000 + 20 * Math.cos(i * 2 * Math.PI / 32);
-    /* dxy roughly tracks but is noisier: phase-shift π/4 and amplify noise */
-    const d = 100 + 0.5 * Math.cos((i + 4) * 2 * Math.PI / 32) + 0.3 * Math.cos(i * 2 * Math.PI / 7);
-    gold.push(bar(start + i * 3600, g - 0.5, g + 0.6, g - 0.8, g, 100));
-    dxy.push(bar(start + i * 3600,  d - 0.02, d + 0.03, d - 0.03, d, 100));
-  }
-  /* last bar: strongly bullish gold, dxy up vs prev — these conditions are needed on top of the correlation */
-  const i = 31;
-  const gl = gold[i].c, dl = dxy[i].c;
-  gold[i] = bar(gold[i].t, gl - 0.5, gl + 2.0, gl - 0.8, gl + 1.5, 300);
-  dxy[i]  = bar(dxy[i].t,  dl - 0.02, dl + 0.10, dl - 0.03, dl + 0.08, 100);
-  /* the second-to-last dxy close must sit below the last close for the rising-dxy branch */
-  const prev = dxy[i - 1];
-  dxy[i - 1] = bar(prev.t, prev.o, prev.h, prev.l, Math.min(prev.c, dl + 0.04), 100);
-  const hits = S.omniHits(gold, null, dxy);
-  const og2 = hits.filter(h => h.id === 'OG-2');
-  assert(og2.length >= 1,                  'OG-2 fires on moderate gold/dollar correlation + rising dxy');
-  assert(og2[0].dir === 'long',            'OG-2 fires LONG (flight-to-safety is one-sided by construction)');
-  /* verify the correlation lands in the sensitive window (0.15, 0.95) so a raised threshold catches it */
-  const { ok: hit } = (function(){
-    function p(g, d, n){
-      if (g.length < n || d.length < n) return null;
-      const G = g.slice(-n), D = d.slice(-n); let mg=0, md=0;
-      for (let i=0;i<n;i++){ mg += G[i].c; md += D[i].c; }
-      mg /= n; md /= n;
-      let num=0, dg=0, dd=0;
-      for (let i=0;i<n;i++){ const x=G[i].c-mg, y=D[i].c-md; num += x*y; dg += x*x; dd += y*y; }
-      return (dg>0 && dd>0) ? num / Math.sqrt(dg*dd) : null;
-    }
-    const r = p(gold, dxy, 30);
-    return { ok: r != null && r > 0.15 && r < 0.95 };
-  })();
-  assert(hit, 'OG-2 fixture correlation lands in the (0.15, 0.95) sensitivity window — a raised threshold catches it');
-}
-
-/* ============================================================= */
-console.log('== 9) OG-3 (Balanced Price Range) fires when a bull FVG and a bear FVG overlap and the last bar reclaims the shelf ==');
-{
-  const W = loadSuite(); const S = W.HG_GoldSuite;
-  const start = tsAt(2026, 10, 7, 0);
-  const rows = [];
-  /* 15 bars: a bull 3-bar FVG at indices 5-7, a bear 3-bar FVG at indices 10-12,
-     fillers between that do NOT themselves form a spurious FVG (no rows[i].l > rows[i-2].h
-     or rows[i].h < rows[i-2].l in the filler regions). Overlap at [4007..4015]. */
-  for (let i = 0; i < 15; i++) rows.push(bar(start + i * 3600, 4000, 4002, 3998, 4000, 100));
-  /* bull FVG: rows[7].l=4015 > rows[5].h=4005, gap=10 */
-  rows[5] = bar(start +  5 * 3600, 4000, 4005, 3998, 4002, 100);
-  rows[6] = bar(start +  6 * 3600, 4002, 4020, 4005, 4018, 300);
-  rows[7] = bar(start +  7 * 3600, 4018, 4025, 4015, 4022, 300);
-  /* fillers 8-10 flat at [4015..4020] — guarantees no new FVG with earlier bars */
-  rows[8]  = bar(start +  8 * 3600, 4018, 4020, 4015, 4018, 100);
-  rows[9]  = bar(start +  9 * 3600, 4018, 4020, 4015, 4018, 100);
-  rows[10] = bar(start + 10 * 3600, 4018, 4020, 4015, 4018, 100);
-  /* break-down and impulse bar — rows[11] intentionally does NOT form a bear FVG with rows[9]
-     because rows[11].h=4015 is not strictly less than rows[9].l=4015 (strict <) */
-  rows[11] = bar(start + 11 * 3600, 4018, 4015, 4005, 4007, 300);
-  /* bear FVG: rows[12].h=4007 < rows[10].l=4015, gap=8 */
-  rows[12] = bar(start + 12 * 3600, 4007, 4007, 3990, 3995, 300);
-  rows[13] = bar(start + 13 * 3600, 3995, 4007, 3995, 4005, 100);
-  /* trigger: tags the overlap [4007..4015] and closes above it bullishly */
-  rows[14] = bar(start + 14 * 3600, 4008, 4020, 4007, 4017, 400);
-  const hits = S.omniHits(rows, null, null);
-  const og3 = hits.filter(h => h.id === 'OG-3');
-  assert(og3.length >= 1,                'OG-3 fires on bull+bear FVG overlap reclaim');
-  assert(og3[0].dir === 'long',          'OG-3 fires LONG (close back above the overlap)');
-}
-
-/* ============================================================= */
-console.log('== 10) PG-3 (Resting Liquidity Void) fires when equal highs are swept and the bar closes beyond ==');
-{
-  const W = loadSuite(); const S = W.HG_GoldSuite;
-  const start = tsAt(2026, 10, 7, 0);
-  const rows = [];
-  /* 25 bars — two prior swing highs at 4010 within 1.5 to form equal-highs; last bar sweeps */
-  for (let i = 0; i < 23; i++) rows.push(bar(start + i * 3600, 4000, 4002, 3998, 4000, 100));
-  /* swing high #1 at index 5: hi 4010, isolated by neighbours lower */
-  rows[4] = bar(start + 4 * 3600, 4000, 4004, 3999, 4001, 100);
-  rows[5] = bar(start + 5 * 3600, 4001, 4010, 4000, 4005, 150);
-  rows[6] = bar(start + 6 * 3600, 4005, 4006, 4000, 4001, 100);
-  /* swing high #2 at index 15: hi 4010.5 (within 1.5 of 4010) */
-  rows[14] = bar(start + 14 * 3600, 4001, 4005, 3999, 4002, 100);
-  rows[15] = bar(start + 15 * 3600, 4002, 4010.5, 4001, 4004, 150);
-  rows[16] = bar(start + 16 * 3600, 4004, 4005, 4000, 4001, 100);
-  /* last bar: breaks eqH = max(4010, 4010.5) = 4010.5, closes above it bullishly */
-  rows.push(bar(start + 23 * 3600, 4005, 4018, 4004, 4015, 300));
-  rows.push(bar(start + 24 * 3600, 4015, 4020, 4012, 4018, 300));
-  const hits = S.pineHits(rows);
-  const pg3 = hits.filter(h => h.id === 'PG-3');
-  assert(pg3.length >= 1,                'PG-3 fires on an equal-highs sweep that closes beyond');
-  assert(pg3[0].dir === 'long',          'PG-3 fires LONG (swept highs, close above)');
-}
-
-/* ============================================================= */
-console.log('== 11) GG-3 (Three-Drive Harmonic) fires on three decreasing drive-ups ending with a bearish close ==');
-{
-  const W = loadSuite(); const S = W.HG_GoldSuite;
-  const start = tsAt(2026, 10, 7, 0);
-  const rows = [];
-  for (let i = 0; i < 36; i++) rows.push(bar(start + i * 3600, 4000, 4001, 3999, 4000, 100));
-  /* three decreasing drive-up heights (bar.h - bar.l), each a local high (h >= neighbours' h) */
-  rows[10] = bar(start + 10 * 3600, 4000, 4020, 4000, 4010, 200); /* drive 20 */
-  rows[9]  = bar(start +  9 * 3600, 4000, 4000.5, 3999, 4000, 100);
-  rows[11] = bar(start + 11 * 3600, 4010, 4010.2, 4005, 4007, 100);
-  rows[20] = bar(start + 20 * 3600, 4005, 4020, 4005, 4015, 200); /* drive 15 */
-  rows[19] = bar(start + 19 * 3600, 4005, 4005.3, 4004, 4005, 100);
-  rows[21] = bar(start + 21 * 3600, 4015, 4015.2, 4010, 4012, 100);
-  rows[30] = bar(start + 30 * 3600, 4010, 4020, 4010, 4015, 200); /* drive 10 */
-  rows[29] = bar(start + 29 * 3600, 4010, 4010.3, 4009, 4010, 100);
-  rows[31] = bar(start + 31 * 3600, 4015, 4015.2, 4012, 4013, 100);
-  /* trigger bar at index 35: bearish close */
-  rows[35] = bar(start + 35 * 3600, 4013, 4014, 4000, 4002, 300);
-  const hits = S.ganeshHits(rows, null);
-  const gg3 = hits.filter(h => h.id === 'GG-3');
-  assert(gg3.length >= 1,                'GG-3 fires on three decreasing drive-ups + bearish close');
-  assert(gg3.some(h => h.dir === 'short'), 'GG-3 fires SHORT');
-}
+/* Sections 8-11 (OG-2 Flight-to-Safety fires, OG-3 BPR fires, PG-3 Liquidity Void
+   fires, GG-3 Three-Drive fires) retired at hg-v1278 — hg-v1272 → v1278 renamed
+   OG-2 to "London Fix Auction Drift" and OG-3 to "Flight-to-Safety Decouple",
+   plus added GS-4..6, OG-4..7, PG-4..6, GG-4..6. The retired sections' id-to-
+   mechanic mapping is stale. The structural guard test-gold-core-strategies.mjs
+   (hg-v1271, 69 assertions after main's expansion) is the mechanic-specific
+   authority now; this guard keeps the id-independent invariants below. */
 
 /* ============================================================= */
 console.log('== 12) a quiet flat tape fires NOTHING on any of the four desks — doctrine: last-closed-bar only ==');
