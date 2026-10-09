@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1278',
-  pack: 'One new read on each gold desk, on top of the participation layer. Gold Scalp raids the prior day only when that day is on the tape, the sweep is 1.50 to 5.50 dollars, and the print is not dead volume. OmniGold adds a yield lead, unread when the yield series is missing. Pine Gold tags the finished session average, and a dead print withholds it. Ganesh Gold adds an eight-bar square, separate from the sixteen-bar square. Every target stays 2.5R. The card does not send an order.',
-  built: '2026-10-09T16:10:00Z'
+  version: 'hg-v1279',
+  pack: 'One more read on each gold desk. Gold Scalp raids a ten-dollar round number only when the sweep is 1 to 4 dollars and the level is not the Asia extreme or the prior-day extreme. OmniGold adds a dollar non-confirmation, and it stays unread when the dollar series is missing or the triple SMT already fired. Pine Gold tags the London opening midpoint only after 07:30 UTC. Ganesh Gold sweeps equal highs or equal lows that sit within 0.80 dollars. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
+  built: '2026-10-09T16:30:00Z'
 };
 
 function hgBuildLabel(b){

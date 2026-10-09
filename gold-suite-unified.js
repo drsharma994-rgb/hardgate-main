@@ -254,6 +254,22 @@
           if (pdShit) out.push(pdShit);
         }
       }
+      var span7 = last.h - last.l;
+      if (span7 > 0 && !paceDead(__pace)){
+        var under = Math.floor((last.c - 0.01) / 10) * 10;
+        var over = Math.ceil((last.c + 0.01) / 10) * 10;
+        var depthUnder = under - last.l;
+        var depthOver = last.h - over;
+        var nearL = (n >= 3 && (Math.abs(under - lo) <= 1 || Math.abs(under - hi) <= 1)) || (pdN >= 3 && (Math.abs(under - pdL) <= 1 || Math.abs(under - pdH) <= 1));
+        var nearH = (n >= 3 && (Math.abs(over - lo) <= 1 || Math.abs(over - hi) <= 1)) || (pdN >= 3 && (Math.abs(over - pdL) <= 1 || Math.abs(over - pdH) <= 1));
+        if (!nearL && depthUnder >= 1 && depthUnder <= 4 && last.c > under && last.c > last.o && (last.c - last.l) / span7 >= 0.55){
+          var rnL = hit('GS-7', 'Round Ten Raid', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'A ten-dollar level was swept by 1 to 4 dollars and the bar closed back above it.');
+          if (rnL) out.push(rnL);
+        } else if (!nearH && depthOver >= 1 && depthOver <= 4 && last.c < over && last.c < last.o && (last.h - last.c) / span7 >= 0.55){
+          var rnS = hit('GS-7', 'Round Ten Raid', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'A ten-dollar level was swept by 1 to 4 dollars and the bar closed back under it.');
+          if (rnS) out.push(rnS);
+        }
+      }
     }
     return out;
   }
@@ -350,6 +366,16 @@
       if (yLead && gLead){
         var yg = hit('OG-7', 'Yield Lead', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'The yield print fell over six bars and this gold bar closed up with a real body.');
         if (yg) out.push(yg);
+      }
+    }
+    if (dxy.length >= 5 && !out.some(function(h){ return h.id === 'OG-1'; })){
+      var dx0 = dxy[dxy.length - 1], dx1 = dxy[dxy.length - 3];
+      if (dx0 && dx1 && last.l < back.l && dx0.l >= dx1.l && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4){
+        var dxL = hit('OG-8', 'Dollar Non-Confirmation', 'long', last.c, Math.min(last.l, back.l) - Math.max(a * 0.45, 3.2), 'Gold made a lower low and the dollar refused it. Silver was not required.');
+        if (dxL) out.push(dxL);
+      } else if (dx0 && dx1 && last.h > back.h && dx0.h <= dx1.h && last.c < last.o && Math.abs(last.c - last.o) >= a * 0.4){
+        var dxS = hit('OG-8', 'Dollar Non-Confirmation', 'short', last.c, Math.max(last.h, back.h) + Math.max(a * 0.45, 3.2), 'Gold made a higher high and the dollar refused it. Silver was not required.');
+        if (dxS) out.push(dxS);
       }
     }
     return out;
@@ -460,7 +486,32 @@
         if (vwS) out.push(vwS);
       }
     }
+    var ib = londonIbMid(rows);
+    if (ib && isFinite(hourOf(last)) && hourOf(last) > 7.5 && hourOf(last) < 10){
+      if (last.l <= ib && last.c > ib && last.c > last.o){
+        var ibL = hit('PG-7', 'London Opening Midpoint', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The London opening midpoint was tagged after 07:30 UTC and the bar closed back above it.');
+        if (ibL) out.push(ibL);
+      } else if (last.h >= ib && last.c < ib && last.c < last.o){
+        var ibS = hit('PG-7', 'London Opening Midpoint', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The London opening midpoint was tagged after 07:30 UTC and the bar closed back under it.');
+        if (ibS) out.push(ibS);
+      }
+    }
     return out;
+  }
+
+  function londonIbMid(rows){
+    var day = dayOf(rows[rows.length - 1]), hi = -Infinity, lo = Infinity, n = 0, i, hv;
+    if (!day) return null;
+    for (i = 0; i < rows.length - 1; i++){
+      if (dayOf(rows[i]) !== day) continue;
+      hv = hourOf(rows[i]);
+      if (!isFinite(hv) || hv < 7 || hv >= 7.5) continue;
+      if (rows[i].h > hi) hi = rows[i].h;
+      if (rows[i].l < lo) lo = rows[i].l;
+      n++;
+    }
+    if (n < 2 || !(hi - lo >= 2)) return null;
+    return (hi + lo) / 2;
   }
 
   function priorSessionMean(bands){
@@ -675,6 +726,20 @@
           if (sqL) out.push(sqL);
         }
       }
+    }
+    var eqH = NaN, eqL = NaN, a1, b1;
+    for (a1 = Math.max(0, rows.length - 20); a1 < rows.length - 2; a1++){
+      for (b1 = a1 + 1; b1 < rows.length - 1; b1++){
+        if (Math.abs(rows[a1].h - rows[b1].h) <= 0.8) eqH = Math.max(rows[a1].h, rows[b1].h);
+        if (Math.abs(rows[a1].l - rows[b1].l) <= 0.8) eqL = Math.min(rows[a1].l, rows[b1].l);
+      }
+    }
+    if (isFinite(eqH) && last.h - eqH >= 0.5 && last.h - eqH <= 3 && last.c < eqH && last.c < last.o){
+      var eqS = hit('GG-7', 'Equal High Sweep', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Two highs within 0.80 dollars were swept and the bar closed back under them.');
+      if (eqS) out.push(eqS);
+    } else if (isFinite(eqL) && eqL - last.l >= 0.5 && eqL - last.l <= 3 && last.c > eqL && last.c > last.o){
+      var eqLhit = hit('GG-7', 'Equal Low Sweep', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Two lows within 0.80 dollars were swept and the bar closed back above them.');
+      if (eqLhit) out.push(eqLhit);
     }
     return out;
   }
