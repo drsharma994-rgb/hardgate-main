@@ -4227,7 +4227,13 @@ function goldScalpSetups(inp){
         D.__part6 = hgGoldPart6Engine(rows, {
           newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
           now: nowMs,
-          dxyRows: (inp && (inp.dxyRows || inp.dxyCandles)) || null,
+          dxyRows: (function(){
+            var intra = inp && inp.dxyIntraday;
+            if (intra && intra.length && isFinite(+intra[0].h) && isFinite(+intra[0].l)) return intra;
+            var daily = inp && (inp.dxyCandles || inp.dxyRows);
+            if (daily && daily.length && isFinite(+daily[0].h) && isFinite(+daily[0].l)) return daily;
+            return null;
+          })(),
           btcRows: (inp && inp.btcRows) || null,
           events: (inp && inp.events) || null,
           dom: (inp && inp.dom) || null,

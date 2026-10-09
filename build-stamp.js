@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1285',
-  pack: 'Gold Scalp only. The COMEX pin was impossible: a close is never three dollars from the nearest five-dollar strike. It now needs the 18:15 UTC bar to run three to five and a half dollars through the strike nearest its open, and to close back through that strike. That pin, and the Tokyo compression break, can lead inside their own windows instead of being thrown out for not being London or New York. A CPI, NFP, FOMC or GDP print on this 15-minute bar can fade when price closes back inside the prior range. The news lock does not delete that fade. An ordinary 12:30 bar is still not a news bar. Every target stays 2.5R. The card does not send an order.',
-  built: '2026-10-09T18:55:00Z'
+  version: 'hg-v1286',
+  pack: 'Gold Scalp only. Silver 15-minute bars and Yahoo dollar-index 15-minute highs and lows are read before a setup is minted, so a gold Asia-low sweep can be checked against a dollar that did not take its Asia high. A close-only dollar series is not an Asia box. A feed that did not arrive stays unread and is not invented. Every target stays 2.5R. The card does not send an order.',
+  built: '2026-10-09T13:48:00Z'
 };
 
 function hgBuildLabel(b){

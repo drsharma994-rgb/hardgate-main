@@ -595,6 +595,23 @@ async function getUST10YCandles(count){
   }catch(e){ return null; }
 }
 
+async function getFreeOHLC(symbol, res){
+  try{
+    res = res || '15m';
+    const ymap = GOLD_RES_YAHOO[res];
+    if (!symbol || !ymap) return null;
+    const key = 'freeohlc|' + symbol + '|' + res;
+    const hit = __macroCacheGet(key); if (hit !== undefined) return hit;
+    const range = res === '15m' ? '5d' : ymap.r;
+    const yurl = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol)
+      + '?interval=' + ymap.i + '&range=' + range;
+    let rows = __parseYahooChart(await __yahooViaProxy(yurl));
+    if (rows.length && ymap.agg) rows = resampleRows(rows, ymap.agg);
+    if (!rows.length) return null;
+    return __macroCachePut(key, { rows: rows.slice(-240), source: 'yahoo:' + symbol });
+  }catch(e){ return null; }
+}
+
 /* Last daily closes of a Yahoo symbol, via the /api/proxy last-resort path. Nullable. */
 /* hg-v1163: the Pearson correlation of the last N daily log returns two
    Yahoo series share, ALIGNED BY UTC DATE (BTC prints on days gold does not;
@@ -1110,5 +1127,6 @@ if (typeof window !== 'undefined'){
   window.getGoldMacroCached = getGoldMacroCached;
   window.hgCorrDailyReturns = __corrDailyReturns;   /* hg-v1163: pure, exported for the guard */
   window.getSilverCandles = getSilverCandles;
+  window.getFreeOHLC = getFreeOHLC;
   window.getUST10YCandles = getUST10YCandles;
 }
