@@ -2163,6 +2163,8 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (camWhy) return camWhy;
     var pivWhy = pineGoldPivotVeto(rows, dir);
     if (pivWhy) return pivWhy;
+    var cprWhy = pineGoldCprVeto(rows, dir);
+    if (cprWhy) return cprWhy;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
@@ -2178,6 +2180,10 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (ceWhy) return ceWhy;
   var gannWhy = pineGoldGannVeto(rows);
   if (gannWhy) return gannWhy;
+  var kelWhy = pineGoldKeltnerVeto(rows, dir);
+  if (kelWhy) return kelWhy;
+  var dispWhy = pineGoldDisplacementVeto(rows, dir);
+  if (dispWhy) return dispWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2632,6 +2638,67 @@ function pineGoldGannVeto(rows){
   try{ gann = core.calculateGannSquare9(prior.c, px); }catch(eGn){ return null; }
   if (!gann || gann.unread || gann.isAtGannPivot !== true) return null;
   return 'Price is sitting on a Gann cardinal from yesterday\'s close.';
+}
+/* Central pivot range from yesterday. A wick through the top that closes
+   back inside does not pass as a long. The bottom is the short. A range
+   narrower than $1 does not refuse. */
+function pineGoldCprVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var pivot = (prior.hi + prior.lo + prior.c) / 3;
+  var bc = (prior.hi + prior.lo) / 2;
+  var tc = 2 * pivot - bc;
+  var top = Math.max(tc, bc), bot = Math.min(tc, bc);
+  if (!(top - bot >= 1)) return null;
+  if (dir === 'long' && h > top && c <= top && c >= bot) return 'The central pivot top was pierced and closed back inside.';
+  if (dir === 'short' && l < bot && c >= bot && c <= top) return 'The central pivot bottom was pierced and closed back inside.';
+  return null;
+}
+function pineGoldEmaLast(rows, len){
+  if (!rows || rows.length < len) return NaN;
+  var k = 2 / (len + 1), ema = null, i, c;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return NaN;
+    ema = ema == null ? c : (c * k + ema * (1 - k));
+  }
+  return ema;
+}
+function pineGoldAtrNow(rows){
+  var atrV = pineGoldBarAtr(rows);
+  if (atrV > 0) return atrV;
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateAtr !== 'function' || !rows || rows.length < 16) return NaN;
+  try{ atrV = core.calculateAtr(rows, 14); }catch(eAt){ return NaN; }
+  return atrV > 0 ? atrV : NaN;
+}
+/* Two ATR beyond the 20 EMA is a chase. A sweep of the other side still passes.
+   No sweep reader does not refuse. */
+function pineGoldKeltnerVeto(rows, dir){
+  if (typeof gfn('goldSweeps') !== 'function' || !rows || rows.length < 20) return null;
+  if (pineGoldSwept(rows, dir)) return null;
+  var atrV = pineGoldAtrNow(rows);
+  var ema = pineGoldEmaLast(rows, 20);
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!(atrV > 0) || !isFinite(ema) || !isFinite(px)) return null;
+  if (dir === 'long' && px > ema + 2 * atrV) return 'Price is more than two ATR above the 20 EMA. A long does not chase it.';
+  if (dir === 'short' && px < ema - 2 * atrV) return 'Price is more than two ATR below the 20 EMA. A short does not chase it.';
+  return null;
+}
+/* One candle whose body is at least 1.2 ATR against the trade.
+   A small candle does not refuse. */
+function pineGoldDisplacementVeto(rows, dir){
+  if (!rows || rows.length < 16) return null;
+  var last = rows[rows.length - 1];
+  var o = pgrNum(last && last.o), c = pgrNum(last && last.c);
+  var atrV = pineGoldAtrNow(rows);
+  if (!isFinite(o) || !isFinite(c) || !(atrV > 0)) return null;
+  if (dir === 'long' && o - c >= 1.2 * atrV) return 'The last candle is a bearish displacement. A long does not stand in front of it.';
+  if (dir === 'short' && c - o >= 1.2 * atrV) return 'The last candle is a bullish displacement. A short does not stand in front of it.';
+  return null;
 }
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
@@ -3190,6 +3257,9 @@ G.pineGoldCeVeto = pineGoldCeVeto;
 G.pineGoldCamarillaVeto = pineGoldCamarillaVeto;
 G.pineGoldPivotVeto = pineGoldPivotVeto;
 G.pineGoldGannVeto = pineGoldGannVeto;
+G.pineGoldCprVeto = pineGoldCprVeto;
+G.pineGoldKeltnerVeto = pineGoldKeltnerVeto;
+G.pineGoldDisplacementVeto = pineGoldDisplacementVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;

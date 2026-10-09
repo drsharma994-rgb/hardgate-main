@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1228',
-  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a scalp buying the Camarilla H3-H4 band or selling the L3-L4 band, a wick through R1 or S1 that closes back inside, and a price sitting on a Gann cardinal from yesterday close. A close through the level, a prior day under $8, or a price far from the cardinal does not refuse. The card does not send an order.',
-  built: '2026-10-09T03:40:00Z'
+  version: 'hg-v1229',
+  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a wick back inside the central pivot range, a chase more than two ATR beyond the 20 EMA unless a sweep just printed, and a last candle that is a displacement against the trade. A close through the pivot, a price inside the channel, or a small candle does not refuse. The card does not send an order.',
+  built: '2026-10-09T03:50:00Z'
 };
 
 function hgBuildLabel(b){
