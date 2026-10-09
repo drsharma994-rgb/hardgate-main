@@ -2017,6 +2017,67 @@ function tmLinreg(rows, dir){
   if (dir === 'long') return slope > 0;
   return slope < 0;
 }
+/* Williams %R, 14. Above -50 agrees with a long. Below -50 agrees with a short.
+   A flat range does not pass. */
+function tmWilliams(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < slice.length; i++){
+    if (!isFinite(slice[i].h) || !isFinite(slice[i].l) || !(slice[i].c > 0)) return null;
+    if (slice[i].h > hi) hi = slice[i].h;
+    if (slice[i].l < lo) lo = slice[i].l;
+  }
+  if (!(hi > lo)) return null;
+  var wr = ((hi - slice[slice.length - 1].c) / (hi - lo)) * -100;
+  if (!isFinite(wr)) return null;
+  if (dir === 'long') return wr > -50;
+  return wr < -50;
+}
+/* Balance of Power, 14. The close has to be on the trade side of the open.
+   A zero range does not pass. */
+function tmBop(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), sum = 0, i, b, range;
+  for (i = 0; i < slice.length; i++){
+    b = slice[i];
+    if (!isFinite(b.h) || !isFinite(b.l) || !isFinite(b.o) || !(b.c > 0)) return null;
+    range = b.h - b.l;
+    if (!(range > 0)) return null;
+    sum += (b.c - b.o) / range;
+  }
+  var avg = sum / len;
+  if (!isFinite(avg) || avg === 0) return false;
+  if (dir === 'long') return avg > 0;
+  return avg < 0;
+}
+/* Klinger volume oscillator, 34/55. Volume force has to be on the trade side
+   of zero. A short tape or missing volume does not pass. */
+function tmKlinger(rows, dir){
+  if (!rows || rows.length < 70 || (dir !== 'long' && dir !== 'short')) return null;
+  var vf = [], cm = 0, prevTrend = 0, i, b, p, tp, prevTp, trend, dm;
+  for (i = 1; i < rows.length; i++){
+    b = rows[i];
+    p = rows[i - 1];
+    if (!(b.c > 0) || !(p.c > 0) || !(b.v > 0) || !isFinite(b.h) || !isFinite(b.l) || !isFinite(p.h) || !isFinite(p.l)) return null;
+    tp = (b.h + b.l + b.c) / 3;
+    prevTp = (p.h + p.l + p.c) / 3;
+    trend = tp >= prevTp ? 1 : -1;
+    dm = b.h - b.l;
+    if (!(dm > 0)) return null;
+    cm = trend === prevTrend ? cm + dm : dm;
+    prevTrend = trend;
+    if (!(cm > 0)) return null;
+    vf.push(b.v * Math.abs(2 * (dm / cm) - 1) * trend * 100);
+  }
+  var fast = tmEmaSeed(vf, 34), slow = tmEmaSeed(vf, 55);
+  if (!fast || !slow) return null;
+  var kvo = fast[fast.length - 1] - slow[slow.length - 1];
+  if (!isFinite(kvo) || kvo === 0) return false;
+  if (dir === 'long') return kvo > 0;
+  return kvo < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

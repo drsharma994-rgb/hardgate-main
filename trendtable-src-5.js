@@ -184,6 +184,15 @@
   var slope = rows1 ? tmLinreg(rows1, dir) : null;
   if (slope == null) hard.push('regression unread');
   else if (!slope) hard.push('regression slope is against the trade');
+  var will = rows1 ? tmWilliams(rows1, dir) : null;
+  if (will == null) hard.push('williams unread');
+  else if (!will) hard.push('williams %R is against the trade');
+  var bop = rows1 ? tmBop(rows1, dir) : null;
+  if (bop == null) hard.push('balance of power unread');
+  else if (!bop) hard.push('balance of power is against the trade');
+  var kling = rows1 ? tmKlinger(rows1, dir) : null;
+  if (kling == null) hard.push('klinger unread');
+  else if (!kling) hard.push('klinger volume is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

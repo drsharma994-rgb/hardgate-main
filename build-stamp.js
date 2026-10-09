@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1235',
-  pack: 'TREND MATRIX SMC CORE PINE PORT - pineSmcCore joins the crypto Pine bag as the tenth record-only mark, completing the dir-returning crypto Pine coverage. Also carries the OmniGold, Ganesh Gold and Gold Scalp also refuse a wick through R2 or S2 that closes back inside, a close that loses the 26-bar midpoint on this bar, and a MACD line that crosses zero on this bar. A close through R2, a midpoint already lost, or a MACD that stays on one side does not refuse. The card does not send an order.',
-  built: '2026-10-09T05:00:00Z'
+  version: 'hg-v1236',
+  pack: 'Trend Matrix also refuses a setup when Williams %R is on the wrong side of -50, Balance of Power is against the trade, or the Klinger volume oscillator is on the wrong side of zero. A short tape, a flat range, or missing volume does not pass. The SMC core mark stays record-only. The card does not send an order.',
+  built: '2026-10-09T05:20:00Z'
 };
 
 function hgBuildLabel(b){
