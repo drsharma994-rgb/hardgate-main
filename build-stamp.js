@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1226',
-  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a knife-catch cascade, a first sweep of yesterday that has not been swept again, and a fade of the drift into the London fix. A quiet tape, a completed second sweep, or a bar outside the fix window does not refuse. The card does not send an order.',
-  built: '2026-10-09T03:20:00Z'
+  version: 'hg-v1227',
+  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a scalp during the gold rollover, a scalp sitting in the deep premium or deep discount of the dealing range without a sweep, and a trade inside a fair-value gap that is already mitigated past its midpoint. A fresh gap, a swept extreme, or a bar outside the rollover does not refuse. The card does not send an order.',
+  built: '2026-10-09T03:30:00Z'
 };
 
 function hgBuildLabel(b){

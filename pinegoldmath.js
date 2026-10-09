@@ -2155,6 +2155,10 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (asiaWhy) return asiaWhy;
     var fixWhy = pineGoldFixDriftVeto(rows, dir);
     if (fixWhy) return fixWhy;
+    var rollWhy = pineGoldRolloverVeto(rows);
+    if (rollWhy) return rollWhy;
+    var deepWhy = pineGoldDeepRangeVeto(rows, dir);
+    if (deepWhy) return deepWhy;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
@@ -2166,6 +2170,8 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (kinWhy) return kinWhy;
   var swWhy = pineGoldSweep2Veto(rows, dir);
   if (swWhy) return swWhy;
+  var ceWhy = pineGoldCeVeto(rows, dir);
+  if (ceWhy) return ceWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2500,6 +2506,56 @@ function pineGoldFixDriftVeto(rows, dir){
   if (Math.abs(drift.drift) < 2) return null;
   if (dir === 'short' && drift.drift > 0) return 'Price is drifting up into the London fix. A short does not fade it.';
   if (dir === 'long' && drift.drift < 0) return 'Price is drifting down into the London fix. A long does not fade it.';
+  return null;
+}
+/* 20:45 UTC through the daily rollover. A missing time does not refuse.
+   The London fix is a different rule and is not this one. */
+function pineGoldRolloverVeto(rows){
+  var core = pineGoldCore();
+  if (!core || typeof core.checkTimeVeto !== 'function' || !rows || !rows.length) return null;
+  var t = pgrNum(rows[rows.length - 1].t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var hit = null;
+  try{ hit = core.checkTimeVeto(new Date(t)); }catch(eRl){ return null; }
+  if (!hit || hit.veto !== true) return null;
+  if (String(hit.reason || '').indexOf('Off-hours') < 0) return null;
+  return 'Gold rollover. A scalp does not pass in this window.';
+}
+/* The top or bottom 40% of the dealing range. A long in deep premium, or a
+   short in deep discount, needs a sweep. No range, or no sweep reader, does not refuse. */
+function pineGoldDeepRangeVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateDealingRange !== 'function' || !rows || !rows.length) return null;
+  if (typeof gfn('goldSweeps') !== 'function') return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!(px > 0)) return null;
+  var range = null;
+  try{ range = core.calculateDealingRange(rows, px, rows.length); }catch(eDp){ return null; }
+  if (!range || range.unread === true) return null;
+  if (pineGoldSwept(rows, dir)) return null;
+  if (dir === 'long' && range.zone === 'DEEP_PREMIUM') return 'Price is in the deep premium of the dealing range and has not swept a low.';
+  if (dir === 'short' && range.zone === 'DEEP_DISCOUNT') return 'Price is in the deep discount of the dealing range and has not swept a high.';
+  return null;
+}
+/* A gap that price has already traded through its midpoint is used up.
+   A fresh gap does not refuse. */
+function pineGoldCeVeto(rows, dir){
+  var Eng = G.HG_PineGoldEngine;
+  if (typeof Eng !== 'function' || !rows || rows.length < 8) return null;
+  var fvgs = null;
+  try{ fvgs = new Eng().detectFreshFvgs(rows, 2); }catch(eCe){ return null; }
+  if (!fvgs || !fvgs.length) return null;
+  var c = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(c)) return null;
+  var i, f;
+  for (i = fvgs.length - 1; i >= 0; i--){
+    f = fvgs[i];
+    if (!f || f.state === 'FRESH' || !(f.top > f.bottom)) continue;
+    if (c < f.bottom || c > f.top) continue;
+    if (dir === 'long' && f.type === 'BULLISH_FVG') return 'This bullish gap is already mitigated past its midpoint.';
+    if (dir === 'short' && f.type === 'BEARISH_FVG') return 'This bearish gap is already mitigated past its midpoint.';
+  }
   return null;
 }
 
@@ -3053,6 +3109,9 @@ G.pineGoldWickVeto = pineGoldWickVeto;
 G.pineGoldKineticVeto = pineGoldKineticVeto;
 G.pineGoldSweep2Veto = pineGoldSweep2Veto;
 G.pineGoldFixDriftVeto = pineGoldFixDriftVeto;
+G.pineGoldRolloverVeto = pineGoldRolloverVeto;
+G.pineGoldDeepRangeVeto = pineGoldDeepRangeVeto;
+G.pineGoldCeVeto = pineGoldCeVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
