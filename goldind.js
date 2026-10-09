@@ -3300,10 +3300,16 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
        Asian-range strategy trades its own session; everything else is
        demoted and held to a +2 higher tally bar in goldRankSetups. */
     var inKillzone = !!(D.kz && D.kz.weight > 0);
+    /* A COMEX pin only exists on the 18:15 bar, and a Tokyo break only exists
+       inside 03:00-04:30. Those windows are outside the London/NY killzone on
+       purpose. Demoting them for that throws away the only bar they can fire. */
+    var nativeHour = (D.kz && isFinite(D.kz.hourGMT)) ? D.kz.hourGMT : NaN;
+    var nativeSess = (key === 'gs10' && nativeHour === 18)
+      || (key === 'gs11' && (nativeHour === 3 || nativeHour === 4));
     /* hg-v944: the lever, defaulting to ON (unchanged). See
        hgGoldSessionSepPanelHtml for what this withholds and what measures it. */
     if (hgGoldOffSessionDemoteOn()
-        && !inKillzone && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
+        && !inKillzone && !nativeSess && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
       demoted = true; offSess = true; stamps.push('OFF-SESSION');
       gateNotes.push('detected ' + (D.kz ? (D.kz.label || 'OFF-HOURS') : 'OFF-HOURS')
         + ' — outside every ICT killzone; held to a +2 higher confluence-tally bar');
@@ -4725,7 +4731,7 @@ function goldScalpSetups(inp){
     try{
       var suite = (typeof window !== 'undefined') ? window.HG_GoldSuite : null;
       if (suite && typeof suite.scalpHits === 'function'){
-        var spec = suite.scalpHits(rows, rows) || [];
+        var spec = suite.scalpHits(rows, rows, { newsRelease: hgGoldTier1OnBar(newsState, rows[rows.length - 1]) }) || [];
         for (var si = 0; si < spec.length; si++){
           var sh = spec[si];
           if (!sh || sh.id === 'GS-1') continue;
@@ -9238,6 +9244,26 @@ function hgGoldNewsEvents(news){
   }catch(e){ return []; }
 }
 
+function hgGoldTier1OnBar(news, bar){
+  try{
+    if (!news || !bar) return false;
+    var open = __toMs(bar.t);
+    if (!isFinite(open)) return false;
+    var evs = hgGoldNewsEvents(news), i, ev, t, title;
+    for (i = 0; i < evs.length; i++){
+      ev = evs[i];
+      if (!ev) continue;
+      title = ev.title || ev.name || ev.event || '';
+      if (!hgGoldNewsIsTier1(title) && !ev.fomcDecision) continue;
+      t = (ev.t != null) ? ev.t : ev.timestamp;
+      t = (+t < 1e12) ? (+t) * 1000 : +t;
+      if (!isFinite(t)) continue;
+      if (t >= open && t < open + 15 * 60 * 1000) return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
 function hgGoldNewsGate(news, nowMs){
   var out = { lock: false, title: null, reason: null, unchecked: false };
   try{
@@ -10178,6 +10204,17 @@ function hgGoldSessionGate(nowMs, rows, stratKey, opt){
     else if (h >= 0 && h < 8){ out.session = 'ASIAN'; out.weight = 0; }
     else { out.session = 'OFF'; out.weight = 0; }
 
+    /* Tokyo compression and the COMEX pin are their own windows. A vwap
+       attempt at 03:20 stays blocked. These two do not. */
+    if (stratKey === 'gs11' && h >= 3 && h < 4.5){
+      out.session = 'TOKYO'; out.weight = 1; out.ok = true; out.reject = false; out.demote = false; out.reason = '';
+      return out;
+    }
+    if (stratKey === 'gs10' && h >= 18.25 && h <= 18.5){
+      out.session = 'COMEX_PIN'; out.weight = 1; out.ok = true; out.reject = false; out.demote = false; out.reason = '';
+      return out;
+    }
+
     if (out.session !== 'ASIAN') return out;
 
     var asianStrat = stratKey === 'asian';
@@ -10219,7 +10256,7 @@ function hgGoldInstFilter(cand, ctx){
     var scalp = ctx.scalp !== false;
     var newsG = hgGoldNewsGate(ctx.news, ctx.nowMs);
     cand.newsGate = newsG;
-    if (newsG.lock){
+    if (newsG.lock && key !== 'gs14'){
       cand.dropped = true;
       cand.reason = newsG.reason;
       return cand;
@@ -18025,6 +18062,7 @@ W.hgGoldBarRvol = hgGoldBarRvol;
 W.hgGoldRealYieldBias = hgGoldRealYieldBias;
 W.hgGoldDollarBias = hgGoldDollarBias;
 W.hgGoldNewsIsTier1 = hgGoldNewsIsTier1;
+W.hgGoldTier1OnBar = hgGoldTier1OnBar;
 W.hgGoldNewsGate = hgGoldNewsGate;
 W.hgGoldNewsEvents = hgGoldNewsEvents;   /* test seam: proves the reader copies */
 W.hgGoldMergeFedFomc = hgGoldMergeFedFomc;
