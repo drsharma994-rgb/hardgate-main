@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1271',
-  pack: 'GOLD CORE STRATEGIES GUARDED - the twelve core gold strategies hg-v1270 shipped (GS/OG/PG/GG x 3) had no guard and the new module was missing from the service-worker precache, leaving check-production red on main. tests/test-gold-core-strategies.mjs pins the contract (four desks, twelve ids, 2.5R targets, correct stop sides, thin/empty/junk tapes form nothing, forDesk routing) and gold-suite-unified.js is now precached. Also carries the Each gold desk now runs its own three strategies. Gold Scalp: London Judas, NY opening half-hour, and a body-gap snipe. OmniGold: silver divergence, flight-to-safety, and a balanced price range. Pine Gold: session VWAP bands, a fresh gap midpoint, and equal highs or lows. Ganesh Gold: the seven-step cycle, a time-price square, and a three-drive. A missing series stays unread. No pattern means no card. The card does not send an order.',
-  built: '2026-10-09T14:05:00Z'
+  version: 'hg-v1272',
+  pack: 'The twelve core gold strategies now need the confirmation that was missing. A Judas or NY sweep must clear the level by at least $1 and close back inside. A body gap must still be open at the close. Triple SMT needs gold, silver, and the dollar. Flight-to-safety needs a real gold body and a dollar that is actually up. A balanced range must be a first close out of a shelf at least $1 wide. VWAP bands need four session bars and a $1 band. Equal highs must be separated. A time-price square only fires when the bar turns. Every target stays 2.5R. A missing series stays unread. The card does not send an order.',
+  built: '2026-10-09T14:35:00Z'
 };
 
 function hgBuildLabel(b){

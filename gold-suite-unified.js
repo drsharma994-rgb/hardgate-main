@@ -94,11 +94,11 @@
       }
       if (n >= 3 && hi - lo >= 3){
         var span = last.h - last.l;
-        if (span > 0 && last.l < lo && last.c >= lo && last.c > last.o && (last.c - last.l) / span >= 0.55){
-          var L = hit('GS-1', 'London Judas Asian Sweep', 'long', last.c, Math.min(last.l, prev.l) - Math.max(a * 0.4, 2.8), 'Asia low was swept and the bar closed back inside with a rejection wick.');
+        if (span > 0 && last.l <= lo - 1 && last.c >= lo + 0.5 && last.c > last.o && (last.c - last.l) / span >= 0.55){
+          var L = hit('GS-1', 'London Judas Asian Sweep', 'long', last.c, Math.min(last.l, prev.l) - Math.max(a * 0.4, 2.8), 'Asia low was swept by at least $1 and the bar closed back inside with a rejection wick.');
           if (L) out.push(L);
-        } else if (last.h > hi && last.c <= hi && last.c < last.o && (last.h - last.c) / span >= 0.55){
-          var S = hit('GS-1', 'London Judas Asian Sweep', 'short', last.c, Math.max(last.h, prev.h) + Math.max(a * 0.4, 2.8), 'Asia high was swept and the bar closed back inside with a rejection wick.');
+        } else if (span > 0 && last.h >= hi + 1 && last.c <= hi - 0.5 && last.c < last.o && (last.h - last.c) / span >= 0.55){
+          var S = hit('GS-1', 'London Judas Asian Sweep', 'short', last.c, Math.max(last.h, prev.h) + Math.max(a * 0.4, 2.8), 'Asia high was swept by at least $1 and the bar closed back inside with a rejection wick.');
           if (S) out.push(S);
         }
       }
@@ -113,12 +113,12 @@
         if (day[i].l < ibL) ibL = day[i].l;
         ibN++;
       }
-      if (ibN >= 1 && ibH - ibL >= 2){
-        if (last.l < ibL && last.c >= ibL && last.c > last.o){
-          var ibLhit = hit('GS-2', 'NY Cash Initial Balance', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The NY opening half-hour low was swept and the bar closed back inside.');
+      if (ibN >= 1 && ibH - ibL >= 3){
+        if (last.l <= ibL - 1 && last.c >= ibL && last.c > last.o){
+          var ibLhit = hit('GS-2', 'NY Cash Initial Balance', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The NY opening half-hour low was swept by at least $1 and the bar closed back inside.');
           if (ibLhit) out.push(ibLhit);
-        } else if (last.h > ibH && last.c <= ibH && last.c < last.o){
-          var ibShit = hit('GS-2', 'NY Cash Initial Balance', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The NY opening half-hour high was swept and the bar closed back inside.');
+        } else if (last.h >= ibH + 1 && last.c <= ibH && last.c < last.o){
+          var ibShit = hit('GS-2', 'NY Cash Initial Balance', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The NY opening half-hour high was swept by at least $1 and the bar closed back inside.');
           if (ibShit) out.push(ibShit);
         }
       }
@@ -126,11 +126,11 @@
     if ((hour >= 7 && hour < 10) || (hour >= 12.5 && hour < 16)){
       var bodyPrevTop = Math.max(prev.o, prev.c), bodyPrevBot = Math.min(prev.o, prev.c);
       var bodyTop = Math.max(last.o, last.c), bodyBot = Math.min(last.o, last.c);
-      if (bodyBot - bodyPrevTop >= 0.8 && last.c > last.o){
-        var viL = hit('GS-3', 'Volume Imbalance Sniping', 'long', last.c, bodyPrevTop - Math.max(a * 0.3, 2), 'A bullish body gap of at least $0.80 closed in the direction of the gap.');
+      if (last.l > bodyPrevTop && last.l - bodyPrevTop >= 0.8 && last.c > last.o){
+        var viL = hit('GS-3', 'Volume Imbalance Sniping', 'long', last.c, bodyPrevTop - Math.max(a * 0.3, 2), 'A bullish body gap of at least $0.80 is still open at the close.');
         if (viL) out.push(viL);
-      } else if (bodyPrevBot - bodyTop >= 0.8 && last.c < last.o){
-        var viS = hit('GS-3', 'Volume Imbalance Sniping', 'short', last.c, bodyPrevBot + Math.max(a * 0.3, 2), 'A bearish body gap of at least $0.80 closed in the direction of the gap.');
+      } else if (bodyPrevBot - last.h >= 0.8 && last.c < last.o){
+        var viS = hit('GS-3', 'Volume Imbalance Sniping', 'short', last.c, bodyPrevBot + Math.max(a * 0.3, 2), 'A bearish body gap of at least $0.80 is still open at the close.');
         if (viS) out.push(viS);
       }
     }
@@ -144,20 +144,21 @@
     var last = rows[rows.length - 1], back = rows[rows.length - 3];
     var a = atr(rows, 14);
     if (!(a > 0) || !back) return out;
-    if (silver.length >= 5){
+    if (silver.length >= 5 && dxy.length >= 5){
       var s0 = silver[silver.length - 1], s1 = silver[silver.length - 3];
-      if (s0 && s1){
-        if (last.l < back.l && s0.l >= s1.l){
-          var smtL = hit('OG-1', 'Triple SMT Divergence', 'long', last.c, Math.min(last.l, back.l) - Math.max(a * 0.45, 3.2), 'Gold made a lower low and silver refused it.');
+      var d0 = dxy[dxy.length - 1], d1 = dxy[dxy.length - 3];
+      if (s0 && s1 && d0 && d1){
+        if (last.l < back.l && s0.l >= s1.l && !(d0.h > d1.h)){
+          var smtL = hit('OG-1', 'Triple SMT Divergence', 'long', last.c, Math.min(last.l, back.l) - Math.max(a * 0.45, 3.2), 'Gold made a lower low. Silver and the dollar both refused it.');
           if (smtL) out.push(smtL);
-        } else if (last.h > back.h && s0.h <= s1.h){
-          var smtS = hit('OG-1', 'Triple SMT Divergence', 'short', last.c, Math.max(last.h, back.h) + Math.max(a * 0.45, 3.2), 'Gold made a higher high and silver refused it.');
+        } else if (last.h > back.h && s0.h <= s1.h && !(d0.l < d1.l)){
+          var smtS = hit('OG-1', 'Triple SMT Divergence', 'short', last.c, Math.max(last.h, back.h) + Math.max(a * 0.45, 3.2), 'Gold made a higher high. Silver and the dollar both refused it.');
           if (smtS) out.push(smtS);
         }
       }
     }
     var r = pearson(rows, dxy, 30);
-    if (r != null && r > 0.15 && last.c > last.o && dxy.length >= 2 && dxy[dxy.length - 1].c > dxy[dxy.length - 2].c){
+    if (r != null && r > 0.15 && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4 && dxy.length >= 5 && dxy[dxy.length - 1].c > dxy[dxy.length - 5].c){
       var fts = hit('OG-2', 'Flight-to-Safety Trend', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold and the dollar rose together. The 30-bar correlation is above +0.15.');
       if (fts) out.push(fts);
     }
@@ -175,11 +176,12 @@
     }
     if (bull && bear){
       var zLo = Math.max(bull.lo, bear.lo), zHi = Math.min(bull.hi, bear.hi);
-      if (zHi > zLo && last.l <= zHi && last.h >= zLo){
-        if (last.c > zHi && last.c > last.o){
+      if (zHi - zLo >= 1 && last.l <= zHi && last.h >= zLo){
+        var prev = rows[rows.length - 2];
+        if (last.c > zHi && last.c > last.o && prev.c <= zHi){
           var bprL = hit('OG-3', 'Balanced Price Range', 'long', last.c, zLo - Math.max(a * 0.2, 1.5), 'Price tagged the overlap of a bull gap and a bear gap and closed back above it.');
           if (bprL) out.push(bprL);
-        } else if (last.c < zLo && last.c < last.o){
+        } else if (last.c < zLo && last.c < last.o && prev.c >= zLo){
           var bprS = hit('OG-3', 'Balanced Price Range', 'short', last.c, zHi + Math.max(a * 0.2, 1.5), 'Price tagged the overlap of a bull gap and a bear gap and closed back under it.');
           if (bprS) out.push(bprS);
         }
@@ -213,20 +215,20 @@
     if (!(a > 0)) return out;
     var bands = sessionBands(rows);
     var band = bands.length ? bands[bands.length - 1] : null;
-    if (band && band.dev > 0){
+    if (band && band.dev >= 1 && bands.length >= 4){
       if (last.l <= band.dn2 && last.c > band.dn2 && last.c > last.o){
         var risk = last.c - (last.l - Math.max(a * 0.35, 2.5));
         var reward = band.mean - last.c;
         if (risk > 0 && reward >= risk * 2){
-          var pg1 = hit('PG-1', 'Session AVWAP 2 sigma', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Price pierced the lower 2 sigma band and closed back above it. The mean is the target.');
-          if (pg1){ pg1.target = +band.mean.toFixed(2); out.push(pg1); }
+          var pg1 = hit('PG-1', 'Session AVWAP 2 sigma', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Price pierced the lower 2 sigma band and closed back above it.');
+          if (pg1) out.push(pg1);
         }
       } else if (last.h >= band.up2 && last.c < band.up2 && last.c < last.o){
         var riskS = (last.h + Math.max(a * 0.35, 2.5)) - last.c;
         var rewardS = last.c - band.mean;
         if (riskS > 0 && rewardS >= riskS * 2){
-          var pg1s = hit('PG-1', 'Session AVWAP 2 sigma', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Price pierced the upper 2 sigma band and closed back under it. The mean is the target.');
-          if (pg1s){ pg1s.target = +band.mean.toFixed(2); out.push(pg1s); }
+          var pg1s = hit('PG-1', 'Session AVWAP 2 sigma', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Price pierced the upper 2 sigma band and closed back under it.');
+          if (pg1s) out.push(pg1s);
         }
       }
     }
@@ -252,25 +254,25 @@
     }
     var highs = [], lows = [], k;
     for (k = 2; k < rows.length - 1; k++){
-      if (rows[k].h >= rows[k - 1].h && rows[k].h >= rows[k + 1].h) highs.push(rows[k].h);
-      if (rows[k].l <= rows[k - 1].l && rows[k].l <= rows[k + 1].l) lows.push(rows[k].l);
+      if (rows[k].h >= rows[k - 1].h && rows[k].h >= rows[k + 1].h) highs.push({ p: rows[k].h, i: k });
+      if (rows[k].l <= rows[k - 1].l && rows[k].l <= rows[k + 1].l) lows.push({ p: rows[k].l, i: k });
     }
     var eqH = NaN, eqL = NaN, p, q;
     for (p = 0; p < highs.length; p++){
       for (q = p + 1; q < highs.length; q++){
-        if (Math.abs(highs[p] - highs[q]) <= 1.5) eqH = Math.max(highs[p], highs[q]);
+        if (Math.abs(highs[q].i - highs[p].i) >= 4 && Math.abs(highs[p].p - highs[q].p) <= 1.5) eqH = Math.max(highs[p].p, highs[q].p);
       }
     }
     for (p = 0; p < lows.length; p++){
       for (q = p + 1; q < lows.length; q++){
-        if (Math.abs(lows[p] - lows[q]) <= 1.5) eqL = Math.min(lows[p], lows[q]);
+        if (Math.abs(lows[q].i - lows[p].i) >= 4 && Math.abs(lows[p].p - lows[q].p) <= 1.5) eqL = Math.min(lows[p].p, lows[q].p);
       }
     }
-    if (isFinite(eqH) && last.h > eqH && last.c > eqH && last.c > last.o){
+    if (isFinite(eqH) && last.h > eqH && last.c >= eqH + 0.5 && last.c > last.o){
       var voidL = hit('PG-3', 'Resting Liquidity Void', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Equal highs were run and the bar closed beyond them.');
       if (voidL) out.push(voidL);
     }
-    if (isFinite(eqL) && last.l < eqL && last.c < eqL && last.c < last.o){
+    if (isFinite(eqL) && last.l < eqL && last.c <= eqL - 0.5 && last.c < last.o){
       var voidS = hit('PG-3', 'Resting Liquidity Void', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Equal lows were run and the bar closed beyond them.');
       if (voidS) out.push(voidS);
     }
@@ -348,14 +350,20 @@
       var gg1 = hit('GG-1', 'Sri Chakra 7-Step Cycle', dir, last.c, dir === 'long' ? last.c - risk : last.c + risk, 'All seven steps passed on this bar. Passed ' + passed + ' of 7.');
       if (gg1) out.push(gg1);
     }
-    if (squared && anchor){
-      var turn = (extreme > last.c && last.c < last.o) ? 'short' : ((extreme === last.h || last.c > rows[rows.length - 16].c) && last.c > last.o && last.c < extreme ? 'long' : null);
-      if (last.c < last.o && dollars > 0) turn = 'short';
-      else if (last.c > last.o && last.c < extreme) turn = 'long';
-      else turn = null;
-      if (turn){
-        var gg2 = hit('GG-2', 'Time-Price Square', turn, last.c, turn === 'long' ? last.l - Math.max(a * 0.3, 2) : last.h + Math.max(a * 0.3, 2), 'Sixteen bars and the dollar distance are in balance, and this bar turned.');
-        if (gg2) out.push(gg2);
+    if (squared){
+      var hi16 = -Infinity, lo16 = Infinity, bi;
+      for (bi = rows.length - 16; bi < rows.length; bi++){
+        if (rows[bi].h > hi16) hi16 = rows[bi].h;
+        if (rows[bi].l < lo16) lo16 = rows[bi].l;
+      }
+      var mid16 = (hi16 + lo16) / 2;
+      var offHigh = hi16 - last.c >= last.c - lo16;
+      if (offHigh && last.c < last.o && last.c < mid16){
+        var gg2s = hit('GG-2', 'Time-Price Square', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Sixteen bars match the dollar distance, and this bar turned down from the high.');
+        if (gg2s) out.push(gg2s);
+      } else if (!offHigh && last.c > last.o && last.c > mid16){
+        var gg2l = hit('GG-2', 'Time-Price Square', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Sixteen bars match the dollar distance, and this bar turned up from the low.');
+        if (gg2l) out.push(gg2l);
       }
     }
     var drives = [], k;
