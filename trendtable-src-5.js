@@ -301,6 +301,15 @@
   var naked = rows1 ? tmNakedPoc(rows1, dir) : null;
   if (naked == null) hard.push('prior point of control unread');
   else if (!naked) hard.push('price lost yesterday point of control');
+  var reg = rows1 ? tmRegress(rows1, dir) : null;
+  if (reg == null) hard.push('regression unread');
+  else if (!reg) hard.push('a regression channel was pierced and closed back inside');
+  var cci = rows1 ? tmCciExit(rows1, dir) : null;
+  if (cci == null) hard.push('cci extreme unread');
+  else if (!cci) hard.push('CCI crossed back from the extreme');
+  var ext = rows1 ? tmExt(rows1, dir) : null;
+  if (ext == null) hard.push('extension unread');
+  else if (!ext) hard.push('the 1.272 extension was pierced and closed back through');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

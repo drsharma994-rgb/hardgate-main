@@ -3082,6 +3082,88 @@ function tmNakedPoc(rows, dir){
   if (dir === 'short' && prevC < poc && px > poc) return false;
   return true;
 }
+/* Linear regression channel of the prior 20 closes. A wick back inside it does not pass.
+   A flat channel does not refuse. */
+function tmRegress(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1);
+  var n = prior.length, sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, i, y;
+  for (i = 0; i < n; i++){
+    y = +prior[i].c;
+    if (!(y > 0)) return null;
+    sumX += i; sumY += y; sumXY += i * y; sumXX += i * i;
+  }
+  var den = n * sumXX - sumX * sumX;
+  if (!(den > 0)) return null;
+  var slope = (n * sumXY - sumX * sumY) / den;
+  var intercept = (sumY - slope * sumX) / n;
+  var acc = 0;
+  for (i = 0; i < n; i++){
+    var err = +prior[i].c - (intercept + slope * i);
+    acc += err * err;
+  }
+  var sd = Math.sqrt(acc / n);
+  if (!(sd > 0)) return true;
+  var mid = intercept + slope * n;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if (dir === 'long' && h > mid + 2 * sd && c <= mid + 2 * sd && c < o) return false;
+  if (dir === 'short' && l < mid - 2 * sd && c >= mid - 2 * sd && c > o) return false;
+  return true;
+}
+/* CCI(20) crossing back through 100. A reading that was already inside does not refuse. */
+function tmCciExit(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function cci(end){
+    var tps = [], i, sum = 0, tp;
+    for (i = end - len + 1; i <= end; i++){
+      if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return NaN;
+      tp = (+rows[i].h + +rows[i].l + +rows[i].c) / 3;
+      tps.push(tp); sum += tp;
+    }
+    var mean = sum / len, dev = 0;
+    for (i = 0; i < tps.length; i++) dev += Math.abs(tps[i] - mean);
+    dev = dev / len;
+    if (!(dev > 0)) return 0;
+    return (tps[tps.length - 1] - mean) / (0.015 * dev);
+  }
+  var prev = cci(rows.length - 2), now = cci(rows.length - 1);
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= 100 && now < 100) return false;
+  if (dir === 'short' && prev <= -100 && now > -100) return false;
+  return true;
+}
+/* The 1.272 extension of the last impulse. A wick back through it does not pass.
+   No impulse, or a swing under 0.4%, does not refuse. */
+function tmExt(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+  }
+  var sw = tmFractals(rows);
+  if (!sw || !sw.highs.length || !sw.lows.length) return true;
+  var hi = sw.highs[sw.highs.length - 1], lo = sw.lows[sw.lows.length - 1];
+  var last = rows[rows.length - 1], prev = +rows[rows.length - 2].c;
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (dir === 'long'){
+    if (!(lo < hi)) return true;
+    var low = +rows[lo].l, high = +rows[hi].h, span = high - low;
+    if (!(span > 0) || span / c < 0.004) return true;
+    var ext = high + 0.272 * span;
+    if (prev < ext && h > ext && c < ext && c < o) return false;
+    return true;
+  }
+  if (!(hi < lo)) return true;
+  var top = +rows[hi].h, bot = +rows[lo].l, drop = top - bot;
+  if (!(drop > 0) || drop / c < 0.004) return true;
+  var extS = bot - 0.272 * drop;
+  if (prev > extS && l < extS && c > extS && c > o) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

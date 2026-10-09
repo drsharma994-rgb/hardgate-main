@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1249',
-  pack: 'Trend Matrix also refuses a slow-stochastic cross down from above 80, a 4-hour open lost on this bar, and yesterday point of control lost on this bar. A cross that is not at the extreme, one bar in the block, or no prior day does not refuse. The card does not send an order.',
-  built: '2026-10-09T08:25:00Z'
+  version: 'hg-v1250',
+  pack: 'Trend Matrix also refuses a wick back inside the 20-bar regression channel, a CCI cross back through 100, and a wick back through the 1.272 extension of the last swing. A close inside the channel, a CCI already inside 100, or no swing does not refuse. The card does not send an order.',
+  built: '2026-10-09T08:40:00Z'
 };
 
 function hgBuildLabel(b){
