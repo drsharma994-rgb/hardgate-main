@@ -126,5 +126,74 @@ console.log('== a recent bar counts; a quiet bank does not mint ==');
     'a missing tape stays unread instead of a fake refusal');
 }
 
+console.log('== two scripts in one family are one vote ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.pineRangeFilter = function(){ return { dir: 'long', newLong: true }; };
+  const same = W.hgObtcApplyPineAccuracy(crown(), bars(280), []);
+  ok(same.tier === 'near' && same.row.clean === false, 'HalfTrend and Range Filter do not confirm each other');
+  ok(/trend family/i.test(same.row.pineNote || ''), 'the note names the single family (' + same.row.pineNote + ')');
+  W.pineSqueezeMomentum = function(){ return { dir: 'long', newLong: true }; };
+  const three = W.hgObtcApplyPineAccuracy(crown(), bars(280), []);
+  ok(three.tier === 'clean' && /PINE CONFIRM/i.test(three.row.pineNote || ''),
+    'a second family beside the trend pair keeps the ticket');
+}
+
+console.log('== a fresh indicator cross is a second read; a lean is not ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.ema = function(vals, p){
+    return vals.map(function(_, i){
+      if (p === 20) return i >= vals.length - 3 ? 2 : 0;
+      return 1;
+    });
+  };
+  W.macdHist = function(vals){ return vals.map(function(){ return 1; }); };
+  W.donchian = function(rows){
+    return { up: rows.map(function(){ return 200; }), lo: rows.map(function(){ return 50; }) };
+  };
+  const crossed = W.hgObtcApplyPineAccuracy(crown(), bars(280), []);
+  ok(crossed.tier === 'clean' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /EMA 20\/50/.test(crossed.row.pineNote || ''),
+    'one fresh pine plus a fresh EMA cross keeps the ticket (' + crossed.row.pineNote + ')');
+
+  W.macdHist = function(vals){
+    return vals.map(function(_, i){ return i >= vals.length - 2 ? -1 : 1; });
+  };
+  const against = W.hgObtcApplyPineAccuracy(crown(), bars(280), []);
+  ok(against.tier === 'near' && /INDICATOR AGAINST/i.test(against.row.pineNote || '') && /MACD/.test(against.row.pineNote || ''),
+    'a fresh MACD cross the other way refuses the ticket (' + against.row.pineNote + ')');
+
+  W.ema = function(vals, p){
+    return vals.map(function(_, i){
+      if (p === 20) return (i % 2) ? 2 : 0;
+      return 1;
+    });
+  };
+  W.macdHist = function(vals){ return vals.map(function(){ return 1; }); };
+  const chop = W.hgObtcApplyPineAccuracy(crown(), bars(280), []);
+  ok(chop.tier === 'near' && /only HalfTrend/i.test(chop.row.pineNote || ''),
+    'an EMA that flips every bar is not a vote (' + chop.row.pineNote + ')');
+}
+
+console.log('== a fresh 1h core the other way is a watch; a missing 1h tape is not ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.pineSqueezeMomentum = function(rows){
+    if (rows && rows.length === 180) return { dir: 'short', newShort: true };
+    return { dir: 'long', newLong: true };
+  };
+  const opposed = W.hgObtcApplyPineAccuracy(crown(), bars(280), [], bars(180));
+  ok(opposed.tier === 'near' && /1h PINE AGAINST/i.test(opposed.row.pineNote || ''),
+    'a fresh 1h squeeze the other way demotes a 4h confirm (' + opposed.row.pineNote + ')');
+  const quiet = W.hgObtcApplyPineAccuracy(crown(), bars(280), [], bars(10));
+  ok(quiet.tier === 'clean' && /PINE CONFIRM/i.test(quiet.row.pineNote || ''),
+    'a 1h tape too short to read does not invent a refusal');
+  const absent = W.hgObtcApplyPineAccuracy(crown(), bars(280), []);
+  ok(absent.tier === 'clean', 'no 1h argument leaves the 4h confirm standing');
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

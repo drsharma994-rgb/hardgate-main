@@ -37,15 +37,20 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              mints levels and never moves rank math.
   PINE ..................... READ ONLY snapshot. pineScan() does not mint a
                              signal the PINE tab did not already produce.
-                             The ten house pine cores are also run on this
-                             desk's own BTC 4h tape. A crown stays a ticket
-                             only when two of those cores fired fresh on the
-                             same side and none fired against it, or one
-                             fired fresh and a second house strategy already
-                             has levels the same way. A quiet or opposing
-                             book leaves a watch, not a ticket. A script
-                             that is not loaded stays unread and is not a
-                             vote.
+                             The ten house pine cores also run on this
+                             desk's own BTC 4h tape, split into independent
+                             families (trend, momentum, structure, flow,
+                             value). Two scripts in one family are one vote.
+                             A crown stays a ticket only when two families
+                             fired fresh the same way and none fired against
+                             it, or one family fired fresh and a second house
+                             strategy already has levels the same way, or one
+                             family fired fresh and a house indicator (EMA
+                             20/50, MACD histogram, Donchian 20) crossed fresh
+                             the same way. A fresh 1h core the other way
+                             leaves a watch. A standing bias is not a fresh
+                             signal. A script that did not fire is not a
+                             vote. A script that is not loaded stays unread.
   REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
                              accepted a taker series and was never fed one —
                              the candle-approximated stand-in answered for the
@@ -465,29 +470,30 @@ a global hard refresh.
     return pick;
   }
 
-  /* The ten cores the PINE tab already runs. Called on the BTC 4h tape this
-     desk fetched. includeContext is deliberately off: a standing bias is not
-     a fresh signal and must not vote. A missing function is unread. */
+  /* The ten cores the PINE tab already runs, each tagged with the idea it
+     actually measures. Two trend scripts are one vote. includeContext is
+     deliberately off: a standing bias is not a fresh signal and must not
+     vote. A missing function is unread. */
   var OBTC_PINE = [
-    { id: 'lorentzian-kernel', label: 'Lorentzian', fn: 'pineLorentzianKernel', minBars: 260,
+    { id: 'lorentzian-kernel', label: 'Lorentzian', family: 'trend', fn: 'pineLorentzianKernel', minBars: 260,
       opts: { kNeighbors: 8, lookback: 250, scoreLimit: 2, kernelLookback: 8, kernelBandwidth: 3 } },
-    { id: 'msb-ob', label: 'MSB / OB', fn: 'pineMsbOb', minBars: 80,
+    { id: 'msb-ob', label: 'MSB / OB', family: 'structure', fn: 'pineMsbOb', minBars: 80,
       opts: { leftBars: 5, rightBars: 5 } },
-    { id: 'squeeze-momentum', label: 'Squeeze Momentum', fn: 'pineSqueezeMomentum', minBars: 50,
+    { id: 'squeeze-momentum', label: 'Squeeze Momentum', family: 'momentum', fn: 'pineSqueezeMomentum', minBars: 50,
       opts: { length: 20, bbMult: 2, kcMult: 1.5 } },
-    { id: 'smart-money-flow', label: 'Smart Money Flow', fn: 'pineSmartMoneyFlow', minBars: 30,
+    { id: 'smart-money-flow', label: 'Smart Money Flow', family: 'flow', fn: 'pineSmartMoneyFlow', minBars: 30,
       opts: { length: 21, threshold: 0.10 } },
-    { id: 'half-trend', label: 'HalfTrend', fn: 'pineHalfTrend', minBars: 120,
+    { id: 'half-trend', label: 'HalfTrend', family: 'trend', fn: 'pineHalfTrend', minBars: 120,
       opts: { amplitude: 2, atrMult: 2.0, atrLen: 100 } },
-    { id: 'smc-core', label: 'SMC Core', fn: 'pineSmcCore', minBars: 30,
+    { id: 'smc-core', label: 'SMC Core', family: 'structure', fn: 'pineSmcCore', minBars: 30,
       opts: { pivotLength: 5, atrLen: 14, recentBars: 5 } },
-    { id: 'vumanchu-cipher', label: 'VuManChu Cipher', fn: 'pineVumanchuCipher', minBars: 40,
+    { id: 'vumanchu-cipher', label: 'VuManChu Cipher', family: 'momentum', fn: 'pineVumanchuCipher', minBars: 40,
       opts: { wtChannelLen: 9, wtAvgLen: 21, osLevel: -53, obLevel: 53, recentBars: 5 } },
-    { id: 'range-filter', label: 'Range Filter', fn: 'pineRangeFilter', minBars: 210,
+    { id: 'range-filter', label: 'Range Filter', family: 'trend', fn: 'pineRangeFilter', minBars: 210,
       opts: { period: 100, mult: 3.0 } },
-    { id: 'nw-envelope', label: 'NW Envelope', fn: 'pineNwEnvelope', minBars: 60,
+    { id: 'nw-envelope', label: 'NW Envelope', family: 'value', fn: 'pineNwEnvelope', minBars: 60,
       opts: { bandwidth: 8.0, mult: 2.5, lookback: 50, atrLen: 100 } },
-    { id: 'weekly-avwap', label: 'Weekly AVWAP', fn: 'pineWeeklyAvwap', minBars: 20,
+    { id: 'weekly-avwap', label: 'Weekly AVWAP', family: 'value', fn: 'pineWeeklyAvwap', minBars: 20,
       opts: { bandMult: 2.0 } }
   ];
 
@@ -512,9 +518,143 @@ a global hard refresh.
       if (!hgObtcPineFresh(res)) continue;
       dir = String(res.dir || '').toLowerCase();
       if (dir !== 'long' && dir !== 'short') continue;
-      out.fresh.push({ id: spec.id, label: spec.label, dir: dir });
+      out.fresh.push({ id: spec.id, label: spec.label, dir: dir, family: spec.family || 'pine' });
     }
     return out;
+  }
+
+  /* Last 6 signs of a series. A hole in that window is unread, not a zero. */
+  function hgObtcWindowStates(series){
+    var n, states, i, s;
+    if (!series || series.length < 6) return null;
+    n = series.length;
+    states = [];
+    for (i = n - 6; i < n; i++){
+      s = +series[i];
+      if (!isFinite(s)) return null;
+      states.push(s > 0 ? 1 : (s < 0 ? -1 : 0));
+    }
+    return states;
+  }
+
+  /* Exactly one side-change, still on that side. A standing lean and a chop
+     that flipped twice are not votes. */
+  function hgObtcSoleFlip(states){
+    var last, flips, changed, i, a, b;
+    if (!states || states.length < 2) return null;
+    last = states[states.length - 1];
+    if (last !== 1 && last !== -1) return null;
+    flips = 0;
+    changed = false;
+    for (i = 1; i < states.length; i++){
+      a = states[i - 1];
+      b = states[i];
+      if (a === 0 || b === 0) continue;
+      if (a !== b) flips++;
+    }
+    for (i = 0; i < states.length - 1; i++){
+      if (states[i] !== 0 && states[i] !== last) changed = true;
+    }
+    if (!changed || flips !== 1) return null;
+    return last === 1 ? 'long' : 'short';
+  }
+
+  /* Exactly one break out of the channel, still outside, never the other side.
+     Sitting outside already is a bias, not a fresh cross. */
+  function hgObtcSoleBreak(states){
+    var last, outs, opp, i;
+    if (!states || states.length < 2) return null;
+    last = states[states.length - 1];
+    if (last !== 1 && last !== -1) return null;
+    outs = 0;
+    opp = 0;
+    for (i = 0; i < states.length; i++){
+      if (states[i] !== 0 && states[i] !== last) opp++;
+    }
+    for (i = 1; i < states.length; i++){
+      if (states[i] === last && states[i - 1] !== last) outs++;
+    }
+    if (outs === 1 && opp === 0) return last === 1 ? 'long' : 'short';
+    return null;
+  }
+
+  function hgObtcCloses(rows){
+    var out = [], i, c;
+    if (!rows) return null;
+    for (i = 0; i < rows.length; i++){
+      c = rows[i] && +rows[i].c;
+      if (!isFinite(c)) return null;
+      out.push(c);
+    }
+    return out;
+  }
+
+  /* House indicators. A cross in the last five bars votes. A level that has
+     been leaning for longer does not. A missing function stays unread. */
+  function hgObtcIndBook(rows){
+    var out = { loaded: 0, ran: 0, fresh: [] };
+    var closes, fast, slow, diff, i, hist, dc, states, dir;
+    if (!rows || rows.length < 20) return out;
+    closes = hgObtcCloses(rows);
+    if (!closes) return out;
+    if (typeof W.ema === 'function'){
+      out.loaded++;
+      if (closes.length >= 55){
+        out.ran++;
+        try{
+          fast = W.ema(closes, 20);
+          slow = W.ema(closes, 50);
+          diff = [];
+          for (i = 0; i < closes.length; i++) diff.push((+fast[i]) - (+slow[i]));
+          dir = hgObtcSoleFlip(hgObtcWindowStates(diff));
+          if (dir) out.fresh.push({ id: 'ema-20-50', label: 'EMA 20/50', dir: dir, family: 'indicator' });
+        }catch(eEm){}
+      }
+    }
+    if (typeof W.macdHist === 'function'){
+      out.loaded++;
+      if (closes.length >= 40){
+        out.ran++;
+        try{
+          hist = W.macdHist(closes);
+          dir = hgObtcSoleFlip(hgObtcWindowStates(hist));
+          if (dir) out.fresh.push({ id: 'macd-hist', label: 'MACD histogram', dir: dir, family: 'indicator' });
+        }catch(eMc){}
+      }
+    }
+    if (typeof W.donchian === 'function'){
+      out.loaded++;
+      if (rows.length >= 30){
+        out.ran++;
+        try{
+          dc = W.donchian(rows, 20);
+          states = null;
+          if (dc && dc.up && dc.lo && dc.up.length >= 6){
+            states = [];
+            for (i = rows.length - 6; i < rows.length; i++){
+              if (!isFinite(+dc.up[i]) || !isFinite(+dc.lo[i]) || !isFinite(+rows[i].c)){ states = null; break; }
+              if (+rows[i].c > +dc.up[i]) states.push(1);
+              else if (+rows[i].c < +dc.lo[i]) states.push(-1);
+              else states.push(0);
+            }
+          }
+          dir = hgObtcSoleBreak(states);
+          if (dir) out.fresh.push({ id: 'donchian-20', label: 'Donchian 20', dir: dir, family: 'indicator' });
+        }catch(eDc){}
+      }
+    }
+    return out;
+  }
+
+  function hgObtcFamilies(list){
+    var names = [], seen = {}, i, f;
+    for (i = 0; i < (list || []).length; i++){
+      f = String((list[i] && list[i].family) || '');
+      if (!f || seen[f]) continue;
+      seen[f] = 1;
+      names.push(f);
+    }
+    return names;
   }
 
   function hgObtcCoreAgree(cands, row){
@@ -544,9 +684,11 @@ a global hard refresh.
     return pick;
   }
 
-  /* A sendable crown needs fresh pine agreement. Silence and opposition are
-     not tickets. An unloaded bank is unread, not a fabricated disagreement. */
-  function hgObtcApplyPineAccuracy(pick, rows, cands){
+  /* A sendable crown needs two independent fresh reads. Two scripts that
+     measure the same idea are one read. Silence and opposition are not
+     tickets. An unloaded bank, a missing tape, and an indicator that did
+     not cross stay unread. */
+  function hgObtcApplyPineAccuracy(pick, rows, cands, rows1h){
     if (!pick || !pick.row) return pick;
     if (!rows || rows.length < 20){
       pick.row.pineNote = 'pine bank unread — no 4h tape, so the scripts were not run';
@@ -559,33 +701,74 @@ a global hard refresh.
       return pick;
     }
     var dir = String(pick.row.dir || '').toLowerCase();
-    var agree = [], oppose = [], i, f;
+    var agree = [], agreeItems = [], oppose = [], i, f;
     for (i = 0; i < book.fresh.length; i++){
       f = book.fresh[i];
-      if (f.dir === dir) agree.push(f.label);
+      if (f.dir === dir){ agree.push(f.label); agreeItems.push(f); }
       else oppose.push(f.label);
     }
+    var ind = hgObtcIndBook(rows);
+    var indAgree = [], indOppose = [];
+    for (i = 0; i < ind.fresh.length; i++){
+      f = ind.fresh[i];
+      if (f.dir === dir) indAgree.push(f.label);
+      else indOppose.push(f.label);
+    }
+    var h1Oppose = [], h1Agree = [];
+    if (rows1h && rows1h.length >= 20){
+      var book1 = hgObtcPineBook(rows1h);
+      for (i = 0; i < book1.fresh.length; i++){
+        f = book1.fresh[i];
+        if (f.dir === dir) h1Agree.push(f.label);
+        else h1Oppose.push(f.label);
+      }
+    }
     var cores = hgObtcCoreAgree(cands, pick.row);
+    var fams = hgObtcFamilies(agreeItems);
     pick.row.pineAgree = agree;
     pick.row.pineOppose = oppose;
+    pick.row.pineFamilies = fams;
     pick.row.coreAgree = cores;
+    pick.row.indAgree = indAgree;
+    pick.row.indOppose = indOppose;
     if (oppose.length){
       return hgObtcDemoteWatch(pick, 'PINE AGAINST — ' + oppose.join(', ')
         + ' fired the other way. Watch only, not a ticket.');
     }
-    if (agree.length >= 2){
+    if (indOppose.length){
+      return hgObtcDemoteWatch(pick, 'INDICATOR AGAINST — ' + indOppose.join(', ')
+        + ' crossed the other way. Watch only, not a ticket.');
+    }
+    if (h1Oppose.length){
+      return hgObtcDemoteWatch(pick, '1h PINE AGAINST — ' + h1Oppose.join(', ')
+        + ' fired the other way on the 1h tape. Watch only, not a ticket.');
+    }
+    var extra = (indAgree.length ? (' · ' + indAgree.join(', ') + ' crossed the same way') : '')
+      + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '');
+    if (fams.length >= 2){
       pick.row.pineNote = 'PINE CONFIRM — ' + agree.join(', ')
-        + (cores.length ? (' · also ' + cores.join(', ')) : '');
+        + (cores.length ? (' · also ' + cores.join(', ')) : '')
+        + extra;
       return pick;
     }
-    if (agree.length === 1 && cores.length >= 1){
-      pick.row.pineNote = 'PINE + CORE — ' + agree[0] + ' fresh, and '
-        + cores.join(', ') + ' already has levels the same way';
+    if (fams.length === 1 && cores.length >= 1){
+      pick.row.pineNote = 'PINE + CORE — ' + agree.join(', ') + ' fresh, and '
+        + cores.join(', ') + ' already has levels the same way' + extra;
       return pick;
     }
-    if (agree.length === 1){
+    if (fams.length === 1 && indAgree.length >= 1){
+      pick.row.pineNote = 'PINE + INDICATOR — ' + agree.join(', ') + ' fresh, and '
+        + indAgree.join(', ') + ' crossed the same way'
+        + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '');
+      return pick;
+    }
+    if (fams.length === 1 && agree.length === 1){
       return hgObtcDemoteWatch(pick, 'only ' + agree[0]
         + ' fired fresh, and no second house strategy has levels this way. Watch only.');
+    }
+    if (fams.length === 1){
+      return hgObtcDemoteWatch(pick, 'only the ' + fams[0] + ' family fired fresh ('
+        + agree.join(', ') + '), and no second house strategy or fresh indicator cross is this way. Watch only.');
     }
     return hgObtcDemoteWatch(pick, 'no fresh pine script on this 4h tape ('
       + book.ran + ' of ' + book.loaded + ' cores ran). Watch only, not a ticket.');
@@ -2033,7 +2216,7 @@ a global hard refresh.
             && c.entry === pick.row.entry && c.stop === pick.row.stop;
         })[0];
         winnerRows = match && match._rows;
-        try{ hgObtcApplyPineAccuracy(pick, winnerRows, all); }catch(ePine){}
+        try{ hgObtcApplyPineAccuracy(pick, winnerRows, all, match && match._rows1); }catch(ePine){}
         /* hg-v1051: ENTRY-EDGE REFINEMENT — the pick's entry is snapped
            to the structure edge the house exact-entry seam prices (edge
            signal / swing enrichment on the winner's own tape), then
@@ -2730,6 +2913,7 @@ a global hard refresh.
   W.hgObtcPrincipalBannerHtml = hgObtcPrincipalBannerHtml;
   W.hgObtcPick = hgObtcPick;
   W.hgObtcPineBook = hgObtcPineBook;
+  W.hgObtcIndBook = hgObtcIndBook;
   W.hgObtcApplyPineAccuracy = hgObtcApplyPineAccuracy;
   /* hg-v1057: the accuracy-pack seams, exported so the test drives the real
      computation rather than a re-implementation */

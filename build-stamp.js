@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1291',
-  pack: 'OmniBTC only. The ten house pine cores run on the Bitcoin 4h tape before a crown is a ticket. Two fresh cores must agree and none may oppose, or one fresh core plus a second house strategy that already has levels the same way. A standing bias is not a fresh signal. A script that did not fire is not a vote. A missing script stays unread. The card does not invent levels.',
-  built: '2026-10-09T19:51:30Z'
+  version: 'hg-v1292',
+  pack: 'OmniBTC only. A crown is a ticket only when two independent pine families fired fresh the same way and none fired against it, or one family fired fresh and either a second house strategy already has levels that way or a house indicator (EMA 20/50, MACD histogram, Donchian 20) crossed fresh that way. Two scripts in one family are one vote. A fresh 1h core the other way leaves a watch. A standing bias is not a fresh signal. A script that did not fire is not a vote. A missing script stays unread. The card does not invent levels.',
+  built: '2026-10-09T19:57:32Z'
 };
 
 function hgBuildLabel(b){
