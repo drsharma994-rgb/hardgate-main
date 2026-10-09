@@ -28,7 +28,7 @@ function _last(arr){
    is equal to T1 or on the wrong side of entry. */
 function hgOrderRunnerTargets(dir, entry, t1, t2){
   dir = String(dir || '').toLowerCase();
-  var a = +t1, b = +t2, e = +entry;
+  var a = hgFin(t1), b = hgFin(t2), e = hgFin(entry);
   var out = { t1: a, t2: b, swapped: false, dropped: false };
   if (!isFinite(a)) return out;
   if (!isFinite(b)){ out.t2 = NaN; return out; }
@@ -113,8 +113,8 @@ function hgFormationParams(){
       }catch(eSt){}
     }
   }catch(e){}
-  p.minRr = p.minRr != null ? Math.max(1.5, Math.min(3, +p.minRr)) : 2.0;
-  p.fqsFloor = p.fqsFloor != null ? Math.max(50, Math.min(80, +p.fqsFloor)) : 62;
+  p.minRr = p.minRr != null ? Math.max(1.5, Math.min(3, hgFin(p.minRr))) : 2.0;
+  p.fqsFloor = p.fqsFloor != null ? Math.max(50, Math.min(80, hgFin(p.fqsFloor))) : 62;
   return p;
 }
 
@@ -250,8 +250,11 @@ function hgAnchoredVWAP(rows, anchorIdx){
     for (var i = anchorIdx; i < rows.length; i++){
       var r = rows[i];
       if (!r) continue;
-      var tp = (+r.h + +r.l + +r.c) / 3;
-      var v = isFinite(+r.v) && +r.v > 0 ? +r.v : 1;
+      var hVal = hgFin(r.h), lVal = hgFin(r.l), cVal = hgFin(r.c);
+      if (!isFinite(hVal) || !isFinite(lVal) || !isFinite(cVal)) continue;
+      var tp = (hVal + lVal + cVal) / 3;
+      var vVal = hgFin(r.v);
+      var v = (isFinite(vVal) && vVal > 0) ? vVal : 1;
       if (!isFinite(tp)) continue;
       pv += tp * v; vol += v; sq += tp * tp * v; cnt++;
     }
@@ -418,7 +421,7 @@ function hgStructureTargets(dir, entry, stop, rows, atrVal, opts){
   opts = opts || {};
   try{
     dir = String(dir || '').toLowerCase();
-    entry = +entry; stop = +stop; atrVal = +atrVal;
+    entry = hgFin(entry); stop = hgFin(stop); atrVal = hgFin(atrVal);
     if (!(isFinite(entry) && isFinite(stop) && atrVal > 0)) return null;
     var risk = Math.abs(entry - stop);
     if (!(risk > 0)) return null;
