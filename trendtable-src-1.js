@@ -142,6 +142,20 @@ function tmRecordReads(r, dir){
   if (pgr) rd['postgate:veto'] = pgr['postgate:veto'];
   var legs = tmLegReads(r, dir), k;
   for (k in legs){ if (Object.prototype.hasOwnProperty.call(legs, k)) rd[k] = legs[k]; }
+  /* hg-v1237: the crypto Pine marks ride the reads seam as booleans */
+  var pm = r.pineMarks;
+  if (pm){
+    if (pm.lor) rd['pine:lorKnnWith'] = pm.lor === dir;
+    if (pm.ht) rd['pine:halftrendWith'] = pm.ht === dir;
+    if (pm.sqz) rd['pine:squeezeWith'] = pm.sqz === dir;
+    if (pm.smf) rd['pine:smfWith'] = pm.smf === dir;
+    if (pm.msb) rd['pine:msbWith'] = pm.msb === dir;
+    if (pm.cipher) rd['pine:cipherWith'] = pm.cipher === dir;
+    if (pm.rfilter) rd['pine:rangefilterWith'] = pm.rfilter === dir;
+    if (pm.nwenv) rd['pine:nwenvelopeWith'] = pm.nwenv === dir;
+    if (pm.wavwap) rd['pine:wavwapWith'] = pm.wavwap === dir;
+    if (pm.smc) rd['pine:smcWith'] = pm.smc === dir;
+  }
   return Object.keys(rd).length ? rd : undefined;
 }
 /* hg-v1159: the TICKET claim on a record is the board's own CLEAN tier — the

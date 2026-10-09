@@ -93,6 +93,11 @@ console.log('== wiring pins ==');
   ok(p9.indexOf('PINE ' + 'pineBits') >= 0 || p9.indexOf("tech.push('PINE '") >= 0, 'the crown renders the Pine line');
   const p10 = read('trendtable-src-10.js');
   ok(p10.indexOf('trendmxPineMarks(r.rows4h)') >= 0, 'the pass reads the marks off the 4h tape');
+  /* hg-v1237: the marks must REACH the ledger, not just the crown — tmRecordReads
+     forwards them as boolean reads so hgFwdReadSplit measures them */
+  const p1 = read('trendtable-src-1.js');
+  ok(p1.indexOf("rd['pine:smcWith'] = pm.smc === dir") >= 0, 'tmRecordReads forwards the pine marks onto the reads seam');
+  ok(p1.indexOf("rd['pine:lorKnnWith'] = pm.lor === dir") >= 0, 'all ten pine marks forward (lorKnn, halftrend, squeeze, smf, msb, cipher, rangefilter, nwenvelope, wavwap, smc)');
 }
 
 console.log('\ntest-trendmx-crypto-pine-v1187: ' + passed + ' passed, 0 failed');
