@@ -1221,6 +1221,114 @@ function tmVwapStretch(rows, dir){
   if (dir === 'long') return dist > 0 && dist <= 2;
   return dist < 0 && dist >= -2;
 }
+/* SSL channel (high/low SMA, length 10). The state only flips when close
+   crosses the high average or the low average. No flip yet is not a pass. */
+function tmSsl(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var hlv = 0, i, j, sh, sl, c;
+  for (i = len - 1; i < rows.length; i++){
+    sh = 0; sl = 0;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(rows[j].h) || !isFinite(rows[j].l) || !isFinite(rows[j].c)) return null;
+      sh += rows[j].h;
+      sl += rows[j].l;
+    }
+    sh /= len; sl /= len;
+    c = rows[i].c;
+    if (c > sh) hlv = 1;
+    else if (c < sl) hlv = -1;
+  }
+  if (hlv === 0) return false;
+  return dir === 'long' ? hlv === 1 : hlv === -1;
+}
+function tmRsiSeries(closes, len){
+  if (!closes || closes.length < len + 1) return null;
+  var gains = 0, losses = 0, i, ch, g, l, avgG, avgL;
+  for (i = 1; i <= len; i++){
+    ch = closes[i] - closes[i - 1];
+    if (!isFinite(ch)) return null;
+    if (ch >= 0) gains += ch; else losses -= ch;
+  }
+  avgG = gains / len; avgL = losses / len;
+  var out = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) out[i] = NaN;
+  out[len] = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
+  for (i = len + 1; i < closes.length; i++){
+    ch = closes[i] - closes[i - 1];
+    if (!isFinite(ch)) return null;
+    g = ch > 0 ? ch : 0;
+    l = ch < 0 ? -ch : 0;
+    avgG = (avgG * (len - 1) + g) / len;
+    avgL = (avgL * (len - 1) + l) / len;
+    out[i] = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
+  }
+  return out;
+}
+/* Stochastic RSI (14, 14, 3). The trade side of 50 agrees. Rolling off
+   the extreme (leaving 90 for a long, leaving 10 for a short) does not. */
+function tmStochRsi(rows, dir){
+  var rsiLen = 14, stochLen = 14, smooth = 3;
+  if (!rows || rows.length < rsiLen + stochLen + smooth + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i, j;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].c)) return null;
+    closes.push(rows[i].c);
+  }
+  var rsi = tmRsiSeries(closes, rsiLen);
+  if (!rsi) return null;
+  var raw = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) raw[i] = NaN;
+  for (i = rsiLen + stochLen - 1; i < closes.length; i++){
+    var hi = -Infinity, lo = Infinity;
+    for (j = i - stochLen + 1; j <= i; j++){
+      if (!isFinite(rsi[j])) return null;
+      if (rsi[j] > hi) hi = rsi[j];
+      if (rsi[j] < lo) lo = rsi[j];
+    }
+    raw[i] = hi === lo ? (rsi[i] > 70 ? 100 : (rsi[i] < 30 ? 0 : 50)) : ((rsi[i] - lo) / (hi - lo)) * 100;
+  }
+  function smaEnd(end){
+    if (end < smooth - 1) return NaN;
+    var s = 0, k;
+    for (k = end - smooth + 1; k <= end; k++){
+      if (!isFinite(raw[k])) return NaN;
+      s += raw[k];
+    }
+    return s / smooth;
+  }
+  var n = closes.length - 1;
+  var kNow = smaEnd(n), kPrev = smaEnd(n - 1);
+  if (!isFinite(kNow) || !isFinite(kPrev)) return null;
+  if (dir === 'long') return kNow > 50 && !(kPrev >= 90 && kNow < kPrev);
+  return kNow < 50 && !(kPrev <= 10 && kNow > kPrev);
+}
+/* Ehlers Fisher Transform, length 10. With the trade means the right side
+   of zero and still moving that way. */
+function tmFisher(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 3 || (dir !== 'long' && dir !== 'short')) return null;
+  var val = 0, fish = 0, prev = 0, i, j, hi, lo, x, next;
+  for (i = len - 1; i < rows.length; i++){
+    hi = -Infinity; lo = Infinity;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(rows[j].h) || !isFinite(rows[j].l)) return null;
+      if (rows[j].h > hi) hi = rows[j].h;
+      if (rows[j].l < lo) lo = rows[j].l;
+    }
+    if (!(hi > lo)) x = 0;
+    else x = 0.66 * ((((rows[i].h + rows[i].l) / 2) - lo) / (hi - lo) - 0.5) + 0.67 * val;
+    if (x > 0.999) x = 0.999;
+    if (x < -0.999) x = -0.999;
+    val = x;
+    next = 0.5 * Math.log((1 + x) / (1 - x)) + 0.5 * fish;
+    prev = fish;
+    fish = next;
+  }
+  if (!isFinite(fish) || !isFinite(prev)) return null;
+  if (dir === 'long') return fish > 0 && fish >= prev;
+  return fish < 0 && fish <= prev;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3562,6 +3670,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var stretch = rows1 ? tmVwapStretch(rows1, dir) : null;
   if (stretch == null) hard.push('vwap band unread');
   else if (!stretch) hard.push('price is stretched more than 2 ATR from VWAP');
+  var ssl = rows1 ? tmSsl(rows1, dir) : null;
+  if (ssl == null) hard.push('ssl unread');
+  else if (!ssl) hard.push('ssl channel is against the trade');
+  var stoch = rows1 ? tmStochRsi(rows1, dir) : null;
+  if (stoch == null) hard.push('stoch rsi unread');
+  else if (!stoch) hard.push('stoch rsi is not with the trade');
+  var fisher = rows1 ? tmFisher(rows1, dir) : null;
+  if (fisher == null) hard.push('fisher unread');
+  else if (!fisher) hard.push('fisher is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -3789,7 +3906,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'tenkan leads kijun, chikou agrees, and price is within 2 ATR of VWAP';
+  ticket.pine = 'SSL, Stochastic RSI and Fisher agree, tenkan leads kijun, and price is within 2 ATR of VWAP';
   return [];
 }
 
@@ -5841,7 +5958,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, and price within 2 ATR of the session VWAP. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6289,6 +6406,9 @@ W.tmDmi = tmDmi;
 W.tmBbSide = tmBbSide;
 W.tmIchiSignal = tmIchiSignal;
 W.tmVwapStretch = tmVwapStretch;
+W.tmSsl = tmSsl;
+W.tmStochRsi = tmStochRsi;
+W.tmFisher = tmFisher;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

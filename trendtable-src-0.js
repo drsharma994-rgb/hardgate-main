@@ -1221,6 +1221,114 @@ function tmVwapStretch(rows, dir){
   if (dir === 'long') return dist > 0 && dist <= 2;
   return dist < 0 && dist >= -2;
 }
+/* SSL channel (high/low SMA, length 10). The state only flips when close
+   crosses the high average or the low average. No flip yet is not a pass. */
+function tmSsl(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var hlv = 0, i, j, sh, sl, c;
+  for (i = len - 1; i < rows.length; i++){
+    sh = 0; sl = 0;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(rows[j].h) || !isFinite(rows[j].l) || !isFinite(rows[j].c)) return null;
+      sh += rows[j].h;
+      sl += rows[j].l;
+    }
+    sh /= len; sl /= len;
+    c = rows[i].c;
+    if (c > sh) hlv = 1;
+    else if (c < sl) hlv = -1;
+  }
+  if (hlv === 0) return false;
+  return dir === 'long' ? hlv === 1 : hlv === -1;
+}
+function tmRsiSeries(closes, len){
+  if (!closes || closes.length < len + 1) return null;
+  var gains = 0, losses = 0, i, ch, g, l, avgG, avgL;
+  for (i = 1; i <= len; i++){
+    ch = closes[i] - closes[i - 1];
+    if (!isFinite(ch)) return null;
+    if (ch >= 0) gains += ch; else losses -= ch;
+  }
+  avgG = gains / len; avgL = losses / len;
+  var out = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) out[i] = NaN;
+  out[len] = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
+  for (i = len + 1; i < closes.length; i++){
+    ch = closes[i] - closes[i - 1];
+    if (!isFinite(ch)) return null;
+    g = ch > 0 ? ch : 0;
+    l = ch < 0 ? -ch : 0;
+    avgG = (avgG * (len - 1) + g) / len;
+    avgL = (avgL * (len - 1) + l) / len;
+    out[i] = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
+  }
+  return out;
+}
+/* Stochastic RSI (14, 14, 3). The trade side of 50 agrees. Rolling off
+   the extreme (leaving 90 for a long, leaving 10 for a short) does not. */
+function tmStochRsi(rows, dir){
+  var rsiLen = 14, stochLen = 14, smooth = 3;
+  if (!rows || rows.length < rsiLen + stochLen + smooth + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i, j;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].c)) return null;
+    closes.push(rows[i].c);
+  }
+  var rsi = tmRsiSeries(closes, rsiLen);
+  if (!rsi) return null;
+  var raw = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) raw[i] = NaN;
+  for (i = rsiLen + stochLen - 1; i < closes.length; i++){
+    var hi = -Infinity, lo = Infinity;
+    for (j = i - stochLen + 1; j <= i; j++){
+      if (!isFinite(rsi[j])) return null;
+      if (rsi[j] > hi) hi = rsi[j];
+      if (rsi[j] < lo) lo = rsi[j];
+    }
+    raw[i] = hi === lo ? (rsi[i] > 70 ? 100 : (rsi[i] < 30 ? 0 : 50)) : ((rsi[i] - lo) / (hi - lo)) * 100;
+  }
+  function smaEnd(end){
+    if (end < smooth - 1) return NaN;
+    var s = 0, k;
+    for (k = end - smooth + 1; k <= end; k++){
+      if (!isFinite(raw[k])) return NaN;
+      s += raw[k];
+    }
+    return s / smooth;
+  }
+  var n = closes.length - 1;
+  var kNow = smaEnd(n), kPrev = smaEnd(n - 1);
+  if (!isFinite(kNow) || !isFinite(kPrev)) return null;
+  if (dir === 'long') return kNow > 50 && !(kPrev >= 90 && kNow < kPrev);
+  return kNow < 50 && !(kPrev <= 10 && kNow > kPrev);
+}
+/* Ehlers Fisher Transform, length 10. With the trade means the right side
+   of zero and still moving that way. */
+function tmFisher(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 3 || (dir !== 'long' && dir !== 'short')) return null;
+  var val = 0, fish = 0, prev = 0, i, j, hi, lo, x, next;
+  for (i = len - 1; i < rows.length; i++){
+    hi = -Infinity; lo = Infinity;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(rows[j].h) || !isFinite(rows[j].l)) return null;
+      if (rows[j].h > hi) hi = rows[j].h;
+      if (rows[j].l < lo) lo = rows[j].l;
+    }
+    if (!(hi > lo)) x = 0;
+    else x = 0.66 * ((((rows[i].h + rows[i].l) / 2) - lo) / (hi - lo) - 0.5) + 0.67 * val;
+    if (x > 0.999) x = 0.999;
+    if (x < -0.999) x = -0.999;
+    val = x;
+    next = 0.5 * Math.log((1 + x) / (1 - x)) + 0.5 * fish;
+    prev = fish;
+    fish = next;
+  }
+  if (!isFinite(fish) || !isFinite(prev)) return null;
+  if (dir === 'long') return fish > 0 && fish >= prev;
+  return fish < 0 && fish <= prev;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

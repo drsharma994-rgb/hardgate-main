@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1212',
-  pack: 'Gold Scalp and OmniGold refuse a breaker block that faces the trade, a volume imbalance in the way of a scalp, and silver SMT against the trade when silver is loaded. No breaker, no gap, or unread silver does not refuse. The earlier gold-tape refusals still apply. The card does not send an order.',
-  built: '2026-10-09T00:55:00Z'
+  version: 'hg-v1213',
+  pack: 'Trend Matrix does not arm unless the SSL channel, Stochastic RSI, and Fisher Transform agree with the trade. A short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
+  built: '2026-10-09T01:05:00Z'
 };
 
 function hgBuildLabel(b){

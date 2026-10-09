@@ -94,6 +94,15 @@
   var stretch = rows1 ? tmVwapStretch(rows1, dir) : null;
   if (stretch == null) hard.push('vwap band unread');
   else if (!stretch) hard.push('price is stretched more than 2 ATR from VWAP');
+  var ssl = rows1 ? tmSsl(rows1, dir) : null;
+  if (ssl == null) hard.push('ssl unread');
+  else if (!ssl) hard.push('ssl channel is against the trade');
+  var stoch = rows1 ? tmStochRsi(rows1, dir) : null;
+  if (stoch == null) hard.push('stoch rsi unread');
+  else if (!stoch) hard.push('stoch rsi is not with the trade');
+  var fisher = rows1 ? tmFisher(rows1, dir) : null;
+  if (fisher == null) hard.push('fisher unread');
+  else if (!fisher) hard.push('fisher is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -321,7 +330,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'tenkan leads kijun, chikou agrees, and price is within 2 ATR of VWAP';
+  ticket.pine = 'SSL, Stochastic RSI and Fisher agree, tenkan leads kijun, and price is within 2 ATR of VWAP';
   return [];
 }
 
