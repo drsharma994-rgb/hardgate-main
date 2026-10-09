@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1240',
-  pack: 'TREND MATRIX PINE MARKS MEASURED - tmRecordReads forwards the ten crypto Pine marks as boolean reads so hgFwdReadSplit measures each against its complement out of sample. Also carries the Trend Matrix also refuses a wick back inside the 20-bar extreme, a session VWAP lost on this bar, and a close that breaks the latest swing against the trade. A close through the extreme, a hold of VWAP, or no swing does not refuse. The card does not send an order.',
-  built: '2026-10-09T06:05:00Z'
+  version: 'hg-v1241',
+  pack: 'Trend Matrix also refuses a wick back inside yesterday high or low, a candle that engulfs the prior body, and an inside bar that breaks the mother bar and closes back inside. A close through, a small candle, or no inside bar does not refuse. The Pine marks still ride the ledger. The card does not send an order.',
+  built: '2026-10-09T06:25:00Z'
 };
 
 function hgBuildLabel(b){

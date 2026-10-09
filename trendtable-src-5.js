@@ -220,6 +220,15 @@
   var bos = rows1 ? tmBos(rows1, dir) : null;
   if (bos == null) hard.push('break of structure unread');
   else if (!bos) hard.push('structure broke against the trade');
+  var yday = rows1 ? tmPriorDay(rows1, dir) : null;
+  if (yday == null) hard.push('prior day unread');
+  else if (!yday) hard.push('yesterday extreme was pierced and closed back inside');
+  var engulf = rows1 ? tmEngulf(rows1, dir) : null;
+  if (engulf == null) hard.push('engulf unread');
+  else if (!engulf) hard.push('a candle engulfed the prior body against the trade');
+  var inside = rows1 ? tmInsideFail(rows1, dir) : null;
+  if (inside == null) hard.push('inside bar unread');
+  else if (!inside) hard.push('an inside bar broke and closed back inside');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

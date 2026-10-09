@@ -2310,6 +2310,77 @@ function tmBos(rows, dir){
   if (!sw.highs.length) return true;
   return !(c > rows[sw.highs[sw.highs.length - 1]].h);
 }
+/* Yesterday's high or low. A wick through it that closes back inside, on a
+   candle against the trade, does not pass. A tiny prior day does not refuse.
+   No prior day in the tape does not refuse. */
+function tmPriorDay(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return true;
+  var hi = -Infinity, lo = Infinity, n = 0;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 4 || !(hi > lo)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.004) return true;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return false;
+  if (dir === 'short' && l < lo && c >= lo && c > o) return false;
+  return true;
+}
+/* The last body covers the prior body and is at least 0.6 of the 14-bar ATR.
+   A smaller candle does not refuse. */
+function tmEngulf(rows, dir){
+  if (!rows || rows.length < 16 || (dir !== 'long' && dir !== 'short')) return null;
+  var atr = 0, i, tr, pc;
+  for (i = rows.length - 14; i < rows.length; i++){
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i - 1].c > 0)) return null;
+    pc = +rows[i - 1].c;
+    tr = Math.max(+rows[i].h - +rows[i].l, Math.abs(+rows[i].h - pc), Math.abs(+rows[i].l - pc));
+    atr += tr;
+  }
+  atr = atr / 14;
+  if (!(atr > 0)) return null;
+  var prev = rows[rows.length - 2], last = rows[rows.length - 1];
+  var o = +last.o, c = +last.c, po = +prev.o, pc2 = +prev.c;
+  if (!isFinite(o) || !(c > 0) || !isFinite(po) || !(pc2 > 0)) return null;
+  if (Math.abs(c - o) < 0.6 * atr) return true;
+  var top = Math.max(po, pc2), bot = Math.min(po, pc2);
+  if (dir === 'long' && c < o && o >= top && c <= bot) return false;
+  if (dir === 'short' && c > o && o <= bot && c >= top) return false;
+  return true;
+}
+/* Mother bar, then an inside bar, then a wick back inside the mother.
+   No inside bar does not refuse. */
+function tmInsideFail(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var m = rows[rows.length - 3], inn = rows[rows.length - 2], last = rows[rows.length - 1];
+  if (!isFinite(+m.h) || !isFinite(+m.l) || !isFinite(+inn.h) || !isFinite(+inn.l)) return null;
+  if (!isFinite(+last.h) || !isFinite(+last.l) || !isFinite(+last.o) || !(+last.c > 0)) return null;
+  if (!(+inn.h < +m.h && +inn.l > +m.l)) return true;
+  if (dir === 'long' && +last.h > +m.h && +last.c <= +m.h && +last.c < +last.o) return false;
+  if (dir === 'short' && +last.l < +m.l && +last.c >= +m.l && +last.c > +last.o) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
