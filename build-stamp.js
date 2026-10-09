@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1263',
-  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a wick back inside the 08:00-08:30 UTC London opening range, a Force Index cross under zero, and yesterday volume node lost on this bar. Before 08:30 UTC, no volume, or a node already lost does not refuse. The card does not send an order.',
-  built: '2026-10-09T11:55:00Z'
+  version: 'hg-v1264',
+  pack: 'OmniGold, Gold Scalp, Ganesh Gold, and Pine Gold also refuse a Chaikin Money Flow cross under zero, yesterday value area high lost on this bar, and a wick back inside the 13:30-14:00 UTC New York cash range. Staying on one side, no volume, or before 14:00 UTC does not refuse. The card does not send an order.',
+  built: '2026-10-09T12:10:00Z'
 };
 
 function hgBuildLabel(b){

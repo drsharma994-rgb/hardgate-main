@@ -2268,6 +2268,12 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (forceWhy) return forceWhy;
   var pocWhy2 = pineGoldNakedPocVeto(rows, dir);
   if (pocWhy2) return pocWhy2;
+  var cmfWhy = pineGoldCmfVeto(rows, dir);
+  if (cmfWhy) return cmfWhy;
+  var vahWhy = pineGoldVahVeto(rows, dir);
+  if (vahWhy) return vahWhy;
+  var nyOrb = pineGoldNyOrbVeto(rows, dir);
+  if (nyOrb) return nyOrb;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3811,6 +3817,124 @@ function pineGoldNakedPocVeto(rows, dir){
   if (dir === 'short' && prevC < poc && c > poc) return 'Price reclaimed yesterday volume node. A short does not pass.';
   return null;
 }
+/* CMF(20) crossing under zero. Staying on one side, or a tape with no volume, does not refuse. */
+function pineGoldCmfVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  var flow = [], vols = [], i, h, l, c, v, mfm;
+  for (i = 0; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l); c = pgrNum(rows[i].c); v = volOf(rows[i]);
+    if (!isFinite(h) || !isFinite(l) || !(c > 0) || !(v > 0)) return null;
+    mfm = h > l ? ((c - l) - (h - c)) / (h - l) : 0;
+    flow.push(mfm * v);
+    vols.push(v);
+  }
+  function at(end){
+    var f = 0, vv = 0, k;
+    for (k = end - len + 1; k <= end; k++){ f += flow[k]; vv += vols[k]; }
+    if (!(vv > 0)) return NaN;
+    return f / vv;
+  }
+  var now = at(flow.length - 1), before = at(flow.length - 2);
+  if (!isFinite(now) || !isFinite(before)) return null;
+  if (dir === 'long' && before >= 0 && now < 0) return 'Chaikin Money Flow crossed under zero. A long does not pass.';
+  if (dir === 'short' && before <= 0 && now > 0) return 'Chaikin Money Flow crossed over zero. A short does not pass.';
+  return null;
+}
+/* Yesterday value-area high, the top of the prices that held 70% of the volume.
+   Losing it on this close does not pass. No volume, or a prior day under $8, does not refuse. */
+function pineGoldVahVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  function dayOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return null;
+  var hi = -Infinity, lo = Infinity, bins = {}, n = 0, total = 0, px, v;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l)) || !(pgrNum(rows[i].c) > 0)) return null;
+    v = volOf(rows[i]);
+    if (!(v > 0)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    px = Math.round((pgrNum(rows[i].h) + pgrNum(rows[i].l) + pgrNum(rows[i].c)) / 3);
+    bins[px] = (bins[px] || 0) + v;
+    total += v;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || hi - lo < 8 || !(total > 0)) return null;
+  var prices = Object.keys(bins).map(function(k){ return +k; }).sort(function(a, b){ return a - b; });
+  var pocI = 0, best = -1;
+  for (i = 0; i < prices.length; i++) if (bins[prices[i]] > best){ best = bins[prices[i]]; pocI = i; }
+  var loI = pocI, hiI = pocI, got = bins[prices[pocI]];
+  while (got < total * 0.7 && (loI > 0 || hiI < prices.length - 1)){
+    var left = loI > 0 ? bins[prices[loI - 1]] : -1;
+    var right = hiI < prices.length - 1 ? bins[prices[hiI + 1]] : -1;
+    if (right >= left){ hiI++; got += bins[prices[hiI]]; }
+    else { loI--; got += bins[prices[loI]]; }
+  }
+  var vah = prices[hiI], val = prices[loI];
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(rows[rows.length - 1].c);
+  if (!(prevC > 0) || !(c > 0) || !(vah > 0)) return null;
+  if (dir === 'long' && prevC > vah && c < vah) return 'Price lost yesterday value area high. A long does not pass.';
+  if (dir === 'short' && prevC < val && c > val) return 'Price reclaimed yesterday value area low. A short does not pass.';
+  return null;
+}
+/* The 13:30-14:00 UTC New York cash open. After 14:00, a wick back inside it does not pass.
+   Before 14:00, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldNyOrbVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 14) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 13.5 || hv >= 14) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The New York cash range was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The New York cash range was pierced and closed back over.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -4413,6 +4537,9 @@ G.pineGoldTsiVeto = pineGoldTsiVeto;
 G.pineGoldOrbVeto = pineGoldOrbVeto;
 G.pineGoldForceVeto = pineGoldForceVeto;
 G.pineGoldNakedPocVeto = pineGoldNakedPocVeto;
+G.pineGoldCmfVeto = pineGoldCmfVeto;
+G.pineGoldVahVeto = pineGoldVahVeto;
+G.pineGoldNyOrbVeto = pineGoldNyOrbVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
