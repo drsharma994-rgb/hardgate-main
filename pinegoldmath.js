@@ -2012,6 +2012,69 @@ function pineGoldTapeVeto(rows, dir, opts){
   var hint = String((opts.macro && (opts.macro.realRateHint || opts.macro.hint)) || '').toUpperCase();
   if (hint === 'HEADWIND' && dir === 'long' && !swept) return 'Real-rate headwind against a long without a sweep';
   if (hint === 'TAILWIND' && dir === 'short' && !swept) return 'Real-rate tailwind against a short without a sweep';
+  if (mode === 'scalp'){
+    var vwapWhy = pineGoldVwapChase(rows, dir);
+    if (vwapWhy) return vwapWhy;
+    var dayWhy = pineGoldPriorDayVeto(rows, dir);
+    if (dayWhy) return dayWhy;
+  }
+  try{
+    var rrFn = gfn('hgGoldRoundReject');
+    var rr = rrFn ? rrFn(rows) : null;
+    if (rr && (rr.dir === 'long' || rr.dir === 'short') && rr.dir !== dir) return rr.why || 'A round-dollar level rejected against this trade.';
+  }catch(eRr){}
+  return null;
+}
+function pineGoldSessionDayOk(rows){
+  if (!rows || rows.length < 2) return false;
+  var anch = pineGoldSessionVwapAnchor(rows);
+  if (anch > 0) return true;
+  var tL = rows[rows.length - 1].t, t0 = rows[0].t;
+  if (!fin(tL) || !fin(t0)) return false;
+  var sL = tL < 1e12 ? tL : tL / 1000, s0 = t0 < 1e12 ? t0 : t0 / 1000;
+  return Math.floor(sL / 86400) === Math.floor(s0 / 86400);
+}
+function pineGoldVwapChase(rows, dir){
+  try{
+    var vbFn = gfn('goldVWAPBands');
+    if (!vbFn || !pineGoldSessionDayOk(rows)) return null;
+    var bands = vbFn(rows, pineGoldSessionVwapAnchor(rows));
+    if (!bands || !isFinite(bands.stdev) || !(bands.stdev > 0)) return null;
+    if (bands.band !== 'AT_2σ' && bands.band !== 'AT_3σ') return null;
+    if (dir === 'long' && bands.pos === 'ABOVE') return 'Session VWAP is two sigma above. A scalp does not chase it.';
+    if (dir === 'short' && bands.pos === 'BELOW') return 'Session VWAP is two sigma below. A scalp does not chase it.';
+  }catch(eVw){}
+  return null;
+}
+function pineGoldBarAtr(rows){
+  var fn = gfn('atr');
+  if (typeof fn !== 'function') return NaN;
+  try{
+    var a = fn(rows, 14);
+    var v = a && a.length ? +a[a.length - 1] : NaN;
+    return isFinite(v) && v > 0 ? v : NaN;
+  }catch(e){ return NaN; }
+}
+function pineGoldPriorDayVeto(rows, dir){
+  try{
+    var pdFn = gfn('hgGoldPriorDayLevels');
+    if (!pdFn) return null;
+    var prior = pdFn(rows);
+    if (!prior || prior.ok !== true) return null;
+    var atrV = pineGoldBarAtr(rows);
+    var lastB = rows[rows.length - 1];
+    if (!lastB || !isFinite(atrV)) return null;
+    var c = pgrNum(lastB.c), h = pgrNum(lastB.h), l = pgrNum(lastB.l);
+    if (!isFinite(c) || !isFinite(h) || !isFinite(l)) return null;
+    if (dir === 'long' && isFinite(prior.hi)){
+      if (h > prior.hi && c < prior.hi) return 'The prior day high was pierced and closed back under.';
+      if (c < prior.hi && prior.hi - c <= 0.35 * atrV && !(h > prior.hi)) return 'Price is under the prior day high and has not swept it.';
+    }
+    if (dir === 'short' && isFinite(prior.lo)){
+      if (l < prior.lo && c > prior.lo) return 'The prior day low was pierced and closed back over.';
+      if (c > prior.lo && c - prior.lo <= 0.35 * atrV && !(l < prior.lo)) return 'Price is over the prior day low and has not swept it.';
+    }
+  }catch(eDy){}
   return null;
 }
 
