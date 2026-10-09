@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1247',
-  pack: 'Trend Matrix also refuses a wick back inside a Keltner band, an Asian-range sweep that closes back inside, and a wick back inside the session VWAP band. A close inside the band, a sweep before 07:00 UTC, or a short session does not refuse. The card does not send an order.',
-  built: '2026-10-09T07:55:00Z'
+  version: 'hg-v1248',
+  pack: 'Trend Matrix also refuses a wick back through a Camarilla level, a Kijun lost on this bar, and a value area lost on this bar. No prior day, a Kijun already lost, or a short session does not refuse. The card does not send an order.',
+  built: '2026-10-09T08:10:00Z'
 };
 
 function hgBuildLabel(b){

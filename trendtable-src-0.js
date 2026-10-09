@@ -2878,6 +2878,116 @@ function tmVwapBand(rows, dir){
   if (dir === 'short' && l < vwap - sd && c >= vwap - sd && c > o) return false;
   return true;
 }
+/* Camarilla H3 and L3 from the prior day. A wick back through the level does not pass.
+   No prior day, or a prior day under 0.4%, does not refuse. */
+function tmCamarilla(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return true;
+  var hi = -Infinity, lo = Infinity, lastC = NaN, n = 0;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    lastC = +rows[i].c;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || !(lastC > 0)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.004) return true;
+  var h3 = lastC + (hi - lo) * 1.1 / 4;
+  var l3 = lastC - (hi - lo) * 1.1 / 4;
+  if (dir === 'long' && h > h3 && c < h3 && c < o) return false;
+  if (dir === 'short' && l < l3 && c > l3 && c > o) return false;
+  return true;
+}
+/* Ichimoku Kijun, the midpoint of the prior 26 bars. Losing it on this bar does not pass.
+   A close that was already through it does not refuse. */
+function tmKijunLost(rows, dir){
+  var len = 26;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1);
+  var hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < prior.length; i++){
+    if (!isFinite(+prior[i].h) || !isFinite(+prior[i].l) || !(+prior[i].c > 0)) return null;
+    if (+prior[i].h > hi) hi = +prior[i].h;
+    if (+prior[i].l < lo) lo = +prior[i].l;
+  }
+  if (!(hi > lo)) return true;
+  var kijun = (hi + lo) / 2;
+  var prev = +prior[prior.length - 1].c;
+  var c = +rows[rows.length - 1].c;
+  if (!(c > 0)) return null;
+  if (dir === 'long' && prev >= kijun && c < kijun) return false;
+  if (dir === 'short' && prev <= kijun && c > kijun) return false;
+  return true;
+}
+/* Session value area, 70% of volume. Losing the edge on this bar does not pass.
+   Fewer than four session bars does not refuse. Missing volume does not pass. */
+function tmVahLost(rows, dir){
+  if (!rows || !rows.length || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var sess = [], i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key === today) sess.push(rows[i]);
+  }
+  if (sess.length < 4) return true;
+  var px = +rows[rows.length - 1].c;
+  if (!(px > 0)) return null;
+  var step = px * 0.001, bins = {}, total = 0, b, v, tp, bin;
+  for (i = 0; i < sess.length; i++){
+    b = sess[i];
+    v = +b.v;
+    if (!(v > 0) || !isFinite(+b.h) || !isFinite(+b.l) || !(+b.c > 0)) return null;
+    tp = (+b.h + +b.l + +b.c) / 3;
+    bin = Math.round(tp / step);
+    bins[bin] = (bins[bin] || 0) + v;
+    total += v;
+  }
+  if (!(total > 0)) return null;
+  var keys = Object.keys(bins).map(Number).sort(function(a, c2){ return a - c2; });
+  var poc = keys[0], best = bins[keys[0]];
+  for (i = 1; i < keys.length; i++){
+    if (bins[keys[i]] > best){ best = bins[keys[i]]; poc = keys[i]; }
+  }
+  var idx = keys.indexOf(poc), lo = idx, hi = idx, got = bins[poc];
+  while (got < total * 0.7 && (lo > 0 || hi < keys.length - 1)){
+    var left = lo > 0 ? bins[keys[lo - 1]] : -1;
+    var right = hi < keys.length - 1 ? bins[keys[hi + 1]] : -1;
+    if (right >= left){ hi++; got += bins[keys[hi]]; }
+    else { lo--; got += bins[keys[lo]]; }
+  }
+  var vah = keys[hi] * step, val = keys[lo] * step;
+  var prevC = +sess[sess.length - 1].c;
+  if (dir === 'long' && prevC > vah && px < vah) return false;
+  if (dir === 'short' && prevC < val && px > val) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

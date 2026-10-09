@@ -283,6 +283,15 @@
   var vwapBand = rows1 ? tmVwapBand(rows1, dir) : null;
   if (vwapBand == null) hard.push('vwap band unread');
   else if (!vwapBand) hard.push('a VWAP band was pierced and closed back inside');
+  var cam = rows1 ? tmCamarilla(rows1, dir) : null;
+  if (cam == null) hard.push('camarilla unread');
+  else if (!cam) hard.push('a Camarilla level was pierced and closed back through');
+  var kijun = rows1 ? tmKijunLost(rows1, dir) : null;
+  if (kijun == null) hard.push('kijun unread');
+  else if (!kijun) hard.push('price lost the Kijun');
+  var vah = rows1 ? tmVahLost(rows1, dir) : null;
+  if (vah == null) hard.push('value area unread');
+  else if (!vah) hard.push('price lost the value area');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

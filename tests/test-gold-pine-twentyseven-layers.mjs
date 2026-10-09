@@ -355,15 +355,15 @@ console.log('== 11) OMNIGOLD mints no new port (hg-v1167: registering widens the
 /* ====================================================================
    § 12 ship stamps say hg-v1220
    ==================================================================== */
-console.log('== 12) build stamps say hg-v1247 ==');
+console.log('== 12) build stamps say hg-v1248 ==');
 {
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1247'/.test(bs), 'build-stamp.js version is hg-v1247');
+  assert(/version:\s*'hg-v1248'/.test(bs), 'build-stamp.js version is hg-v1248');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1247'/.test(sw), 'sw.js HG_CACHE is hg-v1247');
+  assert(/HG_CACHE\s*=\s*'hg-v1248'/.test(sw), 'sw.js HG_CACHE is hg-v1248');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1247/.test(tt), 'trendtable.js header reads hg-v1247');
-  assert(/v=1247/.test(tt), 'trendtable.js loader cachebuster reads v=1247');
+  assert(/hg-v1248/.test(tt), 'trendtable.js header reads hg-v1248');
+  assert(/v=1248/.test(tt), 'trendtable.js loader cachebuster reads v=1248');
 }
 
 console.log('\nhg-v1220 twenty-seven gold Pine record layers (24 + 3) + one state-only mark: all § passed');
