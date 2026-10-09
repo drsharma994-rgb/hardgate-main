@@ -601,6 +601,24 @@ function collectNativeScalp(bars, ctx, source){
       if (built) out.push(built);
     }
   }catch(eCore){}
+  try{
+    var suite = (typeof W !== 'undefined') ? W.HG_GoldSuite : null;
+    var pineHits = (suite && bars.rows15m) ? (suite.pineHits(bars.rows15m) || []) : [];
+    for (var p = 0; p < pineHits.length && out.length < 8; p++){
+      var ph = pineHits[p];
+      if (!ph || !ph.dir || !fin(+ph.entry) || !fin(+ph.stop)) continue;
+      var seenP = false;
+      for (var dp = 0; dp < out.length; dp++){
+        if (out[dp] && out[dp].dir === ph.dir && out[dp].nativeStrategy === ph.name) seenP = true;
+      }
+      if (seenP) continue;
+      var builtP = setupFromNative({
+        dir: ph.dir, entry: +ph.entry, stop: +ph.stop, t1: +ph.target,
+        strategy: ph.name, why: ph.why, tally: 3
+      }, 'scalp', source, false);
+      if (builtP) out.push(builtP);
+    }
+  }catch(ePine){}
   return out;
 }
 

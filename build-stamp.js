@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1269',
-  pack: 'Gold Scalp, OmniGold, Pine Gold, and Ganesh Gold detect three core gold plays on the last closed bar: a London Judas reclaim, a London opening-range break, and a prior-day raid. A finished play is no longer dropped just because the rest of the tape is quiet. No pattern means no card. The card does not send an order.',
-  built: '2026-10-09T13:40:00Z'
+  version: 'hg-v1270',
+  pack: 'Each gold desk now runs its own three strategies. Gold Scalp: London Judas, NY opening half-hour, and a body-gap snipe. OmniGold: silver divergence, flight-to-safety, and a balanced price range. Pine Gold: session VWAP bands, a fresh gap midpoint, and equal highs or lows. Ganesh Gold: the seven-step cycle, a time-price square, and a three-drive. A missing series stays unread. No pattern means no card. The card does not send an order.',
+  built: '2026-10-09T14:05:00Z'
 };
 
 function hgBuildLabel(b){

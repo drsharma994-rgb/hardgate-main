@@ -1153,6 +1153,8 @@ var GST_NAME = {
   sweepob: 'SWEEP→OB (MSS + FRESH OB/FVG)',
   silverb: 'SESSION SILVER BULLET (ASIA→LONDON)',
   judas: 'LONDON JUDAS RECLAIM',
+  gs2: 'NY CASH INITIAL BALANCE',
+  gs3: 'VOLUME IMBALANCE SNIPING',
   /* hg-v933 — gold-native, bars only, and MINTED DEMOTED until a bake gives
      each one a record (see gold-extra-strategies.js for why). */
   goldfix:  'LBMA LONDON FIX FADE (AM/PM)',
@@ -3208,7 +3210,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
        So they are tallied, and the WHY NOTHING LED panel prints the split.
 
        This counts; it does not gate. The condition is unchanged. */
-    var CORE_SELF = { asian: 1, openrange: 1, silverb: 1, pdraid: 1, judas: 1 };
+    var CORE_SELF = { asian: 1, openrange: 1, silverb: 1, pdraid: 1, judas: 1, gs2: 1, gs3: 1 };
     if (!CORE_SELF[key] && (myEv.length < 2 || myEv.length <= oppose)){
       if (D && D.__gsTally){
         if (myEv.length < 2) D.__gsTally.thin++;
@@ -4709,6 +4711,19 @@ function goldScalpSetups(inp){
         }
       }
     }catch(eCore){}
+    try{
+      var suite = (typeof window !== 'undefined') ? window.HG_GoldSuite : null;
+      if (suite && typeof suite.scalpHits === 'function'){
+        var spec = suite.scalpHits(rows, rows) || [];
+        for (var si = 0; si < spec.length; si++){
+          var sh = spec[si];
+          if (!sh || sh.id === 'GS-1') continue;
+          var sKey = sh.id === 'GS-2' ? 'gs2' : 'gs3';
+          push(__gsCand(sKey, sh.dir, D, sh.stop, __gsSnapLvls(D, sh.dir),
+            sh.why, 'a close back through the setup level cancels it', null, sh.entry));
+        }
+      }
+    }catch(eSuite){}
     /* --- 10) ADR Exhaustion Fade — robust VWAP-band fade or legacy confluence --- */
     var adrDone = false;
     if (D.scalpEval && D.scalpEval.adrFade && D.scalpEval.adrFade.trigger){

@@ -13637,18 +13637,20 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function hgOgCoreHtml(){
-    var fn = gfn('pineGoldCoreHits');
+    var suite = (typeof window !== 'undefined') ? window.HG_GoldSuite : null;
     var rows = (__og && __og.lastRows) ? (__og.lastRows.m15 || __og.lastRows.scalp || []) : [];
+    var fn = suite && suite.omniHits;
     if (typeof fn !== 'function' || !rows.length) return '';
     var hits = [];
-    try{ hits = fn(rows) || []; }catch(e){ return ''; }
-    if (!hits.length) return '<div class="note" style="margin-top:8px">CORE STRATEGIES — no Judas reclaim, London opening-range break, or prior-day raid on the last closed bar.</div>';
-    var html = '<div class="note" style="margin-top:8px"><b>CORE STRATEGIES</b>';
+    try{ hits = fn(rows, (typeof window !== 'undefined' && window.__hgSilverRows) || null, null) || []; }catch(e){ return ''; }
+    if (!hits.length) return '<div class="note" style="margin-top:8px">OMNIGOLD CORE — no triple SMT, flight-to-safety break, or balanced price range on the last closed bar.</div>';
+    var html = '<div class="note" style="margin-top:8px"><b>OMNIGOLD CORE</b>';
     for (var i = 0; i < hits.length; i++){
       var hit = hits[i];
-      html += '<div>' + esc(String(hit.dir || '').toUpperCase()) + ' · ' + esc(hit.why || '')
+      html += '<div>' + esc(hit.id) + ' ' + esc(String(hit.dir || '').toUpperCase()) + ' · ' + esc(hit.name || '')
         + ' · entry ' + (isFinite(+hit.entry) ? (+hit.entry).toFixed(2) : 'n/a')
-        + ' · SL ' + (isFinite(+hit.stop) ? (+hit.stop).toFixed(2) : 'n/a') + '</div>';
+        + ' · SL ' + (isFinite(+hit.stop) ? (+hit.stop).toFixed(2) : 'n/a')
+        + ' · TP ' + (isFinite(+hit.target) ? (+hit.target).toFixed(2) : 'n/a') + '</div>';
     }
     return html + '</div>';
   }
