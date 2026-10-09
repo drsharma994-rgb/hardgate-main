@@ -2147,7 +2147,13 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (viWhy) return viWhy;
     var smtWhy = pineGoldSilverSmt(rows, dir, opts.silverRows);
     if (smtWhy) return smtWhy;
+    var ibWhy = pineGoldIbVeto(rows, dir);
+    if (ibWhy) return ibWhy;
   }
+  var cvdWhy = pineGoldCvdVeto(rows, dir);
+  if (cvdWhy) return cvdWhy;
+  var pocWhy = pineGoldPocVeto(rows, dir);
+  if (pocWhy) return pocWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2330,6 +2336,55 @@ function pineGoldSilverSmt(rows, dir, silverRows){
   if (!smt || smt.unread) return null;
   if (dir === 'long' && smt.tripleSmtBearish) return 'Silver confirmed the high. Bearish SMT.';
   if (dir === 'short' && smt.tripleSmtBullish) return 'Silver refused the low. Bullish SMT.';
+  return null;
+}
+/* London 07:00-07:30 and New York 13:30-14:00 UTC. A wick through the
+   30-minute box that closes back inside is a failed break. No box, or a
+   close clean through it, does not refuse. */
+function pineGoldIbVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateInitialBalance !== 'function') return null;
+  var ib = null;
+  try{ ib = core.calculateInitialBalance(rows); }catch(eIb){ return null; }
+  if (!ib) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last && last.h), l = pgrNum(last && last.l), c = pgrNum(last && last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var boxes = [
+    ['London initial balance', ib.londonIb],
+    ['New York initial balance', ib.nyIb]
+  ];
+  var i, box;
+  for (i = 0; i < boxes.length; i++){
+    box = boxes[i][1];
+    if (!box || !(box.ibh > box.ibl)) continue;
+    if (dir === 'long' && h > box.ibh && c <= box.ibh) return boxes[i][0] + ' high was pierced and closed back inside.';
+    if (dir === 'short' && l < box.ibl && c >= box.ibl) return boxes[i][0] + ' low was pierced and closed back over.';
+  }
+  return null;
+}
+/* Close-location volume delta from the gold core. Unread volume does not
+   refuse. Absorption that diverges with the trade does not refuse. */
+function pineGoldCvdVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateCvdAbsorption !== 'function') return null;
+  var cvd = null;
+  try{ cvd = core.calculateCvdAbsorption(rows, dir); }catch(eCv){ return null; }
+  if (!cvd || cvd.unread || cvd.deltaDivergence) return null;
+  if (dir === 'long' && cvd.recentDelta < 0) return 'Volume delta is still selling. No absorption under the low.';
+  if (dir === 'short' && cvd.recentDelta > 0) return 'Volume delta is still buying. No absorption over the high.';
+  return null;
+}
+/* A migrated point of control with price back on the wrong side of it.
+   No migration does not refuse. */
+function pineGoldPocVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectPocMigration !== 'function') return null;
+  var poc = null;
+  try{ poc = core.detectPocMigration(rows); }catch(ePc){ return null; }
+  if (!poc || poc.unread || poc.trappedSide === 'NONE') return null;
+  if (dir === 'long' && poc.trappedSide === 'TRAPPED_LONGS') return 'The point of control rose and price is back under it.';
+  if (dir === 'short' && poc.trappedSide === 'TRAPPED_SHORTS') return 'The point of control fell and price is back over it.';
   return null;
 }
 
@@ -2874,6 +2929,9 @@ G.pineGoldWeeklyAvwap = pineGoldWeeklyAvwap;
 G.pineGoldEfficiency = pineGoldEfficiency;
 G.pineGoldBlocksLead = pineGoldBlocksLead;
 G.pineGoldTapeVeto = pineGoldTapeVeto;
+G.pineGoldIbVeto = pineGoldIbVeto;
+G.pineGoldCvdVeto = pineGoldCvdVeto;
+G.pineGoldPocVeto = pineGoldPocVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;

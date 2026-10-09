@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1223',
-  pack: 'Trend Matrix also requires the Coppock Curve, Laguerre RSI, and the 20-bar regression slope to agree with the trade. A flat slope or a short tape does not pass. The earlier crypto scripts still have to agree. The card does not send an order.',
-  built: '2026-10-09T02:45:00Z'
+  version: 'hg-v1224',
+  pack: 'OmniGold and Gold Scalp also refuse a setup on a failed 30-minute initial balance, volume delta still fighting the trade, or a point of control that has trapped that side. Unread volume does not refuse. A close clean through the box does not refuse. The earlier gold tape rules still apply. The card does not send an order.',
+  built: '2026-10-09T02:55:00Z'
 };
 
 function hgBuildLabel(b){
