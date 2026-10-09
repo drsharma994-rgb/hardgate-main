@@ -3389,6 +3389,87 @@ function tmStar(rows, dir){
   for (i = n - 8; i < n; i++) if (+rows[i].l < +b.l) return true;
   return false;
 }
+/* Yesterday pivot point. Losing it on this close does not pass.
+   No prior day, or a prior day under 0.4%, does not refuse. */
+function tmPpLost(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return true;
+  var hi = -Infinity, lo = Infinity, lastC = NaN, n = 0;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    lastC = +rows[i].c;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || !(lastC > 0)) return true;
+  var prevC = +rows[rows.length - 2].c, c = +rows[rows.length - 1].c;
+  if (!(prevC > 0) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.004) return true;
+  var pp = (hi + lo + lastC) / 3;
+  if (dir === 'long' && prevC > pp && c < pp) return false;
+  if (dir === 'short' && prevC < pp && c > pp) return false;
+  return true;
+}
+/* A new 20-bar extreme on less than half the average volume does not pass.
+   A bar that does not take the extreme still passes. Missing volume does not pass. */
+function tmWeakBreak(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var look = rows.slice(-(len + 1), -1);
+  var hi = -Infinity, lo = Infinity, vol = 0, i;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(+look[i].h) || !isFinite(+look[i].l) || !(+look[i].v > 0)) return null;
+    if (+look[i].h > hi) hi = +look[i].h;
+    if (+look[i].l < lo) lo = +look[i].l;
+    vol += +look[i].v;
+  }
+  var avg = vol / look.length;
+  var last = rows[rows.length - 1];
+  if (!(+last.v > 0) || !(+last.c > 0) || !(hi > lo)) return null;
+  if (dir === 'long' && +last.h > hi && +last.v < avg * 0.5) return false;
+  if (dir === 'short' && +last.l < lo && +last.v < avg * 0.5) return false;
+  return true;
+}
+/* A close back inside a Bollinger band after the previous close was outside it.
+   A close that never left the band does not refuse. */
+function tmBbAccept(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1);
+  var sum = 0, i;
+  for (i = 0; i < prior.length; i++){
+    if (!(+prior[i].c > 0)) return null;
+    sum += +prior[i].c;
+  }
+  var mean = sum / prior.length, acc = 0;
+  for (i = 0; i < prior.length; i++){
+    var d = +prior[i].c - mean;
+    acc += d * d;
+  }
+  var sd = Math.sqrt(acc / prior.length);
+  if (!(sd > 0)) return true;
+  var prevC = +prior[prior.length - 1].c, c = +rows[rows.length - 1].c;
+  if (!(c > 0)) return null;
+  if (dir === 'long' && prevC > mean + 2 * sd && c <= mean + 2 * sd) return false;
+  if (dir === 'short' && prevC < mean - 2 * sd && c >= mean - 2 * sd) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];

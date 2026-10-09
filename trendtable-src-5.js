@@ -337,6 +337,15 @@
   var star = rows1 ? tmStar(rows1, dir) : null;
   if (star == null) hard.push('star unread');
   else if (!star) hard.push('a star printed at the local extreme');
+  var pp = rows1 ? tmPpLost(rows1, dir) : null;
+  if (pp == null) hard.push('pivot point unread');
+  else if (!pp) hard.push('price lost the daily pivot point');
+  var weak = rows1 ? tmWeakBreak(rows1, dir) : null;
+  if (weak == null) hard.push('breakout volume unread');
+  else if (!weak) hard.push('the breakout printed on weak volume');
+  var accept = rows1 ? tmBbAccept(rows1, dir) : null;
+  if (accept == null) hard.push('band acceptance unread');
+  else if (!accept) hard.push('price closed back inside the Bollinger band');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

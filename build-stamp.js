@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1253',
-  pack: 'Trend Matrix also refuses an RSI cross back through 70, a wick back inside the prior 4-hour block, and an evening or morning star at the local extreme. An RSI already inside 70, no prior block, or a star that is not at the extreme does not refuse. The card does not send an order.',
-  built: '2026-10-09T09:25:00Z'
+  version: 'hg-v1254',
+  pack: 'Trend Matrix also refuses a daily pivot point lost on this bar, a 20-bar breakout on less than half the average volume, and a close back inside a Bollinger band after the previous close was outside it. No prior day, a break on normal volume, or a close that never left the band does not refuse. The card does not send an order.',
+  built: '2026-10-09T09:40:00Z'
 };
 
 function hgBuildLabel(b){
