@@ -2159,6 +2159,79 @@ function tmImpulse(rows, dir){
   if (dir === 'long') return !(ema[last] < ema[last - 1] && hist < histPrev);
   return !(ema[last] > ema[last - 1] && hist > histPrev);
 }
+function tmFractals(rows){
+  var wing = 2, highs = [], lows = [], i, k, isH, isL;
+  for (i = wing; i < rows.length - wing; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l)) return null;
+    isH = true;
+    isL = true;
+    for (k = i - wing; k <= i + wing; k++){
+      if (k === i) continue;
+      if (!isFinite(rows[k].h) || !isFinite(rows[k].l)) return null;
+      if (!(rows[i].h > rows[k].h)) isH = false;
+      if (!(rows[i].l < rows[k].l)) isL = false;
+    }
+    if (isH) highs.push(i);
+    if (isL) lows.push(i);
+  }
+  return { highs: highs, lows: lows };
+}
+/* Bearish RSI divergence refuses a long. Bullish divergence refuses a short.
+   No second swing means there is nothing against the trade. A short tape does not pass. */
+function tmRsiDiv(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0) || !isFinite(rows[i].h) || !isFinite(rows[i].l)) return null;
+    closes.push(rows[i].c);
+  }
+  var rsi = tmRsiSeries(closes, 14);
+  var sw = tmFractals(rows);
+  if (!rsi || !sw) return null;
+  var pair = dir === 'long' ? sw.highs : sw.lows;
+  var picked = [], i;
+  for (i = pair.length - 1; i >= 0 && picked.length < 2; i--){
+    if (isFinite(rsi[pair[i]])) picked.push(pair[i]);
+  }
+  if (picked.length < 2) return true;
+  var b = picked[0], a = picked[1];
+  if (dir === 'long' && rows[b].h > rows[a].h && rsi[b] < rsi[a]) return false;
+  if (dir === 'short' && rows[b].l < rows[a].l && rsi[b] > rsi[a]) return false;
+  return true;
+}
+/* Price Volume Trend. The last six bars have to carry volume with the trade.
+   Missing volume does not pass. A flat trend does not pass. */
+function tmPvt(rows, dir){
+  if (!rows || rows.length < 16 || (dir !== 'long' && dir !== 'short')) return null;
+  var pvt = 0, series = [0], i;
+  for (i = 1; i < rows.length; i++){
+    if (!(rows[i].v > 0) || !(rows[i - 1].c > 0) || !(rows[i].c > 0)) return null;
+    pvt += rows[i].v * (rows[i].c - rows[i - 1].c) / rows[i - 1].c;
+    series.push(pvt);
+  }
+  var now = series[series.length - 1], prev = series[series.length - 6];
+  if (!isFinite(now) || !isFinite(prev) || now === prev) return false;
+  if (dir === 'long') return now > prev;
+  return now < prev;
+}
+/* Two lower highs and two lower lows refuse a long. The mirror refuses a short.
+   One swing is not structure, so it does not refuse. */
+function tmStructure(rows, dir){
+  if (!rows || rows.length < 15 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l) || !(rows[i].c > 0)) return null;
+  }
+  var sw = tmFractals(rows);
+  if (!sw) return null;
+  if (sw.highs.length < 2 || sw.lows.length < 2) return true;
+  var h1 = sw.highs[sw.highs.length - 2], h2 = sw.highs[sw.highs.length - 1];
+  var l1 = sw.lows[sw.lows.length - 2], l2 = sw.lows[sw.lows.length - 1];
+  var bear = rows[h2].h < rows[h1].h && rows[l2].l < rows[l1].l;
+  var bull = rows[h2].h > rows[h1].h && rows[l2].l > rows[l1].l;
+  if (dir === 'long') return !bear;
+  return !bull;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
