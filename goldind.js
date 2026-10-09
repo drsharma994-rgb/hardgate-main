@@ -1152,6 +1152,7 @@ var GST_NAME = {
   nyexh: 'NY VOLUME EXHAUSTION',
   sweepob: 'SWEEP→OB (MSS + FRESH OB/FVG)',
   silverb: 'SESSION SILVER BULLET (ASIA→LONDON)',
+  judas: 'LONDON JUDAS RECLAIM',
   /* hg-v933 — gold-native, bars only, and MINTED DEMOTED until a bake gives
      each one a record (see gold-extra-strategies.js for why). */
   goldfix:  'LBMA LONDON FIX FADE (AM/PM)',
@@ -3207,7 +3208,8 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
        So they are tallied, and the WHY NOTHING LED panel prints the split.
 
        This counts; it does not gate. The condition is unchanged. */
-    if (myEv.length < 2 || myEv.length <= oppose){
+    var CORE_SELF = { asian: 1, openrange: 1, silverb: 1, pdraid: 1, judas: 1 };
+    if (!CORE_SELF[key] && (myEv.length < 2 || myEv.length <= oppose)){
       if (D && D.__gsTally){
         if (myEv.length < 2) D.__gsTally.thin++;
         else D.__gsTally.outvoted++;
@@ -4692,6 +4694,21 @@ function goldScalpSetups(inp){
         undefined, oLvl));
     }
     orCand(orL); orCand(orN);
+    /* A finished Judas reclaim or prior-day raid is its own evidence.
+       It does not wait for two unrelated reads. The opening-range break
+       already mints above. */
+    try{
+      var coreFn = (typeof window !== 'undefined') ? window.pineGoldCoreHits : null;
+      if (typeof coreFn === 'function'){
+        var cores = coreFn(rows) || [];
+        for (var ci = 0; ci < cores.length; ci++){
+          var ch = cores[ci];
+          if (!ch || !ch.dir || ch.key === 'openrange') continue;
+          push(__gsCand(ch.key, ch.dir, D, ch.stop, __gsSnapLvls(D, ch.dir),
+            ch.why, ch.invalidates, null, ch.entry));
+        }
+      }
+    }catch(eCore){}
     /* --- 10) ADR Exhaustion Fade — robust VWAP-band fade or legacy confluence --- */
     var adrDone = false;
     if (D.scalpEval && D.scalpEval.adrFade && D.scalpEval.adrFade.trigger){

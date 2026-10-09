@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1268',
-  pack: 'Trend Matrix also refuses a funding-hour sweep that closed back inside, a 21 EMA lost on this bar, and yesterday close lost on this bar. During the funding hour, an EMA already lost, or no prior day does not refuse. The card does not send an order.',
-  built: '2026-10-09T13:10:00Z'
+  version: 'hg-v1269',
+  pack: 'Gold Scalp, OmniGold, Pine Gold, and Ganesh Gold detect three core gold plays on the last closed bar: a London Judas reclaim, a London opening-range break, and a prior-day raid. A finished play is no longer dropped just because the rest of the tape is quiet. No pattern means no card. The card does not send an order.',
+  built: '2026-10-09T13:40:00Z'
 };
 
 function hgBuildLabel(b){

@@ -13631,8 +13631,26 @@ terse status, and never launches a first-time scan on a global refresh.
         h += Wp.hgPerfPanelHtml('OMNIGOLD:SWING', { title: 'KIND PERFORMANCE · OMNIGOLD SWING' });
       }
     } catch(ePerf){}
+    h += hgOgCoreHtml();
     h += '</section>';
     return h;
+  }
+
+  function hgOgCoreHtml(){
+    var fn = gfn('pineGoldCoreHits');
+    var rows = (__og && __og.lastRows) ? (__og.lastRows.m15 || __og.lastRows.scalp || []) : [];
+    if (typeof fn !== 'function' || !rows.length) return '';
+    var hits = [];
+    try{ hits = fn(rows) || []; }catch(e){ return ''; }
+    if (!hits.length) return '<div class="note" style="margin-top:8px">CORE STRATEGIES — no Judas reclaim, London opening-range break, or prior-day raid on the last closed bar.</div>';
+    var html = '<div class="note" style="margin-top:8px"><b>CORE STRATEGIES</b>';
+    for (var i = 0; i < hits.length; i++){
+      var hit = hits[i];
+      html += '<div>' + esc(String(hit.dir || '').toUpperCase()) + ' · ' + esc(hit.why || '')
+        + ' · entry ' + (isFinite(+hit.entry) ? (+hit.entry).toFixed(2) : 'n/a')
+        + ' · SL ' + (isFinite(+hit.stop) ? (+hit.stop).toFixed(2) : 'n/a') + '</div>';
+    }
+    return html + '</div>';
   }
 
   function hgOgCardAsUniformCand(c, horizon){

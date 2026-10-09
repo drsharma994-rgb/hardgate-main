@@ -4033,6 +4033,93 @@ function pineGoldDiCrossVeto(rows, dir){
   return null;
 }
 
+/* Core gold plays on the last closed bar. A quiet tape returns nothing.
+   Judas is a sweep back inside the Asia box. The opening range is a close
+   through the 08:00-08:30 UTC box. The prior-day raid is a sweep back
+   inside yesterday high or low. */
+function pineGoldCoreHits(rows){
+  var out = [];
+  if (!rows || rows.length < 8) return out;
+  function msOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  function dayKey(t){
+    var ms = msOf(t);
+    if (!isFinite(ms)) return null;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  var t = msOf(last.t);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0) || !isFinite(t)) return out;
+  var when = new Date(t);
+  var hour = when.getUTCHours() + when.getUTCMinutes() / 60;
+  var today = when.toISOString().slice(0, 10);
+  var i, ms, at, hv;
+  if (hour >= 7){
+    var ahi = -Infinity, alo = Infinity, n = 0, bad = false;
+    for (i = 0; i < rows.length - 1; i++){
+      ms = msOf(rows[i].t);
+      if (!isFinite(ms)){ bad = true; break; }
+      at = new Date(ms);
+      if (at.toISOString().slice(0, 10) !== today) continue;
+      hv = at.getUTCHours() + at.getUTCMinutes() / 60;
+      if (hv >= 7) continue;
+      if (!(pgrNum(rows[i].h) > 0) || !isFinite(pgrNum(rows[i].l))){ bad = true; break; }
+      if (+rows[i].h > ahi) ahi = +rows[i].h;
+      if (+rows[i].l < alo) alo = +rows[i].l;
+      n++;
+    }
+    if (!bad && n >= 3 && ahi - alo >= 3){
+      if (l < alo && c >= alo && c > o) out.push({ key: 'judas', dir: 'long', entry: c, stop: l, why: 'Asia low was swept and the bar closed back inside. A long reclaim.', invalidates: 'a close back under the sweep wick' });
+      else if (h > ahi && c <= ahi && c < o) out.push({ key: 'judas', dir: 'short', entry: c, stop: h, why: 'Asia high was swept and the bar closed back inside. A short reclaim.', invalidates: 'a close back over the sweep wick' });
+    }
+  }
+  if (hour >= 8.5){
+    var ohi = -Infinity, olo = Infinity, on = 0, obad = false;
+    for (i = 0; i < rows.length - 1; i++){
+      ms = msOf(rows[i].t);
+      if (!isFinite(ms)){ obad = true; break; }
+      at = new Date(ms);
+      if (at.toISOString().slice(0, 10) !== today) continue;
+      hv = at.getUTCHours() + at.getUTCMinutes() / 60;
+      if (hv < 8 || hv >= 8.5) continue;
+      if (!(pgrNum(rows[i].h) > 0) || !isFinite(pgrNum(rows[i].l))){ obad = true; break; }
+      if (+rows[i].h > ohi) ohi = +rows[i].h;
+      if (+rows[i].l < olo) olo = +rows[i].l;
+      on++;
+    }
+    if (!obad && on >= 1 && ohi - olo >= 3){
+      if (c > ohi && c > o) out.push({ key: 'openrange', dir: 'long', entry: c, stop: olo, why: 'Price closed above the London opening range. A long break.', invalidates: 'a close back inside the opening range' });
+      else if (c < olo && c < o) out.push({ key: 'openrange', dir: 'short', entry: c, stop: ohi, why: 'Price closed below the London opening range. A short break.', invalidates: 'a close back inside the opening range' });
+    }
+  }
+  var prevDay = null, broken = false, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayKey(rows[i].t);
+    if (!key){ broken = true; break; }
+    if (key !== today) prevDay = key;
+  }
+  if (!broken && prevDay){
+    var phi = -Infinity, plo = Infinity, pn = 0, pbad = false;
+    for (i = 0; i < rows.length - 1; i++){
+      if (dayKey(rows[i].t) !== prevDay) continue;
+      if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))){ pbad = true; break; }
+      if (+rows[i].h > phi) phi = +rows[i].h;
+      if (+rows[i].l < plo) plo = +rows[i].l;
+      pn++;
+    }
+    if (!pbad && pn >= 4 && phi - plo >= 8){
+      if (l < plo && c >= plo && c > o) out.push({ key: 'pdraid', dir: 'long', entry: c, stop: l, why: 'Yesterday low was swept and the bar closed back above it. A long raid.', invalidates: 'a close back under the sweep wick' });
+      else if (h > phi && c <= phi && c < o) out.push({ key: 'pdraid', dir: 'short', entry: c, stop: h, why: 'Yesterday high was swept and the bar closed back under it. A short raid.', invalidates: 'a close back over the sweep wick' });
+    }
+  }
+  return out;
+}
+
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
    consume these through their extras seam and price them through their own
@@ -4553,6 +4640,7 @@ G.pineGoldMacdCross = pineGoldMacdCross;
 G.pineGoldPsarFlip = pineGoldPsarFlip;
 G.pineGoldStochCross = pineGoldStochCross;
 G.pineGoldRecordLayerHits = pineGoldRecordLayerHits;
+G.pineGoldCoreHits = pineGoldCoreHits;
 /* hg-v1167 */
 G.pineGoldChandelierExit = pineGoldChandelierExit;
 G.pineGoldHullTurn = pineGoldHullTurn;

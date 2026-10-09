@@ -611,6 +611,22 @@ function callHtml(snap){
   }catch(e){ return ''; }
 }
 
+function ggCoreHtml(rows){
+  var fn = W.pineGoldCoreHits;
+  if (typeof fn !== 'function') return '';
+  var hits = [];
+  try{ hits = fn(rows) || []; }catch(e){ return ''; }
+  if (!hits.length) return '<div class="note" style="margin-top:8px">CORE STRATEGIES — no Judas reclaim, London opening-range break, or prior-day raid on the last closed bar.</div>';
+  var html = '<div class="panel" style="margin-top:8px"><h3>CORE STRATEGIES</h3>';
+  for (var i = 0; i < hits.length; i++){
+    var h = hits[i];
+    html += '<div class="kv"><span class="k">' + escH(String(h.dir || '').toUpperCase()) + '</span><span class="v">'
+      + escH(h.why || '') + ' Entry ' + (isFinite(+h.entry) ? (+h.entry).toFixed(2) : 'n/a')
+      + ' · SL ' + (isFinite(+h.stop) ? (+h.stop).toFixed(2) : 'n/a') + '</span></div>';
+  }
+  return html + '</div>';
+}
+
 function paint(el, snap){
   if (!snap.ok){
     el.innerHTML = '<div class="note warn" style="margin-top:10px">' + escH(snap.note || 'scan failed') + '</div>';
@@ -621,6 +637,7 @@ function paint(el, snap){
     + '<div class="gg-board"><aside class="gg-mp-col" aria-label="Most probable setup">'
     + '<div class="gg-eye">MOST PROBABLE</div>'
     + callHtml(snap)
+    + ggCoreHtml(snap.ev && snap.ev.rows)
     + '</aside><div class="gg-rest">'
     + pipelineHtml(snap)
     + modelHtml('GOLD LONG MODEL', snap.mL, snap.planL)

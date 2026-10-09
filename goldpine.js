@@ -579,6 +579,28 @@ function collectNativeScalp(bars, ctx, source){
     var rf = setupFromNative(rejected[r], 'scalp', source, true);
     if (rf && fin(+rf.entry) && fin(+rf.stop)) out.push(rf);
   }
+  try{
+    var coreFn = gfn('pineGoldCoreHits');
+    var hits = (coreFn && bars.rows15m) ? (coreFn(bars.rows15m) || []) : [];
+    for (var k = 0; k < hits.length && out.length < 8; k++){
+      var ch = hits[k];
+      if (!ch || !ch.dir || !fin(+ch.entry) || !fin(+ch.stop)) continue;
+      var name = ch.key === 'judas' ? 'London Judas reclaim' : (ch.key === 'pdraid' ? 'Prior-day raid' : 'London opening range');
+      var seen = false;
+      for (var d = 0; d < out.length; d++){
+        if (out[d] && out[d].dir === ch.dir && out[d].nativeStrategy === name) seen = true;
+      }
+      if (seen) continue;
+      var risk = Math.abs(+ch.entry - +ch.stop);
+      if (!(risk > 0)) continue;
+      var built = setupFromNative({
+        dir: ch.dir, entry: +ch.entry, stop: +ch.stop,
+        t1: ch.dir === 'long' ? +ch.entry + risk * 2 : +ch.entry - risk * 2,
+        strategy: name, why: ch.why, tally: 3
+      }, 'scalp', source, false);
+      if (built) out.push(built);
+    }
+  }catch(eCore){}
   return out;
 }
 
