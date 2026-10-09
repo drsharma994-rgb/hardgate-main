@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1231',
-  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a wick back through the Asian high or low, a $25 level that was pierced and not held, and a trade against a falling or rising higher-timeframe average. A close through the level, a dip under a rising average, or a tape shorter than 84 bars does not refuse. The card does not send an order.',
-  built: '2026-10-09T04:10:00Z'
+  version: 'hg-v1232',
+  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a long in the top eighth of yesterday, a short in the bottom eighth, a swing that was pierced and closed back inside, and a trade against a 26-bar lag that is already falling or rising. A close through yesterday, a green pierce, or a lag that is still with the trade does not refuse. The card does not send an order.',
+  built: '2026-10-09T04:20:00Z'
 };
 
 function hgBuildLabel(b){

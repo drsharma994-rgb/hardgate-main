@@ -2167,6 +2167,8 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (cprWhy) return cprWhy;
     var asiaFail = pineGoldAsiaFailVeto(rows, dir);
     if (asiaFail) return asiaFail;
+    var murWhy = pineGoldMurreyVeto(rows, dir);
+    if (murWhy) return murWhy;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
@@ -2196,6 +2198,10 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (qWhy) return qWhy;
   var htfWhy = pineGoldHtfSlopeVeto(rows, dir);
   if (htfWhy) return htfWhy;
+  var sfpWhy = pineGoldSfpVeto(rows, dir);
+  if (sfpWhy) return sfpWhy;
+  var lagWhy = pineGoldLagVeto(rows, dir);
+  if (lagWhy) return lagWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2851,6 +2857,49 @@ function pineGoldHtfSlopeVeto(rows, dir){
   if (dir === 'short' && px > now && now > prev) return 'The higher-timeframe average is rising and price is over it.';
   return null;
 }
+/* Yesterday split into eight. The top eighth is not a long. The bottom
+   eighth is not a short. A close through yesterday's high or low still passes.
+   A prior day under $8 does not refuse. */
+function pineGoldMurreyVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8) return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(px)) return null;
+  var eighth = (prior.hi - prior.lo) / 8;
+  if (dir === 'long' && px >= prior.lo + 7 * eighth && px <= prior.hi) return 'Price is in the top eighth of yesterday. A long does not buy it.';
+  if (dir === 'short' && px <= prior.lo + eighth && px >= prior.lo) return 'Price is in the bottom eighth of yesterday. A short does not sell it.';
+  return null;
+}
+/* The last bar took the prior swing and closed back inside, against the trade.
+   A close through the swing, or a swing under $3, does not refuse. */
+function pineGoldSfpVeto(rows, dir){
+  if (!rows || rows.length < 12) return null;
+  var last = rows[rows.length - 1];
+  var look = rows.slice(-12, -1);
+  var hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(pgrNum(look[i].h)) || !isFinite(pgrNum(look[i].l))) return null;
+    if (+look[i].h > hi) hi = +look[i].h;
+    if (+look[i].l < lo) lo = +look[i].l;
+  }
+  if (!(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'A swing high was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'A swing low was pierced and closed back over.';
+  return null;
+}
+/* Close versus the close 26 bars ago, and that close versus 26 bars before it.
+   A long under a falling lag does not pass. A dip while the lag is still rising does not refuse. */
+function pineGoldLagVeto(rows, dir){
+  if (!rows || rows.length < 53) return null;
+  var n = rows.length;
+  var c0 = pgrNum(rows[n - 1].c), c26 = pgrNum(rows[n - 27].c), c52 = pgrNum(rows[n - 53].c);
+  if (!(c0 > 0) || !(c26 > 0) || !(c52 > 0)) return null;
+  if (dir === 'long' && c0 < c26 && c26 < c52) return 'Price is under its close from 26 bars ago, and that close was already falling.';
+  if (dir === 'short' && c0 > c26 && c26 > c52) return 'Price is over its close from 26 bars ago, and that close was already rising.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3417,6 +3466,9 @@ G.pineGoldMidVeto = pineGoldMidVeto;
 G.pineGoldAsiaFailVeto = pineGoldAsiaFailVeto;
 G.pineGoldQuarterVeto = pineGoldQuarterVeto;
 G.pineGoldHtfSlopeVeto = pineGoldHtfSlopeVeto;
+G.pineGoldMurreyVeto = pineGoldMurreyVeto;
+G.pineGoldSfpVeto = pineGoldSfpVeto;
+G.pineGoldLagVeto = pineGoldLagVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
