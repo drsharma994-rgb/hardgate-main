@@ -338,6 +338,21 @@
         }
       }
     }
+    if (isFinite(hour) && hour >= 12 && hour < 14 && today && !paceDead(__pace)){
+      var amOpen = NaN, ai, ah;
+      for (ai = 0; ai < day.length - 1; ai++){
+        if (dayOf(day[ai]) !== today) continue;
+        ah = hourOf(day[ai]);
+        if (isFinite(ah) && ah >= 10.5 && ah < 10.75){ amOpen = day[ai].o; break; }
+      }
+      if (isFinite(amOpen) && last.h - amOpen >= 1 && last.c < amOpen && last.c < last.o){
+        var amS = hit('GS-12', 'London AM Fix Hunt', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Between 12:00 and 14:00 UTC price ran at least 1 dollar through the 10:30 UTC open and closed back under it.');
+        if (amS) out.push(amS);
+      } else if (isFinite(amOpen) && amOpen - last.l >= 1 && last.c > amOpen && last.c > last.o){
+        var amL = hit('GS-12', 'London AM Fix Hunt', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Between 12:00 and 14:00 UTC price ran at least 1 dollar through the 10:30 UTC open and closed back above it.');
+        if (amL) out.push(amL);
+      }
+    }
     return out;
   }
 
@@ -467,6 +482,20 @@
       if (sgeOz - last.c >= 15){
         var sge = hit('OG-11', 'Shanghai Basis', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Shanghai gold, converted with the live dollar-yuan rate, is at least 15 dollars an ounce above London, and this bar closed up. A missing Shanghai price or a missing yuan rate is not a premium.');
         if (sge) out.push(sge);
+      }
+    }
+    var eu = rowsOf(extra.eurusd), jy = rowsOf(extra.usdjpy);
+    if (eu.length >= 8 && jy.length >= 8 && rows.length >= 8 && last.c > last.o){
+      var g0 = rows[rows.length - 8].c, e0 = eu[eu.length - 8].c, j0 = jy[jy.length - 8].c;
+      var e1 = eu[eu.length - 1].c, j1 = jy[jy.length - 1].c;
+      if (g0 > 0 && e0 > 0 && j0 > 0 && e1 > 0 && j1 > 0){
+        var usdRet = (last.c - g0) / g0;
+        var eurRet = ((last.c / e1) - (g0 / e0)) / (g0 / e0);
+        var jpyRet = ((last.c * j1) - (g0 * j0)) / (g0 * j0);
+        if (usdRet < 0.0015 && (eurRet > 0.004 || jpyRet > 0.004)){
+          var fx = hit('OG-12', 'Currency Dispersion', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold in euros or yen rose more than 0.4 percent over eight bars while dollar gold rose less than 0.15 percent, and this bar closed up. A missing euro or yen series is not a lead.');
+          if (fx) out.push(fx);
+        }
       }
     }
     return out;
@@ -987,6 +1016,24 @@
       } else if (last.l <= ord.level + 1.2 && last.c > ord.level && last.c > last.o){
         var odL = hit('GG-10', 'Ordinal Gann Angle', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged a 45, 135, 225, or 315 degree Gann angle and closed back above it.');
         if (odL) out.push(odL);
+      }
+    }
+    var step144 = 14.4, base144 = Math.round(last.c / step144) * step144, d144 = Math.abs(last.c - base144);
+    if (d144 <= 1.44 && last.h >= base144 && last.c < base144 && last.c < last.o){
+      var sqS = hit('GG-11', 'Square of 144', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged a 14.40 dollar harmonic and closed back under it.');
+      if (sqS) out.push(sqS);
+    } else if (d144 <= 1.44 && last.l <= base144 && last.c > base144 && last.c > last.o){
+      var sqL144 = hit('GG-11', 'Square of 144', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged a 14.40 dollar harmonic and closed back above it.');
+      if (sqL144) out.push(sqL144);
+    }
+    var nava = gannAngles(last.c, [40, 80, 120, 160, 200, 240, 280, 320]);
+    if (nava && nava.dist <= 1.2){
+      if (last.h >= nava.level - 1.2 && last.c < nava.level && last.c < last.o){
+        var nvS = hit('GG-12', 'Navamsha Angle', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged a 40 degree Navamsha angle and closed back under it.');
+        if (nvS) out.push(nvS);
+      } else if (last.l <= nava.level + 1.2 && last.c > nava.level && last.c > last.o){
+        var nvL = hit('GG-12', 'Navamsha Angle', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged a 40 degree Navamsha angle and closed back above it.');
+        if (nvL) out.push(nvL);
       }
     }
     return out;

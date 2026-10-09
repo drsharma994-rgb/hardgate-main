@@ -1163,6 +1163,7 @@ var GST_NAME = {
   gs9: 'LONDON PM FIX',
   gs10: 'COMEX SETTLEMENT PIN',
   gs11: 'TOKYO COMPRESSION',
+  gs12: 'LONDON AM FIX HUNT',
   /* hg-v933 — gold-native, bars only, and MINTED DEMOTED until a bake gives
      each one a record (see gold-extra-strategies.js for why). */
   goldfix:  'LBMA LONDON FIX FADE (AM/PM)',
@@ -3218,7 +3219,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
        So they are tallied, and the WHY NOTHING LED panel prints the split.
 
        This counts; it does not gate. The condition is unchanged. */
-    var CORE_SELF = { asian: 1, openrange: 1, silverb: 1, pdraid: 1, judas: 1, gs2: 1, gs3: 1, gs4: 1, gs5: 1, gs6: 1, gs7: 1, gs8: 1, gs9: 1, gs10: 1, gs11: 1 };
+    var CORE_SELF = { asian: 1, openrange: 1, silverb: 1, pdraid: 1, judas: 1, gs2: 1, gs3: 1, gs4: 1, gs5: 1, gs6: 1, gs7: 1, gs8: 1, gs9: 1, gs10: 1, gs11: 1, gs12: 1 };
     if (!CORE_SELF[key] && (myEv.length < 2 || myEv.length <= oppose)){
       if (D && D.__gsTally){
         if (myEv.length < 2) D.__gsTally.thin++;
@@ -4726,7 +4727,7 @@ function goldScalpSetups(inp){
         for (var si = 0; si < spec.length; si++){
           var sh = spec[si];
           if (!sh || sh.id === 'GS-1') continue;
-          var sKey = sh.id === 'GS-2' ? 'gs2' : (sh.id === 'GS-4' ? 'gs4' : (sh.id === 'GS-5' ? 'gs5' : (sh.id === 'GS-6' ? 'gs6' : (sh.id === 'GS-7' ? 'gs7' : (sh.id === 'GS-8' ? 'gs8' : (sh.id === 'GS-9' ? 'gs9' : (sh.id === 'GS-10' ? 'gs10' : (sh.id === 'GS-11' ? 'gs11' : 'gs3'))))))));
+          var sKey = sh.id === 'GS-2' ? 'gs2' : (sh.id === 'GS-4' ? 'gs4' : (sh.id === 'GS-5' ? 'gs5' : (sh.id === 'GS-6' ? 'gs6' : (sh.id === 'GS-7' ? 'gs7' : (sh.id === 'GS-8' ? 'gs8' : (sh.id === 'GS-9' ? 'gs9' : (sh.id === 'GS-10' ? 'gs10' : (sh.id === 'GS-11' ? 'gs11' : (sh.id === 'GS-12' ? 'gs12' : 'gs3')))))))));
           push(__gsCand(sKey, sh.dir, D, sh.stop, __gsSnapLvls(D, sh.dir),
             sh.why, 'a close back through the setup level cancels it', null, sh.entry));
         }
