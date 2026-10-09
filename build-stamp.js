@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1250',
-  pack: 'Trend Matrix also refuses a wick back inside the 20-bar regression channel, a CCI cross back through 100, and a wick back through the 1.272 extension of the last swing. A close inside the channel, a CCI already inside 100, or no swing does not refuse. The card does not send an order.',
-  built: '2026-10-09T08:40:00Z'
+  version: 'hg-v1251',
+  pack: 'Trend Matrix also refuses an MFI cross back through 80, a Williams %R cross back through -20, and a wick back inside the 12:00 UTC hour after 13:00. A reading already inside the extreme, or a sweep before 13:00 UTC, does not refuse. The card does not send an order.',
+  built: '2026-10-09T08:55:00Z'
 };
 
 function hgBuildLabel(b){

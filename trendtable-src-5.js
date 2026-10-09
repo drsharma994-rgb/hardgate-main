@@ -310,6 +310,15 @@
   var ext = rows1 ? tmExt(rows1, dir) : null;
   if (ext == null) hard.push('extension unread');
   else if (!ext) hard.push('the 1.272 extension was pierced and closed back through');
+  var mfiX = rows1 ? tmMfiExit(rows1, dir) : null;
+  if (mfiX == null) hard.push('mfi extreme unread');
+  else if (!mfiX) hard.push('money flow crossed back from the extreme');
+  var willX = rows1 ? tmWillExit(rows1, dir) : null;
+  if (willX == null) hard.push('williams extreme unread');
+  else if (!willX) hard.push('Williams crossed back from the extreme');
+  var ny = rows1 ? tmNySweep(rows1, dir) : null;
+  if (ny == null) hard.push('new york hour unread');
+  else if (!ny) hard.push('the New York hour was swept and closed back inside');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

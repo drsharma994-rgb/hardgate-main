@@ -3164,6 +3164,86 @@ function tmExt(rows, dir){
   if (prev > extS && l < extS && c > extS && c > o) return false;
   return true;
 }
+/* MFI(14) crossing back through 80. A reading already inside does not refuse.
+   Missing volume does not pass. */
+function tmMfiExit(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 3 || (dir !== 'long' && dir !== 'short')) return null;
+  function mfi(end){
+    var pos = 0, neg = 0, i, tp, prev, v;
+    for (i = end - len + 1; i <= end; i++){
+      if (!(+rows[i].v > 0) || !(+rows[i].c > 0) || !(+rows[i - 1].c > 0)) return NaN;
+      tp = (+rows[i].h + +rows[i].l + +rows[i].c) / 3;
+      prev = (+rows[i - 1].h + +rows[i - 1].l + +rows[i - 1].c) / 3;
+      v = tp * +rows[i].v;
+      if (tp > prev) pos += v;
+      else if (tp < prev) neg += v;
+    }
+    if (!(pos + neg > 0)) return 50;
+    if (!(neg > 0)) return 100;
+    return 100 - 100 / (1 + pos / neg);
+  }
+  var prev = mfi(rows.length - 2), now = mfi(rows.length - 1);
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= 80 && now < 80) return false;
+  if (dir === 'short' && prev <= 20 && now > 20) return false;
+  return true;
+}
+/* Williams %R leaving the extreme. A reading already inside does not refuse. */
+function tmWillExit(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  function will(end){
+    var hh = -Infinity, ll = Infinity, i;
+    for (i = end - len + 1; i <= end; i++){
+      if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l) || !(+rows[i].c > 0)) return NaN;
+      if (+rows[i].h > hh) hh = +rows[i].h;
+      if (+rows[i].l < ll) ll = +rows[i].l;
+    }
+    if (!(hh > ll)) return -50;
+    return -100 * (hh - +rows[end].c) / (hh - ll);
+  }
+  var prev = will(rows.length - 2), now = will(rows.length - 1);
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= -20 && now < -20) return false;
+  if (dir === 'short' && prev <= -80 && now > -80) return false;
+  return true;
+}
+/* The 12:00 UTC hour. After 13:00, a wick back inside that hour does not pass.
+   Before 13:00, or no such bar, it does not refuse. */
+function tmNySweep(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  if (when.getUTCHours() < 13) return true;
+  var day = when.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms, at;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    at = new Date(ms);
+    if (at.toISOString().slice(0, 10) !== day || at.getUTCHours() !== 12) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo)) return true;
+  var last = rows[rows.length - 1];
+  var h = +last.h, l = +last.l, o = +last.o, c = +last.c;
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.0015) return true;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return false;
+  if (dir === 'short' && l < lo && c >= lo && c > o) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
