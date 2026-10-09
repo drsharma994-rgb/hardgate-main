@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1208',
-  pack: 'Pine Gold, on top of the hg-v1207 Trend Matrix record marks. A scalp primary does not pass when it is long in premium or short in discount without a sweep or an order block. It does not pass during the London fix, and it does not fade an Asian range that already expanded by 1%. A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. The 0.705 pocket is recorded and does not lead. The card does not send an order.',
-  built: '2026-10-15T00:45:00Z'
+  version: 'hg-v1209',
+  pack: 'Gold Scalp and OmniGold refuse to lead when the gold tape says so. A scalp does not chase premium or discount without a sweep, does not fade an Asian range that already expanded, and stands down for the London fix on the London clock. A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. A real-rate headwind does not pass without a sweep. A short history does not refuse. The card does not send an order.',
+  built: '2026-10-09T00:22:28Z'
 };
 
 function hgBuildLabel(b){

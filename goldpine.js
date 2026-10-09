@@ -1241,7 +1241,7 @@ function mount(el){
     + 'plus native GOLD SWING/SCALP candidates. UI shows the <b>top ' + TOP_SETUPS + ' highest-probability formations</b> per section '
     + '(NEW/RECENT/FORMING weighted). '
     + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
-    + 'A scalp primary does not pass in premium or discount without a sweep, during a London fix, or when it fades an Asian range that already expanded. '
+    + 'A scalp primary does not pass in premium or discount without a sweep, during the London fix (London local time), or when it fades an Asian range that already expanded. '
     + 'A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. '
     + '<b>ALIGNED</b> = per-layer or watch context. <b>NATIVE</b> = goldind strategies.</div>'
     + '<div class="row" style="margin-top:10px">'

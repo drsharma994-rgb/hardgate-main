@@ -164,13 +164,31 @@ function pineGoldNearLevel(price, level, atr, mult){
   return Math.abs(price - level) <= (mult || 0.6) * atr;
 }
 
-/* LBMA Gold Price auctions, 10:30 and 15:00 London, which is 10:30 and 15:00 UTC
-   while London is on GMT. The scalp stands down from five minutes before
-   until ten minutes after. A clock that cannot be read does not lock. */
+/* LBMA Gold Price auctions, 10:30 and 15:00 London local. The scalp stands
+   down from five minutes before until ten minutes after. London is UTC in
+   winter and UTC+1 in summer, so the window is the London clock, not a
+   fixed UTC hour. A clock that cannot be read does not lock. */
+function pineGoldLondonMinutes(now){
+  try{
+    var ms = fin(+now) ? +now : Date.now();
+    var d = new Date(ms);
+    if (isNaN(d.getTime())) return null;
+    var fmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    });
+    var parts = fmt.formatToParts(d), hh = NaN, mm = NaN, i;
+    for (i = 0; i < parts.length; i++){
+      if (parts[i].type === 'hour') hh = +parts[i].value;
+      else if (parts[i].type === 'minute') mm = +parts[i].value;
+    }
+    if (hh === 24) hh = 0;
+    if (!isFinite(hh) || !isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  }catch(e){ return null; }
+}
 function pineGoldFixLock(now){
-  var d = new Date(fin(+now) ? +now : Date.now());
-  if (isNaN(d.getTime())) return false;
-  var m = d.getUTCHours() * 60 + d.getUTCMinutes();
+  var m = pineGoldLondonMinutes(now);
+  if (m == null) return false;
   return (m >= 625 && m <= 640) || (m >= 895 && m <= 910);
 }
 
@@ -509,10 +527,10 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
       factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Scalp short in discount without a sweep or order block' });
     }
   }
-  if (native.rsi && dir === 'long' && native.rsi.zone === 'OVERBOUGHT' && native.rsi.div === 'bearish'){
+  if (native.rsi && dir === 'long' && native.rsi.zone === 'OVERBOUGHT' && String(native.rsi.div || '').toLowerCase() === 'bearish'){
     pass = false;
     factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Gold RSI is overbought and diverging' });
-  } else if (native.rsi && dir === 'short' && native.rsi.zone === 'OVERSOLD' && native.rsi.div === 'bullish'){
+  } else if (native.rsi && dir === 'short' && native.rsi.zone === 'OVERSOLD' && String(native.rsi.div || '').toLowerCase() === 'bullish'){
     pass = false;
     factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Gold RSI is oversold and diverging' });
   }
@@ -1941,6 +1959,62 @@ function pineGoldBlocksLead(states, dir){
   return null;
 }
 
+/* Gold-tape veto shared by GOLD SCALP and OMNIGOLD. A missing reading does
+   not veto. A reading that is actually against the trade does. */
+function pineGoldSwept(rows, dir){
+  var swFn = gfn('goldSweeps');
+  if (typeof swFn !== 'function') return false;
+  try{
+    var sw = swFn(rows);
+    if (!sw) return false;
+    if (dir === 'long' && ((sw.dir === 'bullish' && fin(+sw.barsAgo) && sw.barsAgo <= 8) || (sw.lowSweep && fin(+sw.lowSweep.barsAgo) && sw.lowSweep.barsAgo <= 8))) return true;
+    if (dir === 'short' && ((sw.dir === 'bearish' && fin(+sw.barsAgo) && sw.barsAgo <= 8) || (sw.highSweep && fin(+sw.highSweep.barsAgo) && sw.highSweep.barsAgo <= 8))) return true;
+  }catch(e){}
+  return false;
+}
+function pineGoldTapeVeto(rows, dir, opts){
+  opts = opts || {};
+  if (!rows || rows.length < 25 || (dir !== 'long' && dir !== 'short')) return null;
+  var mode = opts.mode === 'swing' ? 'swing' : 'scalp';
+  var price = pgrNum(rows[rows.length - 1] && rows[rows.length - 1].c);
+  if (!isFinite(price) || !(price > 0)) return null;
+  var swept = pineGoldSwept(rows, dir);
+  if (mode === 'scalp'){
+    try{
+      var pdFn = gfn('goldPremiumDiscount');
+      var pd = pdFn ? pdFn(rows) : null;
+      if (pd && dir === 'long' && pd.zone === 'PREMIUM' && !swept) return 'Scalp long in premium without a sweep';
+      if (pd && dir === 'short' && pd.zone === 'DISCOUNT' && !swept) return 'Scalp short in discount without a sweep';
+    }catch(ePd){}
+  }
+  try{
+    var rsiFn = gfn('goldRSIGold');
+    var rsi = rsiFn ? rsiFn(rows) : null;
+    var div = String(rsi && rsi.div || '').toLowerCase();
+    if (rsi && dir === 'long' && rsi.zone === 'OVERBOUGHT' && div === 'bearish') return 'Gold RSI is overbought and diverging';
+    if (rsi && dir === 'short' && rsi.zone === 'OVERSOLD' && div === 'bullish') return 'Gold RSI is oversold and diverging';
+  }catch(eRsi){}
+  if (mode === 'scalp'){
+    try{
+      var asiaFn = gfn('goldAsianRange');
+      var asian = asiaFn ? asiaFn(rows) : null;
+      if (asian && asian.hi > asian.lo && (asian.hi - asian.lo) / price >= 0.01){
+        if ((dir === 'long' && asian.state === 'SHORT_BREAK') || (dir === 'short' && asian.state === 'LONG_BREAK')) return 'Asian range already expanded. Do not fade it.';
+      }
+    }catch(eAs){}
+    if (pineGoldFixLock(opts.now)) return 'London fix auction. A scalp does not pass in this window.';
+  }
+  try{
+    var adrFn = gfn('goldADR');
+    var adr = adrFn ? adrFn(rows, 14) : null;
+    if (adr && adr.exhausted === 'YES' && adr.bias && adr.bias !== dir) return 'The day has used its average range. A continuation does not pass.';
+  }catch(eAd){}
+  var hint = String((opts.macro && (opts.macro.realRateHint || opts.macro.hint)) || '').toUpperCase();
+  if (hint === 'HEADWIND' && dir === 'long' && !swept) return 'Real-rate headwind against a long without a sweep';
+  if (hint === 'TAILWIND' && dir === 'short' && !swept) return 'Real-rate tailwind against a short without a sweep';
+  return null;
+}
+
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
    consume these through their extras seam and price them through their own
@@ -2398,6 +2472,7 @@ G.pineGoldSqueezeFire = pineGoldSqueezeFire;
 G.pineGoldWeeklyAvwap = pineGoldWeeklyAvwap;
 G.pineGoldEfficiency = pineGoldEfficiency;
 G.pineGoldBlocksLead = pineGoldBlocksLead;
+G.pineGoldTapeVeto = pineGoldTapeVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
@@ -2439,7 +2514,7 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries,
     /* hg-v1171 */
     pineGoldWilliamsReentry, pineGoldTrixCross, pineGoldFisherZero,
-    pineGoldAdxDi, pineGoldHeikin, pineGoldSessVwap, pineGoldBlocksLead,
+    pineGoldAdxDi, pineGoldHeikin, pineGoldSessVwap, pineGoldBlocksLead, pineGoldTapeVeto,
     pineGoldQqe, pineGoldSqueezeFire, pineGoldWeeklyAvwap, pineGoldEfficiency,
     pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries,
     /* hg-v1202 */
