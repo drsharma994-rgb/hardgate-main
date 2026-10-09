@@ -1871,6 +1871,80 @@ function tmChaikin(rows, dir){
   if (dir === 'long') return osc > 0;
   return osc < 0;
 }
+/* Detrended Price Oscillator, 20. Price has to be above the average
+   that sat 11 bars back for a long, and below it for a short. */
+function tmDpo(rows, dir){
+  var len = 20, shift = Math.floor(len / 2) + 1;
+  if (!rows || rows.length < len + shift || (dir !== 'long' && dir !== 'short')) return null;
+  var end = rows.length - 1 - shift, start = end - len + 1, sum = 0, i;
+  if (start < 0) return null;
+  for (i = start; i <= end; i++){
+    if (!(rows[i].c > 0)) return null;
+    sum += rows[i].c;
+  }
+  var px = rows[rows.length - 1].c;
+  if (!(px > 0)) return null;
+  var dpo = px - (sum / len);
+  if (!isFinite(dpo)) return null;
+  if (dir === 'long') return dpo > 0;
+  return dpo < 0;
+}
+/* Arms Ease of Movement, 14. The midpoint has to be moving with the trade.
+   Missing volume or a zero range does not pass. */
+function tmEase(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var emv = [], i, b, p, range, mid, prevMid;
+  for (i = 1; i < rows.length; i++){
+    b = rows[i]; p = rows[i - 1];
+    if (!isFinite(b.h) || !isFinite(b.l) || !isFinite(p.h) || !isFinite(p.l) || !(b.v > 0)) return null;
+    range = b.h - b.l;
+    if (!(range > 0)) return null;
+    mid = (b.h + b.l) / 2;
+    prevMid = (p.h + p.l) / 2;
+    emv.push(((mid - prevMid) * range) / b.v);
+  }
+  var slice = emv.slice(-len), sum = 0;
+  for (i = 0; i < slice.length; i++){
+    if (!isFinite(slice[i])) return null;
+    sum += slice[i];
+  }
+  var avg = sum / len;
+  if (dir === 'long') return avg > 0;
+  return avg < 0;
+}
+/* Dorsey Relative Volatility Index, 10. This is not the Relative Vigor Index.
+   Above 50 agrees with a long. Below 50 agrees with a short. */
+function tmRelVol(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len * 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  function stdevAt(end){
+    if (end < len - 1) return NaN;
+    var s = 0, k, m, v = 0, d;
+    for (k = end - len + 1; k <= end; k++) s += closes[k];
+    m = s / len;
+    for (k = end - len + 1; k <= end; k++){ d = closes[k] - m; v += d * d; }
+    return Math.sqrt(v / len);
+  }
+  var up = 0, dn = 0, start = closes.length - len, sd, ch;
+  for (i = start; i < closes.length; i++){
+    sd = stdevAt(i);
+    if (!isFinite(sd)) return null;
+    ch = closes[i] - closes[i - 1];
+    if (ch > 0) up += sd;
+    else if (ch < 0) dn += sd;
+  }
+  if (!(up + dn > 0)) return false;
+  var rvi = 100 * up / (up + dn);
+  if (!isFinite(rvi)) return null;
+  if (dir === 'long') return rvi > 50;
+  return rvi < 50;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -4284,6 +4358,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var chaikin = rows1 ? tmChaikin(rows1, dir) : null;
   if (chaikin == null) hard.push('chaikin unread');
   else if (!chaikin) hard.push('chaikin oscillator is against the trade');
+  var dpo = rows1 ? tmDpo(rows1, dir) : null;
+  if (dpo == null) hard.push('dpo unread');
+  else if (!dpo) hard.push('detrended price is against the trade');
+  var ease = rows1 ? tmEase(rows1, dir) : null;
+  if (ease == null) hard.push('ease of movement unread');
+  else if (!ease) hard.push('ease of movement is against the trade');
+  var relvol = rows1 ? tmRelVol(rows1, dir) : null;
+  if (relvol == null) hard.push('relative volatility unread');
+  else if (!relvol) hard.push('relative volatility is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -4511,7 +4594,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'Ichimoku cloud, True Strength Index and Chaikin Oscillator agree with the earlier crypto scripts';
+  ticket.pine = 'DPO, Ease of Movement and Relative Volatility agree with the earlier crypto scripts';
   return [];
 }
 
@@ -6563,7 +6646,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero, price outside the Ichimoku cloud on the trade side, True Strength Index on the trade side of zero, and the Chaikin Oscillator on the trade side of zero. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero, MACD on the trade side of zero and not under its signal, price on the trade side of the Donchian midpoint, and Chande Momentum on the trade side of zero, price outside the Ichimoku cloud on the trade side, True Strength Index on the trade side of zero, and the Chaikin Oscillator on the trade side of zero, the Detrended Price Oscillator on the trade side of zero, Ease of Movement with the trade, and Relative Volatility on the trade side of 50. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -7035,6 +7118,9 @@ W.tmCmo = tmCmo;
 W.tmKumo = tmKumo;
 W.tmTsi = tmTsi;
 W.tmChaikin = tmChaikin;
+W.tmDpo = tmDpo;
+W.tmEase = tmEase;
+W.tmRelVol = tmRelVol;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

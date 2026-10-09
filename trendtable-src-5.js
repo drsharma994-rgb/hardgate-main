@@ -166,6 +166,15 @@
   var chaikin = rows1 ? tmChaikin(rows1, dir) : null;
   if (chaikin == null) hard.push('chaikin unread');
   else if (!chaikin) hard.push('chaikin oscillator is against the trade');
+  var dpo = rows1 ? tmDpo(rows1, dir) : null;
+  if (dpo == null) hard.push('dpo unread');
+  else if (!dpo) hard.push('detrended price is against the trade');
+  var ease = rows1 ? tmEase(rows1, dir) : null;
+  if (ease == null) hard.push('ease of movement unread');
+  else if (!ease) hard.push('ease of movement is against the trade');
+  var relvol = rows1 ? tmRelVol(rows1, dir) : null;
+  if (relvol == null) hard.push('relative volatility unread');
+  else if (!relvol) hard.push('relative volatility is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -393,7 +402,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'Ichimoku cloud, True Strength Index and Chaikin Oscillator agree with the earlier crypto scripts';
+  ticket.pine = 'DPO, Ease of Movement and Relative Volatility agree with the earlier crypto scripts';
   return [];
 }
 

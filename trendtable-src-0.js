@@ -1871,6 +1871,80 @@ function tmChaikin(rows, dir){
   if (dir === 'long') return osc > 0;
   return osc < 0;
 }
+/* Detrended Price Oscillator, 20. Price has to be above the average
+   that sat 11 bars back for a long, and below it for a short. */
+function tmDpo(rows, dir){
+  var len = 20, shift = Math.floor(len / 2) + 1;
+  if (!rows || rows.length < len + shift || (dir !== 'long' && dir !== 'short')) return null;
+  var end = rows.length - 1 - shift, start = end - len + 1, sum = 0, i;
+  if (start < 0) return null;
+  for (i = start; i <= end; i++){
+    if (!(rows[i].c > 0)) return null;
+    sum += rows[i].c;
+  }
+  var px = rows[rows.length - 1].c;
+  if (!(px > 0)) return null;
+  var dpo = px - (sum / len);
+  if (!isFinite(dpo)) return null;
+  if (dir === 'long') return dpo > 0;
+  return dpo < 0;
+}
+/* Arms Ease of Movement, 14. The midpoint has to be moving with the trade.
+   Missing volume or a zero range does not pass. */
+function tmEase(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var emv = [], i, b, p, range, mid, prevMid;
+  for (i = 1; i < rows.length; i++){
+    b = rows[i]; p = rows[i - 1];
+    if (!isFinite(b.h) || !isFinite(b.l) || !isFinite(p.h) || !isFinite(p.l) || !(b.v > 0)) return null;
+    range = b.h - b.l;
+    if (!(range > 0)) return null;
+    mid = (b.h + b.l) / 2;
+    prevMid = (p.h + p.l) / 2;
+    emv.push(((mid - prevMid) * range) / b.v);
+  }
+  var slice = emv.slice(-len), sum = 0;
+  for (i = 0; i < slice.length; i++){
+    if (!isFinite(slice[i])) return null;
+    sum += slice[i];
+  }
+  var avg = sum / len;
+  if (dir === 'long') return avg > 0;
+  return avg < 0;
+}
+/* Dorsey Relative Volatility Index, 10. This is not the Relative Vigor Index.
+   Above 50 agrees with a long. Below 50 agrees with a short. */
+function tmRelVol(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len * 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  function stdevAt(end){
+    if (end < len - 1) return NaN;
+    var s = 0, k, m, v = 0, d;
+    for (k = end - len + 1; k <= end; k++) s += closes[k];
+    m = s / len;
+    for (k = end - len + 1; k <= end; k++){ d = closes[k] - m; v += d * d; }
+    return Math.sqrt(v / len);
+  }
+  var up = 0, dn = 0, start = closes.length - len, sd, ch;
+  for (i = start; i < closes.length; i++){
+    sd = stdevAt(i);
+    if (!isFinite(sd)) return null;
+    ch = closes[i] - closes[i - 1];
+    if (ch > 0) up += sd;
+    else if (ch < 0) dn += sd;
+  }
+  if (!(up + dn > 0)) return false;
+  var rvi = 100 * up / (up + dn);
+  if (!isFinite(rvi)) return null;
+  if (dir === 'long') return rvi > 50;
+  return rvi < 50;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
