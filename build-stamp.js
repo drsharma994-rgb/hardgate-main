@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1237',
-  pack: 'TREND MATRIX PINE MARKS MEASURED - the ten crypto Pine marks finally reach the ledger: tmRecordReads forwards them as boolean reads (WITH the plan direction = true, AGAINST = false, null abstains), so hgFwdReadSplit can now measure each port against its complement out of sample. This closes the written-but-never-read gap for the hg-v1201/v1207 marks. Also carries the Trend Matrix also refuses a setup when Williams %R is on the wrong side of -50, Balance of Power is against the trade, or the Klinger volume oscillator is on the wrong side of zero. A short tape, a flat range, or missing volume does not pass. The SMC core mark stays record-only. The card does not send an order.',
-  built: '2026-10-09T05:20:00Z'
+  version: 'hg-v1238',
+  pack: 'TREND MATRIX PINE MARKS MEASURED - tmRecordReads forwards the ten crypto Pine marks as boolean reads so hgFwdReadSplit measures each against its complement out of sample (closing the written-but-never-read gap). Also carries the Trend Matrix also refuses a setup when the Stochastic Momentum Index is on the wrong side of zero, the triple EMA is not moving with the trade, or Elder Impulse is sloping against it. A short tape or a flat TEMA does not pass. The card does not send an order.',
+  built: '2026-10-09T05:35:00Z'
 };
 
 function hgBuildLabel(b){
