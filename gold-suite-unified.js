@@ -305,6 +305,39 @@
         }
       }
     }
+    if (isFinite(hour) && hour >= 18.25 && hour <= 18.5 && !paceDead(__pace)){
+      var strike = Math.round(last.c / 5) * 5;
+      var pin = Math.abs(last.c - strike);
+      if (pin >= 3 && pin <= 5.5){
+        if (last.c > strike && last.c < last.o){
+          var pinS = hit('GS-10', 'COMEX Settlement Pin', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Between 18:15 and 18:30 UTC price sat 3 to 5.50 dollars above the nearest five-dollar strike, and this bar closed back toward it.');
+          if (pinS) out.push(pinS);
+        } else if (last.c < strike && last.c > last.o){
+          var pinL = hit('GS-10', 'COMEX Settlement Pin', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Between 18:15 and 18:30 UTC price sat 3 to 5.50 dollars under the nearest five-dollar strike, and this bar closed back toward it.');
+          if (pinL) out.push(pinL);
+        }
+      }
+    }
+    if (isFinite(hour) && hour >= 3 && hour <= 4.5 && today && !paceDead(__pace)){
+      var tHi = -Infinity, tLo = Infinity, tn = 0, ti, th;
+      for (ti = 0; ti < day.length - 1; ti++){
+        if (dayOf(day[ti]) !== today) continue;
+        th = hourOf(day[ti]);
+        if (!isFinite(th) || th < 0 || th >= hour) continue;
+        if (day[ti].h > tHi) tHi = day[ti].h;
+        if (day[ti].l < tLo) tLo = day[ti].l;
+        tn++;
+      }
+      if (tn >= 4 && tHi > tLo && tHi - tLo <= 6.5){
+        if (last.c > tHi && last.c > last.o){
+          var tkL = hit('GS-11', 'Tokyo Compression', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The Asian range into the Tokyo window was 6.50 dollars or less, and this bar closed above it.');
+          if (tkL) out.push(tkL);
+        } else if (last.c < tLo && last.c < last.o){
+          var tkS = hit('GS-11', 'Tokyo Compression', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The Asian range into the Tokyo window was 6.50 dollars or less, and this bar closed under it.');
+          if (tkS) out.push(tkS);
+        }
+      }
+    }
     return out;
   }
 
@@ -427,6 +460,14 @@
     if (realY.length >= 3 && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4 && realY[realY.length - 1].c < realY[realY.length - 3].c){
       var ry = hit('OG-10', 'Real Yield', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'The real-yield series fell over three prints and this gold bar closed up. A missing real-yield series is not a falling yield.');
       if (ry) out.push(ry);
+    }
+    var sgeYuan = Number(extra.sgeYuan), usdCny = Number(extra.usdcny);
+    if (sgeYuan > 0 && usdCny > 0 && last.c > last.o){
+      var sgeOz = (sgeYuan * 31.1035) / usdCny;
+      if (sgeOz - last.c >= 15){
+        var sge = hit('OG-11', 'Shanghai Basis', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Shanghai gold, converted with the live dollar-yuan rate, is at least 15 dollars an ounce above London, and this bar closed up. A missing Shanghai price or a missing yuan rate is not a premium.');
+        if (sge) out.push(sge);
+      }
     }
     return out;
   }
@@ -577,6 +618,16 @@
         if (dcS) out.push(dcS);
       }
     }
+    var virgin = virginSessionVwap(rows, bands, prevVw);
+    if (virgin != null && !paceDead(__pace)){
+      if (last.l <= virgin && last.c > virgin && last.c > last.o){
+        var nvL = hit('PG-11', 'Virgin Session VWAP', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'An older session average had not been traded since it finished, and this bar closed back above it.');
+        if (nvL) out.push(nvL);
+      } else if (last.h >= virgin && last.c < virgin && last.c < last.o){
+        var nvS = hit('PG-11', 'Virgin Session VWAP', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'An older session average had not been traded since it finished, and this bar closed back under it.');
+        if (nvS) out.push(nvS);
+      }
+    }
     return out;
   }
 
@@ -649,6 +700,27 @@
     if (!(hi <= ema + 1.5 * a && lo >= ema - 1.5 * a && hi > lo)) return null;
     if (last.c > hi && last.c > last.o) return 'long';
     if (last.c < lo && last.c < last.o) return 'short';
+    return null;
+  }
+
+  function virginSessionVwap(rows, bands, skipMean){
+    if (!rows || !bands || bands.length !== rows.length || bands.length < 8) return null;
+    var done = [], i, k, m, touched;
+    for (i = 1; i < bands.length - 1; i++){
+      if (!bands[i].sess || bands[i].sess === bands[i + 1].sess) continue;
+      done.push({ mean: bands[i].mean, end: i });
+    }
+    if (done.length < 2) return null;
+    for (i = done.length - 2; i >= 0; i--){
+      m = done[i].mean;
+      if (!isFinite(m)) continue;
+      if (isFinite(skipMean) && Math.abs(m - skipMean) < 1) continue;
+      touched = false;
+      for (k = done[i].end + 1; k < rows.length - 1; k++){
+        if (rows[k].l <= m && rows[k].h >= m){ touched = true; break; }
+      }
+      if (!touched) return m;
+    }
     return null;
   }
 
@@ -905,6 +977,16 @@
       } else if (last.l <= leaf.level + 1.2 && last.c > leaf.level && last.c > last.o){
         var lfL = hit('GG-9', 'Golden Angle', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the 137.5 degree Gann angle and closed back above it.');
         if (lfL) out.push(lfL);
+      }
+    }
+    var ord = gannAngles(last.c, [45, 135, 225, 315]);
+    if (ord && ord.dist <= 1.2){
+      if (last.h >= ord.level - 1.2 && last.c < ord.level && last.c < last.o){
+        var odS = hit('GG-10', 'Ordinal Gann Angle', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged a 45, 135, 225, or 315 degree Gann angle and closed back under it.');
+        if (odS) out.push(odS);
+      } else if (last.l <= ord.level + 1.2 && last.c > ord.level && last.c > last.o){
+        var odL = hit('GG-10', 'Ordinal Gann Angle', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged a 45, 135, 225, or 315 degree Gann angle and closed back above it.');
+        if (odL) out.push(odL);
       }
     }
     return out;

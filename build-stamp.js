@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1281',
-  pack: 'Five reads that were not already on the desks. Gold Scalp fades the 15:00 UTC open only between 15:05 and 15:30 UTC, after a 1.2-range stretch and a turn back. OmniGold adds a real-yield drop over three prints, and a missing real-yield series is not treated as a falling yield. Pine Gold tags an untested prior-session point of control, and it releases a 20-bar Donchian range only after that range sat inside the Keltner band. Ganesh Gold tags the 137.5 degree angle and requires a close back away from it. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
-  built: '2026-10-09T17:10:00Z'
+  version: 'hg-v1282',
+  pack: 'Five reads that were not already on the desks. Gold Scalp fades the nearest five-dollar strike only between 18:15 and 18:30 UTC, and only when price is 3 to 5.50 dollars away and this bar turns back. It also breaks a Tokyo range of 6.50 dollars or less between 03:00 and 04:30 UTC. OmniGold adds a Shanghai premium of at least 15 dollars an ounce, and a missing Shanghai price or a missing yuan rate is not a premium. Pine Gold tags an older session average only when no later bar has traded it. Ganesh Gold tags a 45, 135, 225, or 315 degree angle and requires a close back away from it. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
+  built: '2026-10-09T17:30:00Z'
 };
 
 function hgBuildLabel(b){
