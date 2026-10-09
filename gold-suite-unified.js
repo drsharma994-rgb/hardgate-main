@@ -226,6 +226,35 @@
         if (dbS) out.push(dbS);
       }
     }
+    if (((hour >= 7 && hour < 10) || (hour >= 13.75 && hour < 16)) && today){
+      var yday = null, di2, dd, pdH = -Infinity, pdL = Infinity, pdN = 0;
+      for (di2 = day.length - 1; di2 >= 0; di2--){
+        dd = dayOf(day[di2]);
+        if (dd && dd !== today){ yday = dd; break; }
+      }
+      if (yday){
+        for (di2 = 0; di2 < day.length; di2++){
+          if (dayOf(day[di2]) !== yday) continue;
+          if (day[di2].h > pdH) pdH = day[di2].h;
+          if (day[di2].l < pdL) pdL = day[di2].l;
+          pdN++;
+        }
+      }
+      var span6 = last.h - last.l;
+      if (pdN >= 3 && pdH - pdL >= 3 && span6 > 0 && !paceDead(__pace)){
+        var depthPdL = pdL - last.l;
+        var depthPdH = last.h - pdH;
+        var sameAsiaL = n >= 3 && Math.abs(pdL - lo) <= 1;
+        var sameAsiaH = n >= 3 && Math.abs(pdH - hi) <= 1;
+        if (!sameAsiaL && depthPdL >= 1.5 && depthPdL <= 5.5 && last.c > pdL && last.c > last.o && (last.c - last.l) / span6 >= 0.55){
+          var pdLhit = hit('GS-6', 'Prior Day Raid', 'long', last.c, Math.min(last.l, prev.l) - Math.max(a * 0.4, 2.8), 'The prior-day low was swept by 1.50 to 5.50 dollars and the bar closed back above it.');
+          if (pdLhit) out.push(pdLhit);
+        } else if (!sameAsiaH && depthPdH >= 1.5 && depthPdH <= 5.5 && last.c < pdH && last.c < last.o && (last.h - last.c) / span6 >= 0.55){
+          var pdShit = hit('GS-6', 'Prior Day Raid', 'short', last.c, Math.max(last.h, prev.h) + Math.max(a * 0.4, 2.8), 'The prior-day high was swept by 1.50 to 5.50 dollars and the bar closed back under it.');
+          if (pdShit) out.push(pdShit);
+        }
+      }
+    }
     return out;
   }
 
@@ -315,6 +344,13 @@
         var ssi = hit('OG-6', 'Stagflation Shock', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold and crude both rose over six bars while the yield print fell.');
         if (ssi) out.push(ssi);
       }
+    } else if (yields.length >= 6 && rows.length >= 6){
+      var yLead = yields[yields.length - 1].c < yields[yields.length - 6].c;
+      var gLead = last.c > rows[rows.length - 6].c && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4;
+      if (yLead && gLead){
+        var yg = hit('OG-7', 'Yield Lead', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'The yield print fell over six bars and this gold bar closed up with a real body.');
+        if (yg) out.push(yg);
+      }
     }
     return out;
   }
@@ -333,7 +369,7 @@
       mean = cumP / cumV;
       cumD += vol * (typical - mean) * (typical - mean);
       dev = Math.sqrt(cumD / cumV);
-      out.push({ mean: mean, up2: mean + 2 * dev, dn2: mean - 2 * dev, dev: dev });
+      out.push({ mean: mean, up2: mean + 2 * dev, dn2: mean - 2 * dev, dev: dev, sess: sess });
     }
     return out;
   }
@@ -414,7 +450,28 @@
     }
     var ob = shallowBlock(rows, a, last);
     if (ob) out.push(ob);
+    var prevVw = priorSessionMean(bands);
+    if (prevVw != null && band && Math.abs(band.mean - prevVw) >= 1 && !paceDead(__pace)){
+      if (last.l <= prevVw && last.c > prevVw && last.c > last.o){
+        var vwL = hit('PG-6', 'Prior Session VWAP', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The finished session average was tagged and the bar closed back above it.');
+        if (vwL) out.push(vwL);
+      } else if (last.h >= prevVw && last.c < prevVw && last.c < last.o){
+        var vwS = hit('PG-6', 'Prior Session VWAP', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The finished session average was tagged and the bar closed back under it.');
+        if (vwS) out.push(vwS);
+      }
+    }
     return out;
+  }
+
+  function priorSessionMean(bands){
+    if (!bands || bands.length < 6 || !bands[bands.length - 1].sess) return null;
+    var cur = bands[bands.length - 1].sess, i = bands.length - 2, prev, n = 0, mean;
+    while (i >= 0 && bands[i].sess === cur) i--;
+    if (i < 0) return null;
+    prev = bands[i].sess;
+    mean = bands[i].mean;
+    while (i >= 0 && bands[i].sess === prev){ n++; i--; }
+    return n >= 4 ? mean : null;
   }
 
   function shallowBlock(rows, a, last){
@@ -597,6 +654,26 @@
       } else if (last.l <= sacred.level + 1.2 && last.c > sacred.level && last.c > last.o){
         var sacL = hit('GG-5', 'Gann 108 and 144', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the ' + sacred.deg + ' degree Gann angle and closed back above it.');
         if (sacL) out.push(sacL);
+      }
+    }
+    if (rows.length >= 8){
+      var hi8 = -Infinity, lo8 = Infinity, j8, ext8, dol8, ratio8, mid8;
+      for (j8 = rows.length - 8; j8 < rows.length; j8++){
+        if (rows[j8].h > hi8) hi8 = rows[j8].h;
+        if (rows[j8].l < lo8) lo8 = rows[j8].l;
+      }
+      ext8 = (hi8 - last.c >= last.c - lo8) ? hi8 : lo8;
+      dol8 = Math.abs(last.c - ext8);
+      ratio8 = dol8 > 0 ? 8 / dol8 : NaN;
+      mid8 = (hi8 + lo8) / 2;
+      if (isFinite(ratio8) && ratio8 >= 0.88 && ratio8 <= 1.12){
+        if (ext8 === hi8 && last.c < last.o && last.c < mid8){
+          var sqS = hit('GG-6', 'Eight Bar Square', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Eight bars match the dollar distance within 12 percent, and this bar turned down.');
+          if (sqS) out.push(sqS);
+        } else if (ext8 === lo8 && last.c > last.o && last.c > mid8){
+          var sqL = hit('GG-6', 'Eight Bar Square', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Eight bars match the dollar distance within 12 percent, and this bar turned up.');
+          if (sqL) out.push(sqL);
+        }
       }
     }
     return out;

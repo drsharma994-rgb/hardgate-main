@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1277',
-  pack: 'THE PARTICIPATION LAYER - every gold core hit now carries the defended print. The twenty-one core strategies all share one premise - something was swept, tapped or reclaimed - and none of them read the tape volume, though every bar parses it. paceOf reads the confirming bar over the MEDIAN of the last 20 readable bars (10 positive prints required, and a positive print on the confirming bar itself); every hit carries pace - a number when the tape can speak, null when it cannot, never fabricated - and the why sentence states the participation whenever readable, so every desk card shows it with no consumer edit. The five session-raid detections REQUIRE a defended print: a readable pace under 0.5x withholds GS-1 Judas, GS-2 cash-open ORB, GS-4 London-NY overlap, GS-5 dual Asia boundary and PG-1 band pierce - a sweep nobody came to is withheld, the same honesty as a quiet bar. Level and shape reads (SMT, fix drift, ratio band, consequent encroachment, value area, ribbon, Gann, chakra, shallow block) carry the number without a bar: their premises are not participation. A volume-deaf feed fails open and claims nothing. The guard test pins the contract, proven failing pre-fix. Carries v1276 (version collision): three more gold reads that stay quiet when the series is missing - dual Asia-boundary flush, shallow order block, 108/144 Gann angles, plus physical bullion premium and stagflation shock - all through the same hit seam, so the new hits carry pace automatically.',
-  built: '2026-10-09T16:30:00Z'
+  version: 'hg-v1278',
+  pack: 'One new read on each gold desk, on top of the participation layer. Gold Scalp raids the prior day only when that day is on the tape, the sweep is 1.50 to 5.50 dollars, and the print is not dead volume. OmniGold adds a yield lead, unread when the yield series is missing. Pine Gold tags the finished session average, and a dead print withholds it. Ganesh Gold adds an eight-bar square, separate from the sixteen-bar square. Every target stays 2.5R. The card does not send an order.',
+  built: '2026-10-09T16:10:00Z'
 };
 
 function hgBuildLabel(b){
