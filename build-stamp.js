@@ -5,7 +5,7 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1289',
+  version: 'hg-v1290',
   pack: 'Two fixes answering "I don\'t see clear setups" on OMNIGOLD, GOLD SCALP, GOLD PINE and GANESH GOLD. First: hgOgOpenGoldConvictions enumerated store.live with no age check — hg-v941 fixed TTL inside applyHardgateConvictionLock but that only runs when the OWNING desk scans, so a stale SCALP record held all three gold desks (one-at-a-time) past its 90-min TTL. The reader now stamps every row with its staleness and tracks nFresh beside n: hg-v941 disclosure is preserved (rows still carry every record with age on the panel), and the gate reads nFresh so a known-expired record stops holding. The holding panel marks stale rows STALE so the user sees the orphan. Second: GOLD SCALP\'s ACCURACY leg (hg-v1156) demoted every stratKey not in the two prefer rows (p6fail, p9volbar) — including the 14 hg-v1270+ GS strategies that have no row in the edge table at all. The hg-v1098 instruction said "lead only on measured mechanics with a prefer record" — defensible when every mint stratKey had a row, but it conflated "measured not-prefer" with "truly unmeasured" (the hg-v989 three-state defect). The leg now differentiates: a stratKey with a row still demotes with hg-v1098\'s own message; a stratKey with NO row stamps UNMEASURED and skips the lead-set demote. The geometry / macro / dxy+tnx / real-yield checks still fire on both paths; the lever default stays ON (hg-v1098 preserved on measured mechanics). No gate moved, no threshold moved, no setup leaves any board by this pack.',
   built: '2026-10-09T20:30:00Z'
 };

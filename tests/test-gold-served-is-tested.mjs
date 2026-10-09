@@ -155,9 +155,12 @@ console.log('== 1) the real server serves goldscalp.js byte-identical to disk ==
 console.log('== 2) the baked legs, through the real tab ==');
 let LEAD_TODAY = null;
 {
-  /* (a) the closed-bar strip: 16 min past the last bar's open it is closed; 5 min past, it is forming and stripped */
-  const A = await scan({ now: WED + 16 * 60000 });
-  const B = await scan({ now: WED + 5 * 60000 });
+  /* (a) the closed-bar strip: 16 min past the last bar's open it is closed; 5 min past, it is forming and stripped.
+     hg-v1290: A drives the lever ON explicitly so sections (b)(c)(d) measure
+     the ACCURACY path verbatim; the OFF default (user ask) is asserted at
+     the bottom of this block, in its own scan. */
+  const A = await scan({ now: WED + 16 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: true } });
+  const B = await scan({ now: WED + 5 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: true } });
   assert(!!A.snap && A.cands.length === 7, 'REACHABILITY: at +16 min the desk reads the closed WED bar and forms on seed 102 (' + A.cands.length + ' candidates)');
   assert(/420 15m bars/.test(A.stat), 'the stat line counts all 420 bars when the last one is closed (' + A.stat.slice(0, 60) + ')');
   assert(/419 15m bars/.test(B.stat), 'at +5 min the FORMING bar is stripped: 419 bars (hg-v1095 closed-bar rule, baked) — ' + B.stat.slice(0, 60));
@@ -179,13 +182,14 @@ let LEAD_TODAY = null;
   assert(/ACCURACY — only p6fail \/ p9volbar has held up on this desk/.test(A.cards.replace(/&#39;|&apos;/g, "'")),
     'the card note NAMES the set it read (p6fail / p9volbar), not a sentence typed about two mechanics');
 
-  /* (c) READ, not typed: move a row to prefer at runtime and the leg follows; an unreadable table fails CLOSED */
-  const C = await scan({ now: WED + 16 * 60000, afterBoot: W => { W.HG_GOLD_SETUP_EDGE.scalp.liqsweep.action = 'prefer'; } });
+  /* (c) READ, not typed: move a row to prefer at runtime and the leg follows; an unreadable table fails CLOSED.
+     hg-v1290: lever driven ON explicitly so the ACCURACY path is tested. */
+  const C = await scan({ now: WED + 16 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: true }, afterBoot: W => { W.HG_GOLD_SETUP_EDGE.scalp.liqsweep.action = 'prefer'; } });
   const liq = C.cands.find(c => c.stratKey === 'liqsweep');
   assert(!!liq && !hasAcc(liq) && JSON.stringify(C.tab.leadKeys()) === JSON.stringify(['liqsweep', 'p6fail', 'p9volbar']),
     'with liqsweep read as a prefer row the leg lets it through — the set is READ off the table at scan time');
   assert(/ACCURACY — 5 scalps cannot lead/.test(C.stat), 'and the stat leg counts five (' + C.stat.match(/ACCURACY[^·]*/) + ')');
-  const D = await scan({ now: WED + 16 * 60000, afterBoot: W => { W.HG_GOLD_SETUP_EDGE = null; } });
+  const D = await scan({ now: WED + 16 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: true }, afterBoot: W => { W.HG_GOLD_SETUP_EDGE = null; } });
   assert(D.cands.length === 7 && D.cands.every(hasAcc) && D.tab.leadKeys() === null,
     'with the table unreadable NO mechanic is measured: every candidate carries ACCURACY (fail CLOSED, the hg-v946 GOLD ULTRA rule), leadKeys() is null');
   assert(/the edge table is unreadable/.test(D.cards), 'and the card says so');
@@ -211,7 +215,15 @@ let LEAD_TODAY = null;
     'setLeadMeasuredOnly(false) persists "0" under hg_gs_lead_measured_only');
   const F = await scan({ now: WED + 16 * 60000, store: { hg_gs_lead_measured_only: '0' } });
   assert(F.cands.every(c => !hasAcc(c)) && F.tab.leadMeasuredOnly() === false, 'and a persisted "0" is honoured on the next scan (headless warms read it per scan)');
-  assert(A.tab.leadMeasuredOnly() === true, 'default is ON (the hg-v1098 instruction stands)');
+  /* hg-v1290: no override, no persisted value — the default is now OFF
+     (user ask: "No confirmed setups in any of the gold tabs, fix it").
+     A persisted "1" still flips it back ON (the hg-v1098 lever stays). */
+  const Adef = await scan({ now: WED + 16 * 60000 });
+  assert(Adef.tab.leadMeasuredOnly() === false && Adef.cands.every(c => !hasAcc(c)),
+    'default is OFF (hg-v1290: flipped on user ask; the hg-v1098 instruction stays as the lever)');
+  const Aon = await scan({ now: WED + 16 * 60000, store: { hg_gs_lead_measured_only: '1' } });
+  assert(Aon.tab.leadMeasuredOnly() === true && /ACCURACY —/.test(Aon.stat),
+    'and a persisted "1" flips it back ON — the hg-v1098 instruction is still available');
 
   /* (f) mount KICKS the scan: no click, no refresh, a snapshot appears */
   const G = boot({ now: WED + 16 * 60000 });

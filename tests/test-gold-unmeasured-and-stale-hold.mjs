@@ -243,9 +243,16 @@ console.log('== 2) GOLD SCALP ACCURACY leg: unmeasured mechanics are NOT demoted
   const hasAccMsg = /ACCURACY — only '[\s\S]{0,200}has held up on this desk/.test(src);
   assert(hasAccMsg, 'the hg-v1098 ACCURACY message is preserved for measured mechanics');
 
-  /* The lever and its default are unchanged */
-  assert(/GS_LEAD_MEASURED_ONLY_DEFAULT\s*=\s*true/.test(src),
-    'the GS_LEAD_MEASURED_ONLY_DEFAULT = true is preserved (hg-v1098 default stands)');
+  /* hg-v1290: the DEFAULT is now OFF on user ask ("No confirmed setups
+     in any of the gold tabs, fix it"). The hg-v1098 instruction stays as
+     the lever (window.HG_GS_LEAD_MEASURED_ONLY, localStorage, the hg-v1156
+     persistence) — a scan can still flip it ON — but the OFF default means
+     a measured-neutral row (bosalign, ribbon per hg-v928) can lead if
+     nothing else demotes it. The hg-v1156 measurement that the lever
+     "loosens no gate on seed 102" still holds because the desk's OTHER
+     demotes still fire; this changes the policy toggle, not any gate. */
+  assert(/GS_LEAD_MEASURED_ONLY_DEFAULT\s*=\s*false/.test(src),
+    'the GS_LEAD_MEASURED_ONLY_DEFAULT = false (hg-v1290 flipped on user ask; hg-v1098 instruction stays as the lever)');
 }
 
 /* ============================================================= */
@@ -258,12 +265,12 @@ console.log('== 3) The lever default and the gsLeadKeys reader are unchanged =='
 }
 
 /* ============================================================= */
-console.log('== 4) hg-v1289 ship stamps ==');
+console.log('== 4) hg-v1290 ship stamps ==');
 {
   const build = readFile('build-stamp.js');
   const sw = readFile('sw.js');
-  assert(/version:\s*'hg-v1289'/.test(build), 'build-stamp names hg-v1289');
-  assert(/HG_CACHE\s*=\s*'hg-v1289'/.test(sw), 'sw.js cache id is hg-v1289');
+  assert(/version:\s*'hg-v1290'/.test(build), 'build-stamp names hg-v1290');
+  assert(/HG_CACHE\s*=\s*'hg-v1290'/.test(sw), 'sw.js cache id is hg-v1290');
 }
 
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');

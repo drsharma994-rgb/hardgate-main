@@ -1988,7 +1988,21 @@ var GS_HELD_STAMP = 'HELD · ONE AT A TIME';
    "no mechanic is measured", not "every mechanic is", and the ACCURACY leg
    fails CLOSED on it (the hg-v946 GOLD ULTRA rule). */
 var GS_LEAD_MEASURED_ONLY_LS_KEY = 'hg_gs_lead_measured_only';
-var GS_LEAD_MEASURED_ONLY_DEFAULT = true;   /* hg-v1098: on instruction */
+var GS_LEAD_MEASURED_ONLY_DEFAULT = false;  /* hg-v1290: OFF by default on
+   user ask ("No confirmed setups in any of the gold tabs, fix it"). The
+   hg-v1098 instruction STILL stands as the lever — a scan can flip it ON
+   through the hg-v1156 override chain (window.HG_GS_LEAD_MEASURED_ONLY,
+   or localStorage hg_gs_lead_measured_only='1'), and setLeadMeasuredOnly(true)
+   persists it. What the OFF default changes: an edge-table row that is
+   measured neutral or better (bosalign, ribbon under hg-v928) can lead
+   if nothing else demotes it; the hg-v1289 UNMEASURED path for mechanics
+   not in the edge table is unchanged. What it does NOT change: the
+   geometry, macro, dxy+tnx and real-yield ACCURACY checks still fire
+   in the same loop, the hg-v946 fail-closed on an unreadable table
+   still fires, and on seed 102 the hg-v1156 measurement "all seven
+   candidates are still demoted by the desk's other rules with the
+   lever off, so the lever loosens no gate" still holds — this is a
+   policy toggle inside measured gates, not a loosening of any of them. */
 var GS_LEAD_MEASURED_ONLY = GS_LEAD_MEASURED_ONLY_DEFAULT;
 /* The hg-v1098 instruction is a POLICY on this desk ("leads only on the
    measured mechanics"), not a measurement of its own, and every policy this
