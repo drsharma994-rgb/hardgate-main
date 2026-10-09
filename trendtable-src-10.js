@@ -140,6 +140,7 @@
           reads.pineSqueeze = pm.sqz;
           reads.pineSmf = pm.smf;
           reads.pineMsb = pm.msb;
+          reads.pineSmc = pm.smc;
           /* hg-v1205: four more crypto Pine ports as record-only marks. */
           reads.pineCipher = pm.cipher;
           reads.pineRangeFilter = pm.rfilter;

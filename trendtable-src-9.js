@@ -136,6 +136,7 @@ function trendmxCrownPanelHTML(state){
       if (pfR.pineSqueeze) pineBits.push('squeeze ' + pfR.pineSqueeze);
       if (pfR.pineSmf) pineBits.push('SMF ' + pfR.pineSmf);
       if (pfR.pineMsb) pineBits.push('MSB ' + pfR.pineMsb);
+      if (pfR.pineSmc) pineBits.push('SMC ' + pfR.pineSmc);
       if (pfR.pineCipher) pineBits.push('cipher ' + pfR.pineCipher);
       if (pfR.pineRangeFilter) pineBits.push('range ' + pfR.pineRangeFilter);
       if (pfR.pineNwEnvelope) pineBits.push('NW ' + pfR.pineNwEnvelope);
@@ -314,7 +315,7 @@ function tmStructureDir(rows){
    five). All four already exist in pinemath.js and were read by nothing on
    this desk. Record-only like the five; nothing scores on them. */
 function trendmxPineMarks(rows){
-  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null };
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null };
   try{
     if (!Array.isArray(rows) || rows.length < 30) return out;
     if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
@@ -326,6 +327,7 @@ function trendmxPineMarks(rows){
     if (typeof W.pineRangeFilter === 'function'){ var rf = W.pineRangeFilter(rows, { includeContext: true }); if (rf && rf.dir) out.rfilter = String(rf.dir).toLowerCase(); }
     if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
     if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
+    if (typeof W.pineSmcCore === 'function'){ var sc = W.pineSmcCore(rows, { includeContext: true }); if (sc && sc.dir) out.smc = String(sc.dir).toLowerCase(); }
   }catch(e){ }
   return out;
 }

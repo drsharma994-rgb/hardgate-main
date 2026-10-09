@@ -57,18 +57,20 @@ console.log('== 2) trendmxPineMarks reads all nine ports and each is three-state
   assert(/W\.pineRangeFilter\s*\(/.test(body),    'trendmxPineMarks calls W.pineRangeFilter');
   assert(/W\.pineNwEnvelope\s*\(/.test(body),     'trendmxPineMarks calls W.pineNwEnvelope');
   assert(/W\.pineWeeklyAvwap\s*\(/.test(body),    'trendmxPineMarks calls W.pineWeeklyAvwap');
+  assert(/W\.pineSmcCore\s*\(/.test(body),          'trendmxPineMarks calls W.pineSmcCore');
   /* and the result lands on the right output key */
   assert(/out\.cipher\s*=/.test(body),   'trendmxPineMarks writes out.cipher');
   assert(/out\.rfilter\s*=/.test(body),  'trendmxPineMarks writes out.rfilter');
   assert(/out\.nwenv\s*=/.test(body),    'trendmxPineMarks writes out.nwenv');
   assert(/out\.wavwap\s*=/.test(body),   'trendmxPineMarks writes out.wavwap');
+  assert(/out\.smc\s*=/.test(body),        'trendmxPineMarks writes out.smc');
   const W = loadModules(['indicators.js', 'indicators2.js', 'pinemath.js', 'pinesmf.js', 'pinemsb.js', 'pinesqz.js']);
   /* lift the function into W's sandbox so its W.pineXxx references bind */
   vm.runInNewContext(match[0] + '\nG.trendmxPineMarks = trendmxPineMarks;', W, { filename: 'lifted-trendmxPineMarks' });
   assert(typeof W.trendmxPineMarks === 'function', 'lifted trendmxPineMarks runs in sandbox');
   /* a thin tape (< 30 bars) returns all nine keys as null — the bar
      floor is 30, so a tape of 29 rows must also return all nulls */
-  const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap'];
+  const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap', 'smc'];
   for (const n of [5, 10, 29]){
     const thin = Array.from({length: n}, (_, i) => ({t: i*14400, o: 100 + i*0.1, h: 100.5 + i*0.1, l: 99.5 + i*0.1, c: 100 + i*0.1, v: 100}));
     const out = W.trendmxPineMarks(thin);
@@ -83,7 +85,7 @@ console.log('== 2) trendmxPineMarks reads all nine ports and each is three-state
   /* every expected key is present on the output shape (hg-v955: a field nothing writes is ornamental) */
   const outKeys = Object.keys(outEmpty || {}).sort().join(',');
   assert(outKeys === expected.slice().sort().join(','),
-    'output shape carries exactly the nine keys (' + outKeys + ')');
+    'output shape carries exactly the ten keys (' + outKeys + ')');
 }
 
 /* ====================================================================
@@ -105,7 +107,7 @@ console.log('== 3) each of the nine marks reads long / short / null on a real ta
     x = c;
   }
   const marks = W.trendmxPineMarks(rising);
-  const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap'];
+  const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap', 'smc'];
   for (const k of expected){
     const v = marks[k];
     assert(v === null || v === 'long' || v === 'short',

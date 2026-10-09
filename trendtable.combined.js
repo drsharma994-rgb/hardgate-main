@@ -2221,6 +2221,7 @@ function trendScore(rows1d, rows4h){
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
+
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -2899,6 +2900,7 @@ function trendmxCardStack(r, dir){
       style: 'swing', asset: 'crypto', ticker: ticker,
       clean: !!(gate && gate.clean7),
       nearClean: !!(gate && gate.nearClean),
+
       gatesPassed: gate ? gate.gatesPassed : undefined,
       gatesTotal: 7,
       tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
@@ -3285,6 +3287,7 @@ function trendmxFlowScan(rows){
       if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
     });
   }
+
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -3721,6 +3724,7 @@ function tmVolumeProfile(rows){
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
   var pivots = [];
+
   for (var i = 2; i < rows.length - 2; i++){
     if (dir === 'long'){
       if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
@@ -4262,6 +4266,7 @@ async function trendmxFormOne(ticket, row, ctx){
     var n = rows4.length - 1;
     if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
+
     var lastHigh = null, lastLow = null, si;
     for (si = 0; si < swings.length; si++){
       if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
@@ -4922,6 +4927,7 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     /* hg-v1012: the flow split, read off the stamps the scan left — the
        summary names the evidence the same way the cards do */
     if (r.flow && r.flow.verdict === 'with') flowW++;
+
     else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
@@ -5283,6 +5289,7 @@ function trendmxPerfectState(r){
    drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
 function trendmxAtrRegime(r){
   try{
+
     if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
     if (typeof hgAtrPercentile !== 'function') return null;
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
@@ -5639,6 +5646,7 @@ function trendmxFivePillars(r){
     if (r.flow.verdict === 'against') sentAgainst = true;
     if (r.flow.verdict === 'with') sentWith = true;
   }
+
   if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
     sentRead = true;
     try{
@@ -6014,6 +6022,7 @@ function trendmxTrendFormHTML(rows){
         var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
           + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
         /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
+
            minted tiers; anything below the NEAR floor (or a forming row with
            no majority, whose gate is null) is the house DRAFT ladder, never
            a fabricated 6/7 NEAR. */
@@ -6152,6 +6161,7 @@ function trendmxCrownPanelHTML(state){
       if (pfR.pineSqueeze) pineBits.push('squeeze ' + pfR.pineSqueeze);
       if (pfR.pineSmf) pineBits.push('SMF ' + pfR.pineSmf);
       if (pfR.pineMsb) pineBits.push('MSB ' + pfR.pineMsb);
+      if (pfR.pineSmc) pineBits.push('SMC ' + pfR.pineSmc);
       if (pfR.pineCipher) pineBits.push('cipher ' + pfR.pineCipher);
       if (pfR.pineRangeFilter) pineBits.push('range ' + pfR.pineRangeFilter);
       if (pfR.pineNwEnvelope) pineBits.push('NW ' + pfR.pineNwEnvelope);
@@ -6330,7 +6340,7 @@ function tmStructureDir(rows){
    five). All four already exist in pinemath.js and were read by nothing on
    this desk. Record-only like the five; nothing scores on them. */
 function trendmxPineMarks(rows){
-  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null };
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null };
   try{
     if (!Array.isArray(rows) || rows.length < 30) return out;
     if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
@@ -6342,6 +6352,7 @@ function trendmxPineMarks(rows){
     if (typeof W.pineRangeFilter === 'function'){ var rf = W.pineRangeFilter(rows, { includeContext: true }); if (rf && rf.dir) out.rfilter = String(rf.dir).toLowerCase(); }
     if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
     if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
+    if (typeof W.pineSmcCore === 'function'){ var sc = W.pineSmcCore(rows, { includeContext: true }); if (sc && sc.dir) out.smc = String(sc.dir).toLowerCase(); }
   }catch(e){ }
   return out;
 }
@@ -6386,6 +6397,7 @@ async function trendmxPerfectEvidencePass(rows){
           if (isFinite(usd)) reads.liqClusterUsd = usd;
         }catch(eLc){ }
       }
+
         reads.venueFundingPct = +r.fundingPct;
       /* hg-v1144: venue premium = venue funding minus the Binance twin */
       if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
@@ -6528,6 +6540,7 @@ async function trendmxPerfectEvidencePass(rows){
           reads.pineSqueeze = pm.sqz;
           reads.pineSmf = pm.smf;
           reads.pineMsb = pm.msb;
+          reads.pineSmc = pm.smc;
           /* hg-v1205: four more crypto Pine ports as record-only marks. */
           reads.pineCipher = pm.cipher;
           reads.pineRangeFilter = pm.rfilter;
@@ -6795,6 +6808,7 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
+
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */

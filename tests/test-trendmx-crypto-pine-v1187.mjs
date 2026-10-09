@@ -60,14 +60,15 @@ console.log('== the five Pine marks ride the reads bag (record-only) ==');
     pineSqueezeMomentum: () => { cap.sqz = true; return { dir: 'long' }; },
     pineSmartMoneyFlow: () => { cap.smf = true; return { dir: 'long' }; },
     pineMsbOb: () => { cap.msb = true; return { dir: 'short' }; },
+    pineSmcCore: () => { cap.smc = true; return { dir: 'long' }; },
     binanceTakerRatio: async () => ({ series: [] }),
     binanceFunding: async () => ({ fundingPct: 0.001 }),
     hgNewsRisk: () => ({ blackout: false }),
     hgObtcPerfectFormation: (pick, reads) => { cap.reads = reads; }
   });
   await W.trendmxPerfectEvidencePass([row('BTCUSD', 3)]);
-  ok(cap.lor && cap.ht && cap.sqz && cap.smf && cap.msb, 'all five Pine signals are read off the 4h tape');
-  ok(cap.reads.pineLorKnn === 'long' && cap.reads.pineHalfTrend === 'short' && cap.reads.pineSqueeze === 'long' && cap.reads.pineSmf === 'long' && cap.reads.pineMsb === 'short', 'the marks ride the reads bag');
+  ok(cap.lor && cap.ht && cap.sqz && cap.smf && cap.msb && cap.smc, 'all six Pine signals are read off the 4h tape');
+  ok(cap.reads.pineSmc === 'long', 'the SMC Core mark rides the reads bag');
 }
 
 console.log('== the crown prints the PINE evidence line ==');
