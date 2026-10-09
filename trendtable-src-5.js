@@ -139,6 +139,15 @@
   var obv = rows1 ? tmObv(rows1, dir) : null;
   if (obv == null) hard.push('on-balance volume unread');
   else if (!obv) hard.push('on-balance volume is against the trade');
+  var ha = rows1 ? tmHeikin(rows1, dir) : null;
+  if (ha == null) hard.push('heikin ashi unread');
+  else if (!ha) hard.push('heikin ashi is against the trade');
+  var force = rows1 ? tmForce(rows1, dir) : null;
+  if (force == null) hard.push('force index unread');
+  else if (!force) hard.push('force index is against the trade');
+  var kst = rows1 ? tmKst(rows1, dir) : null;
+  if (kst == null) hard.push('kst unread');
+  else if (!kst) hard.push('know sure thing is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -366,7 +375,7 @@
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'TRIX, Ultimate Oscillator and On-Balance Volume agree with the earlier crypto scripts';
+  ticket.pine = 'Heikin Ashi, Force Index and Know Sure Thing agree with the earlier crypto scripts';
   return [];
 }
 

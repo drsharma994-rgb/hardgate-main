@@ -1677,6 +1677,75 @@ function tmObv(rows, dir){
   if (dir === 'long') return now > then;
   return now < then;
 }
+/* Two Heikin Ashi candles in a row have to match the trade.
+   A doji does not pass. A short tape does not pass. */
+function tmHeikin(rows, dir){
+  if (!rows || rows.length < 4 || (dir !== 'long' && dir !== 'short')) return null;
+  var prevO = NaN, prevC = NaN, haO, haC, i, last = [];
+  for (i = 0; i < rows.length; i++){
+    var b = rows[i];
+    if (!isFinite(b.o) || !isFinite(b.h) || !isFinite(b.l) || !isFinite(b.c)) return null;
+    haC = (b.o + b.h + b.l + b.c) / 4;
+    haO = i === 0 ? (b.o + b.c) / 2 : (prevO + prevC) / 2;
+    prevO = haO;
+    prevC = haC;
+    last.push(haC - haO);
+    if (last.length > 2) last.shift();
+  }
+  if (last.length < 2 || !isFinite(last[0]) || !isFinite(last[1])) return null;
+  if (dir === 'long') return last[0] > 0 && last[1] > 0;
+  return last[0] < 0 && last[1] < 0;
+}
+/* Elder Force Index, EMA 13 of close-change times volume.
+   Missing volume does not pass. */
+function tmForce(rows, dir){
+  var len = 13;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var raw = [], i;
+  for (i = 1; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !isFinite(rows[i - 1].c) || !(rows[i].v > 0)) return null;
+    raw.push((rows[i].c - rows[i - 1].c) * rows[i].v);
+  }
+  var ema = tmEmaSeed(raw, len);
+  if (!ema) return null;
+  var last = ema[ema.length - 1];
+  if (!isFinite(last)) return null;
+  if (dir === 'long') return last > 0;
+  return last < 0;
+}
+/* Martin Pring Know Sure Thing. Above zero agrees with a long.
+   Below zero agrees with a short. */
+function tmKst(rows, dir){
+  if (!rows || rows.length < 50 || (dir !== 'long' && dir !== 'short')) return null;
+  var c = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    c.push(rows[i].c);
+  }
+  function roc(n, end){
+    if (end < n || !(c[end - n] > 0)) return NaN;
+    return ((c[end] - c[end - n]) / c[end - n]) * 100;
+  }
+  function smaRoc(rocLen, smaLen, end){
+    var s = 0, k, r;
+    for (k = end - smaLen + 1; k <= end; k++){
+      r = roc(rocLen, k);
+      if (!isFinite(r)) return NaN;
+      s += r;
+    }
+    return s / smaLen;
+  }
+  var end = c.length - 1;
+  var a = smaRoc(10, 10, end);
+  var b = smaRoc(15, 10, end);
+  var d = smaRoc(20, 10, end);
+  var e = smaRoc(30, 15, end);
+  if (!isFinite(a) || !isFinite(b) || !isFinite(d) || !isFinite(e)) return null;
+  var kst = a + (2 * b) + (3 * d) + (4 * e);
+  if (!isFinite(kst)) return null;
+  if (dir === 'long') return kst > 0;
+  return kst < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -4063,6 +4132,15 @@ async function trendmxFormOne(ticket, row, ctx){
   var obv = rows1 ? tmObv(rows1, dir) : null;
   if (obv == null) hard.push('on-balance volume unread');
   else if (!obv) hard.push('on-balance volume is against the trade');
+  var ha = rows1 ? tmHeikin(rows1, dir) : null;
+  if (ha == null) hard.push('heikin ashi unread');
+  else if (!ha) hard.push('heikin ashi is against the trade');
+  var force = rows1 ? tmForce(rows1, dir) : null;
+  if (force == null) hard.push('force index unread');
+  else if (!force) hard.push('force index is against the trade');
+  var kst = rows1 ? tmKst(rows1, dir) : null;
+  if (kst == null) hard.push('kst unread');
+  else if (!kst) hard.push('know sure thing is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -4290,7 +4368,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'TRIX, Ultimate Oscillator and On-Balance Volume agree with the earlier crypto scripts';
+  ticket.pine = 'Heikin Ashi, Force Index and Know Sure Thing agree with the earlier crypto scripts';
   return [];
 }
 
@@ -6342,7 +6420,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero, TRIX above zero for a long, the Ultimate Oscillator on the trade side of 50, and On-Balance Volume moving with the trade, two Heikin Ashi candles with the trade, the Elder Force Index on the trade side of zero, and Know Sure Thing on the trade side of zero. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6805,6 +6883,9 @@ W.tmRvi = tmRvi;
 W.tmTrix = tmTrix;
 W.tmUltimate = tmUltimate;
 W.tmObv = tmObv;
+W.tmHeikin = tmHeikin;
+W.tmForce = tmForce;
+W.tmKst = tmKst;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

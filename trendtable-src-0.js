@@ -1677,6 +1677,75 @@ function tmObv(rows, dir){
   if (dir === 'long') return now > then;
   return now < then;
 }
+/* Two Heikin Ashi candles in a row have to match the trade.
+   A doji does not pass. A short tape does not pass. */
+function tmHeikin(rows, dir){
+  if (!rows || rows.length < 4 || (dir !== 'long' && dir !== 'short')) return null;
+  var prevO = NaN, prevC = NaN, haO, haC, i, last = [];
+  for (i = 0; i < rows.length; i++){
+    var b = rows[i];
+    if (!isFinite(b.o) || !isFinite(b.h) || !isFinite(b.l) || !isFinite(b.c)) return null;
+    haC = (b.o + b.h + b.l + b.c) / 4;
+    haO = i === 0 ? (b.o + b.c) / 2 : (prevO + prevC) / 2;
+    prevO = haO;
+    prevC = haC;
+    last.push(haC - haO);
+    if (last.length > 2) last.shift();
+  }
+  if (last.length < 2 || !isFinite(last[0]) || !isFinite(last[1])) return null;
+  if (dir === 'long') return last[0] > 0 && last[1] > 0;
+  return last[0] < 0 && last[1] < 0;
+}
+/* Elder Force Index, EMA 13 of close-change times volume.
+   Missing volume does not pass. */
+function tmForce(rows, dir){
+  var len = 13;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var raw = [], i;
+  for (i = 1; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !isFinite(rows[i - 1].c) || !(rows[i].v > 0)) return null;
+    raw.push((rows[i].c - rows[i - 1].c) * rows[i].v);
+  }
+  var ema = tmEmaSeed(raw, len);
+  if (!ema) return null;
+  var last = ema[ema.length - 1];
+  if (!isFinite(last)) return null;
+  if (dir === 'long') return last > 0;
+  return last < 0;
+}
+/* Martin Pring Know Sure Thing. Above zero agrees with a long.
+   Below zero agrees with a short. */
+function tmKst(rows, dir){
+  if (!rows || rows.length < 50 || (dir !== 'long' && dir !== 'short')) return null;
+  var c = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    c.push(rows[i].c);
+  }
+  function roc(n, end){
+    if (end < n || !(c[end - n] > 0)) return NaN;
+    return ((c[end] - c[end - n]) / c[end - n]) * 100;
+  }
+  function smaRoc(rocLen, smaLen, end){
+    var s = 0, k, r;
+    for (k = end - smaLen + 1; k <= end; k++){
+      r = roc(rocLen, k);
+      if (!isFinite(r)) return NaN;
+      s += r;
+    }
+    return s / smaLen;
+  }
+  var end = c.length - 1;
+  var a = smaRoc(10, 10, end);
+  var b = smaRoc(15, 10, end);
+  var d = smaRoc(20, 10, end);
+  var e = smaRoc(30, 15, end);
+  if (!isFinite(a) || !isFinite(b) || !isFinite(d) || !isFinite(e)) return null;
+  var kst = a + (2 * b) + (3 * d) + (4 * e);
+  if (!isFinite(kst)) return null;
+  if (dir === 'long') return kst > 0;
+  return kst < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
