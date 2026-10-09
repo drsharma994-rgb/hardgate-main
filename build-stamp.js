@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1232',
-  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a long in the top eighth of yesterday, a short in the bottom eighth, a swing that was pierced and closed back inside, and a trade against a 26-bar lag that is already falling or rising. A close through yesterday, a green pierce, or a lag that is still with the trade does not refuse. The card does not send an order.',
-  built: '2026-10-09T04:20:00Z'
+  version: 'hg-v1233',
+  pack: 'OmniGold, Ganesh Gold and Gold Scalp also refuse a long that loses yesterday 61.8, a short that reclaims yesterday 38.2, a session VWAP that the last close crosses back through, and a 9/21 cross that prints on this bar. An older cross, a hold of the VWAP, or a prior day under $8 does not refuse. The card does not send an order.',
+  built: '2026-10-09T04:30:00Z'
 };
 
 function hgBuildLabel(b){

@@ -2169,6 +2169,10 @@ function pineGoldTapeVeto(rows, dir, opts){
     if (asiaFail) return asiaFail;
     var murWhy = pineGoldMurreyVeto(rows, dir);
     if (murWhy) return murWhy;
+    var fibWhy = pineGoldFibLostVeto(rows, dir);
+    if (fibWhy) return fibWhy;
+    var vwapLost = pineGoldVwapLostVeto(rows, dir);
+    if (vwapLost) return vwapLost;
   }
   var cvdWhy = pineGoldCvdVeto(rows, dir);
   if (cvdWhy) return cvdWhy;
@@ -2202,6 +2206,8 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (sfpWhy) return sfpWhy;
   var lagWhy = pineGoldLagVeto(rows, dir);
   if (lagWhy) return lagWhy;
+  var crossWhy = pineGoldEmaCrossVeto(rows, dir);
+  if (crossWhy) return crossWhy;
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -2900,6 +2906,82 @@ function pineGoldLagVeto(rows, dir){
   if (dir === 'short' && c0 > c26 && c26 > c52) return 'Price is over its close from 26 bars ago, and that close was already rising.';
   return null;
 }
+/* Yesterday's 61.8 and 38.2. A long that opens above 61.8 and closes back
+   under it does not pass. The 38.2 is the short. A prior day under $8 does not refuse. */
+function pineGoldFibLostVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8 || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(o) || !isFinite(c)) return null;
+  var range = prior.hi - prior.lo;
+  var fib618 = prior.lo + range * 0.618;
+  var fib382 = prior.lo + range * 0.382;
+  if (dir === 'long' && o > fib618 && c < fib618) return 'Price lost yesterday\'s 61.8. A long does not pass.';
+  if (dir === 'short' && o < fib382 && c > fib382) return 'Price crossed back through yesterday\'s 38.2. A short does not pass.';
+  return null;
+}
+/* Session VWAP from 00:00 UTC. The previous close was on the trade side
+   and the last close crossed back. Fewer than four session bars does not refuse. */
+function pineGoldVwapLostVeto(rows, dir){
+  if (!rows || rows.length < 4) return null;
+  var lastT = pgrNum(rows[rows.length - 1].t);
+  if (!isFinite(lastT)) return null;
+  if (lastT < 1e12) lastT = lastT * 1000;
+  var day = new Date(lastT).toISOString().slice(0, 10);
+  var sess = [], i, b, tb, key;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    key = new Date(tb).toISOString().slice(0, 10);
+    if (key !== day) continue;
+    if (!(pgrNum(b.c) > 0) || !isFinite(pgrNum(b.h)) || !isFinite(pgrNum(b.l))) return null;
+    sess.push(b);
+  }
+  if (sess.length < 4) return null;
+  function vwap(list){
+    var s = 0, vol = 0, j, bar, v, tp;
+    for (j = 0; j < list.length; j++){
+      bar = list[j];
+      v = pgrNum(bar.v);
+      if (!(v > 0)) v = 1;
+      tp = (+bar.h + +bar.l + +bar.c) / 3;
+      s += tp * v;
+      vol += v;
+    }
+    return vol > 0 ? s / vol : NaN;
+  }
+  var prevV = vwap(sess.slice(0, -1));
+  var nowV = vwap(sess);
+  var prevC = pgrNum(sess[sess.length - 2].c);
+  var c = pgrNum(sess[sess.length - 1].c);
+  if (!isFinite(prevV) || !isFinite(nowV) || !isFinite(prevC) || !isFinite(c)) return null;
+  if (dir === 'long' && prevC > prevV && c < nowV) return 'Price lost the session VWAP. A long does not pass.';
+  if (dir === 'short' && prevC < prevV && c > nowV) return 'Price crossed back above the session VWAP. A short does not pass.';
+  return null;
+}
+/* A 9/21 cross that prints on this bar. An older cross does not refuse. */
+function pineGoldEmaCrossVeto(rows, dir){
+  if (!rows || rows.length < 30) return null;
+  function series(len){
+    var k = 2 / (len + 1), ema = null, out = [], i, c;
+    for (i = 0; i < rows.length; i++){
+      c = pgrNum(rows[i].c);
+      if (!(c > 0)) return null;
+      ema = ema == null ? c : (c * k + ema * (1 - k));
+      out.push(ema);
+    }
+    return out;
+  }
+  var e9 = series(9), e21 = series(21);
+  if (!e9 || !e21) return null;
+  var n = rows.length - 1;
+  if (dir === 'long' && e9[n - 1] >= e21[n - 1] && e9[n] < e21[n]) return 'The 9 EMA just crossed under the 21.';
+  if (dir === 'short' && e9[n - 1] <= e21[n - 1] && e9[n] > e21[n]) return 'The 9 EMA just crossed over the 21.';
+  return null;
+}
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
@@ -3469,6 +3551,9 @@ G.pineGoldHtfSlopeVeto = pineGoldHtfSlopeVeto;
 G.pineGoldMurreyVeto = pineGoldMurreyVeto;
 G.pineGoldSfpVeto = pineGoldSfpVeto;
 G.pineGoldLagVeto = pineGoldLagVeto;
+G.pineGoldFibLostVeto = pineGoldFibLostVeto;
+G.pineGoldVwapLostVeto = pineGoldVwapLostVeto;
+G.pineGoldEmaCrossVeto = pineGoldEmaCrossVeto;
 G.pineGoldWilliamsSeries = pgrWilliamsSeries;
 G.pineGoldTrixSeries = pgrTrixSeries;
 G.pineGoldFisherSeries = pgrFisherSeries;
