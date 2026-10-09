@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1274',
-  pack: 'The twelve core gold strategies now use XAU/USD measurements. A London Judas must sweep 1.50 to 5.50 dollars and close back with a 55 percent wick. Gold Scalp also reads the 13:30 UTC COMEX open and a micro-gap tap with a 58 percent wick. OmniGold reads a London-fix drift and a flight-to-safety correlation above +0.15, and triple SMT still needs gold, silver, and the dollar. Pine Gold reads a value-area high or low retest. Ganesh Gold reads a Gann square rejection and a time-price match within 12 percent. Every target stays 2.5R. A missing series stays unread. The card does not send an order.',
-  built: '2026-10-09T15:05:00Z'
+  version: 'hg-v1275',
+  pack: 'Four more gold strategies, still unread when the series is missing. Gold Scalp adds a London-to-New York overlap sweep that needs a 65 percent wick. OmniGold adds a gold-silver ratio extreme of 1.8 deviations, and it does not invent a silver price. Pine Gold adds a session-average and daily-open ribbon within 1.50 dollars. Ganesh Gold adds a turn within 15 minutes of a 3-hour boundary. The earlier twelve stay. Every target stays 2.5R. The card does not send an order.',
+  built: '2026-10-09T15:20:00Z'
 };
 
 function hgBuildLabel(b){

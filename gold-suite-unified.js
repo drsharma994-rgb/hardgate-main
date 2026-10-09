@@ -140,6 +140,29 @@
         }
       }
     }
+    if (hour >= 12 && hour < 13.5 && today && !out.some(function(h){ return h.id === 'GS-1'; })){
+      var lonHi = -Infinity, lonLo = Infinity, lonN = 0;
+      for (i = 0; i < day.length - 1; i++){
+        if (dayOf(day[i]) !== today) continue;
+        hv = hourOf(day[i]);
+        if (!isFinite(hv) || hv < 7 || hv >= 12) continue;
+        if (day[i].h > lonHi) lonHi = day[i].h;
+        if (day[i].l < lonLo) lonLo = day[i].l;
+        lonN++;
+      }
+      var span4 = last.h - last.l;
+      if (lonN >= 3 && lonHi - lonLo >= 3 && span4 >= 1){
+        var daerL = (Math.min(last.o, last.c) - last.l) / span4;
+        var daerS = (last.h - Math.max(last.o, last.c)) / span4;
+        if (last.l < lonLo && last.c > lonLo && last.c > last.o && daerL >= 0.65){
+          var ovL = hit('GS-4', 'London-NY Overlap Sweep', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The London low was swept before the US cash open and a 65 percent wick closed back above it.');
+          if (ovL) out.push(ovL);
+        } else if (last.h > lonHi && last.c < lonHi && last.c < last.o && daerS >= 0.65){
+          var ovS = hit('GS-4', 'London-NY Overlap Sweep', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The London high was swept before the US cash open and a 65 percent wick closed back under it.');
+          if (ovS) out.push(ovS);
+        }
+      }
+    }
     return out;
   }
 
@@ -185,6 +208,30 @@
     if (r != null && r > 0.15 && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4 && dxy.length >= 5 && dxy[dxy.length - 1].c > dxy[dxy.length - 5].c){
       var fts = hit('OG-3', 'Flight-to-Safety Decouple', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold and the dollar rose together. The 30-bar correlation is above +0.15.');
       if (fts) out.push(fts);
+    }
+    if (silver.length >= 20 && rows.length >= 20){
+      var ratios = [], gi, si, gsr, mean = 0, variance = 0, sd, z;
+      var nGsr = Math.min(20, rows.length, silver.length);
+      for (gi = 0; gi < nGsr; gi++){
+        si = silver[silver.length - nGsr + gi];
+        gsr = rows[rows.length - nGsr + gi];
+        if (!si || !(si.c > 0) || !gsr) { ratios = []; break; }
+        ratios.push(gsr.c / si.c);
+      }
+      if (ratios.length === nGsr){
+        for (gi = 0; gi < ratios.length; gi++) mean += ratios[gi];
+        mean /= ratios.length;
+        for (gi = 0; gi < ratios.length; gi++) variance += (ratios[gi] - mean) * (ratios[gi] - mean);
+        sd = Math.sqrt(variance / ratios.length);
+        z = sd > 0 ? (ratios[ratios.length - 1] - mean) / sd : NaN;
+        if (z <= -1.8 && last.c > last.o){
+          var gsrL = hit('OG-4', 'Gold-Silver Ratio Band', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'The gold-silver ratio is 1.8 deviations cheap and this bar closed up.');
+          if (gsrL) out.push(gsrL);
+        } else if (z >= 1.8 && last.c < last.o){
+          var gsrS = hit('OG-4', 'Gold-Silver Ratio Band', 'short', last.c, last.h + Math.max(a * 0.45, 3.2), 'The gold-silver ratio is 1.8 deviations rich and this bar closed down.');
+          if (gsrS) out.push(gsrS);
+        }
+      }
     }
     return out;
   }
@@ -260,6 +307,23 @@
       } else if (prior.c < area.val && last.h >= area.val && last.c < area.val && last.c < last.o){
         var vaS = hit('PG-3', 'Value Area Low Retest', 'short', last.c, area.vah, 'Price held the developing value-area low and closed back under it.');
         if (vaS) out.push(vaS);
+      }
+    }
+    var todayP = dayOf(last), dayOpen = NaN, dayBars = 0, di;
+    if (todayP && band && band.dev >= 1){
+      for (di = 0; di < rows.length; di++){
+        if (dayOf(rows[di]) !== todayP) continue;
+        if (!isFinite(dayOpen)) dayOpen = rows[di].o;
+        dayBars++;
+      }
+      if (dayBars >= 8 && isFinite(dayOpen) && Math.abs(band.mean - dayOpen) <= 1.5){
+        if (last.l <= band.mean && last.c > band.mean && last.c > last.o){
+          var ribL = hit('PG-4', 'Session and Daily Open Ribbon', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The session average and the daily open are within 1.50 dollars, and this bar closed back above both.');
+          if (ribL) out.push(ribL);
+        } else if (last.h >= band.mean && last.c < band.mean && last.c < last.o){
+          var ribS = hit('PG-4', 'Session and Daily Open Ribbon', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The session average and the daily open are within 1.50 dollars, and this bar closed back under both.');
+          if (ribS) out.push(ribS);
+        }
       }
     }
     return out;
@@ -392,6 +456,19 @@
       } else if (!offHigh && last.c > last.o && last.c > mid16){
         var gg3l = hit('GG-3', 'Time-Price Symmetry', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Bar count and dollar distance match within 12 percent, and this bar turned up.');
         if (gg3l) out.push(gg3l);
+      }
+    }
+    if (isFinite(hour)){
+      var intoOct = (Math.floor(hour) * 60 + Math.round((hour % 1) * 60)) % 180;
+      var prevG = rows[rows.length - 2];
+      if ((intoOct <= 15 || intoOct >= 165) && prevG){
+        if (prevG.c < prevG.o && last.c > last.o && last.c > prevG.c){
+          var octL = hit('GG-4', 'Gann Wheel of 24', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'This bar turned up within 15 minutes of a 3-hour Gann boundary.');
+          if (octL) out.push(octL);
+        } else if (prevG.c > prevG.o && last.c < last.o && last.c < prevG.c){
+          var octS = hit('GG-4', 'Gann Wheel of 24', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'This bar turned down within 15 minutes of a 3-hour Gann boundary.');
+          if (octS) out.push(octS);
+        }
       }
     }
     return out;
