@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* HARDGATE hg-v1217: three more bar-only Pine ports join OMNIGOLD and
+/* HARDGATE hg-v1219: three more bar-only Pine ports join OMNIGOLD and
    GOLD SCALP as record-only layers, and ONE joins as a state-only read.
    HalfTrend / Range Filter / NW Envelope mint record-only through the
    one judge pineGoldRecordJudge, through goldScalpSetups' existing table
@@ -59,11 +59,11 @@ console.log('== 1) pinegoldmath.js carries three new record-layer builders and o
 /* ====================================================================
    § 2 PINE_GOLD_RECORD_LAYERS has 27 entries; the last three are our adds
    ==================================================================== */
-console.log('== 2) PINE_GOLD_RECORD_LAYERS carries 27 entries with the hg-v1217 three at the end ==');
+console.log('== 2) PINE_GOLD_RECORD_LAYERS carries 27 entries with the hg-v1219 three at the end ==');
 {
   const W = loadModules(['indicators.js', 'indicators2.js', 'pinemath.js', 'pinegoldmath.js']);
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 27, 'table has 27 entries after hg-v1217 (24 + 3 — ' + T.length + ')');
+  assert(T.length === 27, 'table has 27 entries after hg-v1219 (24 + 3 — ' + T.length + ')');
   const last3 = T.slice(-3);
   assert(last3[0].id === 'halftrend'   && last3[0].fn === 'pineHalfTrend'       && last3[0].twin === null, 'row 25: halftrend → pineHalfTrend, twin null');
   assert(last3[1].id === 'rangefilter' && last3[1].fn === 'pineGoldRangeFilter' && last3[1].twin === null, 'row 26: rangefilter → pineGoldRangeFilter, twin null');
@@ -344,7 +344,7 @@ console.log('== 10) no gate module reads a new pine:halftrendWith / pine:rangefi
 console.log('== 11) OMNIGOLD mints no new port (hg-v1167: registering widens the Šidák family bar) ==');
 {
   const omni = readFileSync('omnigold.js', 'utf8');
-  /* the hg-v1217 three new layers must NOT appear as new OMNIGOLD mechanic
+  /* the hg-v1219 three new layers must NOT appear as new OMNIGOLD mechanic
      registrations — asserted textually since the registry is a long literal */
   for (const name of ['HALFTREND', 'RANGE-FILTER', 'NW-ENVELOPE', 'VUMANCHU-CIPHER', 'RANGEFILTER', 'NWENVELOPE']){
     const re = new RegExp("'" + name + "'");
@@ -353,17 +353,17 @@ console.log('== 11) OMNIGOLD mints no new port (hg-v1167: registering widens the
 }
 
 /* ====================================================================
-   § 12 ship stamps say hg-v1217
+   § 12 ship stamps say hg-v1219
    ==================================================================== */
-console.log('== 12) build stamps say hg-v1217 ==');
+console.log('== 12) build stamps say hg-v1219 ==');
 {
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1217'/.test(bs), 'build-stamp.js version is hg-v1217');
+  assert(/version:\s*'hg-v1219'/.test(bs), 'build-stamp.js version is hg-v1219');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1217'/.test(sw), 'sw.js HG_CACHE is hg-v1217');
+  assert(/HG_CACHE\s*=\s*'hg-v1219'/.test(sw), 'sw.js HG_CACHE is hg-v1219');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1217/.test(tt), 'trendtable.js header reads hg-v1217');
-  assert(/v=1217/.test(tt), 'trendtable.js loader cachebuster reads v=1217');
+  assert(/hg-v1219/.test(tt), 'trendtable.js header reads hg-v1219');
+  assert(/v=1219/.test(tt), 'trendtable.js loader cachebuster reads v=1219');
 }
 
-console.log('\nhg-v1217 twenty-seven gold Pine record layers (24 + 3) + one state-only mark: all § passed');
+console.log('\nhg-v1219 twenty-seven gold Pine record layers (24 + 3) + one state-only mark: all § passed');

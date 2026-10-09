@@ -1603,6 +1603,149 @@ function tmRvi(rows, dir){
   if (dir === 'long') return rvi > 0 && rvi + 1e-8 >= signal;
   return rvi < 0 && rvi <= signal + 1e-8;
 }
+/* TRIX, length 15. Triple-smoothed rate of change. Above zero agrees
+   with a long. Below zero agrees with a short. A short tape does not pass. */
+function tmTrix(rows, dir){
+  var len = 15;
+  if (!rows || rows.length < len * 3 + 5 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !(rows[i].c > 0)) return null;
+    closes.push(rows[i].c);
+  }
+  function nextEma(values){
+    var finite = [], k;
+    for (k = 0; k < values.length; k++) if (isFinite(values[k])) finite.push(values[k]);
+    if (finite.length < len + 2) return null;
+    return tmEmaSeed(finite, len);
+  }
+  var e1 = nextEma(closes);
+  var e2 = e1 ? nextEma(e1) : null;
+  var e3 = e2 ? nextEma(e2) : null;
+  if (!e3) return null;
+  var n = e3.length - 1;
+  var last = e3[n], prev = e3[n - 1], older = e3[n - 2];
+  if (!(last > 0) || !(prev > 0) || !(older > 0)) return null;
+  var now = (last - prev) / prev;
+  var before = (prev - older) / older;
+  if (!isFinite(now) || !isFinite(before)) return null;
+  if (dir === 'long') return now > 0;
+  return now < 0;
+}
+/* Larry Williams Ultimate Oscillator, 7/14/28. Above 50 agrees with a long. */
+function tmUltimate(rows, dir){
+  var slow = 28;
+  if (!rows || rows.length < slow + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var bp = [], tr = [], i, bar, prevC, low, high;
+  for (i = 1; i < rows.length; i++){
+    bar = rows[i]; prevC = rows[i - 1].c;
+    if (!isFinite(bar.h) || !isFinite(bar.l) || !isFinite(bar.c) || !isFinite(prevC)) return null;
+    low = Math.min(bar.l, prevC);
+    high = Math.max(bar.h, prevC);
+    bp.push(bar.c - low);
+    tr.push(high - low);
+  }
+  function avg(n){
+    if (bp.length < n) return NaN;
+    var b = 0, t = 0, k;
+    for (k = bp.length - n; k < bp.length; k++){ b += bp[k]; t += tr[k]; }
+    if (!(t > 0)) return NaN;
+    return b / t;
+  }
+  var a7 = avg(7), a14 = avg(14), a28 = avg(28);
+  if (!isFinite(a7) || !isFinite(a14) || !isFinite(a28)) return null;
+  var uo = 100 * ((4 * a7) + (2 * a14) + a28) / 7;
+  if (!isFinite(uo)) return null;
+  if (dir === 'long') return uo > 50;
+  return uo < 50;
+}
+/* On-balance volume over the last 10 closes. Volume has to be real.
+   A long needs the line higher than it was 10 bars ago. */
+function tmObv(rows, dir){
+  var look = 10;
+  if (!rows || rows.length < look + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var obv = 0, series = [0], i;
+  for (i = 1; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !isFinite(rows[i - 1].c) || !(rows[i].v > 0)) return null;
+    if (rows[i].c > rows[i - 1].c) obv += rows[i].v;
+    else if (rows[i].c < rows[i - 1].c) obv -= rows[i].v;
+    series.push(obv);
+  }
+  var now = series[series.length - 1];
+  var then = series[series.length - 1 - look];
+  if (!isFinite(now) || !isFinite(then)) return null;
+  if (dir === 'long') return now > then;
+  return now < then;
+}
+/* Two Heikin Ashi candles in a row have to match the trade.
+   A doji does not pass. A short tape does not pass. */
+function tmHeikin(rows, dir){
+  if (!rows || rows.length < 4 || (dir !== 'long' && dir !== 'short')) return null;
+  var prevO = NaN, prevC = NaN, haO, haC, i, last = [];
+  for (i = 0; i < rows.length; i++){
+    var b = rows[i];
+    if (!isFinite(b.o) || !isFinite(b.h) || !isFinite(b.l) || !isFinite(b.c)) return null;
+    haC = (b.o + b.h + b.l + b.c) / 4;
+    haO = i === 0 ? (b.o + b.c) / 2 : (prevO + prevC) / 2;
+    prevO = haO;
+    prevC = haC;
+    last.push(haC - haO);
+    if (last.length > 2) last.shift();
+  }
+  if (last.length < 2 || !isFinite(last[0]) || !isFinite(last[1])) return null;
+  if (dir === 'long') return last[0] > 0 && last[1] > 0;
+  return last[0] < 0 && last[1] < 0;
+}
+/* Elder Force Index, EMA 13 of close-change times volume.
+   Missing volume does not pass. */
+function tmForce(rows, dir){
+  var len = 13;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var raw = [], i;
+  for (i = 1; i < rows.length; i++){
+    if (!isFinite(rows[i].c) || !isFinite(rows[i - 1].c) || !(rows[i].v > 0)) return null;
+    raw.push((rows[i].c - rows[i - 1].c) * rows[i].v);
+  }
+  var ema = tmEmaSeed(raw, len);
+  if (!ema) return null;
+  var last = ema[ema.length - 1];
+  if (!isFinite(last)) return null;
+  if (dir === 'long') return last > 0;
+  return last < 0;
+}
+/* Martin Pring Know Sure Thing. Above zero agrees with a long.
+   Below zero agrees with a short. */
+function tmKst(rows, dir){
+  if (!rows || rows.length < 50 || (dir !== 'long' && dir !== 'short')) return null;
+  var c = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!(rows[i].c > 0)) return null;
+    c.push(rows[i].c);
+  }
+  function roc(n, end){
+    if (end < n || !(c[end - n] > 0)) return NaN;
+    return ((c[end] - c[end - n]) / c[end - n]) * 100;
+  }
+  function smaRoc(rocLen, smaLen, end){
+    var s = 0, k, r;
+    for (k = end - smaLen + 1; k <= end; k++){
+      r = roc(rocLen, k);
+      if (!isFinite(r)) return NaN;
+      s += r;
+    }
+    return s / smaLen;
+  }
+  var end = c.length - 1;
+  var a = smaRoc(10, 10, end);
+  var b = smaRoc(15, 10, end);
+  var d = smaRoc(20, 10, end);
+  var e = smaRoc(30, 15, end);
+  if (!isFinite(a) || !isFinite(b) || !isFinite(d) || !isFinite(e)) return null;
+  var kst = a + (2 * b) + (3 * d) + (4 * e);
+  if (!isFinite(kst)) return null;
+  if (dir === 'long') return kst > 0;
+  return kst < 0;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
