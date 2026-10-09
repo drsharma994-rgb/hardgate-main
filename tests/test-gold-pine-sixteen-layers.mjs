@@ -38,7 +38,7 @@ console.log('== 1) BPR port, series helper, table entry, state read ==');
   assert(typeof W.pineGoldBpr === 'function', 'pineGoldBpr is exported');
   assert(typeof W.pineGoldBprShelves === 'function', 'pineGoldBprShelves is exported');
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 27, 'twenty-seven record-only layers since hg-v1210 — HalfTrend / Range Filter / NW Envelope follow OTE (' + T.length + ')');
+  assert(T.length === 27, 'twenty-seven record-only layers since hg-v1217 — HalfTrend / Range Filter / NW Envelope follow OTE (' + T.length + ')');
   const b = T[22];
   assert(b && b.id === 'bpr', 'BPR stays at position 22');
   assert(T[23] && T[23].id === 'ote' && T[23].fn === 'pineGoldOte' && T[23].twin === null, 'OTE 0.705 is the last record-only layer and names no twin');
@@ -282,14 +282,14 @@ console.log('== 6) no gate names pine:bprWith, no threshold moves ==');
 /* ====================================================================
    § 7 ship stamps
    ==================================================================== */
-console.log('== 7) build stamps say hg-v1210 ==');
+console.log('== 7) build stamps say hg-v1217 ==');
 {
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1210'/.test(bs), 'build-stamp.js version is hg-v1210');
+  assert(/version:\s*'hg-v1217'/.test(bs), 'build-stamp.js version is hg-v1217');
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1210'/.test(sw), 'sw.js HG_CACHE is hg-v1210');
+  assert(/HG_CACHE\s*=\s*'hg-v1217'/.test(sw), 'sw.js HG_CACHE is hg-v1217');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1210/.test(tt), 'trendtable.js header reads hg-v1210');
+  assert(/hg-v1217/.test(tt), 'trendtable.js header reads hg-v1217');
 }
 
 console.log('\nhg-v1203 BPR: all § passed');

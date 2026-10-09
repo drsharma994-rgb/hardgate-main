@@ -49,7 +49,7 @@ console.log('== 1) three series helpers + three ports + three table entries ==')
   assert(typeof W.pineGoldFisherSeries === 'function' && typeof W.pineGoldFisherZero === 'function',
     'Fisher Transform: series helper and port both exported');
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 27, 'twenty-seven record-only layers since hg-v1210 — HalfTrend / Range Filter / NW Envelope follow OTE (' + T.length + ')');
+  assert(T.length === 27, 'twenty-seven record-only layers since hg-v1217 — HalfTrend / Range Filter / NW Envelope follow OTE (' + T.length + ')');
   const OLD12 = ['supertrend','ichimoku','donchian','emacross','keltner','macd','psar','stoch','chandelier','hullma','cci','aroon'];
   const NEW3 = ['williams','trix','fisher'];
   assert(T.slice(0, 12).map(l => l.id).join(',') === OLD12.join(','), 'the twelve earlier layers lead the table');
@@ -58,10 +58,10 @@ console.log('== 1) three series helpers + three ports + three table entries ==')
   assert(T.slice(18, 22).map(l => l.id).join(',') === 'qqe,squeeze,wavwap,efficiency', 'hg-v1173 formation family follows at 18/19/20/21');
   assert(T[22] && T[22].id === 'bpr', 'the hg-v1202 BPR layer stays at position 22');
   assert(T[23] && T[23].id === 'ote', 'the hg-v1207 OTE layer follows at position 23');
-  /* hg-v1210: the three new record-only scored layers at positions 24-26 */
-  assert(T[24] && T[24].id === 'halftrend',   'the hg-v1210 HalfTrend layer sits at position 24');
-  assert(T[25] && T[25].id === 'rangefilter', 'the hg-v1210 Range Filter layer sits at position 25');
-  assert(T[26] && T[26].id === 'nwenvelope',  'the hg-v1210 NW Envelope layer sits at position 26');
+  /* hg-v1217: the three new record-only scored layers at positions 24-26 */
+  assert(T[24] && T[24].id === 'halftrend',   'the hg-v1217 HalfTrend layer sits at position 24');
+  assert(T[25] && T[25].id === 'rangefilter', 'the hg-v1217 Range Filter layer sits at position 25');
+  assert(T[26] && T[26].id === 'nwenvelope',  'the hg-v1217 NW Envelope layer sits at position 26');
   assert(NEW3.every(id => {
     const l = T.find(x => x.id === id);
     return l && typeof W[l.fn] === 'function';

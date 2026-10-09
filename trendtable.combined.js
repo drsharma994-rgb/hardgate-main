@@ -1221,6 +1221,388 @@ function tmVwapStretch(rows, dir){
   if (dir === 'long') return dist > 0 && dist <= 2;
   return dist < 0 && dist >= -2;
 }
+/* SSL channel (high/low SMA, length 10). The state only flips when close
+   crosses the high average or the low average. No flip yet is not a pass. */
+function tmSsl(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var hlv = 0, i, j, sh, sl, c;
+  for (i = len - 1; i < rows.length; i++){
+    sh = 0; sl = 0;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(rows[j].h) || !isFinite(rows[j].l) || !isFinite(rows[j].c)) return null;
+      sh += rows[j].h;
+      sl += rows[j].l;
+    }
+    sh /= len; sl /= len;
+    c = rows[i].c;
+    if (c > sh) hlv = 1;
+    else if (c < sl) hlv = -1;
+  }
+  if (hlv === 0) return false;
+  return dir === 'long' ? hlv === 1 : hlv === -1;
+}
+function tmRsiSeries(closes, len){
+  if (!closes || closes.length < len + 1) return null;
+  var gains = 0, losses = 0, i, ch, g, l, avgG, avgL;
+  for (i = 1; i <= len; i++){
+    ch = closes[i] - closes[i - 1];
+    if (!isFinite(ch)) return null;
+    if (ch >= 0) gains += ch; else losses -= ch;
+  }
+  avgG = gains / len; avgL = losses / len;
+  var out = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) out[i] = NaN;
+  out[len] = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
+  for (i = len + 1; i < closes.length; i++){
+    ch = closes[i] - closes[i - 1];
+    if (!isFinite(ch)) return null;
+    g = ch > 0 ? ch : 0;
+    l = ch < 0 ? -ch : 0;
+    avgG = (avgG * (len - 1) + g) / len;
+    avgL = (avgL * (len - 1) + l) / len;
+    out[i] = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
+  }
+  return out;
+}
+/* Stochastic RSI (14, 14, 3). The trade side of 50 agrees. Rolling off
+   the extreme (leaving 90 for a long, leaving 10 for a short) does not. */
+function tmStochRsi(rows, dir){
+  var rsiLen = 14, stochLen = 14, smooth = 3;
+  if (!rows || rows.length < rsiLen + stochLen + smooth + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i, j;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].c)) return null;
+    closes.push(rows[i].c);
+  }
+  var rsi = tmRsiSeries(closes, rsiLen);
+  if (!rsi) return null;
+  var raw = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) raw[i] = NaN;
+  for (i = rsiLen + stochLen - 1; i < closes.length; i++){
+    var hi = -Infinity, lo = Infinity;
+    for (j = i - stochLen + 1; j <= i; j++){
+      if (!isFinite(rsi[j])) return null;
+      if (rsi[j] > hi) hi = rsi[j];
+      if (rsi[j] < lo) lo = rsi[j];
+    }
+    raw[i] = hi === lo ? (rsi[i] > 70 ? 100 : (rsi[i] < 30 ? 0 : 50)) : ((rsi[i] - lo) / (hi - lo)) * 100;
+  }
+  function smaEnd(end){
+    if (end < smooth - 1) return NaN;
+    var s = 0, k;
+    for (k = end - smooth + 1; k <= end; k++){
+      if (!isFinite(raw[k])) return NaN;
+      s += raw[k];
+    }
+    return s / smooth;
+  }
+  var n = closes.length - 1;
+  var kNow = smaEnd(n), kPrev = smaEnd(n - 1);
+  if (!isFinite(kNow) || !isFinite(kPrev)) return null;
+  if (dir === 'long') return kNow > 50 && !(kPrev >= 90 && kNow < kPrev);
+  return kNow < 50 && !(kPrev <= 10 && kNow > kPrev);
+}
+/* Ehlers Fisher Transform, length 10. With the trade means the right side
+   of zero and still moving that way. */
+function tmFisher(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 3 || (dir !== 'long' && dir !== 'short')) return null;
+  var val = 0, fish = 0, prev = 0, i, j, hi, lo, x, next;
+  for (i = len - 1; i < rows.length; i++){
+    hi = -Infinity; lo = Infinity;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(rows[j].h) || !isFinite(rows[j].l)) return null;
+      if (rows[j].h > hi) hi = rows[j].h;
+      if (rows[j].l < lo) lo = rows[j].l;
+    }
+    if (!(hi > lo)) x = 0;
+    else x = 0.66 * ((((rows[i].h + rows[i].l) / 2) - lo) / (hi - lo) - 0.5) + 0.67 * val;
+    if (x > 0.999) x = 0.999;
+    if (x < -0.999) x = -0.999;
+    val = x;
+    next = 0.5 * Math.log((1 + x) / (1 - x)) + 0.5 * fish;
+    prev = fish;
+    fish = next;
+  }
+  if (!isFinite(fish) || !isFinite(prev)) return null;
+  if (dir === 'long') return fish > 0 && fish >= prev;
+  return fish < 0 && fish <= prev;
+}
+/* Wilder Parabolic SAR. A long needs the stop under price. A short needs
+   it over price. A tape too short to place the stop does not pass. */
+function tmPsar(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return null;
+  }
+  var step = 0.02, cap = 0.2;
+  var up = rows[1].c >= rows[0].c;
+  var sar = up ? rows[0].l : rows[0].h;
+  var ep = up ? rows[1].h : rows[1].l;
+  var af = step;
+  for (i = 2; i < rows.length; i++){
+    var next = sar + af * (ep - sar);
+    if (up){
+      next = Math.min(next, rows[i - 1].l, rows[i - 2].l);
+      if (rows[i].l < next){
+        up = false; next = ep; ep = rows[i].l; af = step;
+      } else if (rows[i].h > ep){
+        ep = rows[i].h; af = Math.min(cap, af + step);
+      }
+    } else {
+      next = Math.max(next, rows[i - 1].h, rows[i - 2].h);
+      if (rows[i].h > next){
+        up = true; next = ep; ep = rows[i].h; af = step;
+      } else if (rows[i].l < ep){
+        ep = rows[i].l; af = Math.min(cap, af + step);
+      }
+    }
+    sar = next;
+  }
+  if (!isFinite(sar)) return null;
+  var px = rows[rows.length - 1].c;
+  if (dir === 'long') return up && px > sar;
+  return !up && px < sar;
+}
+function tmEmaSeed(values, len){
+  if (!values || values.length < len) return null;
+  var k = 2 / (len + 1), out = new Array(values.length), sum = 0, i;
+  for (i = 0; i < values.length; i++){
+    if (!isFinite(values[i])) return null;
+    if (i < len){
+      sum += values[i];
+      out[i] = i === len - 1 ? sum / len : NaN;
+    } else out[i] = values[i] * k + out[i - 1] * (1 - k);
+  }
+  return out;
+}
+/* Schaff Trend Cycle, 23/50/10. Above 50 and not falling for a long.
+   Below 50 and not rising for a short. */
+function tmSchaff(rows, dir){
+  var fast = 23, slow = 50, cycle = 10, factor = 0.5;
+  if (!rows || rows.length < slow + cycle * 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].c)) return null;
+    closes.push(rows[i].c);
+  }
+  var ef = tmEmaSeed(closes, fast), es = tmEmaSeed(closes, slow);
+  if (!ef || !es) return null;
+  var macd = new Array(closes.length);
+  for (i = 0; i < closes.length; i++) macd[i] = (isFinite(ef[i]) && isFinite(es[i])) ? ef[i] - es[i] : NaN;
+  function stochAt(src, end, asPercent){
+    var hi = -Infinity, lo = Infinity, k;
+    for (k = end - cycle + 1; k <= end; k++){
+      if (!isFinite(src[k])) return NaN;
+      if (src[k] > hi) hi = src[k];
+      if (src[k] < lo) lo = src[k];
+    }
+    if (!(hi > lo) || (hi - lo) <= Math.max(1e-9, Math.abs(hi) * 1e-6)){
+      if (asPercent) return Math.max(0, Math.min(100, src[end]));
+      return src[end] > 0 ? 100 : (src[end] < 0 ? 0 : 50);
+    }
+    return ((src[end] - lo) / (hi - lo)) * 100;
+  }
+  var dSeries = new Array(closes.length), d = 0;
+  for (i = 0; i < closes.length; i++) dSeries[i] = NaN;
+  for (i = slow + cycle - 2; i < closes.length; i++){
+    var kk = stochAt(macd, i, false);
+    if (!isFinite(kk)) return null;
+    d = factor * kk + (1 - factor) * d;
+    dSeries[i] = d;
+  }
+  var stc = 0, prev = 0, seen = 0;
+  for (i = slow + cycle * 2 - 2; i < closes.length; i++){
+    var kd = stochAt(dSeries, i, true);
+    if (!isFinite(kd)) return null;
+    prev = stc;
+    stc = factor * kd + (1 - factor) * stc;
+    seen++;
+  }
+  if (seen < 2 || !isFinite(stc) || !isFinite(prev)) return null;
+  if (dir === 'long') return stc > 50 && stc + 1e-8 >= prev;
+  return stc < 50 && stc <= prev + 1e-8;
+}
+/* Vortex, length 14. The plus line has to lead a long. The minus line
+   has to lead a short. A tie does not pass. */
+function tmVortex(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var start = rows.length - len, vmp = 0, vmm = 0, tr = 0, i, c, p, range;
+  for (i = start; i < rows.length; i++){
+    c = rows[i]; p = rows[i - 1];
+    if (!isFinite(c.h) || !isFinite(c.l) || !isFinite(c.c) || !isFinite(p.h) || !isFinite(p.l) || !isFinite(p.c)) return null;
+    vmp += Math.abs(c.h - p.l);
+    vmm += Math.abs(c.l - p.h);
+    range = Math.max(c.h - c.l, Math.abs(c.h - p.c), Math.abs(c.l - p.c));
+    tr += range;
+  }
+  if (!(tr > 0)) return null;
+  var plus = vmp / tr, minus = vmm / tr;
+  if (dir === 'long') return plus > minus;
+  return minus > plus;
+}
+function tmSmaWindow(values, end, len){
+  if (!values || end < len - 1 || end >= values.length) return NaN;
+  var s = 0, i;
+  for (i = end - len + 1; i <= end; i++){
+    if (!isFinite(values[i])) return NaN;
+    s += values[i];
+  }
+  return s / len;
+}
+/* Bill Williams Awesome Oscillator. Median price, 5 versus 34.
+   A long needs it above zero and not falling. */
+function tmAwesome(rows, dir){
+  var fast = 5, slow = 34;
+  if (!rows || rows.length < slow + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var med = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l)) return null;
+    med.push((rows[i].h + rows[i].l) / 2);
+  }
+  var n = med.length - 1;
+  var ao = tmSmaWindow(med, n, fast) - tmSmaWindow(med, n, slow);
+  var prev = tmSmaWindow(med, n - 1, fast) - tmSmaWindow(med, n - 1, slow);
+  if (!isFinite(ao) || !isFinite(prev)) return null;
+  if (dir === 'long') return ao > 0 && ao + 1e-8 >= prev;
+  return ao < 0 && ao <= prev + 1e-8;
+}
+/* Money Flow Index, 14. Volume has to be real. Above 50 agrees with a
+   long unless it is rolling off 80. The mirror is the short. */
+function tmMfi(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function at(end){
+    var pos = 0, neg = 0, i, tp, prevTp, flow;
+    for (i = end - len + 1; i <= end; i++){
+      if (!(rows[i].v > 0) || !isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return NaN;
+      if (!isFinite(rows[i - 1].h) || !isFinite(rows[i - 1].l) || !isFinite(rows[i - 1].c)) return NaN;
+      tp = (rows[i].h + rows[i].l + rows[i].c) / 3;
+      prevTp = (rows[i - 1].h + rows[i - 1].l + rows[i - 1].c) / 3;
+      flow = tp * rows[i].v;
+      if (tp > prevTp) pos += flow;
+      else if (tp < prevTp) neg += flow;
+    }
+    if (pos === 0 && neg === 0) return 50;
+    if (neg === 0) return 100;
+    if (pos === 0) return 0;
+    return 100 - (100 / (1 + pos / neg));
+  }
+  var now = at(rows.length - 1), prev = at(rows.length - 2);
+  if (!isFinite(now) || !isFinite(prev)) return null;
+  if (dir === 'long') return now > 50 && !(prev >= 80 && now < prev);
+  return now < 50 && !(prev <= 20 && now > prev);
+}
+function tmSmmaAt(values, end, len){
+  if (!values || end < len - 1 || end >= values.length) return NaN;
+  var sum = 0, i;
+  for (i = 0; i < len; i++){
+    if (!isFinite(values[i])) return NaN;
+    sum += values[i];
+  }
+  var smma = sum / len;
+  for (i = len; i <= end; i++){
+    if (!isFinite(values[i])) return NaN;
+    smma = (smma * (len - 1) + values[i]) / len;
+  }
+  return smma;
+}
+/* Williams Alligator. Lips (5, shift 3) lead teeth (8, shift 5),
+   which lead the jaw (13, shift 8), and price is on that side. */
+function tmAlligator(rows, dir){
+  if (!rows || rows.length < 24 || (dir !== 'long' && dir !== 'short')) return null;
+  var med = [], i;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return null;
+    med.push((rows[i].h + rows[i].l) / 2);
+  }
+  var n = med.length - 1;
+  var lips = tmSmmaAt(med, n - 3, 5);
+  var teeth = tmSmmaAt(med, n - 5, 8);
+  var jaw = tmSmmaAt(med, n - 8, 13);
+  var px = rows[n].c;
+  if (!isFinite(lips) || !isFinite(teeth) || !isFinite(jaw) || !(px > 0)) return null;
+  if (dir === 'long') return px > lips && lips > teeth && teeth > jaw;
+  return px < lips && lips < teeth && teeth < jaw;
+}
+/* Commodity Channel Index, 20. Above zero agrees with a long.
+   Below zero agrees with a short. A flat tape is not a pass. */
+function tmCci(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len || (dir !== 'long' && dir !== 'short')) return null;
+  var slice = rows.slice(-len), tp = [], i, sum = 0;
+  for (i = 0; i < slice.length; i++){
+    if (!isFinite(slice[i].h) || !isFinite(slice[i].l) || !isFinite(slice[i].c)) return null;
+    tp.push((slice[i].h + slice[i].l + slice[i].c) / 3);
+    sum += tp[i];
+  }
+  var mean = sum / len, dev = 0;
+  for (i = 0; i < len; i++) dev += Math.abs(tp[i] - mean);
+  dev /= len;
+  if (!(dev > 0)) return false;
+  var cci = (tp[len - 1] - mean) / (0.015 * dev);
+  if (!isFinite(cci)) return null;
+  if (dir === 'long') return cci > 0;
+  return cci < 0;
+}
+/* Dreiss Choppiness Index, 14. Above 61.8 is chop, so neither side passes.
+   The number does not care about direction. A short tape does not pass. */
+function tmChop(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var start = rows.length - len, sum = 0, hi = -Infinity, lo = Infinity, i, bar, prev, tr;
+  for (i = start; i < rows.length; i++){
+    bar = rows[i]; prev = rows[i - 1];
+    if (!isFinite(bar.h) || !isFinite(bar.l) || !isFinite(bar.c) || !isFinite(prev.c)) return null;
+    tr = Math.max(bar.h - bar.l, Math.abs(bar.h - prev.c), Math.abs(bar.l - prev.c));
+    if (!(tr >= 0)) return null;
+    sum += tr;
+    if (bar.h > hi) hi = bar.h;
+    if (bar.l < lo) lo = bar.l;
+  }
+  if (!(hi > lo) || !(sum > 0)) return false;
+  var chop = 100 * Math.log10(sum / (hi - lo)) / Math.log10(len);
+  if (!isFinite(chop)) return null;
+  return chop < 61.8;
+}
+/* Ehlers Relative Vigor Index, length 10. A long needs it above zero
+   and not under its signal line. */
+function tmRvi(rows, dir){
+  var len = 10;
+  if (!rows || rows.length < len + 6 || (dir !== 'long' && dir !== 'short')) return null;
+  var co = [], hl = [], i, span;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(rows[i].o) || !isFinite(rows[i].h) || !isFinite(rows[i].l) || !isFinite(rows[i].c)) return null;
+    co.push(rows[i].c - rows[i].o);
+    span = rows[i].h - rows[i].l;
+    hl.push(span > 0 ? span : 0);
+  }
+  function swma(arr, end){
+    if (end < 3) return NaN;
+    return (arr[end] + 2 * arr[end - 1] + 2 * arr[end - 2] + arr[end - 3]) / 6;
+  }
+  var rvis = [];
+  for (i = 3; i < rows.length; i++){
+    var num = 0, den = 0, k, sn, sd;
+    if (i < 3 + len - 1){ rvis.push(NaN); continue; }
+    for (k = i - len + 1; k <= i; k++){
+      sn = swma(co, k); sd = swma(hl, k);
+      if (!isFinite(sn) || !isFinite(sd)) return null;
+      num += sn; den += sd;
+    }
+    rvis.push(den > 0 ? num / den : 0);
+  }
+  var n = rvis.length - 1;
+  if (n < 3 || !isFinite(rvis[n]) || !isFinite(rvis[n - 1]) || !isFinite(rvis[n - 2]) || !isFinite(rvis[n - 3])) return null;
+  var rvi = rvis[n];
+  var signal = (rvis[n] + 2 * rvis[n - 1] + 2 * rvis[n - 2] + rvis[n - 3]) / 6;
+  if (!isFinite(signal)) return null;
+  if (dir === 'long') return rvi > 0 && rvi + 1e-8 >= signal;
+  return rvi < 0 && rvi <= signal + 1e-8;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
@@ -3562,6 +3944,42 @@ async function trendmxFormOne(ticket, row, ctx){
   var stretch = rows1 ? tmVwapStretch(rows1, dir) : null;
   if (stretch == null) hard.push('vwap band unread');
   else if (!stretch) hard.push('price is stretched more than 2 ATR from VWAP');
+  var ssl = rows1 ? tmSsl(rows1, dir) : null;
+  if (ssl == null) hard.push('ssl unread');
+  else if (!ssl) hard.push('ssl channel is against the trade');
+  var stoch = rows1 ? tmStochRsi(rows1, dir) : null;
+  if (stoch == null) hard.push('stoch rsi unread');
+  else if (!stoch) hard.push('stoch rsi is not with the trade');
+  var fisher = rows1 ? tmFisher(rows1, dir) : null;
+  if (fisher == null) hard.push('fisher unread');
+  else if (!fisher) hard.push('fisher is against the trade');
+  var psar = rows1 ? tmPsar(rows1, dir) : null;
+  if (psar == null) hard.push('parabolic sar unread');
+  else if (!psar) hard.push('parabolic sar is against the trade');
+  var schaff = rows1 ? tmSchaff(rows1, dir) : null;
+  if (schaff == null) hard.push('schaff unread');
+  else if (!schaff) hard.push('schaff trend cycle is against the trade');
+  var vortex = rows1 ? tmVortex(rows1, dir) : null;
+  if (vortex == null) hard.push('vortex unread');
+  else if (!vortex) hard.push('vortex is against the trade');
+  var ao = rows1 ? tmAwesome(rows1, dir) : null;
+  if (ao == null) hard.push('awesome oscillator unread');
+  else if (!ao) hard.push('awesome oscillator is against the trade');
+  var mfi = rows1 ? tmMfi(rows1, dir) : null;
+  if (mfi == null) hard.push('money flow index unread');
+  else if (!mfi) hard.push('money flow index is against the trade');
+  var gator = rows1 ? tmAlligator(rows1, dir) : null;
+  if (gator == null) hard.push('alligator unread');
+  else if (!gator) hard.push('alligator is not feeding with the trade');
+  var cci = rows1 ? tmCci(rows1, dir) : null;
+  if (cci == null) hard.push('cci unread');
+  else if (!cci) hard.push('cci is against the trade');
+  var chop = rows1 ? tmChop(rows1, dir) : null;
+  if (chop == null) hard.push('choppiness unread');
+  else if (!chop) hard.push('choppiness is above 61.8');
+  var rvi = rows1 ? tmRvi(rows1, dir) : null;
+  if (rvi == null) hard.push('vigor unread');
+  else if (!rvi) hard.push('relative vigor is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -3789,7 +4207,7 @@ async function trendmxFormOne(ticket, row, ctx){
   ticket.synergy = row.tmSynergy;
   var atr4 = tmAtrLast(rows4);
   if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
-  ticket.pine = 'tenkan leads kijun, chikou agrees, and price is within 2 ATR of VWAP';
+  ticket.pine = 'CCI, Choppiness and Relative Vigor agree with the earlier crypto scripts';
   return [];
 }
 
@@ -5841,7 +6259,7 @@ function mountTrendMatrix(el){
       '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
-      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, and price within 2 ATR of the session VWAP. Missing data does not pass.</div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · fresh CoinDCX crosses on Telegram every 2 hours. A setup is not armed unless the 1h crypto scripts agree: SuperTrend, WaveTrend from an extreme, money flow, the kernel, QQE, Hull, volume flow, a fresh order block, trend magic, AlphaTrend, the range filter, the Lorentzian vote, HalfTrend, a Waddah explosion, accelerating squeeze momentum, Aroon, Elder Ray, a volume-weighted average above the simple average, DMI with ADX between 18 and 70, Bollinger %B on the trade side of the midline but still inside the band, Tenkan above Kijun with Chikou agreeing, price within 2 ATR of the session VWAP, the SSL channel, Stochastic RSI on the trade side of 50 and not rolling off the extreme, and the Fisher Transform still moving with the trade, Parabolic SAR on the trade side of price, the Schaff Trend Cycle on the trade side of 50, and Vortex with the plus line leading a long or the minus line leading a short, the Awesome Oscillator on the trade side of zero, Money Flow Index on the trade side of 50, and the Alligator feeding with the trade, CCI on the trade side of zero, Choppiness under 61.8, and Relative Vigor above its signal on the trade side of zero. Missing data does not pass.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
@@ -6289,6 +6707,18 @@ W.tmDmi = tmDmi;
 W.tmBbSide = tmBbSide;
 W.tmIchiSignal = tmIchiSignal;
 W.tmVwapStretch = tmVwapStretch;
+W.tmSsl = tmSsl;
+W.tmStochRsi = tmStochRsi;
+W.tmFisher = tmFisher;
+W.tmPsar = tmPsar;
+W.tmSchaff = tmSchaff;
+W.tmVortex = tmVortex;
+W.tmAwesome = tmAwesome;
+W.tmMfi = tmMfi;
+W.tmAlligator = tmAlligator;
+W.tmCci = tmCci;
+W.tmChop = tmChop;
+W.tmRvi = tmRvi;
 W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;

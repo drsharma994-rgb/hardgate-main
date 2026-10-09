@@ -848,7 +848,7 @@ var PINE_GOLD_RECORD_LAYERS = [
      majority. Record-only until the ledger measures it. */
   { id: 'ote', label: 'OTE 0.705', fn: 'pineGoldOte', minBars: 50,
     opts: { look: 40 }, twin: null },
-  /* hg-v1210: three more bar-only Pine ports a gold trader runs, each
+  /* hg-v1217: three more bar-only Pine ports a gold trader runs, each
      distinct from every layer above and from every live-lane port on GOLD
      PINE. HalfTrend (an amplitude-pivot ATR trend flip, different from
      Supertrend's HL2 ATR bands and Chandelier's trail-from-extreme);
@@ -1624,7 +1624,7 @@ function pineGoldOte(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
-/* hg-v1210: Nadaraya-Watson Gaussian kernel smoother. The port's own
+/* hg-v1217: Nadaraya-Watson Gaussian kernel smoother. The port's own
    compute path (see pineNwEnvelope in pinemath.js), lifted here so the
    state read in pineGoldLayerStates can compare close against the
    kernel center on EVERY bar -- not only the bars the port fires on.
@@ -1650,7 +1650,7 @@ function pgrNwCenter(rows, bandwidth, lookback){
   return sumYw / sumW;
 }
 
-/* hg-v1210: Range Filter builder. Calls the pinemath port and promotes
+/* hg-v1217: Range Filter builder. Calls the pinemath port and promotes
    its flip-bar output to the hg-v1164 shape {dir, entry, stop, t1, t2}
    through pgrResult. On a long flip the stop sits below the lower edge
    of the active range (filterLevel - rng - 0.15*ATR via pgrResult's
@@ -1674,7 +1674,7 @@ function pineGoldRangeFilter(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
-/* hg-v1210: Nadaraya-Watson envelope builder. The port fires on a wick
+/* hg-v1217: Nadaraya-Watson envelope builder. The port fires on a wick
    that pierced +/-mult*ATR of the kernel center and closed back inside.
    Entry is the close on that bar; stop sits beyond the band plus a
    0.15*ATR buffer (same shape as BPR, hg-v1203); t1/t2 follow the
@@ -2121,6 +2121,215 @@ function pineGoldTapeVeto(rows, dir, opts){
   var hint = String((opts.macro && (opts.macro.realRateHint || opts.macro.hint)) || '').toUpperCase();
   if (hint === 'HEADWIND' && dir === 'long' && !swept) return 'Real-rate headwind against a long without a sweep';
   if (hint === 'TAILWIND' && dir === 'short' && !swept) return 'Real-rate tailwind against a short without a sweep';
+  if (mode === 'scalp'){
+    var vwapWhy = pineGoldVwapChase(rows, dir);
+    if (vwapWhy) return vwapWhy;
+    var dayWhy = pineGoldPriorDayVeto(rows, dir);
+    if (dayWhy) return dayWhy;
+  }
+  try{
+    var rrFn = gfn('hgGoldRoundReject');
+    var rr = rrFn ? rrFn(rows) : null;
+    if (rr && (rr.dir === 'long' || rr.dir === 'short') && rr.dir !== dir) return rr.why || 'A round-dollar level rejected against this trade.';
+  }catch(eRr){}
+  if (mode === 'scalp'){
+    var orWhy = pineGoldOpeningReject(rows, dir);
+    if (orWhy) return orWhy;
+    var fvgWhy = pineGoldFvgInPath(rows, dir);
+    if (fvgWhy) return fvgWhy;
+  }
+  var eqWhy = pineGoldEqualPool(rows, dir);
+  if (eqWhy) return eqWhy;
+  var brWhy = pineGoldBreakerVeto(rows, dir);
+  if (brWhy) return brWhy;
+  if (mode === 'scalp'){
+    var viWhy = pineGoldVolImbalance(rows, dir);
+    if (viWhy) return viWhy;
+    var smtWhy = pineGoldSilverSmt(rows, dir, opts.silverRows);
+    if (smtWhy) return smtWhy;
+  }
+  return null;
+}
+function pineGoldSessionDayOk(rows){
+  if (!rows || rows.length < 2) return false;
+  var anch = pineGoldSessionVwapAnchor(rows);
+  if (anch > 0) return true;
+  var tL = rows[rows.length - 1].t, t0 = rows[0].t;
+  if (!fin(tL) || !fin(t0)) return false;
+  var sL = tL < 1e12 ? tL : tL / 1000, s0 = t0 < 1e12 ? t0 : t0 / 1000;
+  return Math.floor(sL / 86400) === Math.floor(s0 / 86400);
+}
+function pineGoldVwapChase(rows, dir){
+  try{
+    var vbFn = gfn('goldVWAPBands');
+    if (!vbFn || !pineGoldSessionDayOk(rows)) return null;
+    var bands = vbFn(rows, pineGoldSessionVwapAnchor(rows));
+    if (!bands || !isFinite(bands.stdev) || !(bands.stdev > 0)) return null;
+    if (bands.band !== 'AT_2σ' && bands.band !== 'AT_3σ') return null;
+    if (dir === 'long' && bands.pos === 'ABOVE') return 'Session VWAP is two sigma above. A scalp does not chase it.';
+    if (dir === 'short' && bands.pos === 'BELOW') return 'Session VWAP is two sigma below. A scalp does not chase it.';
+  }catch(eVw){}
+  return null;
+}
+function pineGoldBarAtr(rows){
+  var fn = gfn('atr');
+  if (typeof fn !== 'function') return NaN;
+  try{
+    var a = fn(rows, 14);
+    var v = a && a.length ? +a[a.length - 1] : NaN;
+    return isFinite(v) && v > 0 ? v : NaN;
+  }catch(e){ return NaN; }
+}
+function pineGoldPriorDayVeto(rows, dir){
+  try{
+    var pdFn = gfn('hgGoldPriorDayLevels');
+    if (!pdFn) return null;
+    var prior = pdFn(rows);
+    if (!prior || prior.ok !== true) return null;
+    var atrV = pineGoldBarAtr(rows);
+    var lastB = rows[rows.length - 1];
+    if (!lastB || !isFinite(atrV)) return null;
+    var c = pgrNum(lastB.c), h = pgrNum(lastB.h), l = pgrNum(lastB.l);
+    if (!isFinite(c) || !isFinite(h) || !isFinite(l)) return null;
+    if (dir === 'long' && isFinite(prior.hi)){
+      if (h > prior.hi && c < prior.hi) return 'The prior day high was pierced and closed back under.';
+      if (c < prior.hi && prior.hi - c <= 0.35 * atrV && !(h > prior.hi)) return 'Price is under the prior day high and has not swept it.';
+    }
+    if (dir === 'short' && isFinite(prior.lo)){
+      if (l < prior.lo && c > prior.lo) return 'The prior day low was pierced and closed back over.';
+      if (c > prior.lo && c - prior.lo <= 0.35 * atrV && !(l < prior.lo)) return 'Price is over the prior day low and has not swept it.';
+    }
+  }catch(eDy){}
+  return null;
+}
+/* London 07:00-08:00 and New York 13:00-14:00 UTC, from the desk's own
+   opening-range read. A pierce that closes back inside is a failed break.
+   A box still building, or a clean close through, is not this veto. */
+function pineGoldOpeningReject(rows, dir){
+  var orFn = gfn('goldOpeningRange');
+  if (typeof orFn !== 'function' || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last && last.h), l = pgrNum(last && last.l), c = pgrNum(last && last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var names = { london: 'London', ny: 'New York' };
+  var keys = ['london', 'ny'];
+  for (var i = 0; i < keys.length; i++){
+    var box = null;
+    try{ box = orFn(rows, keys[i]); }catch(eOr){ box = null; }
+    if (!box || !(box.hi > box.lo) || box.state === 'BUILDING') continue;
+    var name = names[keys[i]];
+    if (dir === 'long' && h > box.hi && c <= box.hi) return name + ' opening range high was pierced and closed back inside.';
+    if (dir === 'short' && l < box.lo && c >= box.lo) return name + ' opening range low was pierced and closed back over.';
+  }
+  return null;
+}
+/* A fresh $3 gold fair-value gap from the Pine gold library, still open,
+   and either touching price or within half an ATR. An old or mitigated
+   gap does not refuse. */
+function pineGoldFvgInPath(rows, dir){
+  var Eng = G.HG_PineGoldEngine;
+  if (typeof Eng !== 'function' || !rows || rows.length < 8) return null;
+  var fvgs = null;
+  try{ fvgs = new Eng().detectGoldFvg(rows, 3); }catch(eFg){ return null; }
+  if (!fvgs || !fvgs.length) return null;
+  var atrV = pineGoldBarAtr(rows);
+  var c = pgrNum(rows[rows.length - 1] && rows[rows.length - 1].c);
+  if (!isFinite(atrV) || !isFinite(c)) return null;
+  var n = rows.length, i;
+  for (i = fvgs.length - 1; i >= 0; i--){
+    var f = fvgs[i];
+    if (!f || f.mitigated || !isFinite(f.barIndex) || f.barIndex < n - 16) continue;
+    if (!(f.top > f.bottom)) continue;
+    if (dir === 'long' && f.type === 'BEARISH_FVG' && c < f.top){
+      if (c >= f.bottom) return 'Price is inside a fresh bearish fair value gap.';
+      if (f.bottom - c <= 0.5 * atrV) return 'A fresh bearish fair value gap sits in the way of this long.';
+    }
+    if (dir === 'short' && f.type === 'BULLISH_FVG' && c > f.bottom){
+      if (c <= f.top) return 'Price is inside a fresh bullish fair value gap.';
+      if (c - f.top <= 0.5 * atrV) return 'A fresh bullish fair value gap sits in the way of this short.';
+    }
+  }
+  return null;
+}
+/* Equal highs above a long, equal lows under a short, on this tape.
+   A close through the pool is a break, not this veto. */
+function pineGoldEqualPool(rows, dir){
+  try{
+    var eqFn = gfn('goldEqualLevels');
+    if (!eqFn) return null;
+    var eq = eqFn(rows);
+    if (!eq) return null;
+    var atrV = pineGoldBarAtr(rows);
+    var lastB = rows[rows.length - 1];
+    if (!lastB || !isFinite(atrV)) return null;
+    var c = pgrNum(lastB.c), h = pgrNum(lastB.h), l = pgrNum(lastB.l);
+    if (!isFinite(c) || !isFinite(h) || !isFinite(l)) return null;
+    var near = 0.35 * atrV;
+    if (dir === 'long' && eq.nearestHigh && isFinite(eq.nearestHigh.level)){
+      var hi = eq.nearestHigh.level;
+      if (hi > c && hi - c <= near){
+        if (h > hi) return 'Equal highs were pierced and closed back under.';
+        return 'Equal highs sit just above and have not been swept.';
+      }
+    }
+    if (dir === 'short' && eq.nearestLow && isFinite(eq.nearestLow.level)){
+      var lo = eq.nearestLow.level;
+      if (c > lo && c - lo <= near){
+        if (l < lo) return 'Equal lows were pierced and closed back over.';
+        return 'Equal lows sit just below and have not been swept.';
+      }
+    }
+  }catch(eEq){}
+  return null;
+}
+function pineGoldCore(){
+  var C = G.HG_GoldCoreEngine;
+  if (typeof C !== 'function') return null;
+  try{ return new C(); }catch(eC){ return null; }
+}
+/* A breaker only refuses while price is actually back inside it, and only
+   when the breaker faces the trade. No breaker, or a breaker that agrees, passes. */
+function pineGoldBreakerVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectBreakerBlock !== 'function') return null;
+  var found = null;
+  try{ found = core.detectBreakerBlock(rows); }catch(eBr){ return null; }
+  if (!found || found.retesting !== true) return null;
+  if (dir === 'long' && found.type === 'BEARISH_BREAKER') return 'Price is retesting a bearish breaker block.';
+  if (dir === 'short' && found.type === 'BULLISH_BREAKER') return 'Price is retesting a bullish breaker block.';
+  return null;
+}
+/* The last body-gap in the last eight bars. $0.80 is the library's own
+   minimum. An old gap, or none, does not refuse. */
+function pineGoldVolImbalance(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectVolumeImbalance !== 'function') return null;
+  var vi = null;
+  try{ vi = core.detectVolumeImbalance(rows); }catch(eVi){ return null; }
+  if (!vi || !(vi.gapTop > vi.gapBottom)) return null;
+  var atrV = pineGoldBarAtr(rows);
+  var c = pgrNum(rows[rows.length - 1] && rows[rows.length - 1].c);
+  if (!isFinite(atrV) || !isFinite(c)) return null;
+  if (dir === 'long' && vi.type === 'BEARISH_VI' && c < vi.gapTop){
+    if (c >= vi.gapBottom) return 'Price is inside a bearish volume imbalance.';
+    if (vi.gapBottom - c <= 0.5 * atrV) return 'A bearish volume imbalance sits in the way of this long.';
+  }
+  if (dir === 'short' && vi.type === 'BULLISH_VI' && c > vi.gapBottom){
+    if (c <= vi.gapTop) return 'Price is inside a bullish volume imbalance.';
+    if (c - vi.gapTop <= 0.5 * atrV) return 'A bullish volume imbalance sits in the way of this short.';
+  }
+  return null;
+}
+/* Silver must be loaded. Unread silver does not refuse. */
+function pineGoldSilverSmt(rows, dir, silverRows){
+  if (!silverRows || silverRows.length < 5) return null;
+  var core = pineGoldCore();
+  if (!core || typeof core.evaluateTripleSmt !== 'function') return null;
+  var smt = null;
+  try{ smt = core.evaluateTripleSmt(rows, silverRows); }catch(eSm){ return null; }
+  if (!smt || smt.unread) return null;
+  if (dir === 'long' && smt.tripleSmtBearish) return 'Silver confirmed the high. Bearish SMT.';
+  if (dir === 'short' && smt.tripleSmtBullish) return 'Silver refused the low. Bullish SMT.';
   return null;
 }
 
@@ -2263,8 +2472,8 @@ function pineGoldLayerStates(rows){
               squeezeOn: false, efficiencyEr: NaN,
               /* hg-v1202 */ bpr: null,
               /* hg-v1207 */ ote: null,
-              /* hg-v1210 record-only scored layers */ halftrend: null, rangefilter: null, nwenvelope: null,
-              /* hg-v1210 state-only (not in the record-layer table) */ vumanchuCipher: null,
+              /* hg-v1217 record-only scored layers */ halftrend: null, rangefilter: null, nwenvelope: null,
+              /* hg-v1217 state-only (not in the record-layer table) */ vumanchuCipher: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -2473,7 +2682,7 @@ function pineGoldLayerStates(rows){
         else if (!oteSw.up && c < oteSw.zoneBot) out.ote = 'short';
       }
     }catch(eOte){}
-    /* hg-v1210: HalfTrend state. The port's own `trend` field is +1/-1
+    /* hg-v1217: HalfTrend state. The port's own `trend` field is +1/-1
        on every bar (not only the flip bar), so a readable amplitude
        trend reads one side; the state is the trend-side, not the flip
        event. The port itself returns null without enough bars (atrLen +
@@ -2486,7 +2695,7 @@ function pineGoldLayerStates(rows){
         if (htRes && (htRes.trend === 1 || htRes.trend === -1)) out.halftrend = htRes.trend === 1 ? 'long' : 'short';
       }
     }catch(eHt){}
-    /* hg-v1210: Range Filter state. The port's own `trend` field reads
+    /* hg-v1217: Range Filter state. The port's own `trend` field reads
        the regime (+1 above the filter level with the range, -1 below),
        so the state is the regime side on every bar; `includeContext`
        returns the trend without needing a fresh flip. */
@@ -2498,7 +2707,7 @@ function pineGoldLayerStates(rows){
         if (rfRes && (rfRes.trend === 1 || rfRes.trend === -1)) out.rangefilter = rfRes.trend === 1 ? 'long' : 'short';
       }
     }catch(eRf){}
-    /* hg-v1210: NW Envelope state. The port only returns on a wick
+    /* hg-v1217: NW Envelope state. The port only returns on a wick
        reversion, so for a continuous state read we compare close
        against the Gaussian kernel center via pgrNwCenter (one home
        with the port's own compute, hg-v949). NEITHER at exact
@@ -2511,7 +2720,7 @@ function pineGoldLayerStates(rows){
         else if (c < nwC) out.nwenvelope = 'short';
       }
     }catch(eNw){}
-    /* hg-v1210: VuManChu Cipher state (state-only, NOT in the record
+    /* hg-v1217: VuManChu Cipher state (state-only, NOT in the record
        table). WaveTrend sitting beyond +osLevel is overbought (reads
        SHORT as a mean-reversion bias); sitting below -osLevel is
        oversold (LONG); inside the band is NEITHER. The port's
@@ -2548,7 +2757,7 @@ function pineGoldLayerStates(rows){
    (at least three of the five with the plan is true, at least three
    against is false, anything else absent) */
 var PINE_GOLD_MAJORITY = 3;
-/* hg-v1210: state-only mark ids (NOT in PINE_GOLD_RECORD_LAYERS). The
+/* hg-v1217: state-only mark ids (NOT in PINE_GOLD_RECORD_LAYERS). The
    state joins pineGoldLayerStates and pineGoldPineMarks for the PINE
    STACK line and the forward record, but does NOT mint a record-only
    layer and does NOT join readable/allLong/allShort counts or the
@@ -2585,7 +2794,7 @@ function pineGoldStackLineHtml(states, marks){
       var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
       cells += '<span class="gsx-ind ' + cls + '" title="' + e('pine:' + l.id + 'With — ' + l.label + ' state on this tape') + '"><b>' + e(l.label) + '</b> ' + e(tag) + '</span>';
     });
-    /* hg-v1210: state-only cells live beside the scored record-layer cells
+    /* hg-v1217: state-only cells live beside the scored record-layer cells
        in the stack but are counted separately (they do not join the
        readable-of-table count or the majority bar). Each adds its own
        cell with a dashed-border class so a reader sees the shape
@@ -2671,10 +2880,10 @@ G.pineGoldFisherSeries = pgrFisherSeries;
 G.pineGoldBpr = pineGoldBpr;                          /* hg-v1172 */
 G.pineGoldBprShelves = pgrBprShelves;                 /* hg-v1172 */
 G.pineGoldOte = pineGoldOte;                          /* hg-v1207 */
-G.pineGoldRangeFilter = pineGoldRangeFilter;          /* hg-v1210 */
-G.pineGoldNwEnvelope = pineGoldNwEnvelope;            /* hg-v1210 */
-G.pineGoldNwCenter = pgrNwCenter;                     /* hg-v1210 */
-G.PINE_GOLD_STATE_ONLY_IDS = PINE_GOLD_STATE_ONLY_IDS; /* hg-v1210 */
+G.pineGoldRangeFilter = pineGoldRangeFilter;          /* hg-v1217 */
+G.pineGoldNwEnvelope = pineGoldNwEnvelope;            /* hg-v1217 */
+G.pineGoldNwCenter = pgrNwCenter;                     /* hg-v1217 */
+G.PINE_GOLD_STATE_ONLY_IDS = PINE_GOLD_STATE_ONLY_IDS; /* hg-v1217 */
 G.pineGoldFixLock = pineGoldFixLock;
 G.pineGoldRecordJudge = pineGoldRecordJudge;
 G.pineGoldRecordFloor = pineGoldRecordFloor;
