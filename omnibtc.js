@@ -35,11 +35,17 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              against the candidate demote it to watch — one
                              witness never flips a setup. The stack never
                              mints levels and never moves rank math.
-  PINE ..................... READ ONLY. pineScan() is a snapshot the PINE tab
-                             computes; this reads a BTC row when one is
-                             already there and contributes nothing when it is
-                             not. It never runs pine and never mints a signal
-                             pine did not produce.
+  PINE ..................... READ ONLY snapshot. pineScan() does not mint a
+                             signal the PINE tab did not already produce.
+                             The ten house pine cores are also run on this
+                             desk's own BTC 4h tape. A crown stays a ticket
+                             only when two of those cores fired fresh on the
+                             same side and none fired against it, or one
+                             fired fresh and a second house strategy already
+                             has levels the same way. A quiet or opposing
+                             book leaves a watch, not a ticket. A script
+                             that is not loaded stays unread and is not a
+                             vote.
   REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
                              accepted a taker series and was never fed one —
                              the candle-approximated stand-in answered for the
@@ -457,6 +463,132 @@ a global hard refresh.
     if (pick.row.missing == null && Array.isArray(win.missing)) pick.row.missing = win.missing.slice();
     if ((pick.row.gateMeta == null || !pick.row.gateMeta.length) && Array.isArray(win.gateMeta)) pick.row.gateMeta = win.gateMeta;
     return pick;
+  }
+
+  /* The ten cores the PINE tab already runs. Called on the BTC 4h tape this
+     desk fetched. includeContext is deliberately off: a standing bias is not
+     a fresh signal and must not vote. A missing function is unread. */
+  var OBTC_PINE = [
+    { id: 'lorentzian-kernel', label: 'Lorentzian', fn: 'pineLorentzianKernel', minBars: 260,
+      opts: { kNeighbors: 8, lookback: 250, scoreLimit: 2, kernelLookback: 8, kernelBandwidth: 3 } },
+    { id: 'msb-ob', label: 'MSB / OB', fn: 'pineMsbOb', minBars: 80,
+      opts: { leftBars: 5, rightBars: 5 } },
+    { id: 'squeeze-momentum', label: 'Squeeze Momentum', fn: 'pineSqueezeMomentum', minBars: 50,
+      opts: { length: 20, bbMult: 2, kcMult: 1.5 } },
+    { id: 'smart-money-flow', label: 'Smart Money Flow', fn: 'pineSmartMoneyFlow', minBars: 30,
+      opts: { length: 21, threshold: 0.10 } },
+    { id: 'half-trend', label: 'HalfTrend', fn: 'pineHalfTrend', minBars: 120,
+      opts: { amplitude: 2, atrMult: 2.0, atrLen: 100 } },
+    { id: 'smc-core', label: 'SMC Core', fn: 'pineSmcCore', minBars: 30,
+      opts: { pivotLength: 5, atrLen: 14, recentBars: 5 } },
+    { id: 'vumanchu-cipher', label: 'VuManChu Cipher', fn: 'pineVumanchuCipher', minBars: 40,
+      opts: { wtChannelLen: 9, wtAvgLen: 21, osLevel: -53, obLevel: 53, recentBars: 5 } },
+    { id: 'range-filter', label: 'Range Filter', fn: 'pineRangeFilter', minBars: 210,
+      opts: { period: 100, mult: 3.0 } },
+    { id: 'nw-envelope', label: 'NW Envelope', fn: 'pineNwEnvelope', minBars: 60,
+      opts: { bandwidth: 8.0, mult: 2.5, lookback: 50, atrLen: 100 } },
+    { id: 'weekly-avwap', label: 'Weekly AVWAP', fn: 'pineWeeklyAvwap', minBars: 20,
+      opts: { bandMult: 2.0 } }
+  ];
+
+  function hgObtcPineFresh(res){
+    if (!res) return false;
+    if (res.newLong || res.newShort) return true;
+    var ago = +res.barsAgo;
+    return isFinite(ago) && ago > 0 && ago <= 5;
+  }
+
+  function hgObtcPineBook(rows){
+    var out = { loaded: 0, ran: 0, fresh: [] };
+    var i, spec, fn, res, dir;
+    for (i = 0; i < OBTC_PINE.length; i++){
+      spec = OBTC_PINE[i];
+      fn = W[spec.fn];
+      if (typeof fn !== 'function') continue;
+      out.loaded++;
+      if (!rows || rows.length < spec.minBars) continue;
+      try{ res = fn(rows, spec.opts); }catch(ePn){ res = null; }
+      out.ran++;
+      if (!hgObtcPineFresh(res)) continue;
+      dir = String(res.dir || '').toLowerCase();
+      if (dir !== 'long' && dir !== 'short') continue;
+      out.fresh.push({ id: spec.id, label: spec.label, dir: dir });
+    }
+    return out;
+  }
+
+  function hgObtcCoreAgree(cands, row){
+    var names = [], seen = {}, i, c, eng;
+    var mine = String((row && (row.engine || row.strategy)) || '');
+    var dir = String((row && row.dir) || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') return names;
+    for (i = 0; i < (cands || []).length; i++){
+      c = cands[i];
+      if (!c || String(c.dir || '').toLowerCase() !== dir) continue;
+      if (!hgObtcHasLevels(c)) continue;
+      eng = String(c.engine || c.strategy || '');
+      if (!eng || eng === mine || seen[eng]) continue;
+      seen[eng] = 1;
+      names.push(eng);
+    }
+    return names;
+  }
+
+  function hgObtcDemoteWatch(pick, note){
+    pick.row.clean = false;
+    pick.row.near = true;
+    pick.row.nearClean = true;
+    pick.tier = 'near';
+    pick.row.pineRefused = true;
+    pick.row.pineNote = note;
+    return pick;
+  }
+
+  /* A sendable crown needs fresh pine agreement. Silence and opposition are
+     not tickets. An unloaded bank is unread, not a fabricated disagreement. */
+  function hgObtcApplyPineAccuracy(pick, rows, cands){
+    if (!pick || !pick.row) return pick;
+    if (!rows || rows.length < 20){
+      pick.row.pineNote = 'pine bank unread — no 4h tape, so the scripts were not run';
+      return pick;
+    }
+    var book = hgObtcPineBook(rows);
+    pick.row.pineFresh = book.fresh;
+    if (!book.loaded){
+      pick.row.pineNote = 'pine bank unread — the scripts are not loaded, so they cast no vote';
+      return pick;
+    }
+    var dir = String(pick.row.dir || '').toLowerCase();
+    var agree = [], oppose = [], i, f;
+    for (i = 0; i < book.fresh.length; i++){
+      f = book.fresh[i];
+      if (f.dir === dir) agree.push(f.label);
+      else oppose.push(f.label);
+    }
+    var cores = hgObtcCoreAgree(cands, pick.row);
+    pick.row.pineAgree = agree;
+    pick.row.pineOppose = oppose;
+    pick.row.coreAgree = cores;
+    if (oppose.length){
+      return hgObtcDemoteWatch(pick, 'PINE AGAINST — ' + oppose.join(', ')
+        + ' fired the other way. Watch only, not a ticket.');
+    }
+    if (agree.length >= 2){
+      pick.row.pineNote = 'PINE CONFIRM — ' + agree.join(', ')
+        + (cores.length ? (' · also ' + cores.join(', ')) : '');
+      return pick;
+    }
+    if (agree.length === 1 && cores.length >= 1){
+      pick.row.pineNote = 'PINE + CORE — ' + agree[0] + ' fresh, and '
+        + cores.join(', ') + ' already has levels the same way';
+      return pick;
+    }
+    if (agree.length === 1){
+      return hgObtcDemoteWatch(pick, 'only ' + agree[0]
+        + ' fired fresh, and no second house strategy has levels this way. Watch only.');
+    }
+    return hgObtcDemoteWatch(pick, 'no fresh pine script on this 4h tape ('
+      + book.ran + ' of ' + book.loaded + ' cores ran). Watch only, not a ticket.');
   }
 
   /* hg-v1035: THE PERFECT SETUP tier — the shared PERFECT formation predicate
@@ -1600,6 +1732,7 @@ a global hard refresh.
     html += '<div class="dim">' + esc(r.engine || r.strategy || 'engine');
     if (r.venue) html += ' · ' + esc(String(r.venue).toUpperCase());
     html += clean ? ' · ticket' : ' · watch only</div></div>';
+    if (r.pineNote) html += '<div class="note" data-obtc-pine="1">' + esc(r.pineNote) + '</div>';
     if (r.evidenceChips && r.evidenceChips.length){
       html += '<div class="dim" style="width:100%">' + esc(r.evidenceChips.join(' · ')) + '</div>';
     }
@@ -1790,7 +1923,7 @@ a global hard refresh.
         item = legs[i];
         if (!hgObtcIsBtc(item.sym || item.symbol)) continue;
         tk = tickerOf(item);
-        r4 = await loadBars(item, '4h', 220);
+        r4 = await loadBars(item, '4h', 280);
         r1 = await loadBars(item, '1h', 180);
         r15 = await loadBars(item, '15m', 180);
         /* the 1d leg is what squeezeClassify and trendScore read for the
@@ -1900,6 +2033,7 @@ a global hard refresh.
             && c.entry === pick.row.entry && c.stop === pick.row.stop;
         })[0];
         winnerRows = match && match._rows;
+        try{ hgObtcApplyPineAccuracy(pick, winnerRows, all); }catch(ePine){}
         /* hg-v1051: ENTRY-EDGE REFINEMENT — the pick's entry is snapped
            to the structure edge the house exact-entry seam prices (edge
            signal / swing enrichment on the winner's own tape), then
@@ -2595,6 +2729,8 @@ a global hard refresh.
   W.hgObtcCandidateFromOmniHit = hgObtcCandidateFromOmniHit;
   W.hgObtcPrincipalBannerHtml = hgObtcPrincipalBannerHtml;
   W.hgObtcPick = hgObtcPick;
+  W.hgObtcPineBook = hgObtcPineBook;
+  W.hgObtcApplyPineAccuracy = hgObtcApplyPineAccuracy;
   /* hg-v1057: the accuracy-pack seams, exported so the test drives the real
      computation rather than a re-implementation */
   W.hgObtcFlowAcceptance = hgObtcFlowAcceptance;

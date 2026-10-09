@@ -205,7 +205,7 @@ console.log('== 6) no gate module reads a new pineCipher/pineRangeFilter/pineNwE
 console.log('== 7) build stamps are version-agnostic (reads build-stamp as the source of truth) ==');
 {
   /* hg-v1289: this guard used to hardcode hg-v1287 by text — the hg-v956
-     textual-pin failure, which turned every subsequent release red (hg-v1288
+     textual-pin failure, which turned every subsequent release red (hg-v1291
      already shipped past it). The shared `tests/helpers/build-version.mjs`
      exists for exactly this: ONE place reads build-stamp.js so a pack bump
      costs one edit, not thirty. The invariant this test actually guards is
