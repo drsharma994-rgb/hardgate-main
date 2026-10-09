@@ -113,7 +113,8 @@
   }
   function paceDead(pc){ return pc != null && pc < PACE_DEAD; }
 
-  function scalpHits(raw, dayRaw){
+  function scalpHits(raw, dayRaw, pack){
+    pack = pack || {};
     var rows = rowsOf(raw);
     var day = rowsOf(dayRaw || raw);
     var out = [];
@@ -254,6 +255,141 @@
           if (pdShit) out.push(pdShit);
         }
       }
+      var span7 = last.h - last.l;
+      if (span7 > 0 && !paceDead(__pace)){
+        var under = Math.floor((last.c - 0.01) / 10) * 10;
+        var over = Math.ceil((last.c + 0.01) / 10) * 10;
+        var depthUnder = under - last.l;
+        var depthOver = last.h - over;
+        var nearL = (n >= 3 && (Math.abs(under - lo) <= 1 || Math.abs(under - hi) <= 1)) || (pdN >= 3 && (Math.abs(under - pdL) <= 1 || Math.abs(under - pdH) <= 1));
+        var nearH = (n >= 3 && (Math.abs(over - lo) <= 1 || Math.abs(over - hi) <= 1)) || (pdN >= 3 && (Math.abs(over - pdL) <= 1 || Math.abs(over - pdH) <= 1));
+        if (!nearL && depthUnder >= 1 && depthUnder <= 4 && last.c > under && last.c > last.o && (last.c - last.l) / span7 >= 0.55){
+          var rnL = hit('GS-7', 'Round Ten Raid', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'A ten-dollar level was swept by 1 to 4 dollars and the bar closed back above it.');
+          if (rnL) out.push(rnL);
+        } else if (!nearH && depthOver >= 1 && depthOver <= 4 && last.c < over && last.c < last.o && (last.h - last.c) / span7 >= 0.55){
+          var rnS = hit('GS-7', 'Round Ten Raid', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'A ten-dollar level was swept by 1 to 4 dollars and the bar closed back under it.');
+          if (rnS) out.push(rnS);
+        }
+      }
+    }
+    if (isFinite(hour) && hour >= 9.25 && hour <= 9.75 && today && !paceDead(__pace)){
+      var ffOpen = NaN, fi, fh;
+      for (fi = 0; fi < day.length; fi++){
+        if (dayOf(day[fi]) !== today) continue;
+        fh = hourOf(day[fi]);
+        if (isFinite(fh) && fh >= 6 && fh < 7){ ffOpen = day[fi].o; break; }
+      }
+      if (isFinite(ffOpen) && Math.abs(last.c - ffOpen) >= a * 1.5){
+        if (last.c > ffOpen && last.c < last.o){
+          var ffS = hit('GS-8', 'Frankfurt Book Close', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'After 09:15 UTC price was at least 1.5 times the average range above the 06:00 UTC open, and this bar closed back toward it.');
+          if (ffS) out.push(ffS);
+        } else if (last.c < ffOpen && last.c > last.o){
+          var ffL = hit('GS-8', 'Frankfurt Book Close', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'After 09:15 UTC price was at least 1.5 times the average range under the 06:00 UTC open, and this bar closed back toward it.');
+          if (ffL) out.push(ffL);
+        }
+      }
+    }
+    if (isFinite(hour) && hour >= 15.08 && hour <= 15.5 && today && !paceDead(__pace)){
+      var fixOpen = NaN, pi, ph;
+      for (pi = 0; pi < day.length - 1; pi++){
+        if (dayOf(day[pi]) !== today) continue;
+        ph = hourOf(day[pi]);
+        if (isFinite(ph) && ph >= 15 && ph < 15.25){ fixOpen = day[pi].o; break; }
+      }
+      if (isFinite(fixOpen) && Math.abs(last.c - fixOpen) >= a * 1.2){
+        if (last.c > fixOpen && last.c < last.o){
+          var pmS = hit('GS-9', 'London PM Fix', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Between 15:05 and 15:30 UTC price was at least 1.2 times the average range above the 15:00 UTC open, and this bar closed back toward it.');
+          if (pmS) out.push(pmS);
+        } else if (last.c < fixOpen && last.c > last.o){
+          var pmL = hit('GS-9', 'London PM Fix', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Between 15:05 and 15:30 UTC price was at least 1.2 times the average range under the 15:00 UTC open, and this bar closed back toward it.');
+          if (pmL) out.push(pmL);
+        }
+      }
+    }
+    if (isFinite(hour) && hour >= 18.25 && hour <= 18.5 && !paceDead(__pace)){
+      var strike = Math.round(last.o / 5) * 5;
+      var upExt = last.h - strike;
+      var dnExt = strike - last.l;
+      if (upExt >= 3 && upExt <= 5.5 && last.c < strike && last.c < last.o){
+        var pinS = hit('GS-10', 'COMEX Settlement Pin', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The 18:15 UTC bar ran 3 to 5.50 dollars through the five-dollar strike nearest its open and closed back through that strike.');
+        if (pinS) out.push(pinS);
+      } else if (dnExt >= 3 && dnExt <= 5.5 && last.c > strike && last.c > last.o){
+        var pinL = hit('GS-10', 'COMEX Settlement Pin', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The 18:15 UTC bar ran 3 to 5.50 dollars through the five-dollar strike nearest its open and closed back through that strike.');
+        if (pinL) out.push(pinL);
+      }
+    }
+    if (isFinite(hour) && hour >= 3 && hour <= 4.5 && today && !paceDead(__pace)){
+      var tHi = -Infinity, tLo = Infinity, tn = 0, ti, th;
+      for (ti = 0; ti < day.length - 1; ti++){
+        if (dayOf(day[ti]) !== today) continue;
+        th = hourOf(day[ti]);
+        if (!isFinite(th) || th < 0 || th >= hour) continue;
+        if (day[ti].h > tHi) tHi = day[ti].h;
+        if (day[ti].l < tLo) tLo = day[ti].l;
+        tn++;
+      }
+      if (tn >= 4 && tHi > tLo && tHi - tLo <= 6.5){
+        if (last.c > tHi && last.c > last.o){
+          var tkL = hit('GS-11', 'Tokyo Compression', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The Asian range into the Tokyo window was 6.50 dollars or less, and this bar closed above it.');
+          if (tkL) out.push(tkL);
+        } else if (last.c < tLo && last.c < last.o){
+          var tkS = hit('GS-11', 'Tokyo Compression', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The Asian range into the Tokyo window was 6.50 dollars or less, and this bar closed under it.');
+          if (tkS) out.push(tkS);
+        }
+      }
+    }
+    if (isFinite(hour) && hour >= 12 && hour < 14 && today && !paceDead(__pace)){
+      var amOpen = NaN, ai, ah;
+      for (ai = 0; ai < day.length - 1; ai++){
+        if (dayOf(day[ai]) !== today) continue;
+        ah = hourOf(day[ai]);
+        if (isFinite(ah) && ah >= 10.5 && ah < 10.75){ amOpen = day[ai].o; break; }
+      }
+      if (isFinite(amOpen) && last.h - amOpen >= 1 && last.c < amOpen && last.c < last.o){
+        var amS = hit('GS-12', 'London AM Fix Hunt', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Between 12:00 and 14:00 UTC price ran at least 1 dollar through the 10:30 UTC open and closed back under it.');
+        if (amS) out.push(amS);
+      } else if (isFinite(amOpen) && amOpen - last.l >= 1 && last.c > amOpen && last.c > last.o){
+        var amL = hit('GS-12', 'London AM Fix Hunt', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Between 12:00 and 14:00 UTC price ran at least 1 dollar through the 10:30 UTC open and closed back above it.');
+        if (amL) out.push(amL);
+      }
+    }
+    if (isFinite(hour) && hour >= 7 && hour < 8 && today && !paceDead(__pace)){
+      var voidBar = null, vi, vh, vBody, vSpan, vBull, vOpp, vMid;
+      for (vi = 0; vi < day.length - 1; vi++){
+        if (dayOf(day[vi]) !== today) continue;
+        vh = hourOf(day[vi]);
+        if (isFinite(vh) && vh >= 7 && vh < 7.25){ voidBar = day[vi]; break; }
+      }
+      if (voidBar){
+        vBody = Math.abs(voidBar.c - voidBar.o);
+        vSpan = voidBar.h - voidBar.l;
+        vBull = voidBar.c > voidBar.o;
+        vOpp = vBull ? (Math.min(voidBar.o, voidBar.c) - voidBar.l) : (voidBar.h - Math.max(voidBar.o, voidBar.c));
+        vMid = (voidBar.h + voidBar.l) / 2;
+        if (vBody >= a * 2 && vSpan > 0 && vOpp / vSpan <= 0.08){
+          if (vBull && last.l <= vMid && last.c > vMid && last.c > last.o){
+            var vdL = hit('GS-13', 'London Opening Void', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The 07:00 UTC bar ran at least twice the average range with almost no lower wick, and this bar closed back above its midpoint before 08:00 UTC.');
+            if (vdL) out.push(vdL);
+          } else if (!vBull && last.h >= vMid && last.c < vMid && last.c < last.o){
+            var vdS = hit('GS-13', 'London Opening Void', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The 07:00 UTC bar ran at least twice the average range with almost no upper wick, and this bar closed back under its midpoint before 08:00 UTC.');
+            if (vdS) out.push(vdS);
+          }
+        }
+      }
+    }
+    if (pack.newsRelease === true && isFinite(hour) && ((hour >= 12.5 && hour < 12.75) || (hour >= 13.5 && hour < 13.75)) && rows.length >= 6 && !paceDead(__pace)){
+      var preHi = -Infinity, preLo = Infinity, qi;
+      for (qi = rows.length - 6; qi < rows.length - 1; qi++){
+        if (rows[qi].h > preHi) preHi = rows[qi].h;
+        if (rows[qi].l < preLo) preLo = rows[qi].l;
+      }
+      if (preHi > preLo && last.h > preHi && last.c < preHi && last.c > preLo && last.c < last.o){
+        var nwS = hit('GS-14', 'News Exhaustion', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'A marked US release bar ran above the prior range and closed back inside it.');
+        if (nwS) out.push(nwS);
+      } else if (preHi > preLo && last.l < preLo && last.c > preLo && last.c < preHi && last.c > last.o){
+        var nwL = hit('GS-14', 'News Exhaustion', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'A marked US release bar ran under the prior range and closed back inside it.');
+        if (nwL) out.push(nwL);
+      }
     }
     return out;
   }
@@ -350,6 +486,76 @@
       if (yLead && gLead){
         var yg = hit('OG-7', 'Yield Lead', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'The yield print fell over six bars and this gold bar closed up with a real body.');
         if (yg) out.push(yg);
+      }
+    }
+    if (dxy.length >= 5 && !out.some(function(h){ return h.id === 'OG-1'; })){
+      var dx0 = dxy[dxy.length - 1], dx1 = dxy[dxy.length - 3];
+      if (dx0 && dx1 && last.l < back.l && dx0.l >= dx1.l && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4){
+        var dxL = hit('OG-8', 'Dollar Non-Confirmation', 'long', last.c, Math.min(last.l, back.l) - Math.max(a * 0.45, 3.2), 'Gold made a lower low and the dollar refused it. Silver was not required.');
+        if (dxL) out.push(dxL);
+      } else if (dx0 && dx1 && last.h > back.h && dx0.h <= dx1.h && last.c < last.o && Math.abs(last.c - last.o) >= a * 0.4){
+        var dxS = hit('OG-8', 'Dollar Non-Confirmation', 'short', last.c, Math.max(last.h, back.h) + Math.max(a * 0.45, 3.2), 'Gold made a higher high and the dollar refused it. Silver was not required.');
+        if (dxS) out.push(dxS);
+      }
+    }
+    if (silver.length >= 8 && rows.length >= 8){
+      var gBase = rows[rows.length - 8].c, sBase = silver[silver.length - 8].c, sNow = silver[silver.length - 1].c;
+      if (gBase > 0 && sBase > 0 && sNow > 0){
+        var gRet = (last.c - gBase) / gBase;
+        var sRet = (sNow - sBase) / sBase;
+        if (sRet > 0.015 && gRet < 0.006 && sRet > gRet && last.c > last.o){
+          var sl = hit('OG-9', 'Silver Lead', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Silver rose more than 1.5 percent over eight bars while gold rose less than 0.6 percent, and this bar closed up.');
+          if (sl) out.push(sl);
+        }
+      }
+    }
+    var realY = rowsOf(extra.realYields);
+    if (realY.length >= 3 && last.c > last.o && Math.abs(last.c - last.o) >= a * 0.4 && realY[realY.length - 1].c < realY[realY.length - 3].c){
+      var ry = hit('OG-10', 'Real Yield', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'The real-yield series fell over three prints and this gold bar closed up. A missing real-yield series is not a falling yield.');
+      if (ry) out.push(ry);
+    }
+    var sgeYuan = Number(extra.sgeYuan), usdCny = Number(extra.usdcny);
+    if (sgeYuan > 0 && usdCny > 0 && last.c > last.o){
+      var sgeOz = (sgeYuan * 31.1035) / usdCny;
+      if (sgeOz - last.c >= 15){
+        var sge = hit('OG-11', 'Shanghai Basis', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Shanghai gold, converted with the live dollar-yuan rate, is at least 15 dollars an ounce above London, and this bar closed up. A missing Shanghai price or a missing yuan rate is not a premium.');
+        if (sge) out.push(sge);
+      }
+    }
+    var eu = rowsOf(extra.eurusd), jy = rowsOf(extra.usdjpy);
+    if (eu.length >= 8 && jy.length >= 8 && rows.length >= 8 && last.c > last.o){
+      var g0 = rows[rows.length - 8].c, e0 = eu[eu.length - 8].c, j0 = jy[jy.length - 8].c;
+      var e1 = eu[eu.length - 1].c, j1 = jy[jy.length - 1].c;
+      if (g0 > 0 && e0 > 0 && j0 > 0 && e1 > 0 && j1 > 0){
+        var usdRet = (last.c - g0) / g0;
+        var eurRet = ((last.c / e1) - (g0 / e0)) / (g0 / e0);
+        var jpyRet = ((last.c * j1) - (g0 * j0)) / (g0 * j0);
+        if (usdRet < 0.0015 && (eurRet > 0.004 || jpyRet > 0.004)){
+          var fx = hit('OG-12', 'Currency Dispersion', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold in euros or yen rose more than 0.4 percent over eight bars while dollar gold rose less than 0.15 percent, and this bar closed up. A missing euro or yen series is not a lead.');
+          if (fx) out.push(fx);
+        }
+      }
+    }
+    var spx = rowsOf(extra.spx);
+    if (spx.length >= 20 && rows.length >= 20 && last.c > last.o){
+      var ratios = [], ri, sc, meanR = 0, varR = 0, zR, rNow, rThen;
+      for (ri = 0; ri < 20; ri++){
+        sc = spx[spx.length - 20 + ri].c;
+        if (!(sc > 0) || !(rows[rows.length - 20 + ri].c > 0)){ ratios = []; break; }
+        ratios.push(rows[rows.length - 20 + ri].c / sc);
+      }
+      if (ratios.length === 20){
+        for (ri = 0; ri < 20; ri++) meanR += ratios[ri];
+        meanR /= 20;
+        for (ri = 0; ri < 20; ri++) varR += (ratios[ri] - meanR) * (ratios[ri] - meanR);
+        varR = Math.sqrt(varR / 20);
+        rNow = ratios[19];
+        rThen = ratios[13];
+        zR = varR > 0 ? (rNow - meanR) / varR : 0;
+        if (zR > 1.5 && rNow > rThen){
+          var sx = hit('OG-13', 'Sovereign Risk', 'long', last.c, last.l - Math.max(a * 0.45, 3.2), 'Gold divided by the equity index is more than 1.5 standard deviations above its 20-bar mean and still rising, and this bar closed up. A missing equity series is not a sovereign bid.');
+          if (sx) out.push(sx);
+        }
       }
     }
     return out;
@@ -460,7 +666,151 @@
         if (vwS) out.push(vwS);
       }
     }
+    var ib = londonIbMid(rows);
+    if (ib && isFinite(hourOf(last)) && hourOf(last) > 7.5 && hourOf(last) < 10){
+      if (last.l <= ib && last.c > ib && last.c > last.o){
+        var ibL = hit('PG-7', 'London Opening Midpoint', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The London opening midpoint was tagged after 07:30 UTC and the bar closed back above it.');
+        if (ibL) out.push(ibL);
+      } else if (last.h >= ib && last.c < ib && last.c < last.o){
+        var ibS = hit('PG-7', 'London Opening Midpoint', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The London opening midpoint was tagged after 07:30 UTC and the bar closed back under it.');
+        if (ibS) out.push(ibS);
+      }
+    }
+    var priorBars = priorSessionSlice(rows);
+    var priorArea = priorBars.length >= 8 ? valueArea(priorBars) : null;
+    if (priorArea){
+      if (last.l <= priorArea.val && last.c > priorArea.val && last.c > last.o){
+        var psL = hit('PG-8', 'Prior Session Value', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The finished session value-area low was tagged and the bar closed back above it.');
+        if (psL) out.push(psL);
+      } else if (last.h >= priorArea.vah && last.c < priorArea.vah && last.c < last.o){
+        var psS = hit('PG-8', 'Prior Session Value', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The finished session value-area high was tagged and the bar closed back under it.');
+        if (psS) out.push(psS);
+      }
+    }
+    var naked = nakedPoc(priorBars, rows);
+    if (naked != null){
+      if (last.l <= naked && last.c > naked && last.c > last.o){
+        var npL = hit('PG-9', 'Naked Session POC', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The finished session point of control had not been traded this session, and this bar closed back above it.');
+        if (npL) out.push(npL);
+      } else if (last.h >= naked && last.c < naked && last.c < last.o){
+        var npS = hit('PG-9', 'Naked Session POC', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The finished session point of control had not been traded this session, and this bar closed back under it.');
+        if (npS) out.push(npS);
+      }
+    }
+    var coil = donchianRelease(rows);
+    if (coil && !paceDead(__pace)){
+      if (coil === 'long'){
+        var dcL = hit('PG-10', 'Donchian Keltner Release', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The prior 20 bars sat inside the Keltner band, and this bar closed above that range.');
+        if (dcL) out.push(dcL);
+      } else {
+        var dcS = hit('PG-10', 'Donchian Keltner Release', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The prior 20 bars sat inside the Keltner band, and this bar closed under that range.');
+        if (dcS) out.push(dcS);
+      }
+    }
+    var virgin = virginSessionVwap(rows, bands, prevVw);
+    if (virgin != null && !paceDead(__pace)){
+      if (last.l <= virgin && last.c > virgin && last.c > last.o){
+        var nvL = hit('PG-11', 'Virgin Session VWAP', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'An older session average had not been traded since it finished, and this bar closed back above it.');
+        if (nvL) out.push(nvL);
+      } else if (last.h >= virgin && last.c < virgin && last.c < last.o){
+        var nvS = hit('PG-11', 'Virgin Session VWAP', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'An older session average had not been traded since it finished, and this bar closed back under it.');
+        if (nvS) out.push(nvS);
+      }
+    }
     return out;
+  }
+
+  function londonIbMid(rows){
+    var day = dayOf(rows[rows.length - 1]), hi = -Infinity, lo = Infinity, n = 0, i, hv;
+    if (!day) return null;
+    for (i = 0; i < rows.length - 1; i++){
+      if (dayOf(rows[i]) !== day) continue;
+      hv = hourOf(rows[i]);
+      if (!isFinite(hv) || hv < 7 || hv >= 7.5) continue;
+      if (rows[i].h > hi) hi = rows[i].h;
+      if (rows[i].l < lo) lo = rows[i].l;
+      n++;
+    }
+    if (n < 2 || !(hi - lo >= 2)) return null;
+    return (hi + lo) / 2;
+  }
+
+  function priorSessionSlice(rows){
+    if (!rows || rows.length < 10) return [];
+    function sessOf(b){
+      var h = hourOf(b);
+      if (!isFinite(h)) return '';
+      return h < 7 ? 'ASIA' : (h < 12.5 ? 'LONDON' : (h < 20 ? 'NY' : 'OFF'));
+    }
+    var cur = sessOf(rows[rows.length - 1]), i = rows.length - 2, prev;
+    if (!cur) return [];
+    while (i >= 0 && sessOf(rows[i]) === cur) i--;
+    if (i < 0) return [];
+    prev = sessOf(rows[i]);
+    if (!prev) return [];
+    var end = i;
+    while (i >= 0 && sessOf(rows[i]) === prev) i--;
+    return rows.slice(i + 1, end + 1);
+  }
+
+  function nakedPoc(prior, rows){
+    if (!prior || prior.length < 8 || !rows || rows.length < 2) return null;
+    var buckets = {}, i, key, w, best = -1, poc = NaN, seen = false;
+    function sessOf(b){
+      var h = hourOf(b);
+      if (!isFinite(h)) return '';
+      return h < 7 ? 'ASIA' : (h < 12.5 ? 'LONDON' : (h < 20 ? 'NY' : 'OFF'));
+    }
+    for (i = 0; i < prior.length; i++){
+      key = Math.round(prior[i].c);
+      w = prior[i].v > 0 ? prior[i].v : 1;
+      buckets[key] = (buckets[key] || 0) + w;
+      if (buckets[key] > best){ best = buckets[key]; poc = key; }
+    }
+    if (!isFinite(poc)) return null;
+    var cur = sessOf(rows[rows.length - 1]);
+    for (i = rows.length - 2; i >= 0; i--){
+      if (sessOf(rows[i]) !== cur) break;
+      if (rows[i].l <= poc && rows[i].h >= poc) seen = true;
+    }
+    return seen ? null : poc;
+  }
+
+  function donchianRelease(rows){
+    if (!rows || rows.length < 22) return null;
+    var i, hi = -Infinity, lo = Infinity, ema, a = atr(rows, 14), last = rows[rows.length - 1];
+    if (!(a > 0)) return null;
+    for (i = rows.length - 21; i < rows.length - 1; i++){
+      if (rows[i].h > hi) hi = rows[i].h;
+      if (rows[i].l < lo) lo = rows[i].l;
+    }
+    ema = rows[rows.length - 21].c;
+    for (i = rows.length - 20; i < rows.length - 1; i++) ema = ema + (2 / 21) * (rows[i].c - ema);
+    if (!(hi <= ema + 1.5 * a && lo >= ema - 1.5 * a && hi > lo)) return null;
+    if (last.c > hi && last.c > last.o) return 'long';
+    if (last.c < lo && last.c < last.o) return 'short';
+    return null;
+  }
+
+  function virginSessionVwap(rows, bands, skipMean){
+    if (!rows || !bands || bands.length !== rows.length || bands.length < 8) return null;
+    var done = [], i, k, m, touched;
+    for (i = 1; i < bands.length - 1; i++){
+      if (!bands[i].sess || bands[i].sess === bands[i + 1].sess) continue;
+      done.push({ mean: bands[i].mean, end: i });
+    }
+    if (done.length < 2) return null;
+    for (i = done.length - 2; i >= 0; i--){
+      m = done[i].mean;
+      if (!isFinite(m)) continue;
+      if (isFinite(skipMean) && Math.abs(m - skipMean) < 1) continue;
+      touched = false;
+      for (k = done[i].end + 1; k < rows.length - 1; k++){
+        if (rows[k].l <= m && rows[k].h >= m){ touched = true; break; }
+      }
+      if (!touched) return m;
+    }
+    return null;
   }
 
   function priorSessionMean(bands){
@@ -676,6 +1026,111 @@
         }
       }
     }
+    var eqH = NaN, eqL = NaN, a1, b1;
+    for (a1 = Math.max(0, rows.length - 20); a1 < rows.length - 2; a1++){
+      for (b1 = a1 + 1; b1 < rows.length - 1; b1++){
+        if (Math.abs(rows[a1].h - rows[b1].h) <= 0.8) eqH = Math.max(rows[a1].h, rows[b1].h);
+        if (Math.abs(rows[a1].l - rows[b1].l) <= 0.8) eqL = Math.min(rows[a1].l, rows[b1].l);
+      }
+    }
+    if (isFinite(eqH) && last.h - eqH >= 0.5 && last.h - eqH <= 3 && last.c < eqH && last.c < last.o){
+      var eqS = hit('GG-7', 'Equal High Sweep', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Two highs within 0.80 dollars were swept and the bar closed back under them.');
+      if (eqS) out.push(eqS);
+    } else if (isFinite(eqL) && eqL - last.l >= 0.5 && eqL - last.l <= 3 && last.c > eqL && last.c > last.o){
+      var eqLhit = hit('GG-7', 'Equal Low Sweep', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Two lows within 0.80 dollars were swept and the bar closed back above them.');
+      if (eqLhit) out.push(eqLhit);
+    }
+    var lucasN = [11, 18, 29, 47, 76], hiI = -1, loI = -1, hiV = -Infinity, loV = Infinity, gi, fromHi, fromLo, lucasHi = 0, lucasLo = 0, lk;
+    for (gi = Math.max(0, rows.length - 80); gi < rows.length - 1; gi++){
+      if (rows[gi].h >= hiV){ hiV = rows[gi].h; hiI = gi; }
+      if (rows[gi].l <= loV){ loV = rows[gi].l; loI = gi; }
+    }
+    fromHi = hiI >= 0 ? (rows.length - 1) - hiI : 0;
+    fromLo = loI >= 0 ? (rows.length - 1) - loI : 0;
+    for (lk = 0; lk < lucasN.length; lk++){
+      if (Math.abs(fromHi - lucasN[lk]) <= 1) lucasHi = lucasN[lk];
+      if (Math.abs(fromLo - lucasN[lk]) <= 1) lucasLo = lucasN[lk];
+    }
+    if (lucasHi && last.c < last.o && last.c < hiV){
+      var luS = hit('GG-8', 'Lucas Time Spiral', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'The swing high is ' + fromHi + ' bars back, within one bar of Lucas ' + lucasHi + ', and this bar turned down.');
+      if (luS) out.push(luS);
+    } else if (lucasLo && last.c > last.o && last.c > loV){
+      var luL = hit('GG-8', 'Lucas Time Spiral', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'The swing low is ' + fromLo + ' bars back, within one bar of Lucas ' + lucasLo + ', and this bar turned up.');
+      if (luL) out.push(luL);
+    }
+    var leaf = gannAngles(last.c, [137.5]);
+    if (leaf && leaf.dist <= 1.2){
+      if (last.h >= leaf.level - 1.2 && last.c < leaf.level && last.c < last.o){
+        var lfS = hit('GG-9', 'Golden Angle', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged the 137.5 degree Gann angle and closed back under it.');
+        if (lfS) out.push(lfS);
+      } else if (last.l <= leaf.level + 1.2 && last.c > leaf.level && last.c > last.o){
+        var lfL = hit('GG-9', 'Golden Angle', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the 137.5 degree Gann angle and closed back above it.');
+        if (lfL) out.push(lfL);
+      }
+    }
+    var ord = gannAngles(last.c, [45, 135, 225, 315]);
+    if (ord && ord.dist <= 1.2){
+      if (last.h >= ord.level - 1.2 && last.c < ord.level && last.c < last.o){
+        var odS = hit('GG-10', 'Ordinal Gann Angle', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged a 45, 135, 225, or 315 degree Gann angle and closed back under it.');
+        if (odS) out.push(odS);
+      } else if (last.l <= ord.level + 1.2 && last.c > ord.level && last.c > last.o){
+        var odL = hit('GG-10', 'Ordinal Gann Angle', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged a 45, 135, 225, or 315 degree Gann angle and closed back above it.');
+        if (odL) out.push(odL);
+      }
+    }
+    var step144 = 14.4, base144 = Math.round(last.c / step144) * step144, d144 = Math.abs(last.c - base144);
+    if (d144 <= 1.44 && last.h >= base144 && last.c < base144 && last.c < last.o){
+      var sqS = hit('GG-11', 'Square of 144', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged a 14.40 dollar harmonic and closed back under it.');
+      if (sqS) out.push(sqS);
+    } else if (d144 <= 1.44 && last.l <= base144 && last.c > base144 && last.c > last.o){
+      var sqL144 = hit('GG-11', 'Square of 144', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged a 14.40 dollar harmonic and closed back above it.');
+      if (sqL144) out.push(sqL144);
+    }
+    var nava = gannAngles(last.c, [40, 80, 120, 160, 200, 240, 280, 320]);
+    if (nava && nava.dist <= 1.2){
+      if (last.h >= nava.level - 1.2 && last.c < nava.level && last.c < last.o){
+        var nvS = hit('GG-12', 'Navamsha Angle', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged a 40 degree Navamsha angle and closed back under it.');
+        if (nvS) out.push(nvS);
+      } else if (last.l <= nava.level + 1.2 && last.c > nava.level && last.c > last.o){
+        var nvL = hit('GG-12', 'Navamsha Angle', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged a 40 degree Navamsha angle and closed back above it.');
+        if (nvL) out.push(nvL);
+      }
+    }
+    var gzBase = Math.floor(last.c / 100) * 100, gzLevels = [gzBase + 51.84, gzBase + 38.16], gz, gzLv;
+    for (gz = 0; gz < gzLevels.length; gz++){
+      gzLv = gzLevels[gz];
+      if (Math.abs(last.c - gzLv) > 0.65) continue;
+      if (last.h >= gzLv && last.c < gzLv && last.c < last.o){
+        var gzS = hit('GG-13', 'Giza Slope', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged the 51.84 or 38.16 print inside this hundred dollars and closed back under it.');
+        if (gzS) out.push(gzS);
+        break;
+      }
+      if (last.l <= gzLv && last.c > gzLv && last.c > last.o){
+        var gzL = hit('GG-13', 'Giza Slope', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the 51.84 or 38.16 print inside this hundred dollars and closed back above it.');
+        if (gzL) out.push(gzL);
+        break;
+      }
+    }
+    var rayLoI = -1, rayHiI = -1, rayLo = Infinity, rayHi = -Infinity, rayI, rayBars, rayPx;
+    for (rayI = Math.max(0, rows.length - 24); rayI < rows.length - 1; rayI++){
+      if (rows[rayI].l <= rayLo){ rayLo = rows[rayI].l; rayLoI = rayI; }
+      if (rows[rayI].h >= rayHi){ rayHi = rows[rayI].h; rayHiI = rayI; }
+    }
+    if (last.c > last.o && rayLoI >= 0){
+      rayBars = (rows.length - 1) - rayLoI;
+      rayPx = rayLo + rayBars;
+      if (rayBars >= 4 && Math.abs(last.c - rayPx) <= 1.25 && last.l <= rayPx && last.c > rayPx){
+        var rayL = hit('GG-14', 'Gann One by One', 'long', last.c, last.l - Math.max(a * 0.3, 2), 'Price tagged the one-dollar-per-bar ray up from the swing low and closed back above it.');
+        if (rayL) out.push(rayL);
+      }
+    } else if (last.c < last.o && rayHiI >= 0){
+      rayBars = (rows.length - 1) - rayHiI;
+      rayPx = rayHi - rayBars;
+      if (rayBars >= 4 && rayPx > 0 && Math.abs(last.c - rayPx) <= 1.25 && last.h >= rayPx && last.c < rayPx){
+        var rayS = hit('GG-14', 'Gann One by One', 'short', last.c, last.h + Math.max(a * 0.3, 2), 'Price tagged the one-dollar-per-bar ray down from the swing high and closed back under it.');
+        if (rayS) out.push(rayS);
+      }
+    }
     return out;
   }
 
@@ -694,7 +1149,7 @@
 
   function forDesk(desk, raw, extra){
     extra = extra || {};
-    if (desk === 'goldscalp') return scalpHits(raw, extra.day || raw);
+    if (desk === 'goldscalp') return scalpHits(raw, extra.day || raw, extra);
     if (desk === 'omnigold') return omniHits(raw, extra.silver, extra.dxy, extra);
     if (desk === 'pinegold') return pineHits(raw);
     if (desk === 'ganeshgold') return ganeshHits(raw, extra.dxy);

@@ -151,6 +151,34 @@ console.log('\n== session: Asia blocked unless violent AH/AL sweep; London 08:00
   ok(lo.ok === true && lo.weight >= 3, 'London 08:00 GMT is priority-weighted (got ' + lo.weight + ')');
   const ny = W.hgGoldSessionGate(ny12, rows, 'ob');
   ok(ny.ok === true && ny.weight >= 3, 'NY overlap 12:00–16:00 GMT is priority-weighted (got ' + ny.weight + ')');
+  const tokyo = W.hgGoldSessionGate(Date.UTC(2024, 0, 16, 3, 20, 0), rows, 'gs11');
+  ok(tokyo.ok === true && tokyo.session === 'TOKYO' && tokyo.demote === false,
+     'Tokyo compression keeps its own 03:00-04:30 window (' + tokyo.session + ')');
+  const tokyoOther = W.hgGoldSessionGate(Date.UTC(2024, 0, 16, 3, 20, 0), rows, 'vwap');
+  ok(tokyoOther.ok === false, 'the Tokyo window does not open the rest of Asia');
+  const pin = W.hgGoldSessionGate(Date.UTC(2024, 0, 16, 18, 20, 0), rows, 'gs10');
+  ok(pin.ok === true && pin.session === 'COMEX_PIN', 'COMEX pin keeps its 18:15-18:30 window');
+}
+
+console.log('\n== a tier-1 print on this bar is a fade, not a lock ==');
+{
+  const W = boot();
+  const open = Date.UTC(2024, 0, 16, 12, 30, 0);
+  const bar = { t: open, o: 2400, h: 2401, l: 2399, c: 2400 };
+  ok(W.hgGoldTier1OnBar({ events: [{ title: 'US CPI', t: open + 60000 }] }, bar) === true,
+     'CPI inside this 15m bar is a release');
+  ok(W.hgGoldTier1OnBar({ events: [{ title: 'US CPI', t: open - 3600000 }] }, bar) === false,
+     'a CPI an hour earlier is not this bar');
+  ok(W.hgGoldTier1OnBar({ events: [{ title: 'Crude inventories', t: open + 60000 }] }, bar) === false,
+     'a non-tier-1 print is not a release');
+  const rows = bars(80, 2400, 900, 4);
+  const fade = W.hgGoldInstFilter(
+    { stratKey: 'gs14', dir: 'short', id: 'gs14|short|2400', strategy: 'NEWS EXHAUSTION', stamps: [], gateNotes: [] },
+    { rows: rows, nowMs: open + 5 * 60000, news: { events: [{ title: 'US CPI', impact: 'high', t: open + 60000 }] },
+      scalp: true, hardReject: false, macro: goldMacroFor('short') }
+  );
+  ok(!fade || !/NEWS GATE/.test(String((fade && fade.reason) || '')),
+     'the news lock does not delete the exhaustion fade (' + ((fade && fade.reason) || 'kept') + ')');
 }
 
 console.log('\n== ATR floor is 1.5×, never a cap ==');

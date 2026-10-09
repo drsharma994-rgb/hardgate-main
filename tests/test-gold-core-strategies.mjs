@@ -98,6 +98,22 @@ console.log('== the detectors form setups with a valid, renderable shape ==');
   ok(seen >= 1, 'at least one core hit was driven end to end');
 }
 
+console.log('== COMEX pin is judged on the bar extreme, not the close ==');
+{
+  const S = W.HG_GoldSuite;
+  const last = Date.UTC(2026, 0, 6, 18, 15, 0);
+  const rows = [];
+  for (let i = 0; i < 30; i++){
+    rows.push({ t: last - (29 - i) * 900000, o: 2654, h: 2655, l: 2653, c: 2654, v: 100 });
+  }
+  rows[29] = { t: last, o: 2654.2, h: 2658.2, l: 2653.5, c: 2654.0, v: 100 };
+  const pin = S.scalpHits(rows, rows);
+  ok(pin.some(h => h.id === 'GS-10' && h.dir === 'short'), 'a 3-dollar wick through the five-dollar strike nearest the open, closed back through it, is a COMEX pin');
+  rows[29] = { t: last, o: 2657, h: 2659, l: 2656.5, c: 2658, v: 100 };
+  const stillOut = S.scalpHits(rows, rows);
+  ok(!stillOut.some(h => h.id === 'GS-10'), 'a close that is still beyond the strike is not a pin — the nearest five-dollar strike is never 3 dollars from the close');
+}
+
 console.log('== forDesk routes to the right desk ==');
 {
   const S = W.HG_GoldSuite;
@@ -160,8 +176,8 @@ console.log('== participation: raid sweeps need a defended print, level reads ca
   const src = read('gold-suite-unified.js');
   ok(/var PACE_WIN = 20, PACE_MIN_READ = 10, PACE_DEAD = 0\.5;/.test(src),
     'the participation priors are stated: 20-bar median, 10 readable prints, 0.5x dead');
-  ok((src.match(/\bpaceDead\(/g) || []).length === 8,
-    'paceDead is defined once and consulted by the session-raid detections (GS-1, GS-2, GS-4, GS-5, GS-6, PG-1, PG-6)');
+  ok((src.match(/\bpaceDead\(/g) || []).length === 18,
+    'paceDead is defined once and consulted by the session-raid detections, including the London opening void and the marked news fade');
 }
 
 console.log('== the four desks read the suite ==');

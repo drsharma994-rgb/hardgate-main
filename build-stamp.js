@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1278',
-  pack: 'One new read on each gold desk, on top of the participation layer. Gold Scalp raids the prior day only when that day is on the tape, the sweep is 1.50 to 5.50 dollars, and the print is not dead volume. OmniGold adds a yield lead, unread when the yield series is missing. Pine Gold tags the finished session average, and a dead print withholds it. Ganesh Gold adds an eight-bar square, separate from the sixteen-bar square. Every target stays 2.5R. The card does not send an order.',
-  built: '2026-10-09T16:10:00Z'
+  version: 'hg-v1285',
+  pack: 'Gold Scalp only. The COMEX pin was impossible: a close is never three dollars from the nearest five-dollar strike. It now needs the 18:15 UTC bar to run three to five and a half dollars through the strike nearest its open, and to close back through that strike. That pin, and the Tokyo compression break, can lead inside their own windows instead of being thrown out for not being London or New York. A CPI, NFP, FOMC or GDP print on this 15-minute bar can fade when price closes back inside the prior range. The news lock does not delete that fade. An ordinary 12:30 bar is still not a news bar. Every target stays 2.5R. The card does not send an order.',
+  built: '2026-10-09T18:55:00Z'
 };
 
 function hgBuildLabel(b){
