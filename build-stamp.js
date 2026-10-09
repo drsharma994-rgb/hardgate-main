@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1279',
-  pack: 'One more read on each gold desk. Gold Scalp raids a ten-dollar round number only when the sweep is 1 to 4 dollars and the level is not the Asia extreme or the prior-day extreme. OmniGold adds a dollar non-confirmation, and it stays unread when the dollar series is missing or the triple SMT already fired. Pine Gold tags the London opening midpoint only after 07:30 UTC. Ganesh Gold sweeps equal highs or equal lows that sit within 0.80 dollars. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
-  built: '2026-10-09T16:30:00Z'
+  version: 'hg-v1280',
+  pack: 'Four reads that were not already on the desks. Gold Scalp fades the 06:00 UTC open only between 09:15 and 09:45 UTC, and only after a 1.5-range stretch and a turn back. OmniGold adds a silver lead, unread when silver did not rise more than 1.5 percent while gold rose less than 0.6 percent. Pine Gold tags the finished session value area, not the one still building. Ganesh Gold turns at Lucas 11, 18, 29, 47, or 76 bars from the swing. Lucas 7 stays with the eight-bar square. Every target stays 2.5R. A raid on dead volume is withheld. The card does not send an order.',
+  built: '2026-10-09T16:50:00Z'
 };
 
 function hgBuildLabel(b){
