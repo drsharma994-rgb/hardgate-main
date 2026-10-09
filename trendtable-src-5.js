@@ -346,6 +346,15 @@
   var accept = rows1 ? tmBbAccept(rows1, dir) : null;
   if (accept == null) hard.push('band acceptance unread');
   else if (!accept) hard.push('price closed back inside the Bollinger band');
+  var mid = rows1 ? tmMidLost(rows1, dir) : null;
+  if (mid == null) hard.push('midpoint unread');
+  else if (!mid) hard.push('price lost yesterday midpoint');
+  var keltA = rows1 ? tmKeltAccept(rows1, dir) : null;
+  if (keltA == null) hard.push('keltner acceptance unread');
+  else if (!keltA) hard.push('price closed back inside the Keltner band');
+  var td = rows1 ? tmTd9(rows1, dir) : null;
+  if (td == null) hard.push('td unread');
+  else if (!td) hard.push('a TD 9 closed against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');

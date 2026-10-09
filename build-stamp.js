@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1254',
-  pack: 'Trend Matrix also refuses a daily pivot point lost on this bar, a 20-bar breakout on less than half the average volume, and a close back inside a Bollinger band after the previous close was outside it. No prior day, a break on normal volume, or a close that never left the band does not refuse. The card does not send an order.',
-  built: '2026-10-09T09:40:00Z'
+  version: 'hg-v1255',
+  pack: 'Trend Matrix also refuses yesterday midpoint lost on this bar, a close back inside the Keltner band after the previous close was outside it, and a TD 9 whose last bar closes against the trade. No prior day, a close that never left the band, or a 9th bar that still closes with the trade does not refuse. The card does not send an order.',
+  built: '2026-10-09T09:55:00Z'
 };
 
 function hgBuildLabel(b){

@@ -3470,6 +3470,86 @@ function tmBbAccept(rows, dir){
   if (dir === 'short' && prevC < mean - 2 * sd && c >= mean - 2 * sd) return false;
   return true;
 }
+/* Yesterday midpoint. Losing it on this close does not pass.
+   No prior day, or a prior day under 0.4%, does not refuse. */
+function tmMidLost(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function dayOf(t){
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return true;
+  var hi = -Infinity, lo = Infinity, n = 0;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 4 || !(hi > lo)) return true;
+  var prevC = +rows[rows.length - 2].c, c = +rows[rows.length - 1].c;
+  if (!(prevC > 0) || !(c > 0)) return null;
+  if ((hi - lo) / c < 0.004) return true;
+  var mid = (hi + lo) / 2;
+  if (dir === 'long' && prevC > mid && c < mid) return false;
+  if (dir === 'short' && prevC < mid && c > mid) return false;
+  return true;
+}
+/* A close back inside the Keltner band after the previous close was outside it.
+   A close that never left the band does not refuse. */
+function tmKeltAccept(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1), closes = [], i, atr = 0, pc, tr;
+  for (i = 0; i < prior.length; i++){
+    if (!(+prior[i].c > 0)) return null;
+    closes.push(+prior[i].c);
+  }
+  for (i = 1; i < prior.length; i++){
+    if (!isFinite(+prior[i].h) || !isFinite(+prior[i].l)) return null;
+    pc = +prior[i - 1].c;
+    tr = Math.max(+prior[i].h - +prior[i].l, Math.abs(+prior[i].h - pc), Math.abs(+prior[i].l - pc));
+    atr += tr;
+  }
+  atr = atr / (prior.length - 1);
+  if (!(atr > 0)) return true;
+  var ema = tmSeedEma(closes, len);
+  if (!ema) return null;
+  var mid = ema[ema.length - 1];
+  var prevC = closes[closes.length - 1], c = +rows[rows.length - 1].c;
+  if (!(c > 0)) return null;
+  if (dir === 'long' && prevC > mid + 2 * atr && c <= mid + 2 * atr) return false;
+  if (dir === 'short' && prevC < mid - 2 * atr && c >= mid - 2 * atr) return false;
+  return true;
+}
+/* A TD 9 whose last bar closes against the trade does not pass.
+   A count under 9, or a 9th bar that still closes with the trade, does not refuse. */
+function tmTd9(rows, dir){
+  if (!rows || rows.length < 13 || (dir !== 'long' && dir !== 'short')) return null;
+  var count = 0, i;
+  for (i = rows.length - 1; i >= 4; i--){
+    if (!(+rows[i].c > 0) || !(+rows[i - 4].c > 0) || !isFinite(+rows[i].o)) return null;
+    if (dir === 'long' && +rows[i].c > +rows[i - 4].c) count++;
+    else if (dir === 'short' && +rows[i].c < +rows[i - 4].c) count++;
+    else break;
+  }
+  if (count < 9) return true;
+  var last = rows[rows.length - 1];
+  if (dir === 'long' && +last.c < +last.o) return false;
+  if (dir === 'short' && +last.c > +last.o) return false;
+  return true;
+}
 function tmTurtleReclaim(rows, dir){
   if (!rows || rows.length < 8) return null;
   var current = rows[rows.length - 1];
