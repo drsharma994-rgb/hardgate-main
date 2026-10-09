@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1237',
-  pack: 'Trend Matrix also refuses a setup when the Stochastic Momentum Index is on the wrong side of zero, the triple EMA is not moving with the trade, or Elder Impulse is sloping against it. A short tape or a flat TEMA does not pass. The card does not send an order.',
-  built: '2026-10-09T05:35:00Z'
+  version: 'hg-v1238',
+  pack: 'Trend Matrix also refuses RSI divergence against the trade, a Price Volume Trend that is not moving with the trade, and a lower-high lower-low structure on a long. A short tape, missing volume, or a single swing does not pass. The card does not send an order.',
+  built: '2026-10-09T05:50:00Z'
 };
 
 function hgBuildLabel(b){

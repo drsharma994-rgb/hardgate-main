@@ -202,6 +202,15 @@
   var impulse = rows1 ? tmImpulse(rows1, dir) : null;
   if (impulse == null) hard.push('impulse unread');
   else if (!impulse) hard.push('elder impulse is sloping against the trade');
+  var div = rows1 ? tmRsiDiv(rows1, dir) : null;
+  if (div == null) hard.push('rsi divergence unread');
+  else if (!div) hard.push('rsi divergence is against the trade');
+  var pvt = rows1 ? tmPvt(rows1, dir) : null;
+  if (pvt == null) hard.push('price volume trend unread');
+  else if (!pvt) hard.push('price volume trend is against the trade');
+  var struct = rows1 ? tmStructure(rows1, dir) : null;
+  if (struct == null) hard.push('structure unread');
+  else if (!struct) hard.push('market structure is against the trade');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
