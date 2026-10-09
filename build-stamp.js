@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1235',
-  pack: 'TREND MATRIX SMC CORE PINE PORT - pineSmcCore joins the crypto Pine bag as the tenth record-only mark, completing the dir-returning crypto Pine coverage (SMC Core is the smart-money-concepts signal the desk had not read). Evidence only: nothing scores, nothing gates; the forward ledger decides. Also carries the OmniGold, Ganesh Gold and Gold Scalp also refuse a Supertrend flip on this bar, a CCI that just left +100 or -100, and a candle that engulfs the prior body by at least 0.6 ATR. An old trend, a CCI that stays beyond the line, or a small candle does not refuse. The card does not send an order.',
-  built: '2026-10-09T04:40:00Z'
+  version: 'hg-v1236',
+  pack: 'TREND MATRIX SMC CORE PINE PORT - pineSmcCore joins the crypto Pine bag as the tenth record-only mark, completing the dir-returning crypto Pine coverage. Also carries the 'OmniGold, Ganesh Gold and Gold Scalp also refuse a wick through R2 or S2 that closes back inside, a close that loses the 26-bar midpoint on this bar, and a MACD line that crosses zero on this bar. A close through R2, a midpoint already lost, or a MACD that stays on one side does not refuse. The card does not send an order.'',
+  built: '2026-10-09T05:00:00Z'
 };
 
 function hgBuildLabel(b){
