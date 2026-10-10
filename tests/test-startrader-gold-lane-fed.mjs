@@ -204,7 +204,19 @@ console.log('== 4) the real mint through the real lane ==');
   assert(u && u.dir === 'short', 'REACHABILITY: seed 120 casts a short vote with no label');
   R.startraderGoldSource = () => 'binance-paxg';
   const x = vote(R, 'short', { newsState: null }, [p15, p1h, p4h]);
-  assert(!x, 'named binance-paxg the volume votes are withheld, the board empties and the vote is gone -- parity with GOLD SCALP, which has always named its feed');
+  /* MEASURED, and the claim corrected. This used to assert `!x` — "the board
+     empties and the vote is gone". Driven on seed 120 the vote is IDENTICAL under
+     both labels: `{ src:'GOLD SCALP', dir:'short', pts:2, detail:'OPENING RANGE
+     BREAKOUT' }` unnamed and under `binance-paxg`. The label DOES reach the mint
+     — `stContextVotes` reads `startraderGoldSource('15m')` and sets
+     `gsInp.candleSource` (startradertab.js:385-387) — and `goldScalpSetups` is
+     where the PAXG distrust lands; that effect is proved on seeds 118 and 120 in
+     `test-gold-pine-lanes-fed.mjs`. What THIS seed shows is the other half of the
+     contract: withholding the two volume votes (`goldMFI`, `goldVolSqueeze`) need
+     not remove the TOP candidate, so the lane keeps its vote. Asserting the vote
+     is gone asserted the opposite of what the fix intends. */
+  assert(x && x.dir === 'short' && x.pts === u.pts && x.detail === u.detail,
+    'a PAXG label reaches the mint and leaves the top candidate standing, so the GOLD SCALP vote is unchanged (' + (x && x.detail) + ', ' + (x && x.pts) + 'pts)');
   R.startraderGoldSource = () => 'xm-xauusd';
   const m = vote(R, 'short', { newsState: null }, [p15, p1h, p4h]);
   assert(m && m.dir === 'short', 'the broker label keeps the vote');

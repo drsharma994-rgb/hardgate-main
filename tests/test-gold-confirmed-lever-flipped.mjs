@@ -57,6 +57,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { HG_VER, swCacheOk, hgVerGte } from './helpers/build-version.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 let PASS = 0, FAIL = 0;
@@ -166,10 +167,15 @@ console.log('== 2) the resolver reads the chain: default OFF, lever flips it ON 
 /* ============================================================= */
 console.log('== 3) ship stamps ==');
 {
-  assert(/version:\s*'hg-v1290'/.test(read('build-stamp.js')), 'build-stamp names hg-v1290');
-  assert(/HG_CACHE\s*=\s*'hg-v1290'/.test(read('sw.js')), 'sw.js cache id is hg-v1290');
-  assert(/hg-v1290/.test(read('trendtable.js')) && /v=1290/.test(read('trendtable.js')),
-    'trendtable.js header + v= are hg-v1290 / 1290');
+  /* hg-v956: ask the ONE helper. This section used to pin 'hg-v1290' as a
+     literal, so it went red on every bump from hg-v1291 through hg-v1294 and
+     said nothing about this pack. */
+  assert(hgVerGte(HG_VER, 'hg-v1290'), 'the tree is at or past hg-v1290 (at ' + HG_VER + ')');
+  assert(read('build-stamp.js').includes("version: '" + HG_VER + "'"), 'build-stamp names ' + HG_VER);
+  assert(swCacheOk(read('sw.js')), 'sw.js cache id matches build-stamp.js');
+  const tt = read('trendtable.js');
+  assert(tt.includes(HG_VER), 'trendtable.js header carries ' + HG_VER);
+  assert(tt.includes('v=' + HG_VER.slice(4)), 'trendtable.js loader cachebuster reads v=' + HG_VER.slice(4));
 }
 
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');

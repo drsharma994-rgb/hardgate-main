@@ -386,14 +386,38 @@ console.log('\n10. the census, derived by call shape: which record writers carry
       if (/hgFwdRecordScan = function/.test(src.slice(m.index, m.index + 40))) continue;
       const span = src.slice(m.index, m.index + 900);
       const tab = (span.match(/\(\s*('[^']+'|[A-Za-z_$][\w$]*)/) || [])[1];
-      const pre = src.slice(Math.max(0, m.index - 3000), m.index);
+      /* hg-v1295: the lookback used to be a hard 3000 chars. A pack that adds
+         lines between a record literal's declaration and the call pushes the
+         declaration out of that window and the census silently reads a writer
+         as bare — exactly what hg-v1295 did to OMNIBTC's `var fwdRow = {`
+         (5549 chars back). The window now runs to the PREVIOUS record-scan call
+         (so one call site can never read another's literal) capped at 12000
+         chars, which still bounds the scan. */
+      const prevCall = src.lastIndexOf('hgFwdRecordScan', m.index - 1);
+      const pre = src.slice(Math.max(0, prevCall + 1, m.index - 12000), m.index);
       const spread = /\.\.\.c\b/.test(span);
       const arg3 = (span.match(/^hgFwdRecordScan\s*\(\s*[^,]+,\s*[^,]+,\s*([A-Za-z_$][\w$]*)\s*,/) || [])[1];
       let region, li = -1;
       if (arg3){
-        const asg = pre.match(new RegExp('\\b' + arg3 + '\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*\\('));
-        const at = asg ? src.indexOf('function ' + asg[1] + '(') : -1;
-        region = at >= 0 ? src.slice(at, at + 3000) : pre;
+        /* hg-v1295: locate the record literal by SHAPE, not by a fixed window.
+           The 3000-char pre-window was the only locator, so any pack that added
+           lines between the `var fwdRow = {` declaration and the call pushed the
+           literal out of range and the census read OMNIBTC as bare. Three
+           shapes are now tried, nearest first:
+             (1) `var fwdRow = {`      — an inline literal built in place
+             (2) `var fwdRows = [fwdRow]` / `.map(` — a builder or a wrap
+             (3) the old pre-window, kept as the last resort. */
+        const litA = pre.match(new RegExp('\\b' + arg3 + '\\s*=\\s*(\\{)'));
+        const fnB = pre.match(new RegExp('\\b' + arg3 + '\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*\\('));
+        if (litA){
+          const open = m.index - pre.length + litA.index + litA[0].length - 1;
+          region = src.slice(Math.max(0, open - 200), Math.min(src.length, m.index + 200));
+        } else if (fnB){
+          const at = src.indexOf('function ' + fnB[1] + '(');
+          region = at >= 0 ? src.slice(at, at + 3000) : pre;
+        } else {
+          region = pre;
+        }
         for (const em of region.matchAll(/(?<![.\w])entry\s*:/g)) li = em.index;
       } else {
         region = span;

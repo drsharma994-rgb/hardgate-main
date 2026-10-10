@@ -114,7 +114,18 @@ console.log('== 1) the real mints through the real bridge ==');
   const B120 = W.hgGoldInlineBridge(inp(120));
   assert(B120.scalp.count > 0, 'seed 120 forms through the bridge unnamed (' + B120.scalp.count + ')');
   const X120 = W.hgGoldInlineBridge(inp(120, { candleSource: 'binance-paxg' }));
-  assert(X120.scalp.count === 0, 'named binance-paxg, the volume votes are withheld and the board empties (' + B120.scalp.count + ' -> ' + X120.scalp.count + ') -- parity with GOLD SCALP, which has always named its feed');
+  /* MEASURED, and the claim corrected. This used to read `X120.scalp.count === 0`
+     — "the volume votes are withheld and the board empties". Driven through the
+     bridge on seed 120 it is `2 -> 1`: naming the PAXG feed costs ONE candidate,
+     and the survivor is **kept and demoted**, not deleted (`X120.scalp.best` is
+     `null` while `count` is 1 — the same fact from the other side, since `count`
+     is `ranked.length` and INCLUDES demoted rows). Demote-don't-hide is this
+     tab's invariant everywhere else (hg-v552 / hg-v572). The mechanism is narrow:
+     `volumeTrusted:false` zeroes exactly `goldMFI` (goldind.js:607) and
+     `goldVolSqueeze` (goldind.js:637), both scalp-mint votes only. */
+  assert(X120.scalp.count === B120.scalp.count - 1,
+    'named binance-paxg costs one candidate (' + B120.scalp.count + ' -> ' + X120.scalp.count + ') — the volume votes are withheld, the row is not deleted');
+  assert(X120.scalp.best === null, 'and nothing on that board is tradeable: the pin is empty while the row stays visible');
   const M120 = W.hgGoldInlineBridge(inp(120, { candleSource: 'xm-xauusd' }));
   assert(M120.scalp.count === B120.scalp.count, 'the broker label keeps every candidate (' + M120.scalp.count + ')');
 

@@ -18,6 +18,7 @@
 
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { HG_VER, swCacheOk, hgVerGte } from './helpers/build-version.mjs';
 
 function assert(cond, msg){ if (!cond){ console.log('ASSERT ' + msg); process.exit(1); } console.log('ok  ' + msg); }
 
@@ -280,16 +281,19 @@ console.log('== 6) no gate names pine:bprWith, no threshold moves ==');
 }
 
 /* ====================================================================
-   § 7 ship stamps
+   § 7 ship stamps — asked of the ONE build-version helper (hg-v956).
+   Hardcoding the cache string here is what left this guard red on every
+   bump from hg-v1291 through hg-v1294; it no longer pins a literal.
    ==================================================================== */
-console.log('== 7) build stamps say hg-v1293 ==');
+console.log('== 7) build stamps agree with build-stamp.js ==');
 {
+  assert(hgVerGte(HG_VER, 'hg-v1293'), 'the tree is at or past hg-v1293 (at ' + HG_VER + ')');
   const bs = readFileSync('build-stamp.js', 'utf8');
-  assert(/version:\s*'hg-v1293'/.test(bs), 'build-stamp.js version is hg-v1293');
+  assert(bs.includes("version: '" + HG_VER + "'"), 'build-stamp.js version is ' + HG_VER);
   const sw = readFileSync('sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v1293'/.test(sw), 'sw.js HG_CACHE is hg-v1293');
+  assert(swCacheOk(sw), 'sw.js HG_CACHE matches build-stamp.js (' + HG_VER + ')');
   const tt = readFileSync('trendtable.js', 'utf8');
-  assert(/hg-v1293/.test(tt), 'trendtable.js header reads hg-v1293');
+  assert(tt.includes(HG_VER), 'trendtable.js header reads ' + HG_VER);
 }
 
 console.log('\nhg-v1203 BPR: all § passed');

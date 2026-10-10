@@ -32,13 +32,23 @@
 */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+/* hg-v956: ask the ONE helper for the build version rather than hardcoding it,
+   and resolve paths from this file so the guard runs on any machine. This file
+   used to read '/home/user/hardgate-main/' absolutely — off that one host every
+   module boot failed with ENOENT, the export under test was therefore undefined,
+   and the guard died on `fn is not a function` instead of reporting anything. */
+import { HG_VER, swCacheOk, hgVerGte } from './helpers/build-version.mjs';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 let FAIL = 0, PASS = 0;
 function ok(cond, msg){ if (cond){ PASS++; console.log('  ok  ' + msg); } else { FAIL++; console.log('  NOT OK  ' + msg); } }
 function assert(cond, msg){ ok(cond, msg); }
 
-function readFile(p){ return fs.readFileSync('/home/user/hardgate-main/' + p, 'utf8'); }
+function readFile(p){ return fs.readFileSync(path.join(ROOT, p), 'utf8'); }
 
 /* ============================================================= */
 console.log('== 1) OMNIGOLD stale-hold: a record past TTL is kept on panel, not on the gate ==');
@@ -265,12 +275,13 @@ console.log('== 3) The lever default and the gsLeadKeys reader are unchanged =='
 }
 
 /* ============================================================= */
-console.log('== 4) hg-v1290 ship stamps ==');
+console.log('== 4) ship stamps agree with build-stamp.js (hg-v956) ==');
 {
+  assert(hgVerGte(HG_VER, 'hg-v1289'), 'the tree is at or past hg-v1289 (at ' + HG_VER + ')');
   const build = readFile('build-stamp.js');
   const sw = readFile('sw.js');
-  assert(/version:\s*'hg-v1290'/.test(build), 'build-stamp names hg-v1290');
-  assert(/HG_CACHE\s*=\s*'hg-v1290'/.test(sw), 'sw.js cache id is hg-v1290');
+  assert(build.includes("version: '" + HG_VER + "'"), 'build-stamp names ' + HG_VER);
+  assert(swCacheOk(sw), 'sw.js cache id matches build-stamp.js');
 }
 
 console.log('\n' + PASS + ' passed, ' + FAIL + ' failed');

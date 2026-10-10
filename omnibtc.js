@@ -51,6 +51,19 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              leaves a watch. A standing bias is not a fresh
                              signal. A script that did not fire is not a
                              vote. A script that is not loaded stays unread.
+  HTF ACCURACY LOCK ........ hg-v1295: the SAME ten cores also run on the 1d
+                             tape the desk already loads. A fresh daily core
+                             the other way demotes the crown to a watch
+                             ("1d PINE AGAINST") — a 4h confluence trading
+                             into the daily is not the most accurate setup
+                             here. OPPOSING-ONLY: a daily core that agrees is
+                             disclosed in the note and counted NOWHERE, so it
+                             cannot grow `fams` and cannot make the two-family
+                             ticket easier. The 15m tape is a DISCLOSED
+                             three-state read and never a veto. Lever:
+                             `window.HG_OBTC_HTF_LOCK = false` or
+                             localStorage `hg_obtc_htf_lock = '0'` disables the
+                             lock; the default is ON and read live per scan.
   REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
                              accepted a taker series and was never fed one —
                              the candle-approximated stand-in answered for the
@@ -776,11 +789,44 @@ a global hard refresh.
     return pick;
   }
 
+  /* hg-v1295: THE HIGHER-TIMEFRAME ACCURACY LOCK.
+     ------------------------------------------------------------------
+     The pine and indicator books read the 4h tape and the 1h tape. The
+     desk LOADS a 1d tape and stashes it on every candidate
+     (`c._rows1d`), paints it in the timeframe line, and handed it to
+     NEITHER book — so a crown whose 4h confluence fought the daily tape
+     still printed as a full ticket.
+
+     This is the same shape every time-based read on this repo already
+     uses (the gold desks' MTF conjunction, hg-v1016/v1017): a higher
+     timeframe that disagrees stands the setup down, and a higher
+     timeframe that agrees is DISCLOSED, never counted. It is
+     OPPOSING-ONLY by construction — `dAgree` is read by the note and by
+     nothing else, so it can never grow `fams` and can never make the
+     hg-v1292 two-family ticket easier. The lock can only withhold a
+     ticket that fights the daily; it cannot mint one.
+
+     Lever (the hg-v1156 chain shape): `window.HG_OBTC_HTF_LOCK = false`
+     or `localStorage hg_obtc_htf_lock = '0'` disables the lock. The
+     default is ON, and read live at every scan so a console flip needs
+     no reload. An unreadable lever is ON (the safe side). */
+  function hgObtcHtfLockOn(){
+    try{
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_HTF_LOCK === false) return false;
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_HTF_LOCK === true) return true;
+      if (W && W.localStorage){
+        var v = W.localStorage.getItem('hg_obtc_htf_lock');
+        if (v === '0' || v === 'false') return false;
+      }
+    }catch(eLv){}
+    return true;
+  }
+
   /* A sendable crown needs two independent fresh reads. Two scripts that
      measure the same idea are one read. Silence and opposition are not
      tickets. An unloaded bank, a missing tape, and an indicator that did
      not cross stay unread. */
-  function hgObtcApplyPineAccuracy(pick, rows, cands, rows1h){
+  function hgObtcApplyPineAccuracy(pick, rows, cands, rows1h, rows1d, rows15m){
     if (!pick || !pick.row) return pick;
     if (!rows || rows.length < 20){
       pick.row.pineNote = 'pine bank unread — no 4h tape, so the scripts were not run';
@@ -798,6 +844,54 @@ a global hard refresh.
     pick.row.pineRecord = recBook.states;
     pick.row.pineRecordRan = recBook.ran;
     pick.row.pineRecordLoaded = recBook.loaded;
+    /* hg-v1295: the daily book, read on the same reader as the 4h book and
+       stamped beside it. It decides a LOCK (below) and is disclosed on the
+       row; it never enters `fams`, `agree` or `oppose`. Read before the
+       vote vectors are built so this stays a pre-vote stamp. */
+    var htfOn = hgObtcHtfLockOn();
+    var dBook = null;
+    if (rows1d && rows1d.length >= 120) dBook = hgObtcPineBook(rows1d);
+    /* hg-v1295: the daily split, computed on the pure 4h book (no 1h recursion).
+       Stamped HERE, before any vote vector is built, so the hg-v1293 invariant
+       ("every record-bank use precedes every vote assignment") still holds —
+       the read banks are reads, the vote vectors are votes. */
+    var dAgree = [], dOppose = [], htfRan = 0;
+    if (dBook){
+      htfRan = dBook.ran;
+      for (var di = 0; di < dBook.fresh.length; di++){
+        var df = dBook.fresh[di];
+        if (df.dir === String(pick.row.dir || '').toLowerCase()) dAgree.push(df.label);
+        else dOppose.push(df.label);
+      }
+    }
+    pick.row.htfRan = htfRan;
+    pick.row.htfLock = htfOn;
+    pick.row.htfAgree = dAgree.length ? dAgree.slice() : undefined;
+    pick.row.htfOppose = dOppose.length ? dOppose.slice() : undefined;
+    /* hg-v1295: the 15m DISCLOSURE read. Deliberately NOT a veto — a 15m
+       EMA9/21 wiggle must never stand down a 4h swing ticket (the hg-v1292
+       opposing read is a different, independent 4h/1h measurement). Stamped
+       as a three-state mark so the ledger can split on it later. */
+    var m15 = hgObtcTapeDir(rows15m);
+    if (m15 === 'long' || m15 === 'short'){
+      pick.row.pine15m = (m15 === String(pick.row.dir || '').toLowerCase()) ? 'with' : 'against';
+    } else if (rows15m && rows15m.length >= 30){
+      pick.row.pine15m = 'unread';
+    }
+    /* hg-v1295: the daily disclosure text, built HERE with the other read
+       stamps and read by the three surviving ticket branches below. It is a
+       sentence, never a vote: it appends to `pineNote` and reaches `fams`,
+       `agree` and `oppose` nowhere.
+       The lever-OFF-but-daily-opposing case is named explicitly: reporting
+       "none fresh" there would be FALSE — the daily cores did fire and the
+       LEVER is what withheld them, so a reader must be told which. */
+    var dNote = '';
+    if (dAgree.length) dNote = ' · 1d agrees: ' + dAgree.join(', ');
+    else if (dOppose.length && !htfOn) dNote = ' · 1d PINE AGAINST (' + dOppose.join(', ')
+      + ') — lock OFF, so the daily conflict was NOT a stand-down';
+    else if (dOppose.length) dNote = ' · 1d against: ' + dOppose.join(', ');
+    else if (htfRan) dNote = ' · 1d read ' + htfRan + ' cores, none fresh';
+    else dNote = ' · 1d tape too thin to read';
     if (!book.loaded){
       pick.row.pineNote = 'pine bank unread — the scripts are not loaded, so they cast no vote';
       return pick;
@@ -845,8 +939,18 @@ a global hard refresh.
       return hgObtcDemoteWatch(pick, '1h PINE AGAINST — ' + h1Oppose.join(', ')
         + ' fired the other way on the 1h tape. Watch only, not a ticket.');
     }
+    /* hg-v1295: the daily lock. Opposing-only, and the earliest stand-down:
+       a crown trading into a fresh daily pine read is not the most accurate
+       setup on this desk, whatever its 4h confluence says. Ordered LAST among
+       the stand-downs so a 4h/1h conflict — the narrower, more actionable
+       read — names itself first when more than one fires. */
+    if (htfOn && dOppose.length){
+      return hgObtcDemoteWatch(pick, '1d PINE AGAINST — ' + dOppose.join(', ')
+        + ' fired the other way on the daily tape. Watch only, not a ticket.');
+    }
     var extra = (indAgree.length ? (' · ' + indAgree.join(', ') + ' crossed the same way') : '')
-      + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '');
+      + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '')
+      + dNote;
     if (fams.length >= 2){
       pick.row.pineNote = 'PINE CONFIRM — ' + agree.join(', ')
         + (cores.length ? (' · also ' + cores.join(', ')) : '')
@@ -861,7 +965,8 @@ a global hard refresh.
     if (fams.length === 1 && indAgree.length >= 1){
       pick.row.pineNote = 'PINE + INDICATOR — ' + agree.join(', ') + ' fresh, and '
         + indAgree.join(', ') + ' crossed the same way'
-        + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '');
+        + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '')
+        + dNote;
       return pick;
     }
     if (fams.length === 1 && agree.length === 1){
@@ -2318,7 +2423,10 @@ a global hard refresh.
             && c.entry === pick.row.entry && c.stop === pick.row.stop;
         })[0];
         winnerRows = match && match._rows;
-        try{ hgObtcApplyPineAccuracy(pick, winnerRows, all, match && match._rows1); }catch(ePine){}
+        /* hg-v1295: the daily and 15m tapes the desk already loads and stashes
+           are handed to the accuracy gate — the daily as an opposing-only
+           lock, the 15m as a disclosed read. Both were unread before. */
+        try{ hgObtcApplyPineAccuracy(pick, winnerRows, all, match && match._rows1, match && match._rows1d, match && match._rows15); }catch(ePine){}
         /* hg-v1051: ENTRY-EDGE REFINEMENT — the pick's entry is snapped
            to the structure edge the house exact-entry seam prices (edge
            signal / swing enrichment on the winner's own tape), then
@@ -2895,6 +3003,16 @@ a global hard refresh.
                  the Bollinger squeeze state, recorded only when readable */
               vwapDevPct: (isFinite(pfReads.vwapDevPct) ? pfReads.vwapDevPct : undefined),
               bbSqueeze: (pfReads.bbSqueeze || undefined),
+              /* hg-v1295: the higher-timeframe pine read marks — how many
+                 daily cores produced a read at all, and the 15m tape's
+                 three-state agreement. Recorded so the ledger can split on
+                 the daily-vs-4h interaction; they gate nothing at read time
+                 (the lock decision already happened upstream and is stamped
+                 as `htfLocked` below). */
+              htfRan: (pick.row.htfRan ? pick.row.htfRan : undefined),
+              htfLocked: (pick.row.htfLock && Array.isArray(pick.row.htfOppose) && pick.row.htfOppose.length ? true : undefined),
+              htfLock: (pick.row.htfLock === false ? false : undefined),
+              pine15m: (pick.row.pine15m || undefined),
               session: (pfReads.sessName || undefined)
             };
             /* hg-v1293: the record-only generic Pine ports, one three-state
@@ -3035,6 +3153,7 @@ a global hard refresh.
   W.hgObtcPineBook = hgObtcPineBook;
   W.hgObtcIndBook = hgObtcIndBook;
   W.hgObtcApplyPineAccuracy = hgObtcApplyPineAccuracy;
+  W.hgObtcHtfLockOn = hgObtcHtfLockOn;      /* hg-v1295: the daily-lock lever */
   /* hg-v1057: the accuracy-pack seams, exported so the test drives the real
      computation rather than a re-implementation */
   W.hgObtcFlowAcceptance = hgObtcFlowAcceptance;

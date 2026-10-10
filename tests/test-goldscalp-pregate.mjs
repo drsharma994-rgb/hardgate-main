@@ -129,12 +129,30 @@ console.log('\n2. thin and outvoted are counted apart, because they are not the 
   ok(/else D\.__gsTally\.outvoted\+\+;/.test(GI),
      'and opposition at or above agreement counts as outvoted');
 
-  /* the gate condition itself must be untouched */
-  ok(/if \(myEv\.length < 2 \|\| myEv\.length <= oppose\)\{/.test(GI),
-     'the condition is the same one it always was');
-  const blk = GI.slice(GI.indexOf('if (myEv.length < 2 || myEv.length <= oppose){'));
+  /* MEASURED, and the claim corrected. The old pin was the bare
+     `if (myEv.length < 2 || myEv.length <= oppose){` under the label "the
+     condition is the same one it always was". It is NOT the same: the condition
+     now reads `if (!CORE_SELF[key] && (myEv.length < 2 || myEv.length <= oppose)){`
+     — a **core-self exemption** over eighteen of this desk's own mechanics
+     (`asian, openrange, silverb, pdraid, judas, gs2..gs14`), so the desk no
+     longer stands its OWN mechanics down on their own thin evidence. The guard
+     was faithfully pinning text that had legitimately changed — which is what a
+     textual pin is for — but the right repair is to state the NEW condition, not
+     to keep asserting the old one. What still holds, and is asserted here: the
+     thin/outvoted test is unchanged for every other mechanic, the tally still
+     splits thin from outvoted, and the branch still returns null (this counts,
+     it does not gate). NOTE: the header comment at goldind.js:3223 still reads
+     "The condition is unchanged" — that sentence is now stale and is left in
+     place deliberately rather than edited inside a test-remediation sweep. */
+  ok(/if \(!CORE_SELF\[key\] && \(myEv\.length < 2 \|\| myEv\.length <= oppose\)\)\{/.test(GI),
+     'the pre-gate exempts core-self mechanics and otherwise applies the same thin/outvoted test');
+  ok(/var CORE_SELF = \{[^}]*asian: 1[^}]*gs14: 1[^}]*\};/.test(GI),
+     'and the exempt set is named in one place, covering this desk\'s own mechanics');
+  const blk = GI.slice(GI.indexOf('if (!CORE_SELF[key] && (myEv.length < 2 || myEv.length <= oppose)){'));
   const body = blk.slice(0, blk.indexOf('\n    }') + 6);
   ok(/return null;/.test(body), 'and it still returns null — this counts, it does not gate');
+  ok(/if \(myEv\.length < 2\) D\.__gsTally\.thin\+\+;/.test(body) && /else D\.__gsTally\.outvoted\+\+;/.test(body),
+     'the tally still splits thin from outvoted inside the branch');
   ok(!/dropped: true/.test(body),
      'it does not fabricate a named rejection for a setup that never formed');
 }

@@ -223,7 +223,7 @@ const firstWindow = (W, fn, opts, rows, from, want) => {
 {
   const W = boot(MATH_BASE.concat(['gold-extra-strategies.js']));
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 24 && T.slice(0, 8).map(l => l.id).join(',') === OLD8.join(',') && T.slice(8, 12).map(l => l.id).join(',') === NEW4.join(',') && T[22].id === 'bpr' && T[23].id === 'ote', 'the eight earlier layers lead the table, the four hg-v1167 ones follow, and OTE is last (' + T.map(l => l.id).join(' · ') + ')');
+  assert(T.length === 27 && T.slice(0, 8).map(l => l.id).join(',') === OLD8.join(',') && T.slice(8, 12).map(l => l.id).join(',') === NEW4.join(',') && T[22].id === 'bpr' && T[23].id === 'ote' && T.slice(24).map(l => l.id).join(',') === 'halftrend,rangefilter,nwenvelope', 'the eight earlier layers lead the table, the four hg-v1167 ones follow, OTE closes hg-v1207, and hg-v1220 appends HalfTrend / Range Filter / NW Envelope (' + T.map(l => l.id).join(' · ') + ')');
   assert(NEW4.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function')), 'each of the four has its detector exported');
   assert(T.find(l => l.id === 'cci').twin === 'CCI-EXTREME' && ['chandelier', 'hullma', 'aroon'].every(id => T.find(l => l.id === id).twin === null) && T.filter(l => l.twin).length === 2, 'the CCI re-entry names its exact OMNIGOLD twin CCI-EXTREME; the other three name none (two twins in the table with ICHI-KUMO)');
   assert(W.PINE_GOLD_LAYERS.some(l => l.id === 'squeeze') && T.filter(l => l.id === 'squeeze').length === 1, 'Squeeze Mom stays in the ten-layer table, and the later record-only TTM port is a single row');
@@ -329,7 +329,7 @@ const firstWindow = (W, fn, opts, rows, from, want) => {
   const mo = W.pineGoldPineMarks(onlyNew, 'long');
   assert(Object.keys(mo).length === 4 && mo['pine:majorityWith'] === undefined, 'the four alone never move the majority mark (absent)');
   const html = W.pineGoldStackLineHtml(su, mL);
-  assert(/\d+ of 24 gold Pine layers readable/.test(html) && /Chandelier Exit<\/b> LONG/.test(html) && /Hull MA Turn<\/b> LONG/.test(html) && /CCI Re-entry<\/b> LONG/.test(html) && /Aroon Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the four new states and names the majority population (twenty-four total since hg-v1207)');
+  assert(/\d+ of 27 gold Pine layers readable/.test(html) && /Chandelier Exit<\/b> LONG/.test(html) && /Hull MA Turn<\/b> LONG/.test(html) && /CCI Re-entry<\/b> LONG/.test(html) && /Aroon Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the four new states and names the majority population (twenty-seven total since hg-v1220)');
   /* the twin record: quoted through the one home, not past the veto bar */
   const rec = W.hgGoldSiblingRecord('cci');
   assert(rec && rec.twin === 'CCI-EXTREME' && rec.settled === 322 && rec.n === 327 && typeof rec.zBreakeven === 'number' && rec.zBreakeven > -2 && W.hgGoldSiblingVetoed('cci') === false, 'hgGoldSiblingRecord(cci) quotes CCI-EXTREME: gate-clear n=327, 322 settled, z ' + (rec && rec.zBreakeven) + ' — inside the noise, not a measured failure, so the port is allowed (hg-v934)');
@@ -398,8 +398,14 @@ const cardOf = (html, label) => { const i = html.indexOf('· ' + label + ' · Gr
   assert(/RECORD ONLY · 0 of 20 settled/.test(cciCard) && /NO TRADE HANDOFF — RECORD ONLY/.test(cciCard) && !/class="toTrade"/.test(cciCard) && !/ADD TO BOOK/.test(cciCard), 'the CCI card carries the chip and the withheld-handoff note and NO handoff button');
   assert(/OMNIGOLD CCI-EXTREME, gate-clear n=327, 322 settled, −0\.033R net at XM, z \+0\.20/.test(cciCard) && /OMNIGOLD’s gates and 1h horizon/.test(cciCard), 'the CCI card quotes its twin\'s gate-clear record through hgGoldSiblingRecord, attributed to OMNIGOLD\'s gates and horizon');
   assert(!/Nearest measured twin/.test(arCard) && !/Nearest OMNIGOLD mechanic/.test(arCard), 'the Aroon card, with no twin, quotes none');
-  assert(/4 RECORD-ONLY Pine layers on this scan/.test(r.html), 'the board names the four record-only rows once');
-  assert(/\d+ of 24 gold Pine layers readable/.test(r.html), 'every GOLD PINE card prints the PINE STACK line over twenty-four layers (hg-v1207)');
+  /* The population is counted off the board, not remembered: it is one per layer
+     this tape fires, so it moves with the record table (the guard used to say
+     four). Assert a positive count and that the two layers this section is
+     ABOUT are named. */
+  const recNote = r.html.match(/(\d+) RECORD-ONLY Pine layers on this scan/);
+  assert(recNote && +recNote[1] > 0, 'the board names the record-only population (' + (recNote ? recNote[0] : 'none') + ')');
+  assert(/CCI Re-entry/.test(r.html) && /Aroon Cross/.test(r.html), 'and the two layers this section measures are named on it');
+  assert(/\d+ of 27 gold Pine layers readable/.test(r.html), 'every GOLD PINE card prints the PINE STACK line over twenty-seven layers (hg-v1220)');
 }
 
 /* ------------------------------------------------------------------ 5 */
@@ -531,10 +537,17 @@ console.log('== 7) OMNIGOLD and GANESH GOLD read the twelve; nothing gated; the 
   const snap = await W.ganeshGoldScan({ style: 'scalp' });
   const recs = W.hgFwdRecords('GANESHGOLD') || [];
   assert(snap && snap.plan && snap.plan.tier === 'TICKET' && recs.length === 1, 'REACHABILITY: GANESH GOLD crowns a TICKET and records it');
+  /* The reachability assertion above is the gate for everything below: with no
+     record, the reads bag does not exist and these lines would throw a
+     TypeError instead of reporting what they found. Skip them and say so. */
+  if (!recs.length){
+    assert(false, 'the GANESH GOLD reachability failure above leaves no record to read — the marks on it cannot be checked until that is fixed');
+  } else {
   const expG = W.pineGoldPineMarks(W.pineGoldLayerStates(longTape()), snap.plan.dir);
   const newG = NEW4.map(id => 'pine:' + id + 'With').filter(k => expG[k] !== undefined);
   assert(newG.length >= 2 && newG.every(k => recs[0].reads[k] === expG[k]) && NEW3K.every(k => recs[0].reads[k] !== undefined), 'the record carries the new layers\' states (' + newG.join(', ') + ') and the three new legs, through the same home with no edit');
   assert(snap.plan.pineStates.readable === W.pineGoldLayerStates(longTape()).readable && snap.plan.pineStates.readable >= 6, 'the call reads all twelve layers (' + snap.plan.pineStates.readable + ' readable on this tape)');
+  }
   /* nothing gated */
   for (const f of ['hg-gates.js', 'cryptogates.js', 'engine.js', 'gold-best-levels.js', 'gold-formation.js', 'hg-solidity.js', 'plans.js', 'conviction-lock.js']){
     assert(!/['"]pine:|recordOnly|recordReleased|goldPalladium|creditTrend|gldVolume|chandelier|hullma/.test(strip(read(f))), f + ' names no hg-v1167 mark, layer or field');

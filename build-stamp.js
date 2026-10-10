@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1293',
-  pack: 'OmniBTC record-only pine bank. Seventeen generic ports this desk read nowhere - Supertrend, PSAR, Hull MA, QQE, Stochastic, EMA cross, Fisher, TRIX, Williams %R, CCI, Keltner, Chandelier, Ichimoku, ADX/DI, Aroon, Kaufman efficiency, OTE - now stamp a three-state read on every crown and ride the forward ledger as pine:<id> marks. They vote NOTHING: the hg-v1292 agreement gate is untouched, because this book has two outcomes per port (agreeing grows the family count, disagreeing demotes to watch) and the OMNI family additive well is already measured dry (hg-v987 / hg-v945 / hg-v922). The state read comes from the gold desks own pineGoldLayerStates, not a second copy of seventeen derivations - reading each ports SIGNAL EVENT instead of its STATE left sixteen of seventeen blank on clean tapes, which is the defect this pack found and pinned.',
-  built: '2026-10-09T21:10:00Z'
+  version: 'hg-v1295',
+  pack: 'OmniBTC higher-timeframe accuracy lock. The pine and indicator books read the 4h and 1h tapes only, while the desk already loaded a 1d tape, stashed it on every candidate and painted it in the timeframe line - so a crown whose 4h confluence fought the daily tape still printed as a full ticket. The same ten cores now run on the daily tape through the SAME reader (hg-v949 one home, no second copy of the ports), and a fresh daily core the other way demotes the crown to a watch. The lock is OPPOSING-ONLY by construction: a daily core that agrees is disclosed in the note and counted nowhere, so it can never grow the hg-v1292 family count and can never make the two-family ticket easier. The 15m tape is a disclosed three-state read, never a veto - a 15m EMA9/21 wiggle must not stand down a 4h swing. Lever: window.HG_OBTC_HTF_LOCK = false or localStorage hg_obtc_htf_lock = 0, default ON, read live per scan. The 4h/1h ticket, oppose and three-way promotion paths are byte-identical, and no gate module reads any new mark.',
+  built: '2026-10-10T09:40:00Z'
 };
 
 function hgBuildLabel(b){

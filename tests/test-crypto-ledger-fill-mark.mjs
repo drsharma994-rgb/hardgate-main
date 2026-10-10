@@ -260,8 +260,16 @@ console.log('== 6) the census, derived by call shape: every record writer carrie
       if (/hgFwdRecordScan = function/.test(src.slice(m.index, m.index + 40))) continue;
       const span = src.slice(m.index, m.index + 900);
       const tab = (span.match(/\(\s*('[^']+'|[A-Za-z_$][\w$]*)/) || [])[1];
+      /* hg-v1295: the lookback used to be a hard 3000 chars, which silently
+         reads a writer as bare once a pack adds lines between its record
+         literal's declaration and the call (hg-v1295 moved OMNIBTC's
+         `var fwdRow = {` to 5549 chars back). It now runs to the PREVIOUS
+         record-scan call — so one call site cannot read another's literal —
+         capped at 12000 chars. `winStart` is kept for the downstream
+         `.mark = ` probe, which wants the immediate neighbourhood. */
+      const prevCall = src.lastIndexOf('hgFwdRecordScan', m.index - 1);
       const winStart = Math.max(0, m.index - 3000);
-      const pre = src.slice(winStart, m.index);          /* what precedes the call */
+      const pre = src.slice(Math.max(0, prevCall + 1, m.index - 12000), m.index);   /* what precedes the call */
       const spread = /\.\.\.c\b/.test(span);
       /* WHERE THE RECORD LITERAL LIVES, by call shape: rows built by a named
          function (csFwdRows, cvFwdRows, npFwdRows) -> that function's body;

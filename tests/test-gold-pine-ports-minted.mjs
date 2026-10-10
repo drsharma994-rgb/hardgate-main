@@ -198,7 +198,7 @@ const firstWindow = (W, fn, opts, rows, from) => {
 {
   const W = boot(MATH_BASE);
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(T.length === 24 && NEW3.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function' && l.twin === null)) && T[23].id === 'ote', 'the three hg-v1166 layers sit in the record table (twenty-four since hg-v1207 appended OTE) with their detectors and name no twin (STOCHRSI-TURN is not the Stochastic cross)');
+  assert(T.length === 27 && NEW3.every(id => T.some(l => l.id === id && typeof W[l.fn] === 'function' && l.twin === null)) && T[23].id === 'ote', 'the three hg-v1166 layers sit in the record table (twenty-seven since hg-v1220 appended HalfTrend / Range Filter / NW Envelope after OTE) with their detectors and name no twin (STOCHRSI-TURN is not the Stochastic cross)');
   assert(Array.isArray(W.PINE_GOLD_MAJORITY_IDS) && W.PINE_GOLD_MAJORITY_IDS.join(',') === OLD5.join(','), 'the majority mark keeps its hg-v1165 population: the five hg-v1164 layers');
   const full = tapeEnding(WED, 600, 900, 11, 24, 0);
   const found = {};
@@ -255,7 +255,26 @@ const firstWindow = (W, fn, opts, rows, from) => {
   const theHit = hits.find(h => h.id === (found.psar ? 'psar' : 'stoch'));
   assert(hits.length >= 1 && theHit && theHit.kind === 'pine_' + theHit.id && theHit.dir && isFinite(theHit.entry) && isFinite(theHit.stop) && /fired on the last closed bar/.test(theHit.why),
     'pineGoldRecordLayerHits names each firing layer as a mint hit (kind pine_<id>, dir, entry, stop, why)');
-  assert(W.pineGoldRecordLayerHits(flat).length === 0 && W.pineGoldRecordLayerHits(null).length === 0, 'a dead-flat tape or no rows: no hits');
+  /* MEASURED, not remembered. This assertion used to demand ZERO hits on a
+     dead-flat tape and went red once the table grew past the event-shaped
+     layers. Driven across all 27 with the real scan options, exactly ONE layer
+     reports a direction on flat: `halftrend`, and only because
+     `PINE_GOLD_SCAN` sets `includeContext: true` — the record layers read a
+     port's STATE, not its signal event (the hg-v1293 lesson), and HalfTrend has
+     an ESTABLISHED trend on any tape that never crossed, so its state is a
+     legitimate read, not a signal. The other 26 read nothing.
+     What must hold on flat is therefore: (a) no hits for a null/empty tape,
+     (b) the only layer allowed to report is a state-carrying one, and (c) what
+     it reports is a STATE, never a fresh flip (`newLong`/`newShort`). */
+  assert(W.pineGoldRecordLayerHits(null).length === 0 && W.pineGoldRecordLayerHits([]).length === 0,
+    'no rows: no hits');
+  const flatHits = W.pineGoldRecordLayerHits(flat);
+  assert(flatHits.every(h => h.id === 'halftrend'),
+    'only a state-carrying layer may read on a dead-flat tape (' + flatHits.map(h => h.id).join(', ') + ')');
+  assert(T.filter(l => l.id === 'halftrend').every(l => {
+    const r = W[l.fn](flat, Object.assign({ includeContext: true }, l.opts || {}));
+    return r && !r.newLong && !r.newShort;
+  }), 'and HalfTrend reports its STATE on flat, never a fresh flip (newLong/newShort are false)');
   /* states: eight fields, the majority over the five */
   const up = []; let px = 2300; const t0 = Math.floor(WED / 1000) - 300 * 900;
   for (let i = 0; i < 300; i++){ const o = px, c = o + 1.5 + Math.sin(i / 9) * 0.4; up.push({ t: t0 + i * 900, o, h: Math.max(o, c) + 0.5, l: Math.min(o, c) - 0.5, c, v: 1000 }); px = c; }
@@ -272,7 +291,7 @@ const firstWindow = (W, fn, opts, rows, from) => {
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
   assert(Object.keys(mL).length > 16 && mL['pine:oteWith'] === true && Object.keys(mL).every(k => mL[k] === true) && Object.keys(mS).every(k => mS[k] === false), 'all-long states stay WITH on a long, and OTE is one of them');
   const html = W.pineGoldStackLineHtml(su, mL);
-  assert(/\d+ of 24 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population (twenty-four total since hg-v1207)');
+  assert(/\d+ of 27 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population (twenty-seven total since hg-v1220)');
 }
 
 /* ------------------------------------------------------------------ 4 */
