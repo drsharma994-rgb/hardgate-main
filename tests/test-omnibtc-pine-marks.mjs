@@ -328,15 +328,17 @@ console.log('== 8) NO GATE READS pine* — 7 files × 10 keys × 2 shapes = 140 
 }
 
 /* ------------------------------------------------------------------ */
-console.log('== 9) ship stamps hg-v1293 ==');
+console.log('== 9) ship stamps align build / sw / trendtable (read via the shared helper, hg-v956) ==');
 {
+  const { HG_VER, swCacheOk } = await import('./helpers/build-version.mjs');
   const buildStamp = read('build-stamp.js');
-  ok(/version:\s*['"]hg-v1293['"]/.test(buildStamp), 'build-stamp.js version hg-v1293');
-  const sw = read('sw.js');
-  ok(/HG_CACHE\s*=\s*['"]hg-v1293['"]/.test(sw), 'sw.js HG_CACHE hg-v1293');
+  ok(new RegExp("version:\\s*['\"]" + HG_VER + "['\"]").test(buildStamp),
+    'build-stamp.js version matches HG_VER (' + HG_VER + ')');
+  ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build-stamp HG_VER');
   const loader = read('trendtable.js');
-  ok(/hg-v1293/.test(loader), 'trendtable.js header hg-v1293');
-  ok(/v=1293/.test(loader), 'trendtable.js part loader v=1293');
+  ok(loader.includes(HG_VER), 'trendtable.js header carries HG_VER');
+  const partSuffix = HG_VER.replace(/^hg-v/, '');
+  ok(loader.includes('v=' + partSuffix), 'trendtable.js part loader v=' + partSuffix);
 }
 
 /* ------------------------------------------------------------------ */

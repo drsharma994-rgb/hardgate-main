@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1293',
-  pack: 'OmniBTC gains record-only three-state Pine marks beside the hg-v1291/v1292 freshness gates. Every OMNIBTC forward record carries ten pine* fields (Lorentzian KNN, HalfTrend, Squeeze, SMF, MSB-OB, SMC, Cipher B, Range Filter, NW envelope, Weekly AVWAP), stamped through the one home trendmxPineMarks (hg-v949): long/short writes the field, a null port leaves it absent. The TECHNICAL block prints a PINE line reading the same ten ports on the winner 4h tape. The gates decide whether a crown fires; the marks let the hg-v1065 PERFECT COHORT SPLIT and hg-v989 read-split measure, out of sample, which Pine port actually paid. No new weight: hg-v987/v945/v922 doctrine, hg-v1083 server splice untouched, no gate reads a pine* key.',
-  built: '2026-10-09T20:30:00Z'
+  version: 'hg-v1294',
+  pack: 'OmniBTC gains the walker that measures what the hg-v1291/v1292/v1293 gates do. scripts/backtest-omnibtc.mjs boots the real omnibtc gate chain (hgObtcApplyPineAccuracy, hgObtcPineBook, hgObtcIndBook, hgObtcPineMarks) under vm, walks BTCUSDT 4h bars with a minimal SWING-shaped candidate (EMA50 slope, 12-bar swing stop, 2R target), settles each pick through the forward-ledger rules (next-bar open fill, 20-bar horizon, stop-first on both-touch, Binance USDT-M taker 4bps×2). scripts/omnibtc-evidence-literal.mjs writes HG_OBTC_WALK into omnibtc.js (hg-v921: a generated thing writes itself). hgObtcReplayPanelHtml paints REPLAY · NOT YET MEASURED while measured:false and names the forward-only reads the walk cannot see (flow/netflow/basis/liq/fundAgainst/venueAgree/macroBlocked). No gate reads the literal; no threshold moves. The first machine with Binance access runs the first bake.',
+  built: '2026-10-10T00:00:00Z'
 };
 
 function hgBuildLabel(b){
