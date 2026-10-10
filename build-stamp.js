@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1294',
-  pack: 'OmniBTC gains the walker that measures what the hg-v1291/v1292/v1293 gates do. scripts/backtest-omnibtc.mjs boots the real omnibtc gate chain (hgObtcApplyPineAccuracy, hgObtcPineBook, hgObtcIndBook, hgObtcPineMarks) under vm, walks BTCUSDT 4h bars with a minimal SWING-shaped candidate (EMA50 slope, 12-bar swing stop, 2R target), settles each pick through the forward-ledger rules (next-bar open fill, 20-bar horizon, stop-first on both-touch, Binance USDT-M taker 4bps×2). scripts/omnibtc-evidence-literal.mjs writes HG_OBTC_WALK into omnibtc.js (hg-v921: a generated thing writes itself). hgObtcReplayPanelHtml paints REPLAY · NOT YET MEASURED while measured:false and names the forward-only reads the walk cannot see (flow/netflow/basis/liq/fundAgainst/venueAgree/macroBlocked). No gate reads the literal; no threshold moves. The first machine with Binance access runs the first bake.',
+  version: 'hg-v1295',
+  pack: 'OmniBTC gains three more record-only Pine state readers through the one home trendmxPineMarks (hg-v949). Supertrend (ATR-band flip, DIFFERENT from HalfTrend amplitude-pivot flip), MACD signal-line cross (DIFFERENT from Squeeze BB-in-KC release), CCI re-entry (overbought/oversold mean-reversion, DIFFERENT from Cipher WaveTrend). All three defined in pinemath.js as new ports; wired through trendmxPineMarks (combined + served part); auto-flow to OMNIBTC via the hg-v1293 delegate hgObtcPineMarks. HG_OBTC_PINE_FIELDS extends 10 → 13 (pineSupertrend/pineMacd/pineCci). Three-state marks (hg-v989), measured by the forward ledger out of sample; no gate reads them, no threshold moves. Seventh pack this cycle addressing more Pine scripts on OMNIBTC, under doctrine (hg-v966 refuses more gates on unmeasured evidence).',
   built: '2026-10-10T00:00:00Z'
 };
 

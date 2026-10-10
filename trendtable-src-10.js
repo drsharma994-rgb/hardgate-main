@@ -146,6 +146,10 @@
           reads.pineRangeFilter = pm.rfilter;
           reads.pineNwEnvelope = pm.nwenv;
           reads.pineWavwap = pm.wavwap;
+          /* hg-v1295: three more Pine state readers (Supertrend, MACD, CCI). */
+          reads.pineSupertrend = pm.supertrend;
+          reads.pineMacd = pm.macd;
+          reads.pineCci = pm.cci;
           r.pineMarks = pm;
         }
       }catch(ePine){ }

@@ -150,21 +150,30 @@ a global hard refresh.
     }catch(e){ return null; }
   }
 
-  /* The ten keys trendmxPineMarks emits, mapped to the record field each
-     rides on. Three-state: a long/short reads writes the field, a null
-     port leaves the field absent (hg-v989: an absent read is NOT
-     MEASURED, never a guessed false). */
+  /* The thirteen keys trendmxPineMarks emits (ten from hg-v1293 plus
+     hg-v1295's three new Pine state readers), mapped to the record
+     field each rides on. Three-state: a long/short reads writes the
+     field, a null port leaves the field absent (hg-v989: an absent
+     read is NOT MEASURED, never a guessed false).
+     hg-v1295 additions: Supertrend (ATR-band flip — DIFFERENT from
+     HalfTrend's amplitude-pivot flip), MACD (signal-line cross —
+     DIFFERENT from Squeeze's BB-in-KC release), CCI re-entry
+     (overbought/oversold mean-reversion — DIFFERENT from Cipher's
+     WaveTrend). No gate reads any of the thirteen keys. */
   var HG_OBTC_PINE_FIELDS = [
-    ['lor',     'pineLorKnn'],
-    ['ht',      'pineHalfTrend'],
-    ['sqz',     'pineSqueeze'],
-    ['smf',     'pineSmf'],
-    ['msb',     'pineMsb'],
-    ['smc',     'pineSmc'],
-    ['cipher',  'pineCipher'],
-    ['rfilter', 'pineRangeFilter'],
-    ['nwenv',   'pineNwEnvelope'],
-    ['wavwap',  'pineWavwap']
+    ['lor',        'pineLorKnn'],
+    ['ht',         'pineHalfTrend'],
+    ['sqz',        'pineSqueeze'],
+    ['smf',        'pineSmf'],
+    ['msb',        'pineMsb'],
+    ['smc',        'pineSmc'],
+    ['cipher',     'pineCipher'],
+    ['rfilter',    'pineRangeFilter'],
+    ['nwenv',      'pineNwEnvelope'],
+    ['wavwap',     'pineWavwap'],
+    ['supertrend', 'pineSupertrend'],
+    ['macd',       'pineMacd'],
+    ['cci',        'pineCci']
   ];
   function hgObtcPineStamp(row, pm){
     if (!row || !pm) return;

@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-/* hg-v1293: OMNIBTC carries record-only three-state Pine marks through the
+/* hg-v1295: OMNIBTC carries record-only three-state Pine marks through the
    ONE HOME trendmxPineMarks (hg-v949). Beside the hg-v1291/v1292 freshness
    gates (which read newLong/barsAgo to fire): these record the final sign
    so the hg-v1065 PERFECT COHORT SPLIT and hg-v989 read-split can measure,
-   out of sample, which Pine port actually paid. No new weight; no gate
-   reads the ten pine* keys. */
+   out of sample, which Pine port actually paid. The hg-v1293 ten keys gain
+   three more (Supertrend, MACD, CCI) under the hg-v1164/v1167 shape — the
+   seventh pack this cycle addressing the "update OMNIBTC with more pine
+   scripts, indicators and core strategies" ask, under doctrine (hg-v966,
+   hg-v987 / v945 / v922 — no new weight without a bake). No new weight;
+   no gate reads the thirteen pine* keys. */
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -85,7 +89,9 @@ console.log('== 2) hgObtcPineMarks delegates to the ONE home — no second port 
   const second = [
     'pineLorentzianKernel', 'pineHalfTrend', 'pineSqueezeMomentum',
     'pineSmartMoneyFlow', 'pineMsbOb', 'pineSmcCore',
-    'pineVumanchuCipher', 'pineRangeFilter', 'pineNwEnvelope', 'pineWeeklyAvwap'
+    'pineVumanchuCipher', 'pineRangeFilter', 'pineNwEnvelope', 'pineWeeklyAvwap',
+    /* hg-v1295 */
+    'pineSupertrend', 'pineMacd', 'pineCci'
   ];
   /* their hg-v1291/v1292 gates (hgObtcPineBook) ARE allowed to call pine*
      functions directly for freshness. this record-only helper may not —
@@ -123,7 +129,9 @@ console.log('== 3) driven behaviour: delegation, three-state marks, thin-tape nu
     seen.lastRows = rows;
     return { lor: 'long', ht: 'short', sqz: 'long', smf: null,
              msb: 'long', smc: 'short', cipher: null, rfilter: 'short',
-             nwenv: 'long', wavwap: null };
+             nwenv: 'long', wavwap: null,
+             /* hg-v1295: three new keys the home now emits */
+             supertrend: 'long', macd: null, cci: 'short' };
   };
   const pm = W.hgObtcPineMarks(bars(300));
   ok(seen.called === 1, 'home called exactly once per helper call');
@@ -163,12 +171,12 @@ console.log('== 3) driven behaviour: delegation, three-state marks, thin-tape nu
 }
 
 /* ------------------------------------------------------------------ */
-console.log('== 4) HG_OBTC_PINE_FIELDS: 10 entries, each a [src, dst] with pine* dst ==');
+console.log('== 4) HG_OBTC_PINE_FIELDS: 13 entries, each a [src, dst] with pine* dst ==');
 {
   const W = boot();
   const fields = W.HG_OBTC_PINE_FIELDS;
-  ok(fields.length === 10, 'exactly 10 fields (the ten Pine ports)');
-  const expectedSrc = new Set(['lor','ht','sqz','smf','msb','smc','cipher','rfilter','nwenv','wavwap']);
+  ok(fields.length === 13, 'exactly 13 fields (the ten hg-v1293 plus three hg-v1295 Pine ports)');
+  const expectedSrc = new Set(['lor','ht','sqz','smf','msb','smc','cipher','rfilter','nwenv','wavwap','supertrend','macd','cci']);
   const seenSrc = new Set();
   const seenDst = new Set();
   let allPineDst = true;
@@ -177,8 +185,8 @@ console.log('== 4) HG_OBTC_PINE_FIELDS: 10 entries, each a [src, dst] with pine*
     seenDst.add(dst);
     if (!/^pine[A-Z]/.test(dst)) allPineDst = false;
   }
-  ok(seenSrc.size === 10, 'all 10 src keys are unique');
-  ok(seenDst.size === 10, 'all 10 dst keys are unique');
+  ok(seenSrc.size === 13, 'all 13 src keys are unique');
+  ok(seenDst.size === 13, 'all 13 dst keys are unique');
   for (const s of expectedSrc){
     ok(seenSrc.has(s), `src "${s}" is present`);
   }
@@ -195,7 +203,9 @@ console.log('== 5) hgObtcPineStamp: strict long/short rule, three-state ==');
   W.hgObtcPineStamp(rowA, {
     lor: 'long', ht: 'short', sqz: null, smf: undefined,
     msb: 'long', smc: 'short', cipher: 'junk', rfilter: 1,
-    nwenv: '', wavwap: 'LONG' /* case-sensitive, uppercase refused */
+    nwenv: '', wavwap: 'LONG', /* case-sensitive, uppercase refused */
+    /* hg-v1295: three new keys exercised in the same shape */
+    supertrend: 'long', macd: null, cci: 'short'
   });
   ok(rowA.pineLorKnn === 'long', 'long writes');
   ok(rowA.pineHalfTrend === 'short', 'short writes');
@@ -207,6 +217,10 @@ console.log('== 5) hgObtcPineStamp: strict long/short rule, three-state ==');
   ok(!('pineRangeFilter' in rowA), 'a number refused');
   ok(!('pineNwEnvelope' in rowA), 'empty string refused');
   ok(!('pineWavwap' in rowA), 'uppercase LONG refused (strict equal check)');
+  /* hg-v1295 */
+  ok(rowA.pineSupertrend === 'long', 'pineSupertrend long writes');
+  ok(!('pineMacd' in rowA), 'pineMacd null leaves field absent');
+  ok(rowA.pineCci === 'short', 'pineCci short writes');
   ok(rowA.entry === 100, 'unrelated fields (entry) preserved');
 
   /* case B — a null pm is a no-op */
@@ -220,15 +234,16 @@ console.log('== 5) hgObtcPineStamp: strict long/short rule, three-state ==');
   try{ W.hgObtcPineStamp(null, { lor: 'long' }); }catch(e){ threw = true; }
   ok(!threw, 'null row is a no-op (no throw)');
 
-  /* case D — all 10 keys long */
+  /* case D — all 13 keys long */
   const rowD = {};
   W.hgObtcPineStamp(rowD, { lor: 'long', ht: 'long', sqz: 'long', smf: 'long',
-    msb: 'long', smc: 'long', cipher: 'long', rfilter: 'long', nwenv: 'long', wavwap: 'long' });
+    msb: 'long', smc: 'long', cipher: 'long', rfilter: 'long', nwenv: 'long', wavwap: 'long',
+    supertrend: 'long', macd: 'long', cci: 'long' });
   let dstCount = 0;
   for (const [, dst] of W.HG_OBTC_PINE_FIELDS){
     if (rowD[dst] === 'long') dstCount++;
   }
-  ok(dstCount === 10, 'all 10 pine* fields written when every port reads long');
+  ok(dstCount === 13, 'all 13 pine* fields written when every port reads long');
 
   /* case E — empty pm is a no-op */
   const rowE = { entry: 300 };
@@ -303,14 +318,15 @@ console.log('== 7) scan-site pfReads.pineMarks: card reads what the record stamp
 }
 
 /* ------------------------------------------------------------------ */
-console.log('== 8) NO GATE READS pine* — 7 files × 10 keys × 2 shapes = 140 empty cells ==');
+console.log('== 8) NO GATE READS pine* — 7 files × 13 keys × 2 shapes = 182 empty cells ==');
 {
   const gateFiles = [
     'cryptogates.js', 'engine.js', 'plans.js', 'hg-gates.js',
     'hg-setup-core.js', 'hg-perfect-setup.js', 'setup-stack.js'
   ];
   const keys = ['pineLorKnn','pineHalfTrend','pineSqueeze','pineSmf','pineMsb',
-                'pineSmc','pineCipher','pineRangeFilter','pineNwEnvelope','pineWavwap'];
+                'pineSmc','pineCipher','pineRangeFilter','pineNwEnvelope','pineWavwap',
+                'pineSupertrend','pineMacd','pineCci'];
   let empty = 0, total = 0;
   for (const f of gateFiles){
     let body;
@@ -323,8 +339,8 @@ console.log('== 8) NO GATE READS pine* — 7 files × 10 keys × 2 shapes = 140 
       if (!bracket.test(body)) empty++;
     }
   }
-  ok(total === 140, `swept ${total} cells (7 files × 10 keys × 2 shapes)`);
-  ok(empty === 140, `all ${empty}/140 cells empty: no gate reads any pine* key off a reads/row bag`);
+  ok(total === 182, `swept ${total} cells (7 files × 13 keys × 2 shapes)`);
+  ok(empty === 182, `all ${empty}/182 cells empty: no gate reads any pine* key off a reads/row bag`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -363,5 +379,5 @@ console.log('== 10) one home guard: trendtable combined and src-11 agree on the 
 
 /* ------------------------------------------------------------------ */
 console.log('');
-console.log(`== hg-v1293 OMNIBTC pine marks: ${passed} passed, ${failed} failed ==`);
+console.log(`== hg-v1295 OMNIBTC pine marks: ${passed} passed, ${failed} failed ==`);
 process.exit(failed ? 1 : 0);

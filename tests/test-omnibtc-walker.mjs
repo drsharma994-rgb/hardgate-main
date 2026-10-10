@@ -84,10 +84,12 @@ console.log('== 2) walker produces a row shape the literal writer reads ==');
     ok(['t1', 'stop', 'timeout'].includes(first.outcome.status),
       'outcome.status in {t1,stop,timeout}');
     ok(first.pineMarks && typeof first.pineMarks === 'object',
-      'pineMarks is an object (three-state, hg-v1293)');
+      'pineMarks is an object (three-state, hg-v1293/v1295)');
     const marks = Object.keys(first.pineMarks).sort().join(',');
-    const marksExpected = ['cipher','ht','lor','msb','nwenv','rfilter','smc','sqz','smf','wavwap'].sort().join(',');
-    ok(marks === marksExpected, 'pineMarks carries the ten port keys exactly (' + marks + ')');
+    /* hg-v1295: three more port keys join the hg-v1293 ten
+       (Supertrend/MACD/CCI). */
+    const marksExpected = ['cipher','ht','lor','msb','nwenv','rfilter','smc','sqz','smf','wavwap','supertrend','macd','cci'].sort().join(',');
+    ok(marks === marksExpected, 'pineMarks carries the thirteen port keys exactly (' + marks + ')');
   }
   ok(out.meta && out.meta.horizonBars === 20,
     'meta.horizonBars = 20 (the desk\'s own 4h horizon)');
@@ -271,15 +273,22 @@ console.log('== 8) NO GATE reads HG_OBTC_WALK — it is a report, not a rule =='
 }
 
 /* ------------------------------------------------------------------ */
-console.log('== 9) ship stamps hg-v1294 ==');
+console.log('== 9) ship stamps align via the shared helper (hg-v956) ==');
 {
+  /* hg-v1289's shared helper: ONE place reads build-stamp.js so a
+     pack bump costs one edit, not thirty. The invariant is sw.js /
+     trendtable.js / cachebuster all AGREE with build-stamp.js —
+     not that any of them equals a fixed string. */
+  const { HG_VER, swCacheOk } = await import('./helpers/build-version.mjs');
   const build = read('build-stamp.js');
-  ok(/version:\s*['"]hg-v1294['"]/.test(build), 'build-stamp.js version hg-v1294');
+  ok(new RegExp("version:\\s*['\"]" + HG_VER + "['\"]").test(build),
+    'build-stamp.js version matches HG_VER (' + HG_VER + ')');
   const sw = read('sw.js');
-  ok(/HG_CACHE\s*=\s*['"]hg-v1294['"]/.test(sw), 'sw.js HG_CACHE hg-v1294');
+  ok(swCacheOk(sw), 'sw.js HG_CACHE matches build-stamp (' + HG_VER + ')');
   const loader = read('trendtable.js');
-  ok(/hg-v1294/.test(loader), 'trendtable.js header hg-v1294');
-  ok(/v=1294/.test(loader), 'trendtable.js part loader v=1294');
+  ok(loader.includes(HG_VER), 'trendtable.js header carries HG_VER');
+  const partSuffix = HG_VER.replace(/^hg-v/, '');
+  ok(loader.includes('v=' + partSuffix), 'trendtable.js part loader v=' + partSuffix);
 }
 
 /* ------------------------------------------------------------------ */
