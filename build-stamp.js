@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1292',
-  pack: 'OmniBTC only. A crown is a ticket only when two independent pine families fired fresh the same way and none fired against it, or one family fired fresh and either a second house strategy already has levels that way or a house indicator (EMA 20/50, MACD histogram, Donchian 20) crossed fresh that way. Two scripts in one family are one vote. A fresh 1h core the other way leaves a watch. A standing bias is not a fresh signal. A script that did not fire is not a vote. A missing script stays unread. The card does not invent levels.',
-  built: '2026-10-09T19:57:32Z'
+  version: 'hg-v1293',
+  pack: 'OmniBTC record-only pine bank. Seventeen generic ports this desk read nowhere - Supertrend, PSAR, Hull MA, QQE, Stochastic, EMA cross, Fisher, TRIX, Williams %R, CCI, Keltner, Chandelier, Ichimoku, ADX/DI, Aroon, Kaufman efficiency, OTE - now stamp a three-state read on every crown and ride the forward ledger as pine:<id> marks. They vote NOTHING: the hg-v1292 agreement gate is untouched, because this book has two outcomes per port (agreeing grows the family count, disagreeing demotes to watch) and the OMNI family additive well is already measured dry (hg-v987 / hg-v945 / hg-v922). The state read comes from the gold desks own pineGoldLayerStates, not a second copy of seventeen derivations - reading each ports SIGNAL EVENT instead of its STATE left sixteen of seventeen blank on clean tapes, which is the defect this pack found and pinned.',
+  built: '2026-10-09T21:10:00Z'
 };
 
 function hgBuildLabel(b){

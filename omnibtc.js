@@ -497,6 +497,98 @@ a global hard refresh.
       opts: { bandMult: 2.0 } }
   ];
 
+  /* hg-v1293: THE RECORD-ONLY GENERIC PORTS.
+     ------------------------------------------------------------------
+     Twenty generic, timeframe-agnostic Pine mechanics are already
+     implemented and tested in this repo (they carry a `pineGold` prefix only
+     because the gold desks built them first) and OMNIBTC reads none of them:
+     Supertrend, PSAR flip, Hull turn, QQE, Stoch cross, EMA-cross-RSI,
+     Fisher zero, TRIX cross, Williams %R re-entry, CCI re-entry, Keltner
+     pullback, Chandelier exit, Ichimoku, ADX/DI, Aroon, Efficiency, OTE.
+     They read plain `rows` — no gold input — so they work on BTC as-is
+     (hg-v949's one home; re-implementing them for BTC would be the
+     second-copy failure).
+
+     THIS TABLE CASTS NO VOTE. Said plainly, and for the reason the repo has
+     measured three separate times: hg-v987 (no signal-time read separates
+     OMNIROUTE's 2,833-trade replay), hg-v945 (the additive well is dry on
+     this desk's own evidence) and hg-v922 (nothing either desk ranks by
+     separates across four disjoint windows). Wiring twenty unmeasured ports
+     into `OBTC_PINE` above would not be a free win even if they were
+     measured, because that book has TWO outcomes per port: an agreeing port
+     grows `pineFamilies` and makes the hg-v1292 two-family ticket EASIER,
+     while a disagreeing port hits `if (oppose.length) return
+     hgObtcDemoteWatch(...)` and stands a good crown down. Unmeasured weight
+     that can both flood and veto is the hg-v966 trap.
+
+     So these are RECORDED, never scored — the pattern the gold desks use for
+     their 27 unmeasured layers — and the forward ledger's own separation
+     reads decide out of sample whether any of them pays. That reader is why
+     this is not the hg-v955 defect (a field written and never read): the
+     marks are stamped under the forward ledger's existing 96-key cap in the
+     `pine:<key>` namespace, and `scripts/obtc-factor-separation.mjs` measures
+     them. A port can only be promoted into `OBTC_PINE` above once that
+     measurement releases it.
+
+     `key` is the pineGoldLayerStates output to read (the shared reader owns
+     the derivation); `id` is the ledger/display name. One row per port, so the
+     key and the name cannot drift apart. */
+  var OBTC_PINE_RECORD = [
+    { key: 'supertrend',  id: 'supertrend',         label: 'Supertrend',            family: 'trend' },
+    { key: 'psar',        id: 'psar-flip',          label: 'PSAR',                  family: 'trend' },
+    { key: 'hullma',      id: 'hull-turn',          label: 'Hull MA',               family: 'trend' },
+    { key: 'qqe',         id: 'qqe',                label: 'QQE',                   family: 'momentum' },
+    { key: 'stoch',       id: 'stoch-cross',        label: 'Stochastic',            family: 'momentum' },
+    { key: 'emacross',    id: 'ema-cross-rsi',      label: 'EMA cross',             family: 'momentum' },
+    { key: 'fisher',      id: 'fisher-zero',        label: 'Fisher Transform',      family: 'momentum' },
+    { key: 'trix',        id: 'trix-cross',         label: 'TRIX',                  family: 'momentum' },
+    { key: 'williams',    id: 'williams-reentry',   label: 'Williams %R',           family: 'momentum' },
+    { key: 'cci',         id: 'cci-reentry',        label: 'CCI',                   family: 'momentum' },
+    { key: 'keltner',     id: 'keltner-pullback',   label: 'Keltner',               family: 'value' },
+    { key: 'chandelier',  id: 'chandelier-exit',    label: 'Chandelier',            family: 'trend' },
+    { key: 'ichimoku',    id: 'ichimoku',           label: 'Ichimoku',              family: 'structure' },
+    { key: 'adx',         id: 'adx-di',             label: 'ADX / DI',              family: 'trend' },
+    { key: 'aroon',       id: 'aroon-cross',        label: 'Aroon',                 family: 'trend' },
+    { key: 'efficiency',  id: 'efficiency',         label: 'Kaufman efficiency',    family: 'regime' },
+    { key: 'ote',         id: 'ote',                label: 'OTE zone',              family: 'value' },
+    /* the voting book already reads Donchian and MACD as fresh indicator
+       crosses, so they are NOT duplicated here (hg-v949 second-copy rule). */
+    /* the four primitives the gold reader also derives are deliberately left
+       out: `macd`, `donchian`, `emacross`-as-macd and `sessvwap` either
+       duplicate the voting bank or carry no independent BTC meaning. */
+  ];
+
+  /* The three-state read of the record-only bank.
+     ------------------------------------------------------------------
+     THIS CALLS THE SHARED STATE READER. The first draft of this bank called
+     each port and read `res.dir` — which is the port's SIGNAL EVENT, not its
+     state, so on 400-bar clean up, down and flat tapes exactly ONE of the
+     seventeen ports ever produced a read. The gold desks had already solved
+     this: `pineGoldLayerStates` reads the port's underlying SERIES and takes
+     the current side every record, and says so in its own comment —
+     "the state read for the record stack, not the port's signal event".
+
+     So this reuses that one implementation rather than writing a second copy
+     of seventeen state derivations (hg-v949's one home). Each row's `key` is
+     the reader output to read; a key the reader leaves null is UNREAD — the
+     record carries nothing for it rather than a guessed side. */
+  function hgObtcPineRecordBook(rows){
+    var out = { loaded: 0, ran: 0, states: {} };
+    var statesFn = W.pineGoldLayerStates;
+    if (typeof statesFn !== 'function') return out;      /* reader absent: nothing read */
+    out.loaded = OBTC_PINE_RECORD.length;
+    if (!rows || rows.length < 60) return out;           /* the reader's own floor */
+    var s;
+    try{ s = statesFn(rows); }catch(ePr){ return out; }
+    if (!s || typeof s !== 'object') return out;
+    out.ran = out.loaded;
+    for (var i = 0; i < OBTC_PINE_RECORD.length; i++){
+      var spec = OBTC_PINE_RECORD[i], v = s[spec.key];
+      if (v === 'long' || v === 'short') out.states[spec.id] = v;
+    }
+    return out;
+  }
+
   function hgObtcPineFresh(res){
     if (!res) return false;
     if (res.newLong || res.newShort) return true;
@@ -696,6 +788,16 @@ a global hard refresh.
     }
     var book = hgObtcPineBook(rows);
     pick.row.pineFresh = book.fresh;
+    /* hg-v1293: the record-only bank, read on the same 4h tape but kept OUT of
+       every vote below. Stamped here so the forward ledger carries a
+       three-state read per port and the separation harness can decide, out of
+       sample, whether any of them pays. Absent state = that port did not fire
+       or is not loaded; it is never a guessed side. Nothing in this function
+       reads `pineRecord` back into `fams`, `agree`, or `oppose`. */
+    var recBook = hgObtcPineRecordBook(rows);
+    pick.row.pineRecord = recBook.states;
+    pick.row.pineRecordRan = recBook.ran;
+    pick.row.pineRecordLoaded = recBook.loaded;
     if (!book.loaded){
       pick.row.pineNote = 'pine bank unread — the scripts are not loaded, so they cast no vote';
       return pick;
@@ -2795,6 +2897,24 @@ a global hard refresh.
               bbSqueeze: (pfReads.bbSqueeze || undefined),
               session: (pfReads.sessName || undefined)
             };
+            /* hg-v1293: the record-only generic Pine ports, one three-state
+               mark per port under the `pine:<id>` namespace the ledger's key
+               validator accepts. Read straight off the crown row so the mark
+               cannot drift from what the desk actually saw. A port that did
+               not fire, is not loaded, or threw is ABSENT — recorded as
+               nothing rather than as a guessed side, so the separation split
+               counts it as unread instead of as evidence. These gate NOTHING:
+               no rule above or below this literal reads them back. */
+            try{
+              var recStates = (pick.row && pick.row.pineRecord) || null;
+              if (recStates){
+                for (var rk in recStates){
+                  if (!Object.prototype.hasOwnProperty.call(recStates, rk)) continue;
+                  var rv = recStates[rk];
+                  if (rv === 'long' || rv === 'short') fwdRow['pine:' + rk] = rv;
+                }
+              }
+            }catch(eRec){}
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
             /* the record array is a named variable so the call-shape censuses
                (test-crypto-funding-mark / test-crypto-ledger-fill-mark) read the
