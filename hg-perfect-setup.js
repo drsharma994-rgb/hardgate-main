@@ -70,6 +70,42 @@ var DEFAULT_RR_FLOOR = 0.25;   /* a perfect formation still has to pay for the t
 var VOLUME_AGAINST = 0.6;
 var VOLUME_WITH = 1.0;
 
+/* hg-v1291: A GATE THAT COULD NOT RUN IS NOT A GATE THAT PASSED, and a gate
+   that is UNREADABLE is neither WITH nor against. The gold institutional stack
+   (hgGoldInstFilter) stamps a handful of veto-shaped results on every gold
+   candidate — sweep confirmation, order-block volume, the DXY/TNX macro lock,
+   the MTF matrix, the session gate, the spread lock, the news gate.
+
+   THE GATES DO NOT SHARE A POLARITY, so this reads each one on its OWN terms
+   rather than guessing from a flag name:
+     - `positive` gates pass by being TRUE  (sweepConfirm.ok)
+     - `negative` gates refuse by being TRUE (spreadLock.lock, obVol.trap)
+     - `reject` gates refuse on one flag but only warn on another
+       (sessionGate: `reject` stands a candidate down, `demote` does not)
+   `unchecked` means the feed was missing and nothing was decided: the gate is
+   unreadable, so it neither passes nor fails. An absent pass-flag is the same
+   no-verdict, never a silent refusal. */
+function hgGateReadable(g, kind){
+  if (!g || typeof g !== 'object') return { blocked: false, readable: false, why: '' };
+  if (g.unchecked === true) return { blocked: false, readable: false, why: '' };
+  var why = String(g.reason || '');
+  if (kind === 'positive'){
+    /* an explicit `ok: false` means the gate RAN and did not confirm — a
+       refusal. A missing `ok` is the no-verdict state: this gate never spoke. */
+    if (g.ok === true) return { blocked: false, readable: true, why: '' };
+    if (g.ok === false) return { blocked: true, readable: true, why: why };
+    return { blocked: false, readable: false, why: '' };
+  }
+  if (kind === 'reject'){
+    if (g.reject === true) return { blocked: true, readable: true, why: why };
+    /* `demote` is a warning, not a refusal — the desk still lets it print */
+    return { blocked: false, readable: (g.reject === false), why: '' };
+  }
+  /* negative: refuses when the named lock/trap flag is TRUE */
+  if (g[kind] === true) return { blocked: true, readable: true, why: why };
+  return { blocked: false, readable: (g[kind] === false), why: '' };
+}
+
 /* hgPerfectFormation(c, reads) -> { perfect: bool, plus: bool, why: string[] } */
 function hgPerfectFormation(c, reads){
   var out = { perfect: false, plus: false, why: [] };
@@ -104,6 +140,57 @@ function hgPerfectFormation(c, reads){
         return out;
       }
     }
+
+    /* ---- hg-v1291: THE GOLD INSTITUTIONAL GATES ---------------------------------
+       A gold candidate carries the result of hgGoldInstFilter's own stack — the
+       confirmations that historically stood a gold trade ASIDE (the hg-v1272
+       lesson: a sweep must clear its level and reclaim, a body gap must still be
+       open, an order block must show displacement, DXY+TNX must not be fighting
+       the trade, the MTF stack must not conflict, the session must not hard-reject,
+       the quote must not be wider than the spread lock, the calendar must not be
+       locked). Those stamped results were NEVER read here, so a candidate that
+       survived the stack WITH A DEMOTION could still wear PERFECT — the badge
+       claiming a confirmation the desk had explicitly withheld.
+
+       Every field below is read from the candidate and every one is optional, so
+       a crypto desk (which carries none of them) is byte-identical to before —
+       the bar only ever tightens for a desk that actually stamps these.
+
+       MEASURED, AND SAID PLAINLY: every one of these gates already either DROPS
+       the candidate upstream (sweepConfirm, obVol, macroLock, spreadLock,
+       newsGate — goldind.js sets `cand.dropped` and returns) or sets `demoted`
+       (mtf, sessionGate with hardReject:false), and the always-computable bar
+       ALREADY rejects a demoted candidate. So this is DEFENSE IN DEPTH, not the
+       live defense — it cannot become a hole if that upstream ordering changes,
+       and it is not where the accuracy gain comes from. */
+    var goldGates = [
+      ['sweepConfirm', 'positive', 'sweep not confirmed (no MSS/displacement/IFVG)'],
+      ['obVol',        'trap',     'order-block volume trap'],
+      ['macroLock',    'lock',     'DXY/TNX macro lock against the trade'],
+      ['mtf',          'conflict', 'MTF conflict — H4 and Daily disagree'],
+      ['sessionGate',  'reject',   'session hard-reject'],
+      ['spreadLock',   'lock',     'spread lock — quote wider than the desk cap'],
+      ['newsGate',     'lock',     'news gate — high-impact event lock']
+    ];
+    var goldReadableCount = 0;
+    for (var gi = 0; gi < goldGates.length; gi++){
+      var gKey = goldGates[gi][0], gKind = goldGates[gi][1], gWhy = goldGates[gi][2];
+      var gate = c[gKey];
+      if (!gate || typeof gate !== 'object') continue;      /* absent: not this desk */
+      var gr = hgGateReadable(gate, gKind);
+      if (!gr.readable) continue;                            /* unreadable: no verdict */
+      goldReadableCount++;
+      if (gr.blocked){
+        out.why.push(gWhy + (gr.why ? ' — ' + gr.why : ''));
+        return out;
+      }
+    }
+    /* The whole stack readable and none of it refused is itself a favourable
+       witness — the institutional read the gold desks earn leg by leg. Readable
+       only when at least one gate actually ran, so an all-missing stack is
+       absent rather than a pass (never mint, never deny). */
+    var goldConfWith = (goldReadableCount > 0);
+    var goldConfReadable = (goldReadableCount > 0);
 
     /* ---- evidence legs: an explicit AGAINST disqualifies; an unreadable leg
        neither confirms nor disqualifies. Each leg also reports whether it is
@@ -193,6 +280,21 @@ function hgPerfectFormation(c, reads){
     leg.cvdWith = (cvd === 'BOTH-WITH' || cvd === 'SPOT-ONLY');
     leg.cvdReadable = (cvd != null);
 
+    /* hg-v1291: THE GOLD FREE-FEED WITNESS — every free internet resource the
+       gold desk already scores, as ONE leg. The desk's own verdict map is
+       already oriented to the candidate's direction (true = with this trade,
+       false = against it, absent = the series never loaded), so the whole set
+       reduces to two facts: did anything answer, and did anything object. Any
+       single readable series against the trade is enough to stand the PERFECT
+       down — one contradicting resource is evidence, not noise. Nothing
+       readable is no verdict, so a cold feed can never deny the badge. */
+    var gfw = c.goldFreeWitness;
+    if (gfw && typeof gfw === 'object' && gfw.readable === true){
+      if (gfw.against === true){ out.why.push('a free gold feed is against this trade (' + (gfw.names || 'unnamed') + ')'); return out; }
+      leg.goldFreeWith = true;
+      leg.goldFreeReadable = true;
+    }
+
     out.perfect = true;
 
     /* ---- the headline tier (hg-v1030): PERFECT⁺ is earned when AT LEAST ONE
@@ -205,10 +307,16 @@ function hgPerfectFormation(c, reads){
        confluence badge on zero evidence is a coerced story, not a read mark.
        It also keeps the tier meaningful for desks that feed a subset (e.g.
        gold feeds news + volume, not the trend-matrix witnesses). ---- */
-    var anyReadable = leg.flowReadable || leg.fundReadable || leg.atrReadable
+    var anyReadable = !!(leg.flowReadable || leg.fundReadable || leg.atrReadable
       || leg.strucReadable || leg.newsReadable || leg.sessReadable || leg.volReadable
-      || leg.tqReadable || leg.levReadable || leg.onchainReadable || leg.cvdReadable;
-    out.plus = anyReadable && (!leg.flowReadable || leg.flowWith)
+      || leg.tqReadable || leg.levReadable || leg.onchainReadable || leg.cvdReadable
+      || goldConfReadable || leg.goldFreeReadable);
+    /* hg-v1291: `plus` is coerced to a STRICT boolean. It was assigned only on
+       the success path and the OR chain could collapse to `undefined`, so a
+       caller asserting `plus === false` read a three-state leak. Two suites
+       (test-gold-perfect-plus-v1030, test-omnibtc-perfect-v1035) assert it
+       strictly and caught it the moment a new leg perturbed the path. */
+    out.plus = !!(anyReadable && (!leg.flowReadable || leg.flowWith)
              && (!leg.fundReadable || leg.fundWith)
              && (!leg.atrReadable || leg.atrWith)
              && (!leg.strucReadable || leg.strucWith)
@@ -218,7 +326,9 @@ function hgPerfectFormation(c, reads){
              && (!leg.tqReadable || leg.tqWith)
              && (!leg.levReadable || leg.levWith)
              && (!leg.onchainReadable || leg.onchainWith)
-             && (!leg.cvdReadable || leg.cvdWith);
+             && (!leg.cvdReadable || leg.cvdWith)
+             && (!goldConfReadable || goldConfWith)
+             && (!leg.goldFreeReadable || leg.goldFreeWith));
 
     return out;
   }catch(e){

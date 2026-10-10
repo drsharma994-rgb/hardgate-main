@@ -6042,6 +6042,40 @@ function goldRankSetups(cands, ctx){
       rc.tally = tally;
       rc.tallyParts = parts;
       if (freeAgainst > 0) rc.oppose = (isFinite(+rc.oppose) ? +rc.oppose : 0) + freeAgainst;
+      /* hg-v1291: THE GOLD FREE-FEED WITNESS. Every free internet resource this
+         desk already fetched and scored travels in `freeReads`, and each verdict
+         is ALREADY oriented to this candidate's own direction
+         (hgGoldFreeFeedVerdicts: true = favourable for this trade, false =
+         against it, absent = the series never loaded). The shared PERFECT
+         predicate read none of them, so a whole library of free evidence — the
+         Yahoo metal and cross-ratio complex (GC=F, SI=F, HG=F, PL=F, PA=F, GDX,
+         CPER, ^VIX, TLT, UUP, JPY=X, AUD=X, CNY=X), Frankfurter DXY, the
+         Treasury 10Y, CFTC managed-money COT, alternative.me Fear & Greed, PAXG
+         perp funding and basis, GVZ, GLD volume, the yield curve — was invisible
+         to the badge. It becomes ONE leg: did any series answer, and did any
+         single one object. Computed HERE (not later) because the free block above
+         is what fills the map. Zero new requests: these marks already existed. */
+      try{
+        var pfFr = freeReads || {}, pfFrKeys = Object.keys(pfFr);
+        var pfFrReadable = 0, pfFrAgainst = [];
+        for (var pfFk = 0; pfFk < pfFrKeys.length; pfFk++){
+          var pfFkey = pfFrKeys[pfFk];
+          if (pfFkey.indexOf('free:') !== 0) continue;
+          var pfFval = pfFr[pfFkey];
+          if (pfFval !== true && pfFval !== false) continue;   /* not readable: no verdict */
+          pfFrReadable++;
+          if (pfFval === false) pfFrAgainst.push(pfFkey.slice(5));
+        }
+        if (pfFrReadable > 0){
+          rc.goldFreeWitness = {
+            readable: true,
+            against: pfFrAgainst.length > 0,
+            names: pfFrAgainst.join(', '),
+            readableCount: pfFrReadable,
+            againstCount: pfFrAgainst.length
+          };
+        }
+      }catch(eFrw){}
       try{
         var gradeFn = (typeof window !== 'undefined' && window.hgGoldGradeFromScore) ? window.hgGoldGradeFromScore : null;
         if (gradeFn){
@@ -6187,6 +6221,51 @@ function goldRankSetups(cands, ctx){
               }
             }
           }catch(eSt4){}
+          /* hg-v1291: the VOLATILITY-REGIME leg — one of the legs the shared
+             predicate READS but this desk never FED, so it stayed permanently
+             unread and could never witness anything. Read off the desk's OWN 4h
+             bars through the house ATR percentile (the same classifier TREND
+             MATRIX uses: <20 DEAD, >80 BLOWOFF, else HEALTHY), so the leg means
+             the same thing here as on the crypto desks. HEALTHY is readable-WITH,
+             DEAD is readable-neutral, BLOWOFF disqualifies, and a tape too thin
+             for the classifier stays absent. Zero new requests. */
+          try{
+            if (typeof window !== 'undefined' && typeof window.hgAtrPercentile === 'function'
+                && ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 30){
+              var pfAtrPct = window.hgAtrPercentile(ctx.rows4h, 14, 100);
+              if (isFinite(pfAtrPct)){
+                pfReads.atrRegime = (pfAtrPct < 20) ? 'DEAD' : ((pfAtrPct > 80) ? 'BLOWOFF' : 'HEALTHY');
+                pfReads.atrPercentile = pfAtrPct;
+              }
+            }
+          }catch(eAtr4){}
+          /* hg-v1291: the TREND-QUALITY leg — the second leg the predicate reads
+             and this desk never fed. The Dreiss Choppiness Index and the Kaufman
+             efficiency ratio, read together off the desk's own 4h bars, exactly
+             as the crypto desks read them (omnibtc.js hgObtcTrendQualityOf): CHOP
+             means BOTH chop is high AND efficiency is low — a trend setup on a
+             tape with no trend to ride, the state the predicate counts against.
+             TREND is the with-state; anything in between is readable-neutral; a
+             tape too thin for the windows stays absent. Choppiness comes from
+             indicators.js's own hgChoppiness and efficiency from this file's
+             calculateKaufmanER, so no new maths and no new request. */
+          try{
+            if (ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 25
+                && typeof hgChoppiness === 'function' && typeof calculateKaufmanER === 'function'){
+              var pfChopS = hgChoppiness(ctx.rows4h, 14);
+              var pfKer = calculateKaufmanER(ctx.rows4h, 20);
+              if (Array.isArray(pfChopS) && pfChopS.length){
+                var pfChop = +pfChopS[pfChopS.length - 1];
+                var pfEr = (pfKer && isFinite(+pfKer.er)) ? +pfKer.er : NaN;
+                if (isFinite(pfChop)){
+                  pfReads.chopVal = pfChop;
+                  if (isFinite(pfEr)) pfReads.kerVal = pfEr;
+                  if (pfChop >= 61.8 && isFinite(pfEr) && pfEr < 0.3) pfReads.trendQuality = 'CHOP';
+                  else if (pfChop <= 38.2 && isFinite(pfEr) && pfEr > 0.4) pfReads.trendQuality = 'TREND';
+                }
+              }
+            }
+          }catch(eTq4){}
           try{
             if (isFinite(+ctx.fundingRate) && typeof window !== 'undefined' && typeof window.hgFundingAgainstMark === 'function'){
               var pfFam = window.hgFundingAgainstMark(+ctx.fundingRate, rc.dir);
