@@ -71,11 +71,12 @@
       "ago": -1
     },
     "GTC": {
-      "at": "2026-10-05T19:06:09.126Z",
+      "at": "2026-10-10T01:26:22.339Z",
       "score": 5,
       "fresh": true,
-      "ago": 2,
-      "crossDay": "2026-10-03"
+      "ago": 7,
+      "crossDay": "2026-10-02",
+      "expired": true
     },
     "PUMP": {
       "at": "2026-10-05T16:25:35.107Z",
@@ -129,10 +130,10 @@
       "expired": true
     },
     "STRK": {
-      "at": "2026-10-09T23:35:34.230Z",
+      "at": "2026-10-10T01:26:18.999Z",
       "score": 5,
       "fresh": true,
-      "ago": 3,
+      "ago": 4,
       "crossDay": "2026-10-05",
       "expired": true
     },
@@ -170,10 +171,10 @@
       "expired": true
     },
     "FIL": {
-      "at": "2026-10-09T14:22:09.060Z",
+      "at": "2026-10-10T01:26:21.407Z",
       "score": 4,
       "fresh": true,
-      "ago": 8,
+      "ago": 9,
       "crossDay": "2026-09-30",
       "expired": true
     },
@@ -230,11 +231,12 @@
       "crossDay": "2026-09-27"
     },
     "ETC": {
-      "at": "2026-10-05T19:06:13.170Z",
-      "score": 4,
+      "at": "2026-10-10T01:26:24.153Z",
+      "score": 3,
       "fresh": true,
-      "ago": 4,
-      "crossDay": "2026-10-01"
+      "ago": 9,
+      "crossDay": "2026-09-30",
+      "expired": true
     },
     "GRT": {
       "at": "2026-10-05T19:06:13.603Z",
@@ -521,23 +523,31 @@
       "expired": true
     },
     "CHR": {
-      "at": "2026-10-09T23:35:41.943Z",
+      "at": "2026-10-10T01:26:25.501Z",
       "score": 4,
       "fresh": true,
-      "ago": 1,
+      "ago": 2,
       "crossDay": "2026-10-07",
       "expired": true
     },
     "KNC": {
-      "at": "2026-10-09T23:35:49.590Z",
+      "at": "2026-10-10T01:26:34.165Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 3,
+      "crossDay": "2026-10-06",
+      "expired": true
+    },
+    "MANA": {
+      "at": "2026-10-10T01:26:27.663Z",
       "score": 3,
       "fresh": true,
       "ago": 2,
-      "crossDay": "2026-10-06",
+      "crossDay": "2026-10-07",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-09T23:35:55.975Z",
+  "lastRunAt": "2026-10-10T01:26:40.465Z",
   "scanned": 504,
   "cards": 0
 }
