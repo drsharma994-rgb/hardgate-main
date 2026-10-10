@@ -17773,6 +17773,219 @@ function hgGoldFormingStackHtml(stack){
   }catch(e){ return ''; }
 }
 
+/* ---------------- hg-v1298 PROFITABILITY AUDIT PANEL ---------------- */
+/* THE USER'S ASK, ANSWERED AS THE MEASUREMENT IT IS.
+   "Use only strategies / indicators / fundamentals / pine scripts that have
+   yielded profitable setups" is a HARD FILTER across GOLD SCALP, OMNIGOLD,
+   GOLD PINE and GANESH GOLD. hg-v935 measured that exact filter directly on
+   OMNIGOLD (36 reads x 4 disjoint windows x 2 fill bounds x 16 agreements
+   needed = ZERO verdicts out-of-sample). hg-v937 forward-tested the
+   "9 profitable mechanics" roster (= MILLI GOLD): it beat the full OMNIGOLD
+   book 6/6 IN-SAMPLE and paid 0/6 NET-POSITIVE FORWARD (-0.17R to -0.04R).
+   hg-v966 forbids shipping an unmeasured gate on evidence that failed.
+
+   So the honest answer is NOT a new filter. It is a panel that READS the
+   measured state each desk already enforces (edge table, measured-edge gate,
+   record-only judge, forward ledger) and prints it on every scan, so a
+   reader sees what IS measurable, what is DEMOTED today, what is UNMEASURED
+   (and therefore cannot be filtered on), and WHY the "profitable-only"
+   filter is not a gate here. Nothing is gated on this panel. No gate
+   changes. No setup leaves any board.
+
+   Fails OPEN at every seam: an unreadable table / absent evidence / throwing
+   reader all return ''. An empty audit is NOT a clean bill (hg-v955): the
+   panel renders NOTHING on a desk that cannot be measured, rather than a
+   row of zeros that would read as "no gap found". */
+
+function hgGoldAuditLead(){
+  return '<div class="note" style="margin:6px 0;padding:6px 9px;'
+    + 'border-left:3px solid #0369A1;background:rgba(3,105,161,0.05);font-size:11px">'
+    + '<b>PROFITABILITY AUDIT</b> — the measured state this desk already '
+    + 'enforces, read from the committed evidence. The hard filter '
+    + '<b>USE ONLY PROFITABLE</b> is <b>NOT</b> a gate on this desk: '
+    + 'hg-v935 measured that filter directly on OMNIGOLD (zero verdicts out of '
+    + 'sample across four disjoint windows), hg-v937 forward-tested the 9-'
+    + 'mechanic MILLI GOLD roster (<b>6/6 beat the full desk in sample, 0/6 '
+    + 'paid forward</b>, -0.17R to -0.04R). What runs instead is the '
+    + 'measurement each desk already carries. This panel is disclosure, not a '
+    + 'veto; it gates nothing.</div>';
+}
+
+function hgGoldAuditScalpHtml(){
+  try{
+    var tbl = W.HG_GOLD_SETUP_EDGE;
+    var scalp = tbl && tbl.scalp;
+    if (!scalp || typeof scalp !== 'object') return '';
+    var pref = 0, supp = 0, dem = 0, neut = 0, preferK = [], suppK = [];
+    for (var k in scalp){
+      if (!Object.prototype.hasOwnProperty.call(scalp, k)) continue;
+      var r = scalp[k];
+      var act = r && typeof r === 'object' ? r.action : null;
+      if (act === 'prefer'){ pref++; preferK.push(k); }
+      else if (act === 'suppress'){ supp++; suppK.push(k); }
+      else if (act === 'demote'){ dem++; }
+      else neut++;
+    }
+    var tot = pref + supp + dem + neut;
+    if (!tot) return '';
+    return '<div class="note" style="margin:4px 0;font-size:11px">'
+      + '<b>GOLD SCALP</b> — ' + tot + ' mechanics in HG_GOLD_SETUP_EDGE.scalp: '
+      + '<b>' + pref + '</b> PREFER' + (preferK.length ? ' (' + preferK.join(', ') + ')' : '')
+      + ', <b>' + supp + '</b> SUPPRESS' + (suppK.length ? ' (' + suppK.join(', ') + ')' : '')
+      + ', <b>' + dem + '</b> DEMOTE, <b>' + neut + '</b> NEUTRAL. '
+      + 'A row with no action in this table under the hg-v1289 three-state '
+      + 'rule stamps UNMEASURED and never leads. The hg-v928 refusals '
+      + '(no sample floor on the demote bar) remain in-table and reversible '
+      + 'via <code>hgGoldSetEdgeRetune(false)</code>.</div>';
+  }catch(e){ return ''; }
+}
+
+function hgGoldAuditSwingHtml(){
+  try{
+    var tbl = W.HG_GOLD_SETUP_EDGE;
+    var swing = tbl && tbl.swing;
+    if (!swing || typeof swing !== 'object') return '';
+    var pref = 0, supp = 0, dem = 0, neut = 0, preferK = [];
+    for (var k in swing){
+      if (!Object.prototype.hasOwnProperty.call(swing, k)) continue;
+      var r = swing[k];
+      var act = r && typeof r === 'object' ? r.action : null;
+      if (act === 'prefer'){ pref++; preferK.push(k); }
+      else if (act === 'suppress') supp++;
+      else if (act === 'demote') dem++;
+      else neut++;
+    }
+    var tot = pref + supp + dem + neut;
+    if (!tot) return '';
+    return '<div class="note" style="margin:4px 0;font-size:11px">'
+      + '<b>GOLD SWING</b> — ' + tot + ' mechanics in HG_GOLD_SETUP_EDGE.swing: '
+      + '<b>' + pref + '</b> PREFER' + (preferK.length ? ' (' + preferK.join(', ') + ')' : '')
+      + ', <b>' + supp + '</b> SUPPRESS, <b>' + dem + '</b> DEMOTE, '
+      + '<b>' + neut + '</b> NEUTRAL. hg-v960 refused to pick a swing prefer '
+      + 'floor inside (23, 32] because every value in that interval would be '
+      + 'fitted to reproduce its own answers.</div>';
+  }catch(e){ return ''; }
+}
+
+function hgGoldAuditOmniHtml(){
+  try{
+    var E = W.HG_OG_REPLAY_EVIDENCE;
+    if (!E || !E.kinds) return '';
+    var kinds = E.kinds;
+    var measured = 0, veto = 0, promo = 0, unk = 0, vetoK = [];
+    var MIN_SAMPLES = (typeof W.HG_OG_MIN_SAMPLES === 'number') ? W.HG_OG_MIN_SAMPLES : 20;
+    var VETO_Z = (typeof W.HG_OG_EDGE_VETO_Z === 'number') ? W.HG_OG_EDGE_VETO_Z : -2;
+    var fam = OG_MECHANICS_LEN();
+    var famZ = (typeof W.hgOgFamilyZ === 'function') ? W.hgOgFamilyZ(fam) : NaN;
+    var be = 1 / 3;   /* every plan this desk writes is 2R */
+    /* hg-v1298: prefer the gate-clear reader (reads row[5]/row[6] added by
+       hg-v917) so this panel honestly reports the mechanics that condemn
+       on the population the gate exists to judge. Falls back to the whole-
+       walk reader for environments where only the pre-v1298 omnigold.js
+       is loaded. */
+    var zFn = (typeof W.hgOgReplayZOnFormed === 'function') ? W.hgOgReplayZOnFormed
+            : ((typeof W.hgOgReplayZ === 'function') ? W.hgOgReplayZ : null);
+    if (!zFn) return '';
+    for (var k in kinds){
+      if (!Object.prototype.hasOwnProperty.call(kinds, k)) continue;
+      var row = kinds[k];
+      if (!Array.isArray(row) || row.length < 2) continue;
+      var n = +row[0];
+      if (!(n >= MIN_SAMPLES)) continue;
+      measured++;
+      var z = zFn(row, be);
+      if (!isFinite(z)){ unk++; continue; }
+      if (z <= VETO_Z){ veto++; vetoK.push(k); continue; }
+      if (isFinite(famZ) && z >= famZ){ promo++; continue; }
+      unk++;
+    }
+    if (!measured) return '';
+    return '<div class="note" style="margin:4px 0;font-size:11px">'
+      + '<b>OMNIGOLD</b> — ' + measured + ' mechanics measured (n &ge; '
+      + MIN_SAMPLES + ', committed replay). '
+      + 'Under the hg-v1298 disclosure read (gate-clear row[5]/row[6]): '
+      + '<b>' + veto + '</b> fail outright at '
+      + (isFinite(VETO_Z) ? VETO_Z.toFixed(2) + 'σ' : '-2σ')
+      + (vetoK.length ? ' (' + vetoK.join(', ') + ')' : '')
+      + ', <b>' + promo + '</b> clear the ' + fam + '-mechanic Sidak bar '
+      + (isFinite(famZ) ? '(+' + famZ.toFixed(2) + 'σ)' : '')
+      + ', <b>' + unk + '</b> unknown. '
+      + 'The actual veto gate <code>hgOgGateMeasuredEdge</code> reads the '
+      + 'FORWARD LEDGER (hgFwdStats), not these panels; '
+      + '<code>OG_EDGE_PROOF_DEFAULT=false</code> (hg-v925) means an unknown '
+      + 'mechanic tickets. MILLI GOLD is this desk restricted to its 9 net-'
+      + 'positive mechanics (hg-v936); hg-v937 forward-tested that selection '
+      + 'and it paid 0/6 net-positive out of sample.</div>';
+  }catch(e){ return ''; }
+}
+
+/* OG_MECHANICS lives inside omnigold.js IIFE and is not window-exposed as a
+   count, so we read whatever window surface exists (hgOgReplayFamilySize
+   returns the family size the panel displays) and fall back to the measured
+   kinds count. Never read a hardcoded number here: a re-bake moves it. */
+function OG_MECHANICS_LEN(){
+  try{
+    if (typeof W.hgOgReplayFamilySize === 'function') return +W.hgOgReplayFamilySize() || 0;
+    var E = W.HG_OG_REPLAY_EVIDENCE;
+    if (E && Array.isArray(E.mechanics)) return E.mechanics.length;
+    if (E && E.kinds) return Object.keys(E.kinds).length;
+  }catch(e){}
+  return 0;
+}
+
+function hgGoldAuditPineHtml(){
+  try{
+    var live = W.PINE_GOLD_LAYERS, rec = W.PINE_GOLD_RECORD_LAYERS;
+    var liveN = Array.isArray(live) ? live.length : 0;
+    var recN = Array.isArray(rec) ? rec.length : 0;
+    if (!liveN && !recN) return '';
+    var floor = (typeof W.HG_GOLD_FWD_MIN_JUDGE === 'number') ? W.HG_GOLD_FWD_MIN_JUDGE : 20;
+    return '<div class="note" style="margin:4px 0;font-size:11px">'
+      + '<b>GOLD PINE</b> — <b>' + liveN + '</b> scored layers (live-lane confluence) + '
+      + '<b>' + recN + '</b> record-only layers (<code>pineGoldRecordJudge</code>, '
+      + 'DEMOTED until the local forward ledger measures them paying at n '
+      + '&ge; ' + floor + '). hg-v945/v922 measured that no gold-desk ranked '
+      + 'read separates on this evidence: adding a weight to the confluence '
+      + 'score is refused for that reason. A record-only layer the ledger '
+      + 'releases regains its handoff on its own without a pack.</div>';
+  }catch(e){ return ''; }
+}
+
+function hgGoldAuditGaneshHtml(){
+  try{
+    var walk = W.HG_GANESH_WALK;
+    var head = '<b>GANESH GOLD</b> — ';
+    if (walk && walk.measured && isFinite(+walk.n) && +walk.n > 0){
+      return '<div class="note" style="margin:4px 0;font-size:11px">' + head
+        + '<b>' + walk.n + '</b> trades walked over ' + (walk.span || 'the committed span')
+        + '. ' + (walk.note || 'See <code>HG_GANESH_WALK</code>.') + '</div>';
+    }
+    return '<div class="note" style="margin:4px 0;font-size:11px">' + head
+      + '<b>NO MEASURED RECORD</b> on this desk — no committed walk '
+      + 'exists yet (<code>scripts/backtest-ganeshgold.mjs</code> was wired '
+      + 'in hg-v1298 but needs network and this environment denies it; the '
+      + 'first machine with Binance access can run <code>npm run '
+      + 'ganesh:rebake</code>). Formation is purely rule-based through the '
+      + '12-leg modelGrade; nothing on this desk can be filtered as '
+      + 'profitable until the ledger measures it.' + (walk && walk.note ? ' ' + walk.note : '')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+function hgGoldAuditPanelHtml(deskId){
+  try{
+    var body = '';
+    if (deskId === 'goldscalp') body = hgGoldAuditScalpHtml();
+    else if (deskId === 'goldswing') body = hgGoldAuditSwingHtml();
+    else if (deskId === 'goldpine') body = hgGoldAuditPineHtml();
+    else if (deskId === 'omnigold') body = hgGoldAuditOmniHtml();
+    else if (deskId === 'ganeshgold') body = hgGoldAuditGaneshHtml();
+    else return '';
+    if (!body) return '';
+    return hgGoldAuditLead() + body;
+  }catch(e){ return ''; }
+}
+
 /* ---------------- exports ---------------- */
 
 /* Exported so the sanitiser's resume rule is tested on its own branches
@@ -18174,4 +18387,11 @@ W.hgGoldQuoteFromPerp = hgGoldQuoteFromPerp;
 W.hgGoldL2FromPerp = hgGoldL2FromPerp;
 W.hgGoldLiveFeed = hgGoldLiveFeed;
 W.hgGoldApplyLiveFeed = hgGoldApplyLiveFeed;
+W.hgGoldAuditPanelHtml = hgGoldAuditPanelHtml;        /* hg-v1298 */
+W.hgGoldAuditLead = hgGoldAuditLead;                  /* hg-v1298 */
+W.hgGoldAuditScalpHtml = hgGoldAuditScalpHtml;        /* hg-v1298 */
+W.hgGoldAuditSwingHtml = hgGoldAuditSwingHtml;        /* hg-v1298 */
+W.hgGoldAuditOmniHtml = hgGoldAuditOmniHtml;          /* hg-v1298 */
+W.hgGoldAuditPineHtml = hgGoldAuditPineHtml;          /* hg-v1298 */
+W.hgGoldAuditGaneshHtml = hgGoldAuditGaneshHtml;      /* hg-v1298 */
 })();
