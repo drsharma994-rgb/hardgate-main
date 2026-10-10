@@ -537,11 +537,17 @@ a global hard refresh.
      So these are RECORDED, never scored — the pattern the gold desks use for
      their 27 unmeasured layers — and the forward ledger's own separation
      reads decide out of sample whether any of them pays. That reader is why
-     this is not the hg-v955 defect (a field written and never read): the
      marks are stamped under the forward ledger's existing 96-key cap in the
-     `pine:<key>` namespace, and `scripts/obtc-factor-separation.mjs` measures
-     them. A port can only be promoted into `OBTC_PINE` above once that
+     `pine:<key>` namespace ON THE RECORD, and the ledger's own read split
+     (`hgFwdReadSplit`) measures each port against its complement out of
+     sample. A port can only be promoted into `OBTC_PINE` above once that
      measurement releases it.
+     CORRECTION: an earlier version of this comment named
+     `scripts/obtc-factor-separation.mjs` as the reader. NO SUCH SCRIPT EXISTS
+     (there is no `scripts/obtc-*` at all) and no walk stamps these marks, so
+     the promotion path above is open but DORMANT until one is written. What
+     makes the bank measurable today is the record hand-in below, which hands
+     the states to `hgFwdReadSplit` through the shared `reads` seam.
 
      `key` is the pineGoldLayerStates output to read (the shared reader owns
      the derivation); `id` is the ledger/display name. One row per port, so the
@@ -3017,6 +3023,23 @@ a global hard refresh.
               /* hg-v1046: how many scanned venues crowned this direction —
                  the cross-venue confirmation read mark */
               venueAgreeCount: isFinite(pfReads.venuesAgree) ? pfReads.venuesAgree : undefined,
+              /* the hg-v1293 record-only bank, made MEASURABLE. The seventeen
+                 states rode the row and the card but no record ever carried
+                 them, so hgFwdReadSplit read zero rows by construction. They
+                 now ride the hg-v989 reads seam as booleans: true when the
+                 port agrees WITH the plan direction, false when it opposes,
+                 absent when the reader left it UNREAD (never a guessed side). */
+              reads: (function(){
+                var pr = pick.row && pick.row.pineRecord, out = {}, rk;
+                if (!pr || typeof pr !== 'object') return undefined;
+                var rd = String(pick.row.dir || '').toLowerCase();
+                for (rk in pr){
+                  if (!Object.prototype.hasOwnProperty.call(pr, rk)) continue;
+                  if (pr[rk] !== 'long' && pr[rk] !== 'short') continue;
+                  out['pine:' + rk + 'With'] = (pr[rk] === rd);
+                }
+                return Object.keys(out).length ? out : undefined;
+              })(),
               /* hg-v1047: the measured-edge verdict for this mechanic —
                  recorded only once armed (proven / losing), never while
                  the floor has not been reached */
