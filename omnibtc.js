@@ -789,6 +789,64 @@ a global hard refresh.
     return pick;
   }
 
+  /* hg-v1296: THE TAPE-REGIME GATE OMNIBTC NEVER APPLIED.
+     ------------------------------------------------------------------
+     `hgRegimeAllowsSetup` (plans.js:114) is a HARD veto every other crypto
+     desk already runs on its own 4h tape: `setup-stack.js:115`,
+     `supersetup.js:161`, `chartvision-tab.js:402`, `contract-report.js:404`.
+     A `volatile` tape refuses a trend-continuation entry outright and a
+     `compression` tape refuses swing/edge/best — on every desk except this
+     one. OMNIBTC DISPLAYED `atrRegime` on its TECHNICAL line and read
+     `efficiency` as one witness, and consulted the veto NOWHERE: measured,
+     `hgRegimeAllowsSetup` and `detectRegime` appear zero times in
+     omnibtc.js. So a crown could print a ticket on a volatile 4h tape that
+     the identical tape would have refused on SWING, SCALP, SUPER or the
+     chart-vision desk.
+
+     This is the same shape the desk already uses for its other stand-downs,
+     and it obeys the doctrine this repo holds everywhere:
+       - DEMOTE, do not hide. The crown keeps its card, its levels and its
+         note; only the ticket is withheld (hg-v552 / hg-v572).
+       - THREE-STATE. `hgRegimeAllowsSetup` fails OPEN and reports
+         `unchecked: true` when it cannot read the tape. An unreadable
+         regime is NOT a verdict, so it never demotes here.
+       - NO UNMEASURED WEIGHT. This gate can only ever WITHHOLD a ticket. It
+         adds no vote to `fams`, `agree` or `oppose` and cannot make a
+         ticket easier, so it cannot flood the ticket side (the hg-v966
+         trap).
+       - ONE HOME. It calls the shared `hgRegimeAllowsSetup`; it does not
+         re-derive a second regime read.
+
+     Lever (the hg-v1156 chain shape): `window.HG_OBTC_REGIME_GATE = false`
+     or `localStorage hg_obtc_regime_gate = '0'` disables it. Default ON,
+     read live per scan so a console flip needs no reload. An unreadable
+     lever is ON (the safe side). */
+  function hgObtcRegimeGateOn(){
+    try{
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_REGIME_GATE === false) return false;
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_REGIME_GATE === true) return true;
+      if (W && W.localStorage){
+        var v = W.localStorage.getItem('hg_obtc_regime_gate');
+        if (v === '0' || v === 'false') return false;
+      }
+    }catch(eLv){}
+    return true;
+  }
+
+  /* Returns null when the tape is allowed, could not be read, or the shared
+     gate is absent — i.e. every case where this desk must NOT invent a
+     refusal. Returns the reason string only on a real veto. */
+  function hgObtcRegimeWhy(rows){
+    if (typeof W === 'undefined' || !W || typeof W.hgRegimeAllowsSetup !== 'function') return null;
+    if (!rows || !rows.length) return null;
+    var r = null;
+    try{ r = W.hgRegimeAllowsSetup(rows, 'swing'); }catch(eRg){ return null; }
+    if (!r || typeof r !== 'object') return null;
+    if (r.unchecked === true) return null;      /* unreadable is not a verdict */
+    if (r.allow === false && r.reason) return String(r.reason);
+    return null;
+  }
+
   /* hg-v1295: THE HIGHER-TIMEFRAME ACCURACY LOCK.
      ------------------------------------------------------------------
      The pine and indicator books read the 4h tape and the 1h tape. The
@@ -892,6 +950,23 @@ a global hard refresh.
     else if (dOppose.length) dNote = ' · 1d against: ' + dOppose.join(', ');
     else if (htfRan) dNote = ' · 1d read ' + htfRan + ' cores, none fresh';
     else dNote = ' · 1d tape too thin to read';
+    /* hg-v1297: the tape-regime stand-down, FIRST among the stand-downs, and
+       placed ABOVE the loaded-bank guard on purpose: this veto depends on the
+       4h TAPE and on nothing in the pine bank, so an unloaded bank must not be
+       able to mask it. Every other crypto desk refuses a trend-continuation
+       entry on a volatile tape and a swing/best entry on a compression tape;
+       this desk did not, so a crown could print a ticket on a tape the
+       identical setup would have been refused on everywhere else. The shared
+       gate's reason is stamped verbatim. Unreadable regime -> null -> no
+       refusal (three-state). */
+    if (hgObtcRegimeGateOn()){
+      var rgWhy = hgObtcRegimeWhy(rows);
+      if (rgWhy){
+        pick.row.regimeRefused = true;
+        return hgObtcDemoteWatch(pick, 'TAPE REGIME — ' + rgWhy
+          + '. Watch only, not a ticket.');
+      }
+    }
     if (!book.loaded){
       pick.row.pineNote = 'pine bank unread — the scripts are not loaded, so they cast no vote';
       return pick;
