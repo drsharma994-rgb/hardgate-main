@@ -74,7 +74,7 @@ console.log('== all feeds silent: regime UNKNOWN, nothing faked ==');
   ok(r && r.regime === 'unknown', 'no directional leg measured -> unknown, never a guessed quiet');
   ok(r.bulls === 0 && r.bears === 0 && r.checked === 0, 'no votes invented from empty feeds');
   ok(r.blackout === false, 'no blackout invented from an unread calendar');
-  ok(Array.isArray(r.legs) && r.legs.length === 7, 'seven legs render even when every feed is dark');
+  ok(Array.isArray(r.legs) && r.legs.length === 12, 'twelve legs render even when every feed is dark');
   ok(r.legs.every(function(l){ return l.state === 'unchecked'; }),
     'every dark leg says UNCHECKED — a missing feed is never a neutral vote');
 
@@ -294,6 +294,145 @@ console.log('\n== gather pulls the real feeds, state-only ==');
   const regime = W.hgObtcFundamentalRegime(extra);
   ok(regime.legs.filter(function(l){ return l.state === 'checked'; }).length >= 5,
     'a warmed host checks five-plus legs of the seven');
+}
+
+console.log('\n== Binance retail long/short votes only at the house 65/35 lines ==');
+{
+  const W = boot();
+  const retail = function(pct){
+    return W.hgObtcFundamentalRegime({ retailLs: { latest: { longPct: pct } } });
+  };
+  ok(leg(retail(71.2), 'retail').vote === 'bear' && leg(retail(71.2), 'retail').extreme === true,
+    '71% long is a crowded-long fade — bear');
+  ok(leg(retail(65), 'retail').vote === 'bear', 'exactly 65 is the house line — bear');
+  ok(leg(retail(35), 'retail').vote === 'bull', 'exactly 35 is the house line — bull');
+  ok(leg(retail(28), 'retail').vote === 'bull', '28% long is a crowded-short fade — bull');
+  const mid = leg(retail(52), 'retail');
+  ok(mid.state === 'checked' && mid.vote === 'neutral' && !mid.extreme,
+    '52% long is checked and silent — a lean is not a vote');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'retail').state === 'unchecked',
+    'no Binance print stays unread');
+  ok(leg(W.hgObtcFundamentalRegime({ retailLs: { latest: { longPct: 6500 } } }), 'retail').state === 'unchecked',
+    'a percent outside 0-100 is unread, not a fabricated crowd');
+
+  const alone = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: retail(71.2) });
+  ok(alone.demote === false && alone.chips.indexOf('RETAIL EXTREME') >= 0,
+    'ONE WITNESS NEVER FLIPS A SETUP — retail alone chips and does not demote');
+
+  const both = W.hgObtcFundamentalRegime({
+    fng: { v: 85, c: 'Extreme Greed' },
+    retailLs: { latest: { longPct: 71.2 } }
+  });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: both });
+  ok(hw.demote === true && /FUNDAMENTAL HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'F&G extreme plus crowded retail is two witnesses — the long becomes a watch');
+  ok(both.bulls === 0 && both.bears === 2, 'the two bear votes are counted, nothing else invented');
+}
+
+console.log('\n== a dark host fetches the free sentiment reads, and a failure stays unread ==');
+{
+  const hits = [];
+  const W = boot({
+    fetch: async function(url){
+      hits.push(String(url));
+      if (String(url).indexOf('alternative.me') >= 0){
+        return { ok: true, json: async function(){ return { data: [{ value: '18', value_classification: 'Extreme Fear' }] }; } };
+      }
+      if (String(url).indexOf('coingecko') >= 0){
+        return { ok: true, json: async function(){ return { data: { market_cap_percentage: { btc: 54.2 } } }; } };
+      }
+      return { ok: false, json: async function(){ return null; } };
+    },
+    binanceLongShort: async function(sym, period, limit){
+      hits.push(sym + '|' + period + '|' + limit);
+      return { latest: { longPct: 71.2, shortPct: 28.8, ratio: 2.47, t: 1 }, series: [{}] };
+    }
+  });
+  const extra = await W.hgObtcGatherExtra('BTCUSD', TICKER);
+  ok(extra.fng && extra.fng.v === 18 && extra.fng.c === 'Extreme Fear',
+    'alternative.me fills Fear & Greed when the host has none');
+  ok(extra.dom === 54.2, 'CoinGecko fills BTC dominance when the host has none');
+  ok(extra.retailLs && extra.retailLs.latest.longPct === 71.2, 'Binance BTCUSDT long/short is on the bag');
+  ok(hits.indexOf('BTCUSDT|4h|6') >= 0, 'the retail read is the 4h BTCUSDT print, six bars');
+  const regime = W.hgObtcFundamentalRegime(extra);
+  ok(leg(regime, 'fng').vote === 'bull' && leg(regime, 'retail').vote === 'bear',
+    'fear is contrarian bull and crowded retail is bear — they do not agree');
+
+  const W2 = boot({
+    fetch: async function(){ throw new Error('offline'); },
+    binanceLongShort: async function(){ throw new Error('fapi down'); }
+  });
+  const dead = await W2.hgObtcGatherExtra('BTCUSD', TICKER);
+  ok(dead && !(dead.fng && isFinite(+dead.fng.v)), 'a failed Fear & Greed fetch does not invent a number');
+  ok(dead.dom == null, 'a failed dominance fetch does not invent a number');
+  ok(dead.retailLs === null, 'a failed long/short fetch is null, not a throw');
+
+  let called = 0;
+  const W3 = boot({
+    S: { fng: { v: 77, c: 'Greed' }, dom: 58.4 },
+    fetch: async function(){ called++; return { ok: true, json: async function(){ return { data: [{ value: '1' }] }; } }; }
+  });
+  const held = await W3.hgObtcGatherExtra('BTCUSD', TICKER);
+  ok(held.fng.v === 77 && held.dom === 58.4,
+    'a warmed Fear & Greed and dominance print is not overwritten');
+  ok(called > 0, 'hashrate and CoinMetrics are still asked when the host has no copy');
+}
+
+console.log('\n== hashrate, NVT and OI divergence vote only when measured ==');
+{
+  const W = boot();
+  const hash = function(ch){ return W.hgObtcFundamentalRegime({ hashrate: { change30d: ch } }); };
+  ok(leg(hash(-0.06), 'hashrate').vote === 'bear' && leg(hash(-0.06), 'hashrate').extreme === true,
+    'hashrate -6% over 30d is miner stress — bear');
+  ok(leg(hash(-0.04), 'hashrate').state === 'checked' && leg(hash(-0.04), 'hashrate').vote === 'neutral',
+    'hashrate inside -5% is checked and silent');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'hashrate').state === 'unchecked',
+    'a missing hashrate is unread, not a pass');
+
+  const cm = W.hgObtcCoinmetricsRead([
+    { AdrActCnt: '800000', TxTfrValMeanUSD: '500', CapMrktCurUSD: '1000000000000' },
+    { AdrActCnt: '1000000', TxTfrValMeanUSD: '400', CapMrktCurUSD: '40000000000' }
+  ]);
+  ok(cm && cm.activeAddresses === 1000000 && cm.nvt === 100, 'NVT is cap / (mean transfer * active addresses)');
+  const rich = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, adrChange30d: 0.1, nvt: 100 } });
+  ok(leg(rich, 'nvt').vote === 'bear', 'NVT 100 is at or above 90 — bear');
+  ok(leg(rich, 'addr').info === true && leg(rich, 'addr').vote === 'neutral',
+    'active addresses render and never vote');
+  const cheap = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, nvt: 40 } });
+  ok(leg(cheap, 'nvt').vote === 'neutral' && leg(cheap, 'nvt').state === 'checked',
+    'NVT under 90 is checked and silent');
+  const noNvt = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, nvt: null } });
+  ok(leg(noNvt, 'nvt').state === 'unchecked', 'a null NVT is unread — it does not pass a gate');
+
+  const rows = [];
+  const ois = [];
+  for (let i = 0; i < 15; i++){
+    rows.push({ t: i, o: 100, h: 101, l: 99, c: 100 + i, v: 1 });
+    ois.push({ oi: 1000 + i, t: i });
+  }
+  for (let i = 15; i < 20; i++){
+    rows.push({ t: i, o: 100, h: 121, l: 99, c: 100 + i, v: 1 });
+    ois.push({ oi: 1014 - (i - 14) * 10, t: i });
+  }
+  const fresh = W.hgObtcOiDivRead(rows, { series: ois });
+  ok(fresh && fresh.dir === 'short', 'price up and open interest down is a fresh bearish divergence');
+  const standingRows = rows.slice();
+  const standingOi = ois.slice();
+  for (let k = 0; k < 5; k++){
+    standingRows.push({ t: 20 + k, o: 120, h: 121, l: 119, c: 120 + k, v: 1 });
+    standingOi.push({ oi: 980 - k, t: 20 + k });
+  }
+  ok(W.hgObtcOiDivRead(standingRows, { series: standingOi }) === null,
+    'the same divergence five bars earlier is a standing bias and does not vote');
+  const board = W.hgObtcFundamentalRegime({ oiDiv: { dir: 'short' }, hashrate: { change30d: -0.08 } });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: board });
+  ok(hw.demote === true && /HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'hashrate stress plus a fresh OI divergence is two witnesses — the long is a watch');
+  const one = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: W.hgObtcFundamentalRegime({ oiDiv: { dir: 'short' } }) });
+  ok(one.demote === false && one.chips.indexOf('OI DIVERGENCE') >= 0,
+    'OI divergence alone does not flip the setup');
 }
 
 console.log('\n== wiring: scan gathers, paint renders, header is honest ==');

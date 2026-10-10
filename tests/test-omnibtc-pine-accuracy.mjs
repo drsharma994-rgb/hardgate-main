@@ -195,5 +195,57 @@ console.log('== a fresh 1h core the other way is a watch; a missing 1h tape is n
   ok(absent.tier === 'clean', 'no 1h argument leaves the 4h confirm standing');
 }
 
+console.log('== a fresh daily core the other way is a watch; a short daily tape is not ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.pineSqueezeMomentum = function(rows){
+    if (rows && rows.length === 260) return { dir: 'short', newShort: true };
+    return { dir: 'long', newLong: true };
+  };
+  const opposed = W.hgObtcApplyPineAccuracy(crown(), bars(280), [], bars(10), bars(260));
+  ok(opposed.tier === 'near' && /1d PINE AGAINST/i.test(opposed.row.pineNote || ''),
+    'a fresh daily squeeze the other way demotes a 4h confirm (' + opposed.row.pineNote + ')');
+  const shortDaily = W.hgObtcApplyPineAccuracy(crown(), bars(280), [], bars(10), bars(12));
+  ok(shortDaily.tier === 'clean' && /PINE CONFIRM/i.test(shortDaily.row.pineNote || ''),
+    'a daily tape too short to read does not invent a refusal');
+}
+
+console.log('== a fresh engulfing body is one indicator vote and does not mint a stop ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.ema = function(vals){ return vals.map(function(){ return 1; }); };
+  W.macdHist = function(vals){ return vals.map(function(){ return 1; }); };
+  W.donchian = function(rows){
+    return { up: rows.map(function(){ return 1e9; }), lo: rows.map(function(){ return -1e9; }) };
+  };
+  function tape(prior, last){
+    const rows = [];
+    for (let i = 0; i < 280; i++) rows.push({ t: i, o: 100, h: 101, l: 99, c: 100, v: 1 });
+    rows[278] = prior;
+    rows[279] = last;
+    return rows;
+  }
+  const bull = tape(
+    { t: 278, o: 102, h: 103, l: 99, c: 100, v: 1 },
+    { t: 279, o: 99, h: 104, l: 98, c: 103, v: 2 }
+  );
+  const crossed = W.hgObtcApplyPineAccuracy(crown(), bull, []);
+  ok(crossed.tier === 'clean' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /Engulfing/.test(crossed.row.pineNote || ''),
+    'one fresh pine plus a bullish engulf keeps the ticket without a new stop (' + crossed.row.pineNote + ')');
+  ok(crossed.row.entry === 100 && crossed.row.stop === 90 && crossed.row.t1 === 120,
+    'the engulfing read does not replace ENTRY / STOP / T1');
+
+  W.pineSqueezeMomentum = function(){ return { dir: 'long', newLong: true }; };
+  const bear = tape(
+    { t: 278, o: 100, h: 103, l: 99, c: 102, v: 1 },
+    { t: 279, o: 103, h: 104, l: 98, c: 99, v: 2 }
+  );
+  const against = W.hgObtcApplyPineAccuracy(crown(), bear, []);
+  ok(against.tier === 'near' && /INDICATOR AGAINST/i.test(against.row.pineNote || '') && /Engulfing/.test(against.row.pineNote || ''),
+    'a fresh bearish engulf refuses the long (' + against.row.pineNote + ')');
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);
