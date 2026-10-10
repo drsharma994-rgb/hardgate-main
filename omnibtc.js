@@ -32,9 +32,12 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              when the host has not warmed it); Deribit 25Δ
                              risk-reversal extremes on the house |8| line;
                              Binance BTCUSDT retail long/short only at the
-                             house 65/35 lines; DVOL + BTC.D (CoinGecko when
-                             the host is dark) are info-only priors that
-                             never vote; the news blackout is a hard REFUSE.
+                             house 65/35 lines; hashrate votes only through
+                             a -5% 30d drop; NVT votes only at or above 90
+                             and a missing NVT is not a pass; a fresh
+                             12-bar OI divergence is one witness. DVOL +
+                             BTC.D and active addresses never vote. The
+                             news blackout is a hard REFUSE.
                              2+ net checked votes against the candidate
                              demote it to watch — one witness never flips a
                              setup. The stack never mints levels and never
@@ -647,7 +650,28 @@ a global hard refresh.
         }catch(eDc){}
       }
     }
+    dir = hgObtcEngulfDir(rows);
+    if (dir) out.fresh.push({ id: 'engulfing', label: 'Engulfing', dir: dir, family: 'indicator' });
     return out;
+  }
+
+  /* One fresh engulfing body in the last five bars. Both directions in that
+     window, or none, is not a vote. This is the MTF engulfing idea run on
+     the tape the desk already holds. It does not mint a stop. */
+  function hgObtcEngulfDir(rows){
+    var n, states, i, o, c, po, pc, bull, bear;
+    if (!rows || rows.length < 7) return null;
+    n = rows.length;
+    states = [];
+    for (i = n - 6; i < n; i++){
+      o = +rows[i].o; c = +rows[i].c; po = +rows[i - 1].o; pc = +rows[i - 1].c;
+      if (!isFinite(o) || !isFinite(c) || !isFinite(po) || !isFinite(pc)) return null;
+      bull = c > o && pc < po && c > po && o < pc;
+      bear = c < o && pc > po && c < po && o > pc;
+      if (bull && bear) return null;
+      states.push(bull ? 1 : (bear ? -1 : 0));
+    }
+    return hgObtcSoleBreak(states);
   }
 
   function hgObtcFamilies(list){
@@ -717,6 +741,10 @@ a global hard refresh.
       f = ind.fresh[i];
       if (f.dir === dir) indAgree.push(f.label);
       else indOppose.push(f.label);
+    }
+    if (rows1h && rows1h.length >= 7){
+      var engulf1h = hgObtcEngulfDir(rows1h);
+      if (engulf1h && engulf1h !== dir) indOppose.push('1h Engulfing');
     }
     var h1Oppose = [], h1Agree = [], d1Oppose = [], d1Agree = [];
     if (rows1h && rows1h.length >= 20){
@@ -2137,6 +2165,9 @@ a global hard refresh.
         extra = extra || {};
         if (gfn('hgObtcGatherExtra')){
           try{ extra = await W.hgObtcGatherExtra(tk.symbol, tk) || extra; }catch(eX){}
+        }
+        if (extra && r4 && gfn('hgObtcOiDivRead') && extra.oiHist){
+          try{ extra.oiDiv = W.hgObtcOiDivRead(r4, extra.oiHist); }catch(eOd){}
         }
         if (gfn('hgContractReportRun')){
           try{

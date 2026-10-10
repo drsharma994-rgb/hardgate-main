@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1293',
-  pack: 'OmniBTC only. A crown is a ticket only when independent pine families agree, or one family plus a second house strategy or a fresh indicator cross. A fresh 1h or daily core the other way leaves a watch. Fear and Greed is read from alternative.me and BTC dominance from CoinGecko when the host has not warmed them. Binance BTCUSDT retail long/short votes only at the house 65/35 lines. One sentiment witness never flips a setup. A missing feed stays unread. The card does not invent levels.',
-  built: '2026-10-10T18:30:01Z'
+  version: 'hg-v1294',
+  pack: 'OmniBTC only. A crown is a ticket only when independent pine families agree, or one family plus a second house strategy or a fresh indicator cross, including a fresh engulfing body. A fresh 1h or daily core the other way leaves a watch. Hashrate votes only through a 30-day drop of 5 percent. NVT votes only at or above 90, and a missing NVT is not a pass. A fresh 12-bar open-interest divergence is one witness. One witness never flips a setup. A missing feed stays unread. The card does not invent levels.',
+  built: '2026-10-10T18:37:09Z'
 };
 
 function hgBuildLabel(b){

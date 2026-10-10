@@ -211,5 +211,41 @@ console.log('== a fresh daily core the other way is a watch; a short daily tape 
     'a daily tape too short to read does not invent a refusal');
 }
 
+console.log('== a fresh engulfing body is one indicator vote and does not mint a stop ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.ema = function(vals){ return vals.map(function(){ return 1; }); };
+  W.macdHist = function(vals){ return vals.map(function(){ return 1; }); };
+  W.donchian = function(rows){
+    return { up: rows.map(function(){ return 1e9; }), lo: rows.map(function(){ return -1e9; }) };
+  };
+  function tape(prior, last){
+    const rows = [];
+    for (let i = 0; i < 280; i++) rows.push({ t: i, o: 100, h: 101, l: 99, c: 100, v: 1 });
+    rows[278] = prior;
+    rows[279] = last;
+    return rows;
+  }
+  const bull = tape(
+    { t: 278, o: 102, h: 103, l: 99, c: 100, v: 1 },
+    { t: 279, o: 99, h: 104, l: 98, c: 103, v: 2 }
+  );
+  const crossed = W.hgObtcApplyPineAccuracy(crown(), bull, []);
+  ok(crossed.tier === 'clean' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /Engulfing/.test(crossed.row.pineNote || ''),
+    'one fresh pine plus a bullish engulf keeps the ticket without a new stop (' + crossed.row.pineNote + ')');
+  ok(crossed.row.entry === 100 && crossed.row.stop === 90 && crossed.row.t1 === 120,
+    'the engulfing read does not replace ENTRY / STOP / T1');
+
+  W.pineSqueezeMomentum = function(){ return { dir: 'long', newLong: true }; };
+  const bear = tape(
+    { t: 278, o: 100, h: 103, l: 99, c: 102, v: 1 },
+    { t: 279, o: 103, h: 104, l: 98, c: 99, v: 2 }
+  );
+  const against = W.hgObtcApplyPineAccuracy(crown(), bear, []);
+  ok(against.tier === 'near' && /INDICATOR AGAINST/i.test(against.row.pineNote || '') && /Engulfing/.test(against.row.pineNote || ''),
+    'a fresh bearish engulf refuses the long (' + against.row.pineNote + ')');
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

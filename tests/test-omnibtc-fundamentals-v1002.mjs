@@ -74,7 +74,7 @@ console.log('== all feeds silent: regime UNKNOWN, nothing faked ==');
   ok(r && r.regime === 'unknown', 'no directional leg measured -> unknown, never a guessed quiet');
   ok(r.bulls === 0 && r.bears === 0 && r.checked === 0, 'no votes invented from empty feeds');
   ok(r.blackout === false, 'no blackout invented from an unread calendar');
-  ok(Array.isArray(r.legs) && r.legs.length === 8, 'eight legs render even when every feed is dark');
+  ok(Array.isArray(r.legs) && r.legs.length === 12, 'twelve legs render even when every feed is dark');
   ok(r.legs.every(function(l){ return l.state === 'unchecked'; }),
     'every dark leg says UNCHECKED — a missing feed is never a neutral vote');
 
@@ -374,8 +374,65 @@ console.log('\n== a dark host fetches the free sentiment reads, and a failure st
     fetch: async function(){ called++; return { ok: true, json: async function(){ return { data: [{ value: '1' }] }; } }; }
   });
   const held = await W3.hgObtcGatherExtra('BTCUSD', TICKER);
-  ok(held.fng.v === 77 && held.dom === 58.4 && called === 0,
-    'a warmed host is not overwritten by the free fetch');
+  ok(held.fng.v === 77 && held.dom === 58.4,
+    'a warmed Fear & Greed and dominance print is not overwritten');
+  ok(called > 0, 'hashrate and CoinMetrics are still asked when the host has no copy');
+}
+
+console.log('\n== hashrate, NVT and OI divergence vote only when measured ==');
+{
+  const W = boot();
+  const hash = function(ch){ return W.hgObtcFundamentalRegime({ hashrate: { change30d: ch } }); };
+  ok(leg(hash(-0.06), 'hashrate').vote === 'bear' && leg(hash(-0.06), 'hashrate').extreme === true,
+    'hashrate -6% over 30d is miner stress — bear');
+  ok(leg(hash(-0.04), 'hashrate').state === 'checked' && leg(hash(-0.04), 'hashrate').vote === 'neutral',
+    'hashrate inside -5% is checked and silent');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'hashrate').state === 'unchecked',
+    'a missing hashrate is unread, not a pass');
+
+  const cm = W.hgObtcCoinmetricsRead([
+    { AdrActCnt: '800000', TxTfrValMeanUSD: '500', CapMrktCurUSD: '1000000000000' },
+    { AdrActCnt: '1000000', TxTfrValMeanUSD: '400', CapMrktCurUSD: '40000000000' }
+  ]);
+  ok(cm && cm.activeAddresses === 1000000 && cm.nvt === 100, 'NVT is cap / (mean transfer * active addresses)');
+  const rich = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, adrChange30d: 0.1, nvt: 100 } });
+  ok(leg(rich, 'nvt').vote === 'bear', 'NVT 100 is at or above 90 — bear');
+  ok(leg(rich, 'addr').info === true && leg(rich, 'addr').vote === 'neutral',
+    'active addresses render and never vote');
+  const cheap = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, nvt: 40 } });
+  ok(leg(cheap, 'nvt').vote === 'neutral' && leg(cheap, 'nvt').state === 'checked',
+    'NVT under 90 is checked and silent');
+  const noNvt = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, nvt: null } });
+  ok(leg(noNvt, 'nvt').state === 'unchecked', 'a null NVT is unread — it does not pass a gate');
+
+  const rows = [];
+  const ois = [];
+  for (let i = 0; i < 15; i++){
+    rows.push({ t: i, o: 100, h: 101, l: 99, c: 100 + i, v: 1 });
+    ois.push({ oi: 1000 + i, t: i });
+  }
+  for (let i = 15; i < 20; i++){
+    rows.push({ t: i, o: 100, h: 121, l: 99, c: 100 + i, v: 1 });
+    ois.push({ oi: 1014 - (i - 14) * 10, t: i });
+  }
+  const fresh = W.hgObtcOiDivRead(rows, { series: ois });
+  ok(fresh && fresh.dir === 'short', 'price up and open interest down is a fresh bearish divergence');
+  const standingRows = rows.slice();
+  const standingOi = ois.slice();
+  for (let k = 0; k < 5; k++){
+    standingRows.push({ t: 20 + k, o: 120, h: 121, l: 119, c: 120 + k, v: 1 });
+    standingOi.push({ oi: 980 - k, t: 20 + k });
+  }
+  ok(W.hgObtcOiDivRead(standingRows, { series: standingOi }) === null,
+    'the same divergence five bars earlier is a standing bias and does not vote');
+  const board = W.hgObtcFundamentalRegime({ oiDiv: { dir: 'short' }, hashrate: { change30d: -0.08 } });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: board });
+  ok(hw.demote === true && /HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'hashrate stress plus a fresh OI divergence is two witnesses — the long is a watch');
+  const one = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: W.hgObtcFundamentalRegime({ oiDiv: { dir: 'short' } }) });
+  ok(one.demote === false && one.chips.indexOf('OI DIVERGENCE') >= 0,
+    'OI divergence alone does not flip the setup');
 }
 
 console.log('\n== wiring: scan gathers, paint renders, header is honest ==');
