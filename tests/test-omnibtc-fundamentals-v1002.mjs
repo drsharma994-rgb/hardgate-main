@@ -53,7 +53,7 @@ function boot(extra){
   vm.createContext(ctx);
   /* hg-v1003: the stack moved to fundamental-stack.js (house-wide, shared);
      omnibtc-engines.js delegates. Load it first, exactly as index.html does. */
-  for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'fundamental-stack.js', 'omnibtc-engines.js', 'omnibtc.js']){
+  for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'fundamental-stack.js', 'hg-perfect-setup.js', 'omnibtc-engines.js', 'omnibtc.js']){
     vm.runInContext(read(f), ctx, { filename: f });
   }
   return ctx;
@@ -449,6 +449,46 @@ console.log('\n== wiring: scan gathers, paint renders, header is honest ==');
       && /W\.hgObtcFundamentalPanelHtml/.test(eng), 'the stack is exported for the tab');
   ok(/one witness never flips/i.test(eng), 'the engine header states the one-witness rule');
   ok(!/dxyMock|dxyMock/i.test(eng), 'the mock macro feed is NOT wired in — no fabricated fundamentals');
+}
+
+console.log('\n== hg-v1295: the sentiment verdict is wired to the shared PERFECT tier ==');
+{
+  const W = boot();
+  // decisive tailwind (2 bulls v 0 bears) reads WITH for a long
+  ok(W.hgObtcFundamentalVerdict({ bulls: 2, bears: 0 }, 'long') === 'with',
+    '2-vote tailwind reads WITH for a long');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 2, bears: 0 }, 'short') === 'against',
+    'the SAME 2-vote bullish read is a decisive headwind for a short');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 3, bears: 1 }, 'long') === 'with',
+    'a 3v1 tailwind is still decisive WITH (2+ net)');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 1, bears: 0 }, 'long') === null,
+    'a single witness stays UNREAD — one witness never flips');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 0, bears: 0 }, 'long') === null,
+    'no checked votes stays UNREAD');
+  ok(W.hgObtcFundamentalVerdict(null, 'long') === null, 'absent stack stays UNREAD');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 2, bears: 0 }, null) === null, 'no direction stays UNREAD');
+
+  // the wiring actually feeds the predicate: a WITH verdict earns PERFECT+
+  const W2 = boot();
+  const c = { dir: 'long', grade: 'A', demoted: false, vetoed: false, oppose: 0, tally: 6,
+    entry: 2300, stop: 2290, t1: 2313 };
+  const reads = { takerFlowVerdict: 'with', fundingAgainst: false, atrRegime: 'HEALTHY',
+    volumeRvol: 1.4, trendQuality: 'TREND', sess: 'participating', fundamentalVerdict: 'with' };
+  const pf = W2.hgPerfectFormation(c, reads);
+  ok(pf.perfect === true && pf.plus === true,
+    'every evidence leg WITH, incl the sentiment tailwind → ★ PERFECT⁺');
+  const readsAgainst = Object.assign({}, reads, { fundamentalVerdict: 'against' });
+  ok(W2.hgPerfectFormation(c, readsAgainst).perfect === false,
+    'a decisive sentiment headwind denies PERFECT (fail-closed belt)');
+  const readsUnread = Object.assign({}, reads, { fundamentalVerdict: undefined });
+  ok(W2.hgPerfectFormation(c, readsUnread).perfect === true,
+    'an UNREAD sentiment leg neither mints nor denies PERFECT');
+
+  const src = read('omnibtc.js');
+  ok(/W\.hgObtcFundamentalVerdict = hgObtcFundamentalVerdict/.test(src),
+    'the verdict helper is exported for the tab and its test');
+  ok(/pfReads\.fundamentalVerdict/.test(src),
+    'the scan wires the verdict into the reads the PERFECT tier consumes');
 }
 
 console.log('\npassed: ' + passed);

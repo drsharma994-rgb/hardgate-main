@@ -1016,6 +1016,23 @@ a global hard refresh.
     };
   }
 
+  /* hg-v1295: the directional FUNDAMENTAL / SENTIMENT verdict the card
+     prints, mapped to the shared PERFECT predicate's leg. Same 2+ net rule
+     the demote uses: a decisive tailwind reads 'with', a decisive headwind
+     reads 'against', anything else stays UNREAD (no verdict). Exported so
+     the wiring is testable and never drifts from the card. */
+  function hgObtcFundamentalVerdict(fund, dir){
+    try{
+      if (!fund || !dir) return null;
+      if (!(fund.bears || fund.bulls)) return null;
+      var against = dir === 'long' ? (fund.bears || 0) : (fund.bulls || 0);
+      var withDir = dir === 'long' ? (fund.bulls || 0) : (fund.bears || 0);
+      if (against - withDir >= 2) return 'against';
+      if (withDir - against >= 2) return 'with';
+      return null;
+    }catch(e){ return null; }
+  }
+
   function hgObtcPerfectFormation(pick, reads){
     if (!pick || !pick.row || !hgObtcHasLevels(pick.row)) return { perfect: false, plus: false, why: ['no pick or levels'] };
     var r = pick.row;
@@ -1659,6 +1676,15 @@ a global hard refresh.
       if (r.dvolState) sLines.push('DVOL ' + (+r.dvolState.dvol).toFixed(1));
       if (isFinite(reads.cvdContext)) { } /* context string below */
       if (reads.cvdContext) sLines.push('CVD ' + reads.cvdContext);
+      /* hg-v1295: the directional free-sentiment verdict (F&G, retail
+         long/short, hashrate, NVT, OI divergence) — read WITH the crown's
+         direction and fed to the shared PERFECT tier. */
+      if (reads.fundamentalVerdict){
+        sLines.push('sentiment stack ' + reads.fundamentalVerdict
+          + ' (feeds ★ PERFECT⁺ — an ' + reads.fundamentalVerdict + ' read is a ' + (reads.fundamentalVerdict === 'with' ? 'tailwind' : 'headwind') + ' the perfect tier must clear)');
+        if (reads.fundamentalVerdict === 'against'){ sVerd = 'AGAINST'; sCls = ' bad'; }
+        else if (reads.fundamentalVerdict === 'with' && sVerd === 'UNREAD') sVerd = 'ALIGNED';
+      }
       html += dim('SENTIMENTAL', sVerd, sCls, sLines);
       /* ---- MACRO: dominance, news, leverage cycle, basis ---- */
       var mLines = [], mVerd = 'UNREAD', mCls = '';
@@ -2532,6 +2558,20 @@ a global hard refresh.
         }catch(eVen){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eVen); }catch(eWv){} }
         try{
           if (fundamental && fundamental.blackout) pfReads.newsRisk = 'blackout';
+          /* hg-v1295: FUNDAMENTAL / SENTIMENT VERDICT — the same directional
+             count the card prints (bears vs bulls from the free sentiment
+             stack: F&G, retail long/short, hashrate, NVT, OI divergence). A
+             decisive 2+ net tailwind WITH the crown's direction reads 'with'
+             (so PERFECT⁺ cannot be earned without it); a decisive 2+ net
+             headwind reads 'against' (a fail-closed belt over the demote
+             rule — such a row is normally already a watch, never a ticket).
+             No decisive checked vote stays UNREAD: no verdict either way. */
+          if (fundamental && pick.row.dir){
+            try{
+              var fndV = hgObtcFundamentalVerdict(fundamental, pick.row.dir);
+              if (fndV) pfReads.fundamentalVerdict = fndV;
+            }catch(eFv){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFv); }catch(eWfv){} }
+          }
           if (pick.row.omniCvdWith === true) pfReads.takerFlowVerdict = 'with';
           else if (pick.row.omniCvdWith === false) pfReads.takerFlowVerdict = 'against';
           /* hg-v1057: TAKER-FLOW ACCEPTANCE — an opposed flow verdict that
@@ -3188,6 +3228,7 @@ a global hard refresh.
       };
     }catch(e){ return null; }
   };
+  W.hgObtcFundamentalVerdict = hgObtcFundamentalVerdict;   /* hg-v1295: fundamental/sentiment leg for the PERFECT tier */
   W.hgObtcPerfectCandidate = hgObtcPerfectCandidate;   /* hg-v1035: the PERFECT tier */
   W.hgObtcPerfectFormation = hgObtcPerfectFormation;
   W.hgObtcPerfectStamp = hgObtcPerfectStamp;

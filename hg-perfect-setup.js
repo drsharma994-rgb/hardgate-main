@@ -40,6 +40,10 @@ Two tiers of legs, stated plainly:
       hg-v1057)
     - spot-vs-perp CVD context AGAINST / PERP-ONLY (both books oppose, or a
       leverage-driven move with spot not participating; hg-v1057)
+    - fundamental/sentiment verdict AGAINST (a decisive tailwind for the
+      OTHER side from the free sentiment stack — Fear & Greed, retail
+      long/short, hashrate, NVT, OI divergence; fed by the BTC crown so the
+      perfect tier reads the same combined read the card prints)
 
 The reason it never *requires* the evidence legs to be READABLE is honesty:
 a missing feed must not be able to either mint or deny a PERFECT. A candidate
@@ -294,6 +298,18 @@ function hgPerfectFormation(c, reads){
       leg.goldFreeWith = true;
       leg.goldFreeReadable = true;
     }
+    /* hg-v1295: FUNDAMENTAL / SENTIMENT VERDICT — the directional tailwind
+       read off the free sentiment stack (Fear & Greed, BTC retail long/short,
+       hashrate stress, NVT, OI divergence). 'against' is a decisive headwind
+       for the OTHER side and disqualifies; 'with' is a decisive tailwind and
+       earns the max-confluence tier only if nothing else readable is neutral.
+       Absent (no decisive checked vote) stays UNREAD — it neither confirms
+       nor denies. Most desks do not feed it, so it stays null for them and
+       the tier is unchanged. */
+    var sent = reads.fundamentalVerdict != null ? reads.fundamentalVerdict : c.fundamentalVerdict;
+    if (sent === 'against'){ out.why.push('fundamental/sentiment stack against'); return out; }
+    leg.sentWith = (sent === 'with');
+    leg.sentReadable = (sent === 'with' || sent === 'against');
 
     out.perfect = true;
 
@@ -310,7 +326,7 @@ function hgPerfectFormation(c, reads){
     var anyReadable = !!(leg.flowReadable || leg.fundReadable || leg.atrReadable
       || leg.strucReadable || leg.newsReadable || leg.sessReadable || leg.volReadable
       || leg.tqReadable || leg.levReadable || leg.onchainReadable || leg.cvdReadable
-      || goldConfReadable || leg.goldFreeReadable);
+      || goldConfReadable || leg.goldFreeReadable || leg.sentReadable);
     /* hg-v1291: `plus` is coerced to a STRICT boolean. It was assigned only on
        the success path and the OR chain could collapse to `undefined`, so a
        caller asserting `plus === false` read a three-state leak. Two suites
@@ -328,7 +344,8 @@ function hgPerfectFormation(c, reads){
              && (!leg.onchainReadable || leg.onchainWith)
              && (!leg.cvdReadable || leg.cvdWith)
              && (!goldConfReadable || goldConfWith)
-             && (!leg.goldFreeReadable || leg.goldFreeWith));
+             && (!leg.goldFreeReadable || leg.goldFreeWith)
+             && (!leg.sentReadable || leg.sentWith));
 
     return out;
   }catch(e){
