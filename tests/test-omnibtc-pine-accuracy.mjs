@@ -195,5 +195,21 @@ console.log('== a fresh 1h core the other way is a watch; a missing 1h tape is n
   ok(absent.tier === 'clean', 'no 1h argument leaves the 4h confirm standing');
 }
 
+console.log('== a fresh daily core the other way is a watch; a short daily tape is not ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.pineSqueezeMomentum = function(rows){
+    if (rows && rows.length === 260) return { dir: 'short', newShort: true };
+    return { dir: 'long', newLong: true };
+  };
+  const opposed = W.hgObtcApplyPineAccuracy(crown(), bars(280), [], bars(10), bars(260));
+  ok(opposed.tier === 'near' && /1d PINE AGAINST/i.test(opposed.row.pineNote || ''),
+    'a fresh daily squeeze the other way demotes a 4h confirm (' + opposed.row.pineNote + ')');
+  const shortDaily = W.hgObtcApplyPineAccuracy(crown(), bars(280), [], bars(10), bars(12));
+  ok(shortDaily.tier === 'clean' && /PINE CONFIRM/i.test(shortDaily.row.pineNote || ''),
+    'a daily tape too short to read does not invent a refusal');
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

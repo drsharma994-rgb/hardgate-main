@@ -28,13 +28,17 @@ invoked (squeeze, PINE and structure were listed and never wired):
   ONCHAIN / TERM / CARRY ... evidence only — confirm / demote / refuse
   FUNDAMENTAL STACK ........ hg-v1002, evidence only (omnibtc-engines.js):
                              FEAR & GREED extremes contrarian on the house
-                             S2 80/20 lines; Deribit 25Δ risk-reversal
-                             extremes on the house |8| line; DVOL + BTC.D
-                             are info-only priors that never vote; the news
-                             blackout is a hard REFUSE. 2+ net checked votes
-                             against the candidate demote it to watch — one
-                             witness never flips a setup. The stack never
-                             mints levels and never moves rank math.
+                             S2 80/20 lines (alternative.me, fetched here
+                             when the host has not warmed it); Deribit 25Δ
+                             risk-reversal extremes on the house |8| line;
+                             Binance BTCUSDT retail long/short only at the
+                             house 65/35 lines; DVOL + BTC.D (CoinGecko when
+                             the host is dark) are info-only priors that
+                             never vote; the news blackout is a hard REFUSE.
+                             2+ net checked votes against the candidate
+                             demote it to watch — one witness never flips a
+                             setup. The stack never mints levels and never
+                             moves rank math. A missing feed stays unread.
   PINE ..................... READ ONLY snapshot. pineScan() does not mint a
                              signal the PINE tab did not already produce.
                              The ten house pine cores also run on this
@@ -47,8 +51,8 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              strategy already has levels the same way, or one
                              family fired fresh and a house indicator (EMA
                              20/50, MACD histogram, Donchian 20) crossed fresh
-                             the same way. A fresh 1h core the other way
-                             leaves a watch. A standing bias is not a fresh
+                             the same way. A fresh 1h or 1d core the other
+                             way leaves a watch. A standing bias is not a fresh
                              signal. A script that did not fire is not a
                              vote. A script that is not loaded stays unread.
   REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
@@ -688,7 +692,7 @@ a global hard refresh.
      measure the same idea are one read. Silence and opposition are not
      tickets. An unloaded bank, a missing tape, and an indicator that did
      not cross stay unread. */
-  function hgObtcApplyPineAccuracy(pick, rows, cands, rows1h){
+  function hgObtcApplyPineAccuracy(pick, rows, cands, rows1h, rows1d){
     if (!pick || !pick.row) return pick;
     if (!rows || rows.length < 20){
       pick.row.pineNote = 'pine bank unread — no 4h tape, so the scripts were not run';
@@ -714,13 +718,21 @@ a global hard refresh.
       if (f.dir === dir) indAgree.push(f.label);
       else indOppose.push(f.label);
     }
-    var h1Oppose = [], h1Agree = [];
+    var h1Oppose = [], h1Agree = [], d1Oppose = [], d1Agree = [];
     if (rows1h && rows1h.length >= 20){
       var book1 = hgObtcPineBook(rows1h);
       for (i = 0; i < book1.fresh.length; i++){
         f = book1.fresh[i];
         if (f.dir === dir) h1Agree.push(f.label);
         else h1Oppose.push(f.label);
+      }
+    }
+    if (rows1d && rows1d.length >= 20){
+      var bookD = hgObtcPineBook(rows1d);
+      for (i = 0; i < bookD.fresh.length; i++){
+        f = bookD.fresh[i];
+        if (f.dir === dir) d1Agree.push(f.label);
+        else d1Oppose.push(f.label);
       }
     }
     var cores = hgObtcCoreAgree(cands, pick.row);
@@ -743,8 +755,13 @@ a global hard refresh.
       return hgObtcDemoteWatch(pick, '1h PINE AGAINST — ' + h1Oppose.join(', ')
         + ' fired the other way on the 1h tape. Watch only, not a ticket.');
     }
+    if (d1Oppose.length){
+      return hgObtcDemoteWatch(pick, '1d PINE AGAINST — ' + d1Oppose.join(', ')
+        + ' fired the other way on the daily tape. Watch only, not a ticket.');
+    }
     var extra = (indAgree.length ? (' · ' + indAgree.join(', ') + ' crossed the same way') : '')
-      + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '');
+      + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '')
+      + (d1Agree.length ? (' · 1d agrees: ' + d1Agree.join(', ')) : '');
     if (fams.length >= 2){
       pick.row.pineNote = 'PINE CONFIRM — ' + agree.join(', ')
         + (cores.length ? (' · also ' + cores.join(', ')) : '')
@@ -759,7 +776,8 @@ a global hard refresh.
     if (fams.length === 1 && indAgree.length >= 1){
       pick.row.pineNote = 'PINE + INDICATOR — ' + agree.join(', ') + ' fresh, and '
         + indAgree.join(', ') + ' crossed the same way'
-        + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '');
+        + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '')
+        + (d1Agree.length ? (' · 1d agrees: ' + d1Agree.join(', ')) : '');
       return pick;
     }
     if (fams.length === 1 && agree.length === 1){
@@ -2216,7 +2234,7 @@ a global hard refresh.
             && c.entry === pick.row.entry && c.stop === pick.row.stop;
         })[0];
         winnerRows = match && match._rows;
-        try{ hgObtcApplyPineAccuracy(pick, winnerRows, all, match && match._rows1); }catch(ePine){}
+        try{ hgObtcApplyPineAccuracy(pick, winnerRows, all, match && match._rows1, match && match._rows1d); }catch(ePine){}
         /* hg-v1051: ENTRY-EDGE REFINEMENT — the pick's entry is snapped
            to the structure edge the house exact-entry seam prices (edge
            signal / swing enrichment on the winner's own tape), then

@@ -29,6 +29,11 @@ EVIDENCE, not tickets:
   ONE WITNESS NEVER FLIPS A SETUP. 2+ net votes with the direction print a
   TAILWIND chip. Chips inform, gates decide: the stack never mints levels,
   never moves rank math, and an unread feed stays UNCHECKED, never faked.
+  When the host has not warmed Fear & Greed or BTC dominance, the gather
+  asks alternative.me and CoinGecko once. A failed fetch stays unread.
+  Binance BTCUSDT global long/short (free, 4h) votes only at the house
+  65/35 retail lines — inside the band it is checked and silent. One
+  crowded print still cannot flip a setup by itself.
   hg-v1003: the stack itself now lives in fundamental-stack.js — one shared
   asset-aware source of truth for every crypto and gold desk; the
   hgObtcFundamental* wrappers below delegate to it and fail open without it.
@@ -715,14 +720,51 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     return [];
   }
 
+  /* Binance global long/short, account-weighted. The house fade lines live
+     in positioning.js (65 / 35). Inside the band the print is checked and
+     casts no vote. A missing or out-of-range print stays unread. */
+  function hgObtcRetailLeg(extra){
+    var ls = extra && extra.retailLs;
+    var pct = ls && ls.latest ? +ls.latest.longPct : NaN;
+    if (!isFinite(pct) || pct < 0 || pct > 100){
+      return { key: 'retail', label: 'RETAIL LONG/SHORT', vote: 'neutral', state: 'unchecked',
+        text: 'Binance BTCUSDT global long/short absent' };
+    }
+    var vote = pct >= 65 ? 'bear' : (pct <= 35 ? 'bull' : 'neutral');
+    return { key: 'retail', label: 'RETAIL LONG/SHORT', vote: vote, state: 'checked',
+      extreme: vote !== 'neutral',
+      text: pct.toFixed(1) + '% long'
+        + (vote === 'bear' ? ' — crowded long (house >=65 fade)'
+          : vote === 'bull' ? ' — crowded short (house <=35 fade)'
+          : ' — inside 35-65, no vote') };
+  }
+
+  function hgObtcWithRetail(r, extra){
+    var i, leg;
+    if (!r || !Array.isArray(r.legs)) return r;
+    for (i = 0; i < r.legs.length; i++){
+      if (r.legs[i] && r.legs[i].key === 'retail') return r;
+    }
+    leg = hgObtcRetailLeg(extra);
+    r.legs.push(leg);
+    if (leg.state !== 'checked') return r;
+    r.checked = (r.checked || 0) + 1;
+    if (leg.vote === 'bull') r.bulls = (r.bulls || 0) + 1;
+    else if (leg.vote === 'bear') r.bears = (r.bears || 0) + 1;
+    if ((r.bulls || 0) === 0 && (r.bears || 0) === 0) r.regime = 'quiet';
+    else if (r.bulls === r.bears) r.regime = 'mixed';
+    else r.regime = r.bulls > r.bears ? 'bullish' : 'bearish';
+    return r;
+  }
+
   function hgObtcFundamentalRegime(extra){
     if (gfn('hgFundamentalRegime')){
       try{
         var r = W.hgFundamentalRegime('btc', extra || {});
-        if (r && Array.isArray(r.legs)) return r;
+        if (r && Array.isArray(r.legs)) return hgObtcWithRetail(r, extra);
       }catch(e){}
     }
-    return { regime: 'unknown', bulls: 0, bears: 0, checked: 0, blackout: false, legs: [] };
+    return hgObtcWithRetail({ regime: 'unknown', bulls: 0, bears: 0, checked: 0, blackout: false, legs: [] }, extra);
   }
 
   function hgObtcFundamentalPanelHtml(regime){
@@ -797,6 +839,7 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
             if (l.key === 'fng') out.chips.push('F&G EXTREME');
             else if (l.key === 'rr25d') out.chips.push('RR25 EXTREME');
             else if (l.key === 'dvol') out.chips.push('DVOL EXTREME');
+            else if (l.key === 'retail') out.chips.push('RETAIL EXTREME');
           });
         }
       } else {
@@ -840,11 +883,41 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     try{
       ctx.fundamental = hgObtcFundamentalRegime({
         onchain: ctx.onchain, term: ctx.term, carry: ctx.carry,
-        fng: extra.fng, dom: extra.dom,
+        fng: extra.fng, dom: extra.dom, retailLs: extra.retailLs,
         options: extra.options, dvol: extra.dvol, news: extra.news
       });
     }catch(e3){}
     return ctx;
+  }
+
+  /* Free sentiment reads. A host value wins. A failed fetch is not cached
+     as a number. Ten minutes is enough that the second venue leg does not
+     ask again. */
+  var __obtcSentAt = { fng: 0, dom: 0 };
+  var __obtcSentVal = { fng: null, dom: null };
+  var OBTC_SENT_MS = 10 * 60 * 1000;
+
+  function hgObtcSentTake(key){
+    if (__obtcSentVal[key] == null) return null;
+    if ((Date.now() - __obtcSentAt[key]) > OBTC_SENT_MS) return null;
+    return __obtcSentVal[key];
+  }
+  function hgObtcFinitePct(v){
+    if (v === null || v === undefined || v === '') return false;
+    var n = +v;
+    return isFinite(n) && n > 0 && n <= 100;
+  }
+  function hgObtcSentKeep(key, val){
+    __obtcSentVal[key] = val;
+    __obtcSentAt[key] = Date.now();
+  }
+  async function hgObtcFetchJson(url){
+    if (typeof fetch !== 'function') return null;
+    try{
+      var res = await fetch(url, { cache: 'no-store' });
+      if (!res || res.ok === false || typeof res.json !== 'function') return null;
+      return await res.json();
+    }catch(eFj){ return null; }
   }
 
   async function hgObtcGatherExtra(sym, ticker){
@@ -893,16 +966,46 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     }catch(eBf){ extra.btcFundingBinance = null; }
     extra.term = evidenceFromExtra(extra).term;
     extra.carry = evidenceFromExtra(extra).carry;
-    /* hg-v1002: sentiment / options positioning / event risk join the
-       evidence bag. STATE-ONLY reads — the Deribit book is boot-warmed
-       (HG_warmups 'dvol'), so a scan never refetches it; F&G and BTC.D
-       sit on the host S; hgNewsRisk is synchronous by contract. */
+    /* Sentiment. The host wins when it already has a number. Otherwise one
+       free read: alternative.me Fear & Greed, CoinGecko BTC dominance, and
+       Binance BTCUSDT global long/short. A failure stays unread. */
     try{
       if (extra.fng === undefined){ var hS = hostS(); extra.fng = (hS && hS.fng) ? hS.fng : null; }
     }catch(eF){}
     try{
+      if (!(extra.fng && isFinite(+extra.fng.v))){
+        var cachedF = hgObtcSentTake('fng');
+        if (cachedF) extra.fng = cachedF;
+        else {
+          var fj = await hgObtcFetchJson('https://api.alternative.me/fng/?limit=1');
+          var fd = fj && fj.data && fj.data[0];
+          if (fd && isFinite(+fd.value)){
+            extra.fng = { v: +fd.value, c: String(fd.value_classification || '') };
+            hgObtcSentKeep('fng', extra.fng);
+          }
+        }
+      }
+    }catch(eFf){}
+    try{
       if (extra.dom === undefined){ var hS2 = hostS(); extra.dom = (hS2 && hS2.dom != null) ? hS2.dom : null; }
     }catch(eD){}
+    try{
+      if (!hgObtcFinitePct(extra.dom)){
+        var cachedD = hgObtcSentTake('dom');
+        if (hgObtcFinitePct(cachedD)) extra.dom = cachedD;
+        else {
+          var gj = await hgObtcFetchJson('https://api.coingecko.com/api/v3/global');
+          var btcDom = gj && gj.data && gj.data.market_cap_percentage && +gj.data.market_cap_percentage.btc;
+          if (isFinite(btcDom)){ extra.dom = btcDom; hgObtcSentKeep('dom', btcDom); }
+        }
+      }
+    }catch(eDg){}
+    try{
+      if (gfn('binanceLongShort')){
+        var ls = await W.binanceLongShort('BTCUSDT', '4h', 6);
+        extra.retailLs = (ls && ls.latest && isFinite(+ls.latest.longPct)) ? ls : null;
+      }
+    }catch(eLs){ extra.retailLs = null; }
     try{ if (gfn('deribitOptionsState')) extra.options = W.deribitOptionsState(); }catch(eO){}
     try{ if (gfn('deribitVolState')) extra.dvol = W.deribitVolState(); }catch(eV){}
     try{ if (gfn('hgNewsRisk')) extra.news = W.hgNewsRisk('BTC'); }catch(eN){}
