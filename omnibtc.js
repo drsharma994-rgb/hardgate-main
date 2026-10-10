@@ -185,6 +185,388 @@ a global hard refresh.
     }
   }
 
+  /* hg-v1297: THE OMNIBTC FREE-FEEDS AND INDICATOR-STACK MARKS — the gold-side
+     hg-v1162-v1167 shape on this desk, built from what the scan already
+     holds and nothing more. Nine three-state free: marks (DXY / 10Y /
+     real-yield / VIX / BTC.D / stables 7d / F&G extreme / rotation season /
+     news blackout) read off the context the pfReads block already assembled,
+     and ten three-state ind: marks (ADX / DMI / BB squeeze / BB outside /
+     RSI14 / KER20 / ATR expand / vol>MA / TSMOM24h / Hurst1d) computed on
+     the record's OWN tape (4h for swing records, 15m for scalp records
+     via hg-v1046 — the daily leg rides match._rows1d for Hurst).
+
+     Every mark is three-state (hg-v989: true WITH / false AGAINST / absent
+     NOT MEASURED). State reads (vixRising, stables7dPct, newsBlackout, every
+     ind: state read like adxTrending or bbSqueeze) read the same on long and
+     short because a regime is not a side; direction-aware reads (dxyTrend,
+     tnxTrend, realYieldTilt, btcdHigh, btcSeason, every ind: *With) flip
+     with the plan's direction. Nothing is coerced: +null, '1', 'LONG', etc.
+     each return undefined, never a guessed boolean (the +null === 0 trap).
+
+     No gate reads any of the nineteen keys (asserted in the guard). The
+     ledger carries them under the reads: bag -- the hg-v989 seam which has
+     been open since hg-v1162 shipped the gold-side pattern -- and the
+     forward split (hgFwdReadSplit('OMNIBTC')) measures them out of sample
+     once records settle. hg-v966 refuses a new gate on unmeasured evidence;
+     these ride record-only until the hg-v1294 walker measures them. */
+
+  /* The nine free-feed keys. Each row is [key, kind, derive]. 'dir' kinds
+     flip the semantic with pick.row.dir; 'state' kinds read the same both
+     ways. The derive function returns true/false/undefined and MUST NEVER
+     coerce (hg-v955 strict-boolean rule: a mark that returns a truthy
+     non-boolean is a mark that disagrees with hgFwdReadsNormalize at the
+     door). Reasons each key is DIFFERENT from the top-level enum fields
+     OMNIBTC's record already carries are named in the hg-v1297 AGENTS entry. */
+
+  function hgObtcFreeFeedVerdicts(ctx, dir, sym){
+    var out = {};
+    if (!ctx || typeof ctx !== 'object') return out;
+    if (dir !== 'long' && dir !== 'short') return out;
+    var L = (dir === 'long');
+
+    /* free:fngExtreme — the BIAS S2 sentiment guard as a mark (hg-v992).
+       Delegates to hgFngExtremeMark through W, the one home. true when the
+       guard would veto this direction (F&G >= 80 on a long, <= 20 on a
+       short); false when readable but non-firing; absent on junk / no F&G.
+       hg-v949: no second copy of the >= 80 / <= 20 bar here. */
+    try{
+      var fngVal = null;
+      var f = ctx.fng;
+      if (typeof f === 'number' && isFinite(f)) fngVal = f;
+      else if (f && typeof f === 'object' && typeof f.v === 'number' && isFinite(f.v)) fngVal = f.v;
+      if (fngVal !== null && typeof W.hgFngExtremeMark === 'function'){
+        var fx = W.hgFngExtremeMark(fngVal, dir, sym);
+        if (fx === true || fx === false) out['free:fngExtreme'] = fx;
+      }
+    }catch(eF){}
+
+    /* free:btcSeason — the rotation season vs the trade's direction.
+       Mirrored for shorts: a BTC long is favoured when season is 'btc',
+       disfavoured when 'alt'; a BTC short is favoured when 'alt' (money
+       is leaving BTC), disfavoured when 'btc'. Mixed / unknown is absent.
+       Direction-aware: NOT a simple delegation to hgRotationFavours
+       (which speaks for longs only and returns false on every short). */
+    try{
+      var rot = ctx.rotation;
+      var seas = (rot && typeof rot.season === 'string') ? String(rot.season).toLowerCase() : '';
+      if (seas === 'btc') out['free:btcSeason'] = L;
+      else if (seas === 'alt') out['free:btcSeason'] = !L;
+    }catch(eR){}
+
+    /* free:dxyTrend — DXY 20d trend direction-aware. A rising dollar is
+       risk-off and against a BTC long; falling is WITH. Mirrored for shorts.
+       FLAT or junk or null reads absent. Reads regime.dxyTrend first (the
+       live shell gauge in regime.js), falls back to macro.dxyTrend from
+       getGoldMacroCached() -- both carry the same 20-day trend string. */
+    try{
+      var dxyT = null;
+      if (ctx.regime && typeof ctx.regime.dxyTrend === 'string') dxyT = ctx.regime.dxyTrend;
+      else if (ctx.macro && typeof ctx.macro.dxyTrend === 'string') dxyT = ctx.macro.dxyTrend;
+      if (dxyT === 'RISING' || dxyT === 'FALLING'){
+        var dxyUp = (dxyT === 'RISING');
+        /* up DXY against long: long + up -> false, long + down -> true;
+           short + up -> true, short + down -> false. */
+        out['free:dxyTrend'] = L ? !dxyUp : dxyUp;
+      }
+    }catch(eDx){}
+
+    /* free:tnxTrend — US 10-year yield direction-aware. Rising yields are
+       risk-off and against risk longs (same convention as DXY). Reads
+       macro.tnxTrend from getGoldMacroCached(); macro.js has carried this
+       since hg-v1163 and it is BTC-safe (the 10Y leg is not gold-specific). */
+    try{
+      var tnxT = (ctx.macro && typeof ctx.macro.tnxTrend === 'string') ? ctx.macro.tnxTrend : null;
+      if (tnxT === 'RISING' || tnxT === 'FALLING'){
+        var tnxUp = (tnxT === 'RISING');
+        out['free:tnxTrend'] = L ? !tnxUp : tnxUp;
+      }
+    }catch(eTn){}
+
+    /* free:realYieldTilt — the real-rate tilt (macro.realRateHint:
+       TAILWIND/HEADWIND/NEUTRAL from macro.js). TAILWIND favours a risk
+       long; HEADWIND is against. Mirrored for shorts. NEUTRAL / unread
+       reads absent. */
+    try{
+      var rt = (ctx.macro && typeof ctx.macro.realRateHint === 'string') ? ctx.macro.realRateHint : null;
+      if (rt === 'TAILWIND') out['free:realYieldTilt'] = L;
+      else if (rt === 'HEADWIND') out['free:realYieldTilt'] = !L;
+    }catch(eRy){}
+
+    /* free:vixRising — VIX 20d trend as a state read (true both ways:
+       RISING is risk-off regime, FALLING is risk-on). Reads macro.vixTrend.
+       Not direction-aware -- a regime is not a side (hg-v993 shape). */
+    try{
+      var vixT = (ctx.macro && typeof ctx.macro.vixTrend === 'string') ? ctx.macro.vixTrend : null;
+      if (vixT === 'RISING') out['free:vixRising'] = true;
+      else if (vixT === 'FALLING') out['free:vixRising'] = false;
+    }catch(eVx){}
+
+    /* free:btcdHigh — BTC.D direction-aware. BTC.D > 55% means alt rotation
+       is weak (headwind for alts), favouring a BTC long; BTC.D < 45% means
+       alts are leading, disfavouring BTC. 45-55 is the neutral band and
+       reads absent (hg-v984 uses the same 55% bar for the macro alt filter).
+       Mirrored for shorts: a weakening BTC (BTC.D < 45) favours a BTC short. */
+    try{
+      var btcd = null;
+      if (ctx.regime && typeof ctx.regime.btcdPct === 'number' && isFinite(ctx.regime.btcdPct)){
+        btcd = ctx.regime.btcdPct;
+      } else if (typeof ctx.dom === 'number' && isFinite(ctx.dom)){
+        btcd = ctx.dom;
+      }
+      if (btcd !== null){
+        if (btcd > 55) out['free:btcdHigh'] = L;
+        else if (btcd < 45) out['free:btcdHigh'] = !L;
+      }
+    }catch(eBd){}
+
+    /* free:stables7dPct — stable-coin market cap 7-day % change as a state
+       read. Minting (>= +1.5%) means capital is pouring into stables and
+       waiting on BTC; redemption (<= -1.5%) means it is leaving the ecosystem.
+       Both directions read the same mark (regime, not a side). Inside the
+       band or null reads absent. */
+    try{
+      var st7 = null;
+      if (ctx.regime && ctx.regime.stables && typeof ctx.regime.stables.delta7dPct === 'number'
+          && isFinite(ctx.regime.stables.delta7dPct)) st7 = ctx.regime.stables.delta7dPct;
+      if (st7 !== null){
+        if (st7 >= 1.5) out['free:stables7dPct'] = true;
+        else if (st7 <= -1.5) out['free:stables7dPct'] = false;
+      }
+    }catch(eSt){}
+
+    /* free:newsBlackout — hgNewsRisk('BTC') verdict. true on confirmed
+       blackout (CPI/NFP/FOMC/GDP window), false on readable 'low' (calendar
+       loaded and nothing high-impact nearby). 'high' / 'med' are ambiguous
+       between the two and read absent -- the boolean mark is not fine
+       enough to carry them. hg-v992's unchecked flag reads absent (a dark
+       calendar is NOT MEASURED, never a guessed clear). */
+    try{
+      var nw = ctx.news;
+      if (nw && typeof nw === 'object'){
+        if (nw.unchecked === true){ /* NOT MEASURED, absent */ }
+        else if (nw.blackout === true) out['free:newsBlackout'] = true;
+        else if (nw.risk === 'low' && nw.blackout === false) out['free:newsBlackout'] = false;
+      }
+    }catch(eNw){}
+
+    return out;
+  }
+
+  /* The ten indicator-stack keys. Computed on the record's own tape via
+     the already-globally-exported helpers (adx, rsi, atr, sma, bollinger,
+     ttmSqueeze, hgKaufmanER, hgHurstRS). Numeric reads first (hgObtcIndicatorReads);
+     three-state booleans second (hgObtcIndicatorMarks) with the hg-v989
+     absent-when-ambiguous rule: a reading sitting on a boundary (ADX between
+     20 and 25, RSI exactly 50, KER between 0.3 and 0.6, Hurst between 0.45
+     and 0.55, equal +DI/-DI, zero momentum) is NOT MEASURED, never guessed. */
+
+  function hgObtcIndicatorReads(rows, opts){
+    opts = opts || {};
+    var out = { n: 0 };
+    try{
+      if (!Array.isArray(rows) || rows.length < 30) return out;
+      out.n = rows.length;
+      var closes = rows.map(function(r){ return (r && typeof r.c === 'number' && isFinite(r.c)) ? r.c : NaN; });
+      var vols = rows.map(function(r){ return (r && typeof r.v === 'number' && isFinite(r.v)) ? r.v : NaN; });
+
+      /* ADX14 + DMI */
+      if (typeof W.adx === 'function'){
+        try{
+          var ad = W.adx(rows, 14);
+          if (ad && typeof ad === 'object'){
+            var aArr = Array.isArray(ad.adx) ? ad.adx : null;
+            var pArr = Array.isArray(ad.plusDI) ? ad.plusDI : null;
+            var mArr = Array.isArray(ad.minusDI) ? ad.minusDI : null;
+            if (aArr && aArr.length){
+              var aLast = aArr[aArr.length - 1];
+              if (isFinite(aLast)) out.adx14 = aLast;
+            }
+            if (pArr && pArr.length){
+              var pLast = pArr[pArr.length - 1];
+              if (isFinite(pLast)) out.plusDI = pLast;
+            }
+            if (mArr && mArr.length){
+              var mLast = mArr[mArr.length - 1];
+              if (isFinite(mLast)) out.minusDI = mLast;
+            }
+          }
+        }catch(eA){}
+      }
+
+      /* Bollinger 20,2 + squeeze (BB inside KC) */
+      if (typeof W.bollinger === 'function' && closes.length >= 20){
+        try{
+          var bb = W.bollinger(closes, 20, 2);
+          if (bb && typeof bb === 'object'){
+            var mid = Array.isArray(bb.mid) ? bb.mid[bb.mid.length - 1] : NaN;
+            var up = Array.isArray(bb.upper) ? bb.upper[bb.upper.length - 1] : NaN;
+            var lo = Array.isArray(bb.lower) ? bb.lower[bb.lower.length - 1] : NaN;
+            var c = closes[closes.length - 1];
+            if (isFinite(up) && isFinite(lo) && isFinite(c)){
+              out.bbUpper = up; out.bbLower = lo; out.bbMid = mid; out.bbClose = c;
+              out.bbOutside = (c > up || c < lo);
+            }
+          }
+        }catch(eB){}
+      }
+      if (typeof W.ttmSqueeze === 'function' && rows.length >= 20){
+        try{
+          var sq = W.ttmSqueeze(rows, 20, 2, 20, 1.5);
+          if (sq && typeof sq === 'object'){
+            var sArr = Array.isArray(sq.squeeze) ? sq.squeeze : null;
+            if (sArr && sArr.length){
+              var sLast = sArr[sArr.length - 1];
+              if (sLast === true || sLast === false) out.bbSqueeze = sLast;
+            }
+          }
+        }catch(eSq){}
+      }
+
+      /* RSI14 */
+      if (typeof W.rsi === 'function'){
+        try{
+          var rs = W.rsi(closes, 14);
+          var rArr = Array.isArray(rs) ? rs : null;
+          if (rArr && rArr.length){
+            var rLast = rArr[rArr.length - 1];
+            if (isFinite(rLast)) out.rsi14 = rLast;
+          }
+        }catch(eRs){}
+      }
+
+      /* KER20 (Kaufman efficiency ratio) — returns an array; the last
+         element is the current KER. hg-v955 shape in miniature: a scalar
+         test on an array always reads NaN, so the mark would silently
+         read absent on every record if we used isFinite(ker). */
+      if (typeof W.hgKaufmanER === 'function'){
+        try{
+          var kerArr = W.hgKaufmanER(closes, 20);
+          if (Array.isArray(kerArr) && kerArr.length){
+            var kLast = kerArr[kerArr.length - 1];
+            if (isFinite(kLast)) out.ker20 = kLast;
+          }
+        }catch(eK){}
+      }
+
+      /* ATR14 and ATR50 (expansion test) */
+      if (typeof W.atr === 'function'){
+        try{
+          var a14 = W.atr(rows, 14);
+          var a14Arr = Array.isArray(a14) ? a14 : null;
+          if (a14Arr && a14Arr.length){
+            var a14Last = a14Arr[a14Arr.length - 1];
+            if (isFinite(a14Last)) out.atr14 = a14Last;
+          }
+        }catch(eAt1){}
+        try{
+          if (rows.length >= 50){
+            var a50 = W.atr(rows, 50);
+            var a50Arr = Array.isArray(a50) ? a50 : null;
+            if (a50Arr && a50Arr.length){
+              var a50Last = a50Arr[a50Arr.length - 1];
+              if (isFinite(a50Last)) out.atr50 = a50Last;
+            }
+          }
+        }catch(eAt5){}
+      }
+
+      /* volume vs 20-bar MA */
+      if (vols.length >= 20){
+        try{
+          var volSum = 0, volCount = 0, j;
+          for (j = vols.length - 20; j < vols.length; j++){
+            if (isFinite(vols[j])){ volSum += vols[j]; volCount++; }
+          }
+          var vMa = (volCount >= 15) ? volSum / volCount : NaN;
+          var vLast = vols[vols.length - 1];
+          if (isFinite(vMa) && vMa > 0 && isFinite(vLast)){
+            out.volAboveMa = (vLast > vMa);
+            out.volRatio = vLast / vMa;
+          }
+        }catch(eVl){}
+      }
+
+      /* TSMOM: close vs close N bars ago (24h = 6 bars on 4h, 96 on 15m).
+         Positive = up momentum, negative = down. */
+      try{
+        var tsN = (opts && isFinite(+opts.tsmomN)) ? +opts.tsmomN : 6;
+        if (closes.length > tsN){
+          var cNow = closes[closes.length - 1];
+          var cThen = closes[closes.length - 1 - tsN];
+          if (isFinite(cNow) && isFinite(cThen) && cThen !== 0){
+            out.tsmom = cNow / cThen - 1;
+          }
+        }
+      }catch(eTs){}
+
+      /* Hurst(1d) via fixpack14-core's hgHurstRS. Needs rows1d with >= 60
+         bars; a 4h/15m record whose caller does not pass rows1d records
+         absent (hg-v989: NOT MEASURED, never a guessed trending). */
+      try{
+        if (opts && Array.isArray(opts.rows1d) && opts.rows1d.length >= 60
+            && typeof W.hgHurstRS === 'function'){
+          var closes1d = opts.rows1d.map(function(r){ return (r && typeof r.c === 'number' && isFinite(r.c)) ? r.c : NaN; });
+          var h = W.hgHurstRS(closes1d, 10);
+          if (h && typeof h === 'object' && typeof h.H === 'number' && isFinite(h.H)) out.hurst1d = h.H;
+        }
+      }catch(eH){}
+    }catch(eAll){}
+    return out;
+  }
+
+  function hgObtcIndicatorMarks(ir, dir){
+    var out = {};
+    if (!ir || typeof ir !== 'object') return out;
+    if (dir !== 'long' && dir !== 'short') return out;
+    var L = (dir === 'long');
+
+    /* ind:adxTrending — ADX14 >= 25 trending, <= 20 ranging, between absent */
+    if (typeof ir.adx14 === 'number' && isFinite(ir.adx14)){
+      if (ir.adx14 >= 25) out['ind:adxTrending'] = true;
+      else if (ir.adx14 <= 20) out['ind:adxTrending'] = false;
+    }
+    /* ind:dmiWith — +DI vs -DI direction-aware; absent at exact equal */
+    if (typeof ir.plusDI === 'number' && typeof ir.minusDI === 'number'
+        && isFinite(ir.plusDI) && isFinite(ir.minusDI)){
+      if (ir.plusDI > ir.minusDI) out['ind:dmiWith'] = L;
+      else if (ir.plusDI < ir.minusDI) out['ind:dmiWith'] = !L;
+    }
+    /* ind:bbSqueeze — TTM squeeze state (BB inside KC); state read */
+    if (ir.bbSqueeze === true || ir.bbSqueeze === false) out['ind:bbSqueeze'] = ir.bbSqueeze;
+    /* ind:bbOutside — close outside the 20,2 bands; state read */
+    if (ir.bbOutside === true || ir.bbOutside === false) out['ind:bbOutside'] = ir.bbOutside;
+    /* ind:rsiWith — RSI14 above/below 50 direction-aware; absent at exact 50 */
+    if (typeof ir.rsi14 === 'number' && isFinite(ir.rsi14)){
+      if (ir.rsi14 > 50) out['ind:rsiWith'] = L;
+      else if (ir.rsi14 < 50) out['ind:rsiWith'] = !L;
+    }
+    /* ind:kerTrend — KER >= 0.6 trending, <= 0.3 chop, between absent */
+    if (typeof ir.ker20 === 'number' && isFinite(ir.ker20)){
+      if (ir.ker20 >= 0.6) out['ind:kerTrend'] = true;
+      else if (ir.ker20 <= 0.3) out['ind:kerTrend'] = false;
+    }
+    /* ind:atrExpanding — ATR14 vs ATR50; absent on exact equal or missing */
+    if (typeof ir.atr14 === 'number' && typeof ir.atr50 === 'number'
+        && isFinite(ir.atr14) && isFinite(ir.atr50)){
+      if (ir.atr14 > ir.atr50) out['ind:atrExpanding'] = true;
+      else if (ir.atr14 < ir.atr50) out['ind:atrExpanding'] = false;
+    }
+    /* ind:volAboveMa — state read true both ways */
+    if (ir.volAboveMa === true || ir.volAboveMa === false) out['ind:volAboveMa'] = ir.volAboveMa;
+    /* ind:tsmomWith — direction-aware; absent at exact zero */
+    if (typeof ir.tsmom === 'number' && isFinite(ir.tsmom)){
+      if (ir.tsmom > 0) out['ind:tsmomWith'] = L;
+      else if (ir.tsmom < 0) out['ind:tsmomWith'] = !L;
+    }
+    /* ind:hurstTrending — H >= 0.55 trending, <= 0.45 mean-reverting */
+    if (typeof ir.hurst1d === 'number' && isFinite(ir.hurst1d)){
+      if (ir.hurst1d >= 0.55) out['ind:hurstTrending'] = true;
+      else if (ir.hurst1d <= 0.45) out['ind:hurstTrending'] = false;
+    }
+
+    return out;
+  }
+
   function hgObtcIsBtc(sym){
     try{
       var raw = String(sym || '');
@@ -2759,6 +3141,25 @@ a global hard refresh.
             var on = (pfReads.wmMacroVerdict === 'BUY') && !off;
             pfReads.macroTilt = off ? 'RISK-OFF' : (on ? 'RISK-ON' : (tiltBits.length ? 'NEUTRAL' : 'UNREAD'));
           }catch(eWm){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eWm); }catch(eWwd){} }
+          /* hg-v1297: the free-feed verdicts, direction-aware three-state
+             boolean marks for the nine BTC-safe legs the ledger can split
+             on. Reads from the context the hg-v1064 block above assembled
+             (rg, extra.fng, extra.dom, extra.news) plus the warmed rotation
+             and macro snapshots. All nine marks are either true/false or
+             absent (hg-v989); gate nothing (asserted in the guard). The
+             ledger stamps them on the record via the reads: bag at the
+             fwdRow literal below. */
+          try{
+            var ffCtx = {
+              fng: (extra && extra.fng != null) ? extra.fng : null,
+              dom: (extra && typeof extra.dom === 'number' && isFinite(extra.dom)) ? extra.dom : null,
+              news: (extra && extra.news) ? extra.news : null,
+              regime: rg || null,
+              rotation: (typeof W.rotationState === 'function') ? W.rotationState() : null,
+              macro: (typeof W.getGoldMacroCached === 'function') ? W.getGoldMacroCached() : null
+            };
+            pfReads.freeFeedVerdicts = hgObtcFreeFeedVerdicts(ffCtx, pick.row.dir, 'BTCUSDT');
+          }catch(eFfv){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFfv); }catch(eWfv){} }
           /* hg-v1049: the fire bar's session and the multi-timeframe
              agreement, read off the tapes the desk already holds */
           if (winnerRows && winnerRows.length){
@@ -2941,6 +3342,30 @@ a global hard refresh.
                Three-state: a long/short writes pine*; a null port leaves
                the field absent (NOT MEASURED, hg-v989). */
             var fwdPine = hgObtcPineMarks(fwdTape);
+            /* hg-v1297: the ten indicator-stack marks on the record's own
+               tape, through the one home. ADX / DMI / BB squeeze / BB
+               outside / RSI14 / KER20 / ATR expansion / vol>MA / TSMOM24h
+               and Hurst(1d) on match._rows1d when the caller passed it.
+               Three-state (hg-v989: boundary cases absent, never guessed).
+               tsmomN: 6 bars on 4h ~= 24h; 96 bars on 15m = 24h. */
+            var fwdIndReads = hgObtcIndicatorReads(fwdTape, {
+              rows1d: (match && Array.isArray(match._rows1d) && match._rows1d.length >= 60) ? match._rows1d : null,
+              tsmomN: fwdScalp ? 96 : 6
+            });
+            var fwdIndMarks = hgObtcIndicatorMarks(fwdIndReads, pick.row.dir);
+            /* assemble the reads: bag — the hg-v989 seam which has been
+               open since hg-v1162. Nine free-feed + ten indicator marks
+               = 19 keys, well inside the FWD_READS_MAX=96 cap. Each key
+               is strictly true/false or absent; the normaliser's
+               hgFwdReadsNormalize drops non-booleans at the door. */
+            var fwdReadsBag = {};
+            try{
+              var ff = pfReads.freeFeedVerdicts;
+              if (ff && typeof ff === 'object'){ for (var kFF in ff){ if (ff[kFF] === true || ff[kFF] === false) fwdReadsBag[kFF] = ff[kFF]; } }
+            }catch(eRfF){}
+            try{
+              if (fwdIndMarks && typeof fwdIndMarks === 'object'){ for (var kII in fwdIndMarks){ if (fwdIndMarks[kII] === true || fwdIndMarks[kII] === false) fwdReadsBag[kII] = fwdIndMarks[kII]; } }
+            }catch(eRfI){}
             var fwdRow = {
               sym: 'BTCUSD',
               dir: pick.row.dir,
@@ -2985,7 +3410,11 @@ a global hard refresh.
                  the Bollinger squeeze state, recorded only when readable */
               vwapDevPct: (isFinite(pfReads.vwapDevPct) ? pfReads.vwapDevPct : undefined),
               bbSqueeze: (pfReads.bbSqueeze || undefined),
-              session: (pfReads.sessName || undefined)
+              session: (pfReads.sessName || undefined),
+              /* hg-v1297: the nineteen free: / ind: three-state marks for
+                 the hg-v989 forward split. The normaliser's reads: slot
+                 (hg-forward.js:336) drops non-booleans and caps at 96 */
+              reads: fwdReadsBag
             };
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
             /* hg-v1293: stamp the ten Pine port marks here, AFTER the
@@ -3119,6 +3548,10 @@ a global hard refresh.
      drives the real functions rather than a re-implementation (hg-v967). */
   W.hgObtcPineMarks = hgObtcPineMarks;
   W.hgObtcPineStamp = hgObtcPineStamp;
+  /* hg-v1297: free-feed verdicts + indicator stack reads/marks (one home) */
+  W.hgObtcFreeFeedVerdicts = hgObtcFreeFeedVerdicts;
+  W.hgObtcIndicatorReads = hgObtcIndicatorReads;
+  W.hgObtcIndicatorMarks = hgObtcIndicatorMarks;
   W.HG_OBTC_PINE_FIELDS = HG_OBTC_PINE_FIELDS;
   /* hg-v1294: the OMNIBTC replay literal and its one reader (hg-v921 /
      hg-v955: a generated thing writes itself; a reader with nothing to
