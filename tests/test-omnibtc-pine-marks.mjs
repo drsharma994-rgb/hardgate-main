@@ -378,6 +378,188 @@ console.log('== 10) one home guard: trendtable combined and src-11 agree on the 
 }
 
 /* ------------------------------------------------------------------ */
+/* hg-v1296: the latent defect — hg-v1293 added ten pine* top-level fields
+   and hg-v1295 grew the set to thirteen, both packs stamped them on fwdRow
+   via hgObtcPineStamp, and NEITHER pack added the fields to the forward
+   normaliser's whitelist. The ten (then thirteen) marks were silently
+   stripped at the door on every OMNIBTC record for the entire life of
+   both packs; the forward ledger has never seen a pine mark on OMNIBTC.
+   The hg-v955 shape in my own packs: work done and dropped on the way out.
+   §§11-13 drive the live persistence through the real hgFwdRecordScan ->
+   hgFwdNormalize chain and lock the fix. */
 console.log('');
-console.log(`== hg-v1295 OMNIBTC pine marks: ${passed} passed, ${failed} failed ==`);
+console.log('== 11) hg-v1296: ALL THIRTEEN pine* fields persist through hgFwdNormalize ==');
+{
+  const hgForward = read('hg-forward.js');
+  const ctx = {
+    console: { log(){}, warn(){}, error(){} },
+    Math, Date, isFinite, isNaN, parseFloat, parseInt, JSON, Array, Object,
+    Number, String, Promise, RegExp, Error
+  };
+  ctx.window = ctx; ctx.W = ctx; ctx.globalThis = ctx;
+  ctx.localStorage = { data: {}, getItem(k){ return this.data[k] || null; },
+    setItem(k, v){ this.data[k] = String(v); }, removeItem(k){ delete this.data[k]; } };
+  vm.createContext(ctx);
+  vm.runInContext(hgForward, ctx);
+  const rec = {
+    tab: 'OMNIBTC', mechanic: 'MMOVE', sym: 'BTCUSD', tf: '4h', dir: 'long',
+    entry: 100, stop: 95, t1: 110, barT: 1700000000,
+    mark: 99, ticket: true,
+    pineLorKnn: 'long', pineHalfTrend: 'short', pineSqueeze: 'long',
+    pineSmf: 'short', pineMsb: 'long', pineSmc: 'short', pineCipher: 'long',
+    pineRangeFilter: 'short', pineNwEnvelope: 'long', pineWavwap: 'short',
+    pineSupertrend: 'long', pineMacd: 'short', pineCci: 'long'
+  };
+  const norm = ctx.hgFwdNormalize(rec);
+  ok(norm && typeof norm === 'object', 'hgFwdNormalize returned a record (not null)');
+  const expected = ['pineLorKnn','pineHalfTrend','pineSqueeze','pineSmf','pineMsb',
+                    'pineSmc','pineCipher','pineRangeFilter','pineNwEnvelope','pineWavwap',
+                    'pineSupertrend','pineMacd','pineCci'];
+  for (const k of expected){
+    ok(norm[k] === rec[k], `pine field persists: ${k} = ${rec[k]}`);
+  }
+  const persisted = expected.filter(k => k in norm);
+  ok(persisted.length === 13, `thirteen pine keys survive normalisation (got ${persisted.length})`);
+}
+
+/* ------------------------------------------------------------------ */
+console.log('== 12) hg-v1296: strict three-state — junk values record NOTHING ==');
+{
+  const hgForward = read('hg-forward.js');
+  const ctx = {
+    console: { log(){}, warn(){}, error(){} },
+    Math, Date, isFinite, isNaN, parseFloat, parseInt, JSON, Array, Object,
+    Number, String, Promise, RegExp, Error
+  };
+  ctx.window = ctx; ctx.W = ctx; ctx.globalThis = ctx;
+  ctx.localStorage = { data: {}, getItem(k){ return this.data[k] || null; },
+    setItem(k, v){ this.data[k] = String(v); }, removeItem(k){ delete this.data[k]; } };
+  vm.createContext(ctx);
+  vm.runInContext(hgForward, ctx);
+  const base = {
+    tab: 'OMNIBTC', mechanic: 'MMOVE', sym: 'BTCUSD', tf: '4h', dir: 'long',
+    entry: 100, stop: 95, t1: 110, barT: 1700000000, mark: 99, ticket: true
+  };
+  const junk = [
+    ['pineLorKnn', 'LONG',  'uppercase LONG refused (strict equal)'],
+    ['pineLorKnn', 'Long',  'mixed-case refused'],
+    ['pineLorKnn', 1,       'number 1 refused (+null trap)'],
+    ['pineLorKnn', 0,       'number 0 refused'],
+    ['pineLorKnn', null,    'null refused'],
+    ['pineLorKnn', '',      'empty string refused'],
+    ['pineLorKnn', true,    'boolean true refused'],
+    ['pineLorKnn', {},      'object refused'],
+    ['pineHalfTrend', 'bull', 'synonym "bull" refused'],
+    ['pineCci', 'neutral',  'synonym "neutral" refused']
+  ];
+  for (const [key, val, msg] of junk){
+    const rec = Object.assign({}, base, { [key]: val });
+    const norm = ctx.hgFwdNormalize(rec);
+    /* the normaliser writes every slot as `<k>: ... ? value : undefined`, so
+       the key is always present on `out`; what the hg-v989 three-state rule
+       guarantees is that junk reads back as `undefined` -- NOT MEASURED. */
+    ok(norm[key] === undefined, msg + ' (' + key + ' = ' + JSON.stringify(val) + ')');
+  }
+  /* positive case: a real long is kept */
+  const good = Object.assign({}, base, { pineLorKnn: 'long' });
+  ok(ctx.hgFwdNormalize(good).pineLorKnn === 'long', 'a real long is kept');
+  /* and a real SHORT is kept — the normaliser's 'short' branch exists for a
+     reason, and a mutation that drops it (short becomes a duplicated 'long'
+     check) must be caught. All thirteen keys get the short probe below. */
+  const keys = ['pineLorKnn','pineHalfTrend','pineSqueeze','pineSmf','pineMsb',
+                'pineSmc','pineCipher','pineRangeFilter','pineNwEnvelope','pineWavwap',
+                'pineSupertrend','pineMacd','pineCci'];
+  for (const k of keys){
+    const rec = Object.assign({}, base, { [k]: 'short' });
+    const norm = ctx.hgFwdNormalize(rec);
+    ok(norm[k] === 'short', `real "short" on ${k} is kept (the two-branch guard carries both directions)`);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+console.log('== 13) hg-v1296: round-trip through hgFwdRecordScan — the pine marks reach the stored record ==');
+{
+  const hgForward = read('hg-forward.js');
+  const ctx = {
+    console: { log(){}, warn(){}, error(){} },
+    Math, Date, isFinite, isNaN, parseFloat, parseInt, JSON, Array, Object,
+    Number, String, Promise, RegExp, Error
+  };
+  ctx.window = ctx; ctx.W = ctx; ctx.globalThis = ctx;
+  ctx.localStorage = { data: {}, getItem(k){ return this.data[k] || null; },
+    setItem(k, v){ this.data[k] = String(v); }, removeItem(k){ delete this.data[k]; } };
+  vm.createContext(ctx);
+  vm.runInContext(hgForward, ctx);
+  const rec = {
+    tab: 'OMNIBTC', mechanic: 'MMOVE', sym: 'BTCUSD', tf: '4h', dir: 'long',
+    entry: 100, stop: 95, t1: 110, barT: 1700000000,
+    mark: 99, ticket: true,
+    pineLorKnn: 'long', pineHalfTrend: 'short', pineSqueeze: 'long',
+    pineSmf: 'short', pineMsb: 'long', pineSmc: 'short', pineCipher: 'long',
+    pineRangeFilter: 'short', pineNwEnvelope: 'long', pineWavwap: 'short',
+    pineSupertrend: 'long', pineMacd: 'short', pineCci: 'long'
+  };
+  ctx.hgFwdRecordScan('OMNIBTC', '4h', [rec], { horizonBars: 20 });
+  const recs = ctx.hgFwdRecords('OMNIBTC');
+  ok(recs.length === 1, 'exactly one record stored');
+  const stored = recs[0];
+  const expected = ['pineLorKnn','pineHalfTrend','pineSqueeze','pineSmf','pineMsb',
+                    'pineSmc','pineCipher','pineRangeFilter','pineNwEnvelope','pineWavwap',
+                    'pineSupertrend','pineMacd','pineCci'];
+  for (const k of expected){
+    ok(stored[k] === rec[k], `stored record carries ${k} = ${rec[k]} (not stripped at the door)`);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+console.log('== 14) hg-v1296: drift guard — normaliser accepts exactly what HG_OBTC_PINE_FIELDS stamps ==');
+{
+  /* the stamp site in omnibtc.js is the one home for WHICH fields OMNIBTC
+     writes; the normaliser is the one home for WHICH it accepts. The two
+     must agree, or a future pack extending HG_OBTC_PINE_FIELDS without
+     also extending hgFwdNormalize reintroduces the hg-v1293 defect. */
+  const omnibtc = read('omnibtc.js');
+  const hgForward = read('hg-forward.js');
+  /* read the HG_OBTC_PINE_FIELDS literal — pairs of [src, dst] */
+  const tableMatch = omnibtc.match(/HG_OBTC_PINE_FIELDS\s*=\s*\[([\s\S]*?)\];/);
+  ok(tableMatch, 'HG_OBTC_PINE_FIELDS literal found in omnibtc.js');
+  const stampedKeys = Array.from(tableMatch[1].matchAll(/\[\s*'[^']+'\s*,\s*'([^']+)'\s*\]/g)).map(m => m[1]).sort();
+  ok(stampedKeys.length === 13, `the stamp site writes thirteen pine keys (got ${stampedKeys.length})`);
+  /* every stamped key has a matching normaliser slot */
+  for (const k of stampedKeys){
+    const re = new RegExp('\\b' + k + ':\\s*\\(rec\\.' + k + "\\s*===\\s*'long'");
+    ok(re.test(hgForward), `normaliser carries three-state slot for ${k}`);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+console.log("== 15) hg-v1296: hg-forward.js reads pine* ONLY in the two seams (passthrough + normaliser) ==");
+{
+  /* §8 above swept the gate files for reads bag / row / cand / r / setup / plan
+     access. §15 asserts the same inside hg-forward.js: the thirteen pine keys
+     each appear exactly three times on `rec.<k>` (two in the normaliser's
+     three-state guard: `rec.<k> === 'long'` and `rec.<k> === 'short'`, and one
+     as the value `? rec.<k> : undefined`), plus one `c.<k>` passthrough from
+     hgFwdRecordScan. A fourth `rec.<k>` or a second `c.<k>` would be a reader
+     masquerading as a slot (hg-v955). */
+  const hgForward = read('hg-forward.js');
+  const keys = ['pineLorKnn','pineHalfTrend','pineSqueeze','pineSmf','pineMsb',
+                'pineSmc','pineCipher','pineRangeFilter','pineNwEnvelope','pineWavwap',
+                'pineSupertrend','pineMacd','pineCci'];
+  for (const k of keys){
+    /* three `rec.<k>` occurrences: 'long' guard, 'short' guard, and the value */
+    const recOccurrences = (hgForward.match(new RegExp('\\brec\\.' + k + '\\b', 'g')) || []).length;
+    ok(recOccurrences === 3, `rec.${k} appears exactly three times (normaliser slot: two guards + value) — got ${recOccurrences}`);
+    /* one `c.<k>` occurrence: the hgFwdRecordScan passthrough */
+    const candOccurrences = (hgForward.match(new RegExp('\\bc\\.' + k + '\\b', 'g')) || []).length;
+    ok(candOccurrences === 1, `c.${k} appears exactly once (the hg-v1296 passthrough) — got ${candOccurrences}`);
+    /* two property writes: `<k>: c.<k>,` (passthrough) and `<k>: (rec.<k> === ...` (normaliser slot) */
+    const propWrites = (hgForward.match(new RegExp('(^|[^\\w.])' + k + ':', 'gm')) || []).length;
+    ok(propWrites === 2, `${k}: appears exactly twice as an output property write — got ${propWrites}`);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+console.log('');
+console.log(`== hg-v1296 OMNIBTC pine marks persistence (fixes hg-v1293/v1295 defect): ${passed} passed, ${failed} failed ==`);
 process.exit(failed ? 1 : 0);

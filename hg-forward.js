@@ -515,6 +515,41 @@ localStorage. Never throws.
          number between fire and settle is the residual error, and a record
          that carries it can be asked. */
       iuxShiftPct: (typeof rec.iuxShiftPct === 'number' && isFinite(rec.iuxShiftPct) && Math.abs(rec.iuxShiftPct) <= 5) ? rec.iuxShiftPct : undefined,
+      /* hg-v1296: THE THIRTEEN PINE STATE READER MARKS ON OMNIBTC RECORDS —
+         the latent hg-v1293 / v1295 defect, closed. hg-v1293 added ten pine*
+         state fields through hgObtcPineStamp on every OMNIBTC record; hg-v1295
+         grew the set to thirteen. BOTH packs stamped the fields on `fwdRow`
+         and shipped tests asserting the stamp call wrote them. NEITHER pack
+         added the fields to this normaliser's whitelist, so hgFwdNormalize
+         built `out` without them and every pine mark was DROPPED at the door
+         on every OMNIBTC record for the entire life of both packs. The
+         forward ledger has NEVER seen a single pine mark on OMNIBTC, and
+         hgFwdReadSplit('OMNIBTC') on any pine key returns empty by
+         construction. The hg-v955 shape (work done and dropped on the way
+         out) in my own two packs, caught by driving the live persistence
+         rather than reading only the stamp call. Three-state enum (same
+         rule as macroTilt / basisMom / cvdContext above): the two strings
+         'long' / 'short' write the field, anything else records NOTHING
+         (undefined — NOT MEASURED, hg-v989). A junk value like `'LONG'`
+         or `1` or `null` or `''` is a caller this log does not understand;
+         the honest record is the third state. The thirteen keys mirror
+         HG_OBTC_PINE_FIELDS at omnibtc.js:163; the OMNIBTC stamp site is
+         the one home for which fields OMNIBTC writes, this is the one home
+         for which it accepts, and the guard asserts the two agree by
+         driving a record carrying all thirteen through to settlement. */
+      pineLorKnn: (rec.pineLorKnn === 'long' || rec.pineLorKnn === 'short') ? rec.pineLorKnn : undefined,
+      pineHalfTrend: (rec.pineHalfTrend === 'long' || rec.pineHalfTrend === 'short') ? rec.pineHalfTrend : undefined,
+      pineSqueeze: (rec.pineSqueeze === 'long' || rec.pineSqueeze === 'short') ? rec.pineSqueeze : undefined,
+      pineSmf: (rec.pineSmf === 'long' || rec.pineSmf === 'short') ? rec.pineSmf : undefined,
+      pineMsb: (rec.pineMsb === 'long' || rec.pineMsb === 'short') ? rec.pineMsb : undefined,
+      pineSmc: (rec.pineSmc === 'long' || rec.pineSmc === 'short') ? rec.pineSmc : undefined,
+      pineCipher: (rec.pineCipher === 'long' || rec.pineCipher === 'short') ? rec.pineCipher : undefined,
+      pineRangeFilter: (rec.pineRangeFilter === 'long' || rec.pineRangeFilter === 'short') ? rec.pineRangeFilter : undefined,
+      pineNwEnvelope: (rec.pineNwEnvelope === 'long' || rec.pineNwEnvelope === 'short') ? rec.pineNwEnvelope : undefined,
+      pineWavwap: (rec.pineWavwap === 'long' || rec.pineWavwap === 'short') ? rec.pineWavwap : undefined,
+      pineSupertrend: (rec.pineSupertrend === 'long' || rec.pineSupertrend === 'short') ? rec.pineSupertrend : undefined,
+      pineMacd: (rec.pineMacd === 'long' || rec.pineMacd === 'short') ? rec.pineMacd : undefined,
+      pineCci: (rec.pineCci === 'long' || rec.pineCci === 'short') ? rec.pineCci : undefined,
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -2518,6 +2553,31 @@ localStorage. Never throws.
                split reads them. */
             perfect: c.perfect,
             perfectPlus: c.perfectPlus,
+            /* hg-v1296: THE OMNIBTC PINE STATE MARKS, PASSED THROUGH.
+               hg-v1293 added ten pine* top-level fields on every OMNIBTC
+               candidate via hgObtcPineStamp, and hg-v1295 grew the set to
+               thirteen. NEITHER pack listed them here, so the explicit
+               object below built its payload without them -- the hg-v1168
+               shape, in my own two packs. Added to hgFwdNormalize's
+               whitelist beside this; the normaliser decides which values
+               survive (strict 'long'/'short' three-state, hg-v989). A
+               caller that marks none hands none, and the record carries
+               none exactly as before -- the OMNIBTC seam is the only one
+               known to stamp pine*, but a future tab can hand them in by
+               the same key and ride the same slots. */
+            pineLorKnn: c.pineLorKnn,
+            pineHalfTrend: c.pineHalfTrend,
+            pineSqueeze: c.pineSqueeze,
+            pineSmf: c.pineSmf,
+            pineMsb: c.pineMsb,
+            pineSmc: c.pineSmc,
+            pineCipher: c.pineCipher,
+            pineRangeFilter: c.pineRangeFilter,
+            pineNwEnvelope: c.pineNwEnvelope,
+            pineWavwap: c.pineWavwap,
+            pineSupertrend: c.pineSupertrend,
+            pineMacd: c.pineMacd,
+            pineCci: c.pineCci,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
