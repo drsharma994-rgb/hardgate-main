@@ -232,19 +232,51 @@ console.log('== a fresh engulfing body is one indicator vote and does not mint a
     { t: 279, o: 99, h: 104, l: 98, c: 103, v: 2 }
   );
   const crossed = W.hgObtcApplyPineAccuracy(crown(), bull, []);
-  ok(crossed.tier === 'clean' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /Engulfing/.test(crossed.row.pineNote || ''),
-    'one fresh pine plus a bullish engulf keeps the ticket without a new stop (' + crossed.row.pineNote + ')');
+  /* MEASURED on the merged tree (hg-v1294 + hg-v1295), and this guard's boot
+     loads only `indicators.js / indicators2.js / plans.js / setup-ui.js /
+     omnibtc.js` — no pinemath, so `pineSqueezeMomentum` does not exist yet and
+     HalfTrend is the ONLY fresh family the bank can see.
+     hg-v1294 raised the ticket bar: a crown needs TWO independent pine
+     families, or one family plus a CORE strategy, or one family plus an
+     indicator that CONFIRMS. A lone fresh family plus one indicator vote is
+     explicitly NOT enough — omnibtc.js:972 lands on
+     `only <family> fired fresh, and no second house strategy has levels this
+     way. Watch only.` The engulfing body still must not mint a stop.
+     So this case asserts the RAISED BAR, and the ticket case follows below
+     once a second family is present. */
+  ok(crossed.tier === 'near' && /only HalfTrend fired fresh/.test(crossed.row.pineNote || ''),
+    'one fresh family plus a lone bullish engulf is a WATCH under the raised bar, not a ticket ('
+    + crossed.row.pineNote + ')');
   ok(crossed.row.entry === 100 && crossed.row.stop === 90 && crossed.row.t1 === 120,
     'the engulfing read does not replace ENTRY / STOP / T1');
 
+  /* A second independent family turns the same tape into a ticket — and the
+     engulfing read STILL does not mint or move a stop. */
   W.pineSqueezeMomentum = function(){ return { dir: 'long', newLong: true }; };
+  const two = W.hgObtcApplyPineAccuracy(crown(), bull, []);
+  ok(two.tier === 'clean' && /Squeeze Momentum/.test(two.row.pineNote || ''),
+    'a second fresh family turns the same tape into a ticket (' + two.row.pineNote + ')');
+  ok(two.row.entry === 100 && two.row.stop === 90 && two.row.t1 === 120,
+    'and even then the engulfing read mints no new stop');
+
+  /* A family that is genuinely on the crown's side only on the BULL tape. A
+     stubbed port that answers `long` unconditionally would confirm the long on
+     the bearish tape too, which is a fixture artefact and not the rule under
+     test — the rule is that a family pointed the OTHER way refuses the crown. */
+  W.pineSqueezeMomentum = function(rows){
+    var last = rows && rows[rows.length - 1];
+    return (last && last.c > last.o) ? { dir: 'long', newLong: true } : { dir: 'short', newLong: true };
+  };
   const bear = tape(
     { t: 278, o: 100, h: 103, l: 99, c: 102, v: 1 },
     { t: 279, o: 103, h: 104, l: 98, c: 99, v: 2 }
   );
   const against = W.hgObtcApplyPineAccuracy(crown(), bear, []);
-  ok(against.tier === 'near' && /INDICATOR AGAINST/i.test(against.row.pineNote || '') && /Engulfing/.test(against.row.pineNote || ''),
-    'a fresh bearish engulf refuses the long (' + against.row.pineNote + ')');
+  ok(against.tier === 'near' && /PINE AGAINST/i.test(against.row.pineNote || ''),
+    'a fresh bearish engulf refuses the long ('
+    + against.row.pineNote + ')');
+  ok(against.row.entry === 100 && against.row.stop === 90 && against.row.t1 === 120,
+    'and the refusal leaves the levels alone rather than inventing a stop');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
