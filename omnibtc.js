@@ -1040,6 +1040,28 @@ a global hard refresh.
       if (gfn('hgProvenEdgeVerdict') && btc.length > 1){
         var mechOf = function(r){ return String(r.omniKind || r.kind || r.engine || 'UNKNOWN').toUpperCase().slice(0, 28); };
         var pickMech = mechOf(pick.row);
+        /* hg-v1303: hgPickMostProbableAny routes the candidate through
+           hgNormalizeSetupRow (plans.js), whose field whitelist does NOT
+           carry kind/omniKind/engine — those are re-attached below at the
+           btc.filter(matching entry/stop) block AFTER this override runs.
+           So mechOf(pick.row) reads 'UNKNOWN' here, which hgProvenEdgeVerdict
+           reads as unproven, which means the override's "primary pick is
+           already proven, don't override" short-circuit never fires: the
+           override has been running UNCONDITIONALLY on every scan with any
+           proven-mechanic candidate. Look the mechanic up from btc by
+           matching entry/stop/sym/dir so the short-circuit does its job.
+           hg-v1022 drives the real pick path to prove this restores the
+           primary ranker's choice whenever its mechanic is already proven. */
+        if (pickMech === 'UNKNOWN' && Array.isArray(btc)){
+          for (var pfI = 0; pfI < btc.length; pfI++){
+            var pfRow = btc[pfI];
+            if (pfRow && pfRow.sym === pick.row.sym && pfRow.dir === pick.row.dir
+                && pfRow.entry === pick.row.entry && pfRow.stop === pick.row.stop){
+              var pfMech = mechOf(pfRow);
+              if (pfMech !== 'UNKNOWN'){ pickMech = pfMech; break; }
+            }
+          }
+        }
         var pickV = W.hgProvenEdgeVerdict('omnibtc', pickMech, { pool: 'OMNIBTC', mechanic: pickMech });
         if (!(pickV && pickV.state === 'proven')){
           /* hg-v1302: iterate in a stable order so "first proven" is not
@@ -1533,14 +1555,24 @@ a global hard refresh.
       var im = (pr && pr.indMarks && typeof pr.indMarks === 'object') ? pr.indMarks : null;
       var pm = (pr && pr.pineMarks && typeof pr.pineMarks === 'object') ? pr.pineMarks : null;
       /* Pine marks use bare keys (lor, ht, etc.) not pine:*; map to colon
-         form for one consistent reader. */
+         form for one consistent reader. hg-v1303: resolve the raw
+         'long'/'short' direction against pick.row.dir so WITH/AGAINST
+         matches the plan direction. Previously 'long' always mapped to
+         WITH and 'short' to AGAINST, which inverted every pine row on
+         every SHORT pick (the free: and ind: marks arrive already-resolved
+         as booleans by hgObtcFreeFeedVerdicts / hgObtcIndicatorMarks; only
+         the pine bag carries raw direction strings). A pick with neither
+         'long' nor 'short' direction leaves the pine mark absent (UNREAD),
+         never a guessed verdict (hg-v989 three-state rule). */
       var pmColon = {};
-      if (pm){
+      var planLong = !!(pick && pick.row && pick.row.dir === 'long');
+      var planShort = !!(pick && pick.row && pick.row.dir === 'short');
+      if (pm && (planLong || planShort)){
         for (var k in pm){
           if (!Object.prototype.hasOwnProperty.call(pm, k)) continue;
           var v = pm[k];
-          if (v === 'long') pmColon['pine:' + k] = true;
-          else if (v === 'short') pmColon['pine:' + k] = false;
+          if (v === 'long') pmColon['pine:' + k] = planLong;
+          else if (v === 'short') pmColon['pine:' + k] = planShort;
         }
       }
       var dir = pick.row.dir || '';
@@ -2037,7 +2069,18 @@ a global hard refresh.
       var r = pick.row, reads = r.perfectReads || {};
       var dir = String(r.dir || '').toLowerCase();
       if (dir !== 'long' && dir !== 'short') return '';
-      var entry = +r.entry, stop = +r.stop, t1 = +r.t1, t2 = +r.t2, a = isFinite(reads.atrVal) ? +reads.atrVal : NaN;
+      /* hg-v1303: SCALP/TRAP picks run on 15m bars; use the 15m ATR for
+         Entry Zone (±0.25·ATR) and TP3 (±6.5·ATR) when the pfReads block
+         stored one (atrVal15). The crown recorder uses the same /SCALP|TRAP/i
+         test (fwdScalp) to pick the record's tape, so card and ledger agree.
+         Fail open: no atrVal15 (scalp 15m rows unavailable) → read atrVal
+         (4h, overstated for a scalp, which is the pre-fix shape — kept so
+         a legacy pick never leaves the card without a zone or TP3). */
+      var __obtcScalp = /SCALP|TRAP/i.test(String(r.engine || r.omniKind || r.kind || ''));
+      var __obtcAtrForZone = (__obtcScalp && isFinite(reads.atrVal15))
+          ? +reads.atrVal15
+          : (isFinite(reads.atrVal) ? +reads.atrVal : NaN);
+      var entry = +r.entry, stop = +r.stop, t1 = +r.t1, t2 = +r.t2, a = __obtcAtrForZone;
       if (!(isFinite(entry) && isFinite(stop) && isFinite(t1))) return '';
       var risk = Math.abs(entry - stop);
       var rr = risk > 0 ? Math.abs(t1 - entry) / risk : NaN;
@@ -2060,7 +2103,12 @@ a global hard refresh.
       if (reads.structureTrend) conv.push('EMA50/200 4h: ' + String(reads.structureTrend).toUpperCase());
       if (isFinite(+r.rsi)) conv.push('RSI ' + (+r.rsi).toFixed(1));
       if (isFinite(reads.slotRvol)) conv.push('RVOL ' + (+reads.slotRvol).toFixed(2) + ' vs the 0.6/1.0 house bars');
-      if (isFinite(reads.atrVal)) conv.push('ATR14 ' + (+reads.atrVal).toFixed(2));
+      /* hg-v1303: on a scalp pick we drew the zone and TP3 from the 15m ATR
+         (atrVal15); print that one here so the convergence row matches what
+         the levels were actually drawn on. The 4h ATR is still available
+         through reads.atrVal — on a scalp card both can be useful. */
+      if (isFinite(a)) conv.push('ATR14' + (__obtcScalp ? ' (15m) ' : ' ') + a.toFixed(2));
+      if (__obtcScalp && isFinite(reads.atrVal) && reads.atrVal !== a) conv.push('ATR14 (4h) ' + (+reads.atrVal).toFixed(2));
       if (isFinite(reads.venueFundingPct)) conv.push('funding ' + (+reads.venueFundingPct).toFixed(4) + '%');
       /* ---- the automation blueprint ---- */
       var venue = r.venue ? String(r.venue).toLowerCase() : 'delta';
@@ -2631,7 +2679,17 @@ a global hard refresh.
     try{
       var hit = fn();
       if (!hit) return;
-      if (hit.dir && hit.entry != null && hit.t1 == null && hit.tp != null) hit.t1 = hit.tp;
+      /* hg-v1303: the MEAN REVERSION engine (mrSignal) returns {target}
+         instead of {t1}/{tp}; every firing was silently dropped at
+         hgObtcCandidateFromSignal's isFinite(t1) check for the whole life
+         of this wiring. hgNormalizeSetupRow (plans.js) already accepts
+         'target' as a t1 fallback — matching that here keeps the two
+         readers consistent. Only applied when t1 is absent, so engines
+         that correctly emit t1 are unchanged. */
+      if (hit.dir && hit.entry != null && hit.t1 == null){
+        if (hit.tp != null) hit.t1 = hit.tp;
+        else if (hit.target != null) hit.t1 = hit.target;
+      }
       var c = hgObtcCandidateFromSignal(hit, ticker, { engine: name });
       if (c){
         hgObtcApplyOmniPrincipal(c);
@@ -3373,6 +3431,26 @@ a global hard refresh.
                 if (isFinite(aLast) && aLast > 0) pfReads.atrVal = aLast;
               }
             }catch(eAt2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAt2); }catch(eWa){} }
+          }
+          /* hg-v1303: store the 15m ATR beside the 4h ATR for scalp picks
+             to read. hgObtcSetupCardHtml paints Entry Zone (±0.25·ATR) and
+             TP3 (±6.5·ATR) from pfReads.atrVal; on a SCALP/TRAP pick that
+             runs on 15m bars the 4h ATR is 5-10× the 15m ATR and the zone
+             + TP3 end up 5-10× too wide. The crown recorder already picks
+             match._rows15 for scalp records (/SCALP|TRAP/i, fwdScalp branch
+             below ~3722), so the card can read the right ATR by the same
+             rule. Fails open: no 15m rows, under 20 bars, or no W.atr all
+             leave atrVal15 absent and the card falls back to atrVal, which
+             is correct for swing picks and overstated for scalp picks (the
+             pre-fix shape, kept so a legacy caller never crashes). */
+          if (match && Array.isArray(match._rows15) && match._rows15.length >= 20 && typeof W.atr === 'function'){
+            try{
+              var atrArr15 = W.atr(match._rows15, 14);
+              if (atrArr15 && atrArr15.length){
+                var aLast15 = +atrArr15[atrArr15.length - 1];
+                if (isFinite(aLast15) && aLast15 > 0) pfReads.atrVal15 = aLast15;
+              }
+            }catch(eAt3){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAt3); }catch(eWa2){} }
           }
           /* hg-v1057: LEVERAGE CYCLE — OI % change (coinalyze, 24h) plus the
              last three Binance funding prints. RESET (deleveraging) is the
