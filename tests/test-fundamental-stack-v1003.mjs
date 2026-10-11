@@ -294,17 +294,28 @@ console.log('\n== OMNIBTC delegates to the shared stack, behaviour intact ==');
      F&G reading is still exactly one bear, and every unsupplied leg still
      reports `unchecked` rather than voting. */
   const unchecked = (r.legs || []).filter(l => l.state === 'unchecked').length;
-  /* hg-v1294 grew the OMNIBTC delegate from the shared five-leg BTC board to
-     TWELVE: onchain, term, fng, rr25d, dvol, dom and news from the shared
-     stack, then retail, hashrate, NVT, active addresses and OI divergence.
-     The shared board itself is asserted at seven above and is untouched. What
-     this assertion is FOR is the v1002 SEMANTICS over whatever the board has
-     become: one extreme F&G reading is still exactly one bear, and every leg
-     that was not supplied still reports `unchecked` rather than voting. */
-  ok(r.regime === 'bearish' && r.bears === 1 && r.legs.length === 12 && unchecked === 11,
-    'the delegate returns the shared BTC board with the v1002 semantics, now over twelve legs '
-    + '(got regime=' + r.regime + ' bears=' + r.bears + ' legs=' + (r.legs || []).length
-    + ' unchecked=' + unchecked + ')');
+  const keys = (r.legs || []).map(l => l.key);
+  const checkedLegs = (r.legs || []).filter(l => l.state === 'checked');
+  /* What this assertion is FOR is the v1002 SEMANTICS, not a leg tally — the
+     tally has moved four times (5 -> 9 at hg-v1294, -> 12, -> 13, -> 14 at
+     hg-v1300) and a hard count here is a maintenance tripwire that fails for a
+     reason unrelated to the contract. So: assert the semantics EXACTLY, and
+     make the count a FLOOR plus named-membership checks, which is what actually
+     regresses if a leg is dropped. The shared board itself
+     (hgFundamentalRegime) is asserted at seven above and untouched. */
+  const SETTLED = ['onchain', 'term', 'fng', 'rr25d', 'dvol', 'dom', 'news',
+    'retail', 'hashrate', 'nvt', 'addr', 'oidiv'];
+  const missing = SETTLED.filter(k => keys.indexOf(k) < 0);
+  ok(r.regime === 'bearish' && r.bears === 1 && r.checked === 1
+     && checkedLegs.length === 1 && checkedLegs[0].key === 'fng'
+     && unchecked === r.legs.length - 1 && missing.length === 0
+     && r.legs.length >= SETTLED.length,
+    'the delegate returns the shared BTC board with the v1002 semantics: one extreme F&G reading is '
+    + 'exactly one bear, every unsupplied leg still reports unchecked rather than voting, and no '
+    + 'settled leg has been dropped '
+    + '(got regime=' + r.regime + ' bears=' + r.bears + ' checked=' + r.checked
+    + ' legs=' + r.legs.length + ' unchecked=' + unchecked
+    + (missing.length ? ' MISSING=' + JSON.stringify(missing) : '') + ')');
   const ev = W.hgObtcEvidenceDecide({ dir: 'long', entry: 100, stop: 90, t1: 120 }, {
     fundamental: W.hgObtcFundamentalRegime({
       fng: { v: 85, c: 'Extreme Greed' }, options: { rr25d: { rr25d: -9.2, extreme: true, bias: 'PUTS RICH' } } })

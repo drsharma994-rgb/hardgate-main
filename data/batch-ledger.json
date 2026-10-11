@@ -1,0 +1,10 @@
+{
+  "_readme": "HARDGATE batch-bump ledger. THE RULE: every app update ships a NEW batch number and all five surfaces move together. This file is the record of which batches shipped; tests/test-batch-bump-discipline.mjs fails when build-stamp.js carries a version not listed here, or when the LAST entry is not the live version. WHY A LEDGER: a pure consistency check passes when you edit a module and bump nothing (the tree is consistent on the OLD number) - it catches drift WITHIN a bump, not a MISSING one. Append-only; the guard reads the last entry. TO SHIP: pick the next free number, move build-stamp.js (version + built), sw.js HG_CACHE, trendtable.js (header comment AND the trendtable-src-* loader ?v=), hg-api-base.js (data-v AND the shivagold/shiva-nav ?v=), and every index.html ?v= pin, then append {version, built, note} here.",
+  "batches": [
+    { "version": "hg-v1297", "built": "2026-10-11T07:30:00Z", "note": "OMNIBTC tape-regime stand-down; version triad repaired (trendtable.js and hg-api-base.js had been left behind by a merge, which serves stale trendtable parts from cache)" },
+    { "version": "hg-v1298", "built": "2026-10-11T09:00:00Z", "note": "upstream: RSI cross and liquidity sweep vote; EMA stack does not" },
+    { "version": "hg-v1299", "built": "2026-10-11T10:00:00Z", "note": "upstream: OMNIBTC accuracy verdict made honest end to end" },
+    { "version": "hg-v1300", "built": "2026-10-11T11:00:00Z", "note": "upstream: OMNIBTC smart-dollar spread leg, record bank plus two" },
+    { "version": "hg-v1301", "built": "2026-10-11T12:30:00Z", "note": "test-fundamental-stack-v1003 repaired (its leg tally was pinned at a number upstream had moved four times; it now asserts the v1002 semantics plus named membership); batch-bump discipline enforced by tests/test-batch-bump-discipline.mjs" }
+  ]
+}
