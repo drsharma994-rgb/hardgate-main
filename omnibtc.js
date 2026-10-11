@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — omnibtc.js
+HARDGATE — omnibtc.js (v1302)
 OMNIBTC — Bitcoin only. Every house strategy and indicator bank is pointed
 at BTC, then the desk keeps ONE most-probable setup.
 
