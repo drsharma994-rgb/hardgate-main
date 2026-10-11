@@ -554,13 +554,19 @@ a global hard refresh.
         ? 'PASSED: confirmed by opposite family engine'
         : 'FAILED: no sibling confirmation from opposite family';
 
+      /* hg-v1303: THE SCORE IS NOW ONE TABLE with one home. Before this the
+         six weighted contributions existed only as inline `score +=` lines, so
+         nothing could NAME which of them had actually confirmed a setup — and
+         measured, `accuracyScore` and `crossValidation` were written on every
+         candidate and READ NOWHERE in the repository. The verdict the desk
+         computed was never shown to anyone.
+         The table is now the single source: the score is its sum, and the
+         confirmatory readout below renders the same objects. A future weight
+         can only be added here, so the readout cannot drift from the score. */
+      var parts = hgObtcAccuracyParts(cand, confirmed);
       var score = 0;
-      if (cand.clean) score += 20;
-      if (confirmed) score += 15;
-      if (cand.engine && String(cand.engine).indexOf('PINE') >= 0) score += 10;
-      if (cand.takerFlowWith) score += 10;
-      if (cand.fundamentalAligned) score += 10;
-      if (cand.omniPrincipal === 'pass') score += 5;
+      for (var qi = 0; qi < parts.length; qi++) score += parts[qi].weight;
+      cand.accuracyParts = parts;
       cand.accuracyScore = score;
 
       if (score > bestScore){
@@ -1083,6 +1089,145 @@ a global hard refresh.
     if (r.unchecked === true) return null;      /* unreadable is not a verdict */
     if (r.allow === false && r.reason) return String(r.reason);
     return null;
+  }
+
+  /* hg-v1303: THE CONFIRMATORY SETUP.
+     ------------------------------------------------------------------
+     WHAT WAS WRONG. The desk already assembled an independent-evidence
+     verdict and never showed it. `crossValidation` and `accuracyScore` were
+     stamped on every candidate and read NOWHERE in the repo — measured, three
+     write sites and zero read sites. The six weighted contributions existed
+     only as inline `score +=` lines, so no reader could tell WHICH evidence
+     had confirmed a crown; the card printed the pine note and the evidence
+     chips and nothing about the cross-validation that actually gates the
+     ticket.
+
+     WHAT THIS ADDS. One table (`hgObtcAccuracyParts`) is now the single home
+     of the weights — the score is its sum and the readout renders the same
+     objects, so the two cannot drift. `hgObtcConfirmatoryRead` then composes
+     what the desk already knows into one named read, and
+     `hgObtcConfirmatoryHtml` prints it.
+
+     WHAT IT DELIBERATELY IS NOT. A readout, never a gate. It adds no weight,
+     changes no threshold, and can neither mint nor move a ticket: it reads
+     `fams`/`agree`/`oppose` and the already-stamped flags, and renders them.
+     That is why it is safe on this desk (the hg-v966 trap: weight that can
+     both flood the ticket side and veto). It is also three-state and
+     honest about absence — an unread flow is "unread", not "against"; a
+     quiet fundamental board is "quiet", not a confirmation. */
+  function hgObtcAccuracyParts(row, confirmed){
+    row = row || {};
+    var eng = String(row.engine || row.strategy || '');
+    return [
+      { key: 'gates',      label: 'house gates CLEAN',        weight: row.clean ? 20 : 0,
+        on: !!row.clean, detail: row.clean ? 'every gate cleared' : 'not 7/7 CLEAN' },
+      { key: 'sibling',    label: 'independent opposite family', weight: confirmed ? 15 : 0,
+        on: !!confirmed, detail: confirmed ? 'an opposite-family sibling agrees on symbol AND direction'
+                                          : 'no sibling confirmation from the opposite family' },
+      { key: 'pine',       label: 'pine-led',                  weight: eng.indexOf('PINE') >= 0 ? 10 : 0,
+        on: eng.indexOf('PINE') >= 0, detail: eng.indexOf('PINE') >= 0 ? 'the pick is a pine-led engine' : null },
+      { key: 'flow',       label: 'taker flow WITH',           weight: row.takerFlowWith ? 10 : 0,
+        on: !!row.takerFlowWith, detail: row.takerFlowWith ? 'Binance taker CVD slope agrees with the direction'
+                                                          : 'taker flow unread or not aligned' },
+      { key: 'fundamental',label: 'fundamental board WITH',    weight: row.fundamentalAligned ? 10 : 0,
+        on: !!row.fundamentalAligned, detail: row.fundamentalAligned ? 'at least two checked legs vote WITH and none against'
+                                                                    : 'fundamental board quiet, mixed or thin' },
+      { key: 'principal',  label: 'omni principal pass',       weight: row.omniPrincipal === 'pass' ? 5 : 0,
+        on: row.omniPrincipal === 'pass', detail: row.omniPrincipal === 'pass' ? 'the principal read passes' : null }
+    ];
+  }
+
+  /* The named read. Every field is three-state: a truthy reading, an explicit
+     `against` reading, or absent/unread. Nothing here is invented.
+     The sibling contribution is recovered from the row's OWN crossValidation
+     verdict when the parts table is absent, so this read is self-sufficient on a
+     raw row rather than silently under-reporting the strongest confirmation. */
+  function hgObtcConfirmatoryRead(row){
+    row = row || {};
+    var dir = String(row.dir || '').toLowerCase();
+    var sibConfirmed = row.crossValidation === 'PASSED: confirmed by opposite family engine';
+    var parts = Array.isArray(row.accuracyParts) ? row.accuracyParts : hgObtcAccuracyParts(row, sibConfirmed);
+    /* the score is the parts sum — one home. If the row carries a stamped
+       accuracyScore it must agree, so prefer the stamp and fall back to the sum
+       rather than reporting a different number than the verdict used. */
+    var partsSum = 0;
+    for (var ps = 0; ps < parts.length; ps++) partsSum += parts[ps].weight;
+    /* NB: `+null === 0` and `isFinite(0)` is TRUE, so a plain isFinite(+x) test
+       silently reads an ABSENT score as a real zero — the read then reports 0
+       where the source sums 70. Absence must be tested before coercion. */
+    var hasStamp = row.accuracyScore !== null && row.accuracyScore !== undefined
+      && isFinite(+row.accuracyScore);
+    var readScore = hasStamp ? +row.accuracyScore : partsSum;
+    var with_ = [], absent = [];
+    for (var i = 0; i < parts.length; i++){
+      if (parts[i].on) with_.push(parts[i]);
+      else if (parts[i].detail) absent.push(parts[i]);
+    }
+    var ag = Array.isArray(row.pineAgree) ? row.pineAgree : [];
+    var op = Array.isArray(row.pineOppose) ? row.pineOppose : [];
+    var fams = Array.isArray(row.pineFamilies) ? row.pineFamilies : [];
+    var indA = Array.isArray(row.indAgree) ? row.indAgree : [];
+    var indO = Array.isArray(row.indOppose) ? row.indOppose : [];
+    return {
+      dir: dir || null,
+      /* the evidence families that read this way, by name */
+      pineAgree: ag.slice(), pineOppose: op.slice(), pineFamilies: fams.slice(),
+      indAgree: indA.slice(), indOppose: indO.slice(),
+      /* the already-stamped verdicts, surfaced rather than swallowed */
+      crossValidation: row.crossValidation || null,
+      takerFlowWith: row.takerFlowWith === true ? true : (row.takerFlowWith === false ? false : null),
+      fundamentalAligned: row.fundamentalAligned === true ? true : null,
+      takerFlowState: row.takerFlowWith === true ? 'with' : (row.takerFlowWith === false ? 'against' : 'unread'),
+      parts: parts,
+      withCount: with_.length,
+      absentCount: absent.length,
+      score: readScore,
+      /* the ticket triple gate, reported as it is applied. Same absence rule as
+         the score: no stamp means the read's own sum is the score, not zero. */
+      ticket: !!(row.clean === true && sibConfirmed && readScore >= 30)
+    };
+  }
+
+  function hgObtcConfirmatoryHtml(row){
+    var r = hgObtcConfirmatoryRead(row);
+    if (!r.score && !r.withCount && !r.crossValidation) return '';
+    var h = '<div class="note" data-obtc-confirmatory="1" style="margin-top:6px">';
+    h += '<b>' + (r.ticket ? 'CONFIRMATORY SETUP' : 'CONFIRMATORY READ · NOT A TICKET') + '</b>';
+    h += ' — ' + r.withCount + ' confirmed · ' + r.absentCount + ' unread or unaligned'
+      + (r.score != null ? (' · weighted accuracy ' + r.score + '/70') : '');
+    if (r.dir) h += ' · ' + esc(r.dir.toUpperCase());
+    h += '<div class="dim" style="margin-top:4px">';
+    if (r.withCount){
+      h += 'WITH: ';
+      var bits = [];
+      for (var i = 0; i < r.parts.length; i++) if (r.parts[i].on) bits.push(esc(r.parts[i].label) + ' (+' + r.parts[i].weight + ')');
+      h += bits.join(' · ');
+    } else {
+      h += 'WITH: nothing independent confirmed this yet';
+    }
+    h += '</div>';
+    /* what DISAGREED, named — never folded into the score */
+    if (r.pineOppose.length || r.indOppose.length || r.takerFlowState === 'against'){
+      h += '<div class="dim" style="margin-top:2px">AGAINST: ';
+      var ag2 = [];
+      if (r.pineOppose.length) ag2.push('pine ' + esc(r.pineOppose.join(', ')));
+      if (r.indOppose.length) ag2.push('indicator ' + esc(r.indOppose.join(', ')));
+      if (r.takerFlowState === 'against') ag2.push('taker flow');
+      h += ag2.join(' · ') + '</div>';
+    }
+    h += '<div class="dim" style="margin-top:2px">';
+    h += 'cross-validation: ' + esc(r.crossValidation || 'not evaluated')
+      + ' · taker flow: ' + r.takerFlowState
+      + ' · fundamentals: ' + (r.fundamentalAligned ? 'aligned' : 'not aligned');
+    if (r.pineFamilies.length) h += ' · pine families: ' + esc(r.pineFamilies.join(', '));
+    h += '</div>';
+    if (!r.ticket){
+      h += '<div class="dim" style="margin-top:2px">A ticket needs all three: 7/7 CLEAN, an independent '
+        + 'opposite-family sibling on the same symbol AND direction, and a weighted accuracy of at least 30. '
+        + 'Anything short is shown as a watch, never sent.</div>';
+    }
+    h += '</div>';
+    return h;
   }
 
   /* hg-v1295: THE HIGHER-TIMEFRAME ACCURACY LOCK.
@@ -2462,6 +2607,9 @@ a global hard refresh.
     if (r.venue) html += ' · ' + esc(String(r.venue).toUpperCase());
     html += clean ? ' · ticket' : ' · watch only</div></div>';
     if (r.pineNote) html += '<div class="note" data-obtc-pine="1">' + esc(r.pineNote) + '</div>';
+    /* hg-v1303: the confirmatory read — what independent evidence confirmed
+       this, what disagreed, and what was never read. Readout only. */
+    html += hgObtcConfirmatoryHtml(r);
     if (r.evidenceChips && r.evidenceChips.length){
       html += '<div class="dim" style="width:100%">' + esc(r.evidenceChips.join(' · ')) + '</div>';
     }
