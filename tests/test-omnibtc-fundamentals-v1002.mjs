@@ -74,10 +74,15 @@ console.log('== all feeds silent: regime UNKNOWN, nothing faked ==');
   ok(r && r.regime === 'unknown', 'no directional leg measured -> unknown, never a guessed quiet');
   ok(r.bulls === 0 && r.bears === 0 && r.checked === 0, 'no votes invented from empty feeds');
   ok(r.blackout === false, 'no blackout invented from an unread calendar');
-  /* hg-v1300: TOP TRADERS vs RETAIL is the fourteenth leg */
-  ok(Array.isArray(r.legs) && r.legs.length === 14, 'fourteen legs render even when every feed is dark');
+  /* hg-v1300 added TOP TRADERS vs RETAIL; hg-v1301 added PERP FUNDING and
+     COINBASE PREMIUM - sixteen legs */
+  ok(Array.isArray(r.legs) && r.legs.length === 16, 'sixteen legs render even when every feed is dark');
   ok(r.legs.some(function(l){ return l.key === 'toptrader' && l.state === 'unchecked'; }),
     'the smart-$ spread leg renders UNCHECKED when its feeds are dark');
+  ok(r.legs.some(function(l){ return l.key === 'funding' && l.state === 'unchecked'; }),
+    'the funding leg renders UNCHECKED when its feed is dark');
+  ok(r.legs.some(function(l){ return l.key === 'cbprem' && l.state === 'unchecked'; }),
+    'the Coinbase-premium leg renders UNCHECKED when its feeds are dark');
   ok(r.legs.every(function(l){ return l.state === 'unchecked'; }),
     'every dark leg says UNCHECKED — a missing feed is never a neutral vote');
 
@@ -410,6 +415,57 @@ console.log('\n== hg-v1300: TOP TRADERS vs RETAIL votes only on the house ±15pp
   const crowned = W.hgObtcPick([Object.assign({}, swingLong, { _extra: alignedExtra }), sib]);
   ok(crowned && crowned.tier === 'clean' && crowned.row.fundamentalAligned === true,
     'the aligned stack plus a cross-family sibling crowns the CLEAN ticket');
+}
+
+console.log('\n== hg-v1301: PERP FUNDING votes only past the house ±0.05 line ==');
+{
+  const W = boot();
+  const fund = function(pct){
+    return W.hgObtcFundamentalRegime({ btcFundingBinance: pct });
+  };
+  ok(leg(fund(0.09), 'funding').vote === 'bear' && leg(fund(0.09), 'funding').extreme === true,
+    '+0.09%/8h longs paying past the line is a crowded long — bear');
+  ok(leg(fund(0.05), 'funding').vote === 'bear', 'exactly +0.05 is the house line — bear');
+  ok(leg(fund(-0.05), 'funding').vote === 'bull', 'exactly -0.05 is the house line — bull');
+  ok(leg(fund(-0.12), 'funding').vote === 'bull', 'shorts paying past the line is a crowded short — bull');
+  const mid = leg(fund(0.004), 'funding');
+  ok(mid.state === 'checked' && mid.vote === 'neutral' && !mid.extreme,
+    '+0.004%/8h is checked and silent — inside the line, no vote');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'funding').state === 'unchecked',
+    'no Binance funding print stays unread');
+
+  const alone = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: fund(0.09) });
+  ok(alone.demote === false && alone.chips.indexOf('FUNDING EXTREME') >= 0,
+    'ONE WITNESS NEVER FLIPS A SETUP — funding alone chips and does not demote');
+
+  const both = W.hgObtcFundamentalRegime({ fng: { v: 85, c: 'Extreme Greed' }, btcFundingBinance: 0.09 });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: both });
+  ok(hw.demote === true && /FUNDAMENTAL HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'F&G extreme plus crowded funding is two witnesses — the long becomes a watch');
+  ok(both.bulls === 0 && both.bears === 2, 'the funding vote is counted once, nothing else invented');
+}
+
+console.log('\n== hg-v1301: COINBASE PREMIUM is a disclosed info read, never a vote ==');
+{
+  const W = boot();
+  ok(leg(W.hgObtcFundamentalRegime({}), 'cbprem').state === 'unchecked',
+    'no Coinbase print stays unread');
+  ok(leg(W.hgObtcFundamentalRegime({ cbSpot: 100000 }), 'cbprem').state === 'unchecked',
+    'the premium needs BOTH sides — Coinbase without the Binance mark is unread');
+  ok(leg(W.hgObtcFundamentalRegime({ btcMarkBinance: 100000 }), 'cbprem').state === 'unchecked',
+    'the Binance mark without Coinbase is unread too');
+  const on = W.hgObtcFundamentalRegime({ cbSpot: 100150, btcMarkBinance: 100000 });
+  const l = leg(on, 'cbprem');
+  ok(l.state === 'checked' && l.info === true && l.vote === 'neutral',
+    'a readable premium is INFO — it never votes');
+  ok(/\+15\.0 bp/.test(l.text) && /US spot above/.test(l.text),
+    'the premium prints in basis points: ' + l.text);
+  ok(on.checked === 0 && on.bulls === 0 && on.bears === 0,
+    'the info leg adds no checked count and no vote to the regime');
+  const neg = leg(W.hgObtcFundamentalRegime({ cbSpot: 99700, btcMarkBinance: 100000 }), 'cbprem');
+  ok(/-30\.0 bp/.test(neg.text) && /US spot below/.test(neg.text),
+    'a discount reads below the mark: ' + neg.text);
 }
 
 console.log('\n== a dark host fetches the free sentiment reads, and a failure stays unread ==');
