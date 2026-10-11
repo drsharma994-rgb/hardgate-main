@@ -185,15 +185,17 @@ a global hard refresh.
     }
   }
 
-  /* hg-v1297: THE OMNIBTC FREE-FEEDS AND INDICATOR-STACK MARKS — the gold-side
-     hg-v1162-v1167 shape on this desk, built from what the scan already
-     holds and nothing more. Nine three-state free: marks (DXY / 10Y /
-     real-yield / VIX / BTC.D / stables 7d / F&G extreme / rotation season /
-     news blackout) read off the context the pfReads block already assembled,
-     and ten three-state ind: marks (ADX / DMI / BB squeeze / BB outside /
-     RSI14 / KER20 / ATR expand / vol>MA / TSMOM24h / Hurst1d) computed on
-     the record's OWN tape (4h for swing records, 15m for scalp records
-     via hg-v1046 — the daily leg rides match._rows1d for Hurst).
+  /* hg-v1297/v1299: THE OMNIBTC FREE-FEEDS AND INDICATOR-STACK MARKS -- the
+     gold-side hg-v1162-v1167 shape on this desk, built from what the scan
+     already holds and nothing more. Eleven three-state free: marks (DXY /
+     10Y / real-yield / VIX / BTC.D / stables 7d / F&G extreme / rotation
+     season / news blackout + hg-v1299 BTC-gold corr / curve-slope trend)
+     read off the context the pfReads block already assembled, and thirteen
+     three-state ind: marks (ADX / DMI / BB squeeze / BB outside / RSI14 /
+     KER20 / ATR expand / vol>MA / TSMOM24h / Hurst1d + hg-v1299 SMA50 /
+     SMA200 / Parkinson20) computed on the record's OWN tape (4h for swing
+     records, 15m for scalp records via hg-v1046 -- the daily leg rides
+     match._rows1d for Hurst).
 
      Every mark is three-state (hg-v989: true WITH / false AGAINST / absent
      NOT MEASURED). State reads (vixRising, stables7dPct, newsBlackout, every
@@ -203,7 +205,7 @@ a global hard refresh.
      with the plan's direction. Nothing is coerced: +null, '1', 'LONG', etc.
      each return undefined, never a guessed boolean (the +null === 0 trap).
 
-     No gate reads any of the nineteen keys (asserted in the guard). The
+     No gate reads any of the twenty-four keys (asserted in the guard). The
      ledger carries them under the reads: bag -- the hg-v989 seam which has
      been open since hg-v1162 shipped the gold-side pattern -- and the
      forward split (hgFwdReadSplit('OMNIBTC')) measures them out of sample
@@ -348,6 +350,38 @@ a global hard refresh.
         else if (nw.risk === 'low' && nw.blackout === false) out['free:newsBlackout'] = false;
       }
     }catch(eNw){}
+
+    /* hg-v1299: free:btcGoldCorr -- 20-day daily-return correlation of BTC
+       against gold (from macro.js goldBtcCorr20, computed per hg-v1163).
+       Positive (>= +0.30) = BTC trading like a safe haven alongside gold;
+       negative (<= -0.30) = BTC trading as a risk asset diverging from the
+       haven. STATE read, true both ways (a correlation regime is not a side
+       -- hg-v993's rule). Inside the +/-0.30 band or null reads absent (hg-v989).
+       Strict inequalities so a boundary of exactly +0.30 reads absent -- that
+       boundary is not a regime. Only accepts a finite number; a string or
+       null yields nothing (the +null === 0 trap, pinned in hg-v955). */
+    try{
+      var gbc = (ctx.macro && typeof ctx.macro.goldBtcCorr20 === 'number'
+          && isFinite(ctx.macro.goldBtcCorr20)) ? ctx.macro.goldBtcCorr20 : null;
+      if (gbc !== null){
+        if (gbc >= 0.30) out['free:btcGoldCorr'] = true;
+        else if (gbc <= -0.30) out['free:btcGoldCorr'] = false;
+      }
+    }catch(eGbc){}
+
+    /* hg-v1299: free:curveSlopeTrend -- the US 10y-3m yield curve direction
+       (macro.curveSlopeTrend, hg-v1166). 'STEEPENING' (curve getting wider by
+       >= +0.10) reads true, 'FLATTENING' (narrowing by <= -0.10) reads false,
+       'FLAT'/null/junk reads absent. STATE read, true both ways: steepening
+       usually signals risk-on expectations (growth priced in), flattening is
+       late-cycle risk-off -- the regime is read, not applied for or against
+       a direction (hg-v993). Strict string match -- an arbitrary enum value
+       reads absent, never guessed (hg-v989). */
+    try{
+      var cst = (ctx.macro && typeof ctx.macro.curveSlopeTrend === 'string') ? ctx.macro.curveSlopeTrend : null;
+      if (cst === 'STEEPENING') out['free:curveSlopeTrend'] = true;
+      else if (cst === 'FLATTENING') out['free:curveSlopeTrend'] = false;
+    }catch(eCst){}
 
     return out;
   }
@@ -510,6 +544,71 @@ a global hard refresh.
           if (h && typeof h === 'object' && typeof h.H === 'number' && isFinite(h.H)) out.hurst1d = h.H;
         }
       }catch(eH){}
+
+      /* hg-v1299: SMA50 and SMA200 last values -- classic trend filters, the
+         same ones gold's catalog carries. Direction-aware marks (ind:sma50With,
+         ind:sma200With) read whether the last close sits above (TREND bull) or
+         below (TREND bear) the moving average. sma() comes from indicators2.js
+         (global function declaration lands on window at module load). Returns
+         an array; last element is NaN until len-1 bars are present. */
+      if (typeof W.sma === 'function'){
+        try{
+          if (closes.length >= 50){
+            var s50arr = W.sma(closes, 50);
+            if (Array.isArray(s50arr) && s50arr.length){
+              var s50Last = s50arr[s50arr.length - 1];
+              if (isFinite(s50Last)) out.sma50 = s50Last;
+            }
+          }
+        }catch(eS5){}
+        try{
+          if (closes.length >= 200){
+            var s200arr = W.sma(closes, 200);
+            if (Array.isArray(s200arr) && s200arr.length){
+              var s200Last = s200arr[s200arr.length - 1];
+              if (isFinite(s200Last)) out.sma200 = s200Last;
+            }
+          }
+        }catch(eS2){}
+      }
+
+      /* hg-v1299: Parkinson volatility 20-bar (realised range vol) and its
+         100-window median baseline. Parkinson_t = sqrt((1/4*ln(2)) * mean of
+         ln(h/l)^2 over N bars) -- range-based estimator, more efficient than
+         close-to-close stdev. One home: compute the series once over the
+         available window and compare the last reading against the median of
+         the earlier readings (never its own window, hg-v1158 trap).
+         Non-finite h / l / h<=0 / l<=0 reads NaN; a single NaN inside the
+         20-bar window invalidates that reading. */
+      try{
+        if (rows.length >= 50){
+          var parkSeries = [];
+          var k2 = 1 / (4 * Math.log(2));
+          var pi;
+          for (pi = 19; pi < rows.length; pi++){
+            var sumSq = 0, pok = true;
+            for (var pj = pi - 19; pj <= pi; pj++){
+              var ph = rows[pj] && rows[pj].h;
+              var pl = rows[pj] && rows[pj].l;
+              if (!isFinite(+ph) || !isFinite(+pl) || +ph <= 0 || +pl <= 0){ pok = false; break; }
+              var lgRatio = Math.log(+ph / +pl);
+              sumSq += lgRatio * lgRatio;
+            }
+            if (pok) parkSeries.push(Math.sqrt(k2 * sumSq / 20));
+            else parkSeries.push(NaN);
+          }
+          var parkLast = parkSeries.length ? parkSeries[parkSeries.length - 1] : NaN;
+          if (isFinite(parkLast)){
+            out.park20 = parkLast;
+            var earlier = parkSeries.slice(0, -1).filter(function(v){ return isFinite(v); });
+            if (earlier.length >= 15){
+              earlier.sort(function(a, b){ return a - b; });
+              var mid = Math.floor(earlier.length / 2);
+              out.park20Median = (earlier.length % 2) ? earlier[mid] : (earlier[mid - 1] + earlier[mid]) / 2;
+            }
+          }
+        }
+      }catch(eP){}
     }catch(eAll){}
     return out;
   }
@@ -562,6 +661,35 @@ a global hard refresh.
     if (typeof ir.hurst1d === 'number' && isFinite(ir.hurst1d)){
       if (ir.hurst1d >= 0.55) out['ind:hurstTrending'] = true;
       else if (ir.hurst1d <= 0.45) out['ind:hurstTrending'] = false;
+    }
+
+    /* hg-v1299: ind:sma50With -- direction-aware trend filter. Close above
+       SMA50 is bull trend (WITH a long, AGAINST a short); below is bear
+       trend (mirror). Exact equal reads absent (hg-v989: a boundary is not
+       a side). Needs both SMA and the record's last close. */
+    if (typeof ir.sma50 === 'number' && isFinite(ir.sma50)
+        && typeof ir.bbClose === 'number' && isFinite(ir.bbClose)){
+      if (ir.bbClose > ir.sma50) out['ind:sma50With'] = L;
+      else if (ir.bbClose < ir.sma50) out['ind:sma50With'] = !L;
+    }
+
+    /* hg-v1299: ind:sma200With -- same shape over SMA200 (classic structural
+       trend filter). Strict inequalities so exact-equal reads absent. */
+    if (typeof ir.sma200 === 'number' && isFinite(ir.sma200)
+        && typeof ir.bbClose === 'number' && isFinite(ir.bbClose)){
+      if (ir.bbClose > ir.sma200) out['ind:sma200With'] = L;
+      else if (ir.bbClose < ir.sma200) out['ind:sma200With'] = !L;
+    }
+
+    /* hg-v1299: ind:parkHigh -- state read. Parkinson 20 above median of its
+       prior 100-window readings is a HIGH-VOL regime (true); below is LOW
+       (false). Both ways because a vol regime is not a side (hg-v993). The
+       median is NEVER its own window (hg-v1158 trap). Exact equal reads
+       absent -- no boundary verdicts. */
+    if (typeof ir.park20 === 'number' && typeof ir.park20Median === 'number'
+        && isFinite(ir.park20) && isFinite(ir.park20Median)){
+      if (ir.park20 > ir.park20Median) out['ind:parkHigh'] = true;
+      else if (ir.park20 < ir.park20Median) out['ind:parkHigh'] = false;
     }
 
     return out;

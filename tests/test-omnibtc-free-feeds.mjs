@@ -333,17 +333,23 @@ console.log('== 8) end-to-end: the reads: bag persists through hgFwdRecordScan =
 }
 
 /* ------------------------------------------------------------------ */
-console.log('== 9) NO GATE READS free: / ind: marks — 7 files × 19 keys × 2 shapes = 266 empty cells ==');
+console.log('== 9) NO GATE READS free: / ind: marks — 7 files × 24 keys × 2 shapes = 336 empty cells ==');
 {
   const gateFiles = [
     'cryptogates.js', 'engine.js', 'plans.js', 'hg-gates.js',
     'hg-setup-core.js', 'hg-perfect-setup.js', 'setup-stack.js'
   ];
   const keys = [
+    /* hg-v1297 nine */
     'free:fngExtreme','free:btcSeason','free:dxyTrend','free:tnxTrend','free:realYieldTilt',
     'free:vixRising','free:btcdHigh','free:stables7dPct','free:newsBlackout',
+    /* hg-v1299 two */
+    'free:btcGoldCorr','free:curveSlopeTrend',
+    /* hg-v1297 ten */
     'ind:adxTrending','ind:dmiWith','ind:bbSqueeze','ind:bbOutside','ind:rsiWith',
-    'ind:kerTrend','ind:atrExpanding','ind:volAboveMa','ind:tsmomWith','ind:hurstTrending'
+    'ind:kerTrend','ind:atrExpanding','ind:volAboveMa','ind:tsmomWith','ind:hurstTrending',
+    /* hg-v1299 three */
+    'ind:sma50With','ind:sma200With','ind:parkHigh'
   ];
   let empty = 0, total = 0;
   for (const f of gateFiles){
@@ -359,8 +365,8 @@ console.log('== 9) NO GATE READS free: / ind: marks — 7 files × 19 keys × 2 
       if (!quoted.test(body)) empty++;
     }
   }
-  ok(total === 266, `swept ${total} cells (7 files × 19 keys × 2 shapes)`);
-  ok(empty === 266, `all ${empty}/266 cells empty: no gate reads any of the nineteen marks`);
+  ok(total === 336, `swept ${total} cells (7 files × 24 keys × 2 shapes)`);
+  ok(empty === 336, `all ${empty}/336 cells empty: no gate reads any of the twenty-four marks`);
 }
 
 /* ------------------------------------------------------------------ */
