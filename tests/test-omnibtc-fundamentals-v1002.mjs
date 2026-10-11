@@ -74,7 +74,7 @@ console.log('== all feeds silent: regime UNKNOWN, nothing faked ==');
   ok(r && r.regime === 'unknown', 'no directional leg measured -> unknown, never a guessed quiet');
   ok(r.bulls === 0 && r.bears === 0 && r.checked === 0, 'no votes invented from empty feeds');
   ok(r.blackout === false, 'no blackout invented from an unread calendar');
-  ok(Array.isArray(r.legs) && r.legs.length === 12, 'twelve legs render even when every feed is dark');
+  ok(Array.isArray(r.legs) && r.legs.length === 13, 'thirteen legs render even when every feed is dark');
   ok(r.legs.every(function(l){ return l.state === 'unchecked'; }),
     'every dark leg says UNCHECKED — a missing feed is never a neutral vote');
 
@@ -433,6 +433,15 @@ console.log('\n== hashrate, NVT and OI divergence vote only when measured ==');
     { fundamental: W.hgObtcFundamentalRegime({ oiDiv: { dir: 'short' } }) });
   ok(one.demote === false && one.chips.indexOf('OI DIVERGENCE') >= 0,
     'OI divergence alone does not flip the setup');
+
+  const stack = W.hgObtcFundamentalRegime({ emaStack: { side: 'bull' } });
+  ok(leg(stack, 'emastack').info === true && leg(stack, 'emastack').vote === 'neutral'
+    && leg(stack, 'emastack').state === 'checked',
+    'a bullish EMA 50/200 stack is shown and does not vote');
+  ok(stack.bulls === 0, 'the standing EMA stack does not add a bull vote');
+  const shortTape = W.hgObtcFundamentalRegime({ emaStack: null });
+  ok(leg(shortTape, 'emastack').state === 'unchecked' && /not a pass/.test(leg(shortTape, 'emastack').text),
+    'a tape shorter than 200 bars leaves the EMA stack unread');
 }
 
 console.log('\n== wiring: scan gathers, paint renders, header is honest ==');

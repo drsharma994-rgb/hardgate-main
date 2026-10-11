@@ -46,8 +46,11 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              it, or one family fired fresh and a second house
                              strategy already has levels the same way, or one
                              family fired fresh and a house indicator (EMA
-                             20/50, MACD histogram, Donchian 20) crossed fresh
-                             the same way. A fresh 1h core the other way
+                             20/50, MACD histogram, Donchian 20, a fresh RSI
+                             cross of 50, or a liquidity sweep) crossed fresh
+                             the same way. RSI parked between 40 and 60 is
+                             not a pass. The EMA 50/200 stack is shown and
+                             never votes. A fresh 1h core the other way
                              leaves a watch. A standing bias is not a fresh
                              signal. A script that did not fire is not a
                              vote. A script that is not loaded stays unread.
@@ -754,7 +757,89 @@ a global hard refresh.
         }catch(eDc){}
       }
     }
+    dir = hgObtcEngulfDir(rows);
+    if (dir) out.fresh.push({ id: 'engulfing', label: 'Engulfing', dir: dir, family: 'indicator' });
+    if (typeof W.rsi === 'function'){
+      out.loaded++;
+      if (closes.length >= 20){
+        out.ran++;
+        try{
+          var rs = W.rsi(closes, 14);
+          var adj = [], k;
+          for (k = 0; k < rs.length; k++) adj.push(isFinite(+rs[k]) ? (+rs[k] - 50) : NaN);
+          dir = hgObtcSoleFlip(hgObtcWindowStates(adj));
+          if (dir) out.fresh.push({ id: 'rsi-14', label: 'RSI 14', dir: dir, family: 'indicator' });
+        }catch(eRs){}
+      }
+    }
+    dir = hgObtcSweepDir(rows);
+    if (dir) out.fresh.push({ id: 'liq-sweep', label: 'Liquidity sweep', dir: dir, family: 'indicator' });
     return out;
+  }
+
+  /* One fresh engulfing body in the last five bars. Both directions in that
+     window, or none, is not a vote. This is the MTF engulfing idea run on
+     the tape the desk already holds. It does not mint a stop. */
+  function hgObtcEngulfDir(rows){
+    var n, states, i, o, c, po, pc, bull, bear;
+    if (!rows || rows.length < 7) return null;
+    n = rows.length;
+    states = [];
+    for (i = n - 6; i < n; i++){
+      o = +rows[i].o; c = +rows[i].c; po = +rows[i - 1].o; pc = +rows[i - 1].c;
+      if (!isFinite(o) || !isFinite(c) || !isFinite(po) || !isFinite(pc)) return null;
+      bull = c > o && pc < po && c > po && o < pc;
+      bear = c < o && pc > po && c < po && o > pc;
+      if (bull && bear) return null;
+      states.push(bull ? 1 : (bear ? -1 : 0));
+    }
+    return hgObtcSoleBreak(states);
+  }
+
+  /* A wick through the prior ten bars that closes back inside. A close that
+     stays outside is a break, which Donchian already reads. Both sides in
+     the window, or none, is not a vote. */
+  function hgObtcSweepDir(rows){
+    var n, states, i, j, priorLo, priorHi, lo, hi, c, bull, bear;
+    if (!rows || rows.length < 16) return null;
+    n = rows.length;
+    states = [];
+    for (i = n - 6; i < n; i++){
+      priorLo = Infinity;
+      priorHi = -Infinity;
+      for (j = i - 10; j < i; j++){
+        if (!isFinite(+rows[j].l) || !isFinite(+rows[j].h)) return null;
+        if (+rows[j].l < priorLo) priorLo = +rows[j].l;
+        if (+rows[j].h > priorHi) priorHi = +rows[j].h;
+      }
+      lo = +rows[i].l; hi = +rows[i].h; c = +rows[i].c;
+      if (!isFinite(lo) || !isFinite(hi) || !isFinite(c)) return null;
+      bull = lo < priorLo && c > priorLo;
+      bear = hi > priorHi && c < priorHi;
+      if (bull && bear) return null;
+      states.push(bull ? 1 : (bear ? -1 : 0));
+    }
+    return hgObtcSoleBreak(states);
+  }
+
+  /* Standing EMA 50/200 location. Shown later as an info prior. It does
+     not vote, and a tape shorter than 200 bars stays unread. */
+  function hgObtcEmaStack(rows){
+    var closes, e50, e200, px, a, b;
+    if (!rows || typeof W.ema !== 'function') return undefined;
+    closes = hgObtcCloses(rows);
+    if (!closes || closes.length < 200) return null;
+    try{
+      e50 = W.ema(closes, 50);
+      e200 = W.ema(closes, 200);
+    }catch(eEm){ return undefined; }
+    px = closes[closes.length - 1];
+    a = e50 && +e50[e50.length - 1];
+    b = e200 && +e200[e200.length - 1];
+    if (!isFinite(px) || !isFinite(a) || !isFinite(b)) return null;
+    if (px > a && a > b) return { side: 'bull' };
+    if (px < a && a < b) return { side: 'bear' };
+    return { side: 'mixed' };
   }
 
   function hgObtcFamilies(list){
@@ -2433,6 +2518,12 @@ a global hard refresh.
         extra = extra || {};
         if (gfn('hgObtcGatherExtra')){
           try{ extra = await W.hgObtcGatherExtra(tk.symbol, tk) || extra; }catch(eX){}
+        }
+        if (extra && r4 && gfn('hgObtcOiDivRead') && extra.oiHist){
+          try{ extra.oiDiv = W.hgObtcOiDivRead(r4, extra.oiHist); }catch(eOd){}
+        }
+        if (extra && r4){
+          try{ extra.emaStack = hgObtcEmaStack(r4); }catch(eEs){}
         }
         if (gfn('hgContractReportRun')){
           try{

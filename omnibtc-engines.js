@@ -875,6 +875,24 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
         + ' — fresh 12-bar divergence, one witness' };
   }
 
+  function hgObtcEmaStackLeg(extra){
+    var s = extra && extra.emaStack;
+    var text;
+    if (!extra || extra.emaStack === undefined){
+      return { key: 'emastack', label: 'EMA STACK', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'EMA 50/200 stack unread' };
+    }
+    if (!s || (s.side !== 'bull' && s.side !== 'bear' && s.side !== 'mixed')){
+      return { key: 'emastack', label: 'EMA STACK', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'EMA 200 needs 200 bars — a short tape is not a pass' };
+    }
+    text = s.side === 'bull' ? 'price above EMA50 above EMA200'
+      : s.side === 'bear' ? 'price below EMA50 below EMA200'
+      : 'EMA 50 and 200 are not stacked';
+    return { key: 'emastack', label: 'EMA STACK', vote: 'neutral', state: 'checked', info: true,
+      text: text + ' — standing stack, not a fresh signal, no vote' };
+  }
+
   function hgObtcWithRetail(r, extra){
     if (!r || !Array.isArray(r.legs)) return r;
     hgObtcAppendLeg(r, hgObtcRetailLeg(extra));
@@ -882,6 +900,7 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     hgObtcAppendLeg(r, hgObtcNvtLeg(extra));
     hgObtcAppendLeg(r, hgObtcAddrLeg(extra));
     hgObtcAppendLeg(r, hgObtcOiDivLeg(extra));
+    hgObtcAppendLeg(r, hgObtcEmaStackLeg(extra));
     return r;
   }
 
@@ -1016,6 +1035,7 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
         onchain: ctx.onchain, term: ctx.term, carry: ctx.carry,
         fng: extra.fng, dom: extra.dom, retailLs: extra.retailLs,
         hashrate: extra.hashrate, coinmetrics: extra.coinmetrics, oiDiv: extra.oiDiv,
+        emaStack: extra.emaStack,
         options: extra.options, dvol: extra.dvol, news: extra.news
       });
     }catch(e3){}
