@@ -89,7 +89,7 @@ console.log('== 2) the groups cover every mark the hg-v1297/v1299/v1295 pipeline
 {
   const ctx = bootPanel();
   const groups = ctx.HG_OBTC_MARKS_GROUPS;
-  ok(Array.isArray(groups) && groups.length === 5, 'exactly 5 groups');
+  ok(Array.isArray(groups) && groups.length === 6, 'exactly 6 groups (hg-v1301 adds ON-CHAIN)');
   const titles = groups.map(g => g.title);
   ok(titles.includes('MACRO'), 'MACRO group');
   ok(titles.includes('CRYPTO SENTIMENT'), 'CRYPTO SENTIMENT group');
@@ -100,10 +100,10 @@ console.log('== 2) the groups cover every mark the hg-v1297/v1299/v1295 pipeline
   const freeKeys = allKeys.filter(k => k.startsWith('free:'));
   const indKeys = allKeys.filter(k => k.startsWith('ind:'));
   const pineKeys = allKeys.filter(k => k.startsWith('pine:'));
-  ok(freeKeys.length === 11, `panel covers 11 free: keys — got ${freeKeys.length}`);
+  ok(freeKeys.length === 12, `panel covers 12 free: keys — got ${freeKeys.length} (hg-v1301 adds mempoolFeeHigh)`);
   ok(indKeys.length === 13, `panel covers 13 ind: keys — got ${indKeys.length}`);
   ok(pineKeys.length === 13, `panel covers 13 pine: keys — got ${pineKeys.length}`);
-  ok(allKeys.length === 37, `total 37 marks surfaced — got ${allKeys.length}`);
+  ok(allKeys.length === 38, `total 38 marks surfaced — got ${allKeys.length} (hg-v1301 adds free:mempoolFeeHigh)`);
   /* every key must be unique */
   const uniq = new Set(allKeys);
   ok(uniq.size === allKeys.length, 'no duplicate keys across groups');
@@ -125,18 +125,18 @@ console.log('== 3) the panel reads strict booleans and absents everything else =
   ok(typeof html === 'string' && html.length > 0, 'returns html');
   ok(/FUNDAMENTALS &amp; FEED/.test(html), 'header reads FUNDAMENTALS & FEED');
   /* count read: 3 free + 3 ind + 5 pine = 11 */
-  ok(/11 of 37/.test(html), 'header shows 11 of 37 read');
+  ok(/11 of 38/.test(html), 'header shows 11 of 38 read (hg-v1301 total 38)');
   /* direction surfaced */
   ok(/plan direction LONG/.test(html), 'direction LONG surfaced');
   /* the WITH / AGAINST labels */
   ok(/WITH/.test(html), 'WITH tokens present');
   ok(/AGAINST/.test(html), 'AGAINST tokens present');
-  ok(/UNREAD/.test(html), 'UNREAD tokens present (the 26 absent marks)');
-  /* every unread mark reads UNREAD (37 - 11 = 26). Count only value cells
+  ok(/UNREAD/.test(html), 'UNREAD tokens present (the 27 absent marks)');
+  /* every unread mark reads UNREAD (38 - 11 = 27). Count only value cells
      ("<span class='v'>UNREAD</span>"), not the "WITH / AGAINST / UNREAD"
      doctrine line which mentions the token descriptively. */
   const unreads = (html.match(/<span class="v[^"]*">UNREAD<\/span>/g) || []).length;
-  ok(unreads === 26, `exactly 26 UNREAD cells — got ${unreads}`);
+  ok(unreads === 27, `exactly 27 UNREAD cells — got ${unreads}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -152,7 +152,7 @@ console.log('== 4) a non-boolean mark reads UNREAD (the hg-v955 coercion trap) =
   const html = ctx.hgObtcMarksPanelHtml(pick);
   /* exactly one pine mark is read: ht:'short'. 'LONG' (upper), 1, '', null are junk */
   /* zero free marks read. */
-  ok(/1 of 37/.test(html), 'only ht is read; 1 of 37');
+  ok(/1 of 38/.test(html), 'only ht is read; 1 of 38 (hg-v1301 total 38)');
   /* ht reads SHORT direction → AGAINST on a long. Count only value cells. */
   const againsts = (html.match(/<span class="v[^"]*">AGAINST<\/span>/g) || []).length;
   ok(againsts === 1, `exactly 1 AGAINST (ht short on long plan) — got ${againsts}`);
@@ -193,7 +193,7 @@ console.log('== 6) fail-open contract: a null pick / missing bag / absent reads 
   /* perfectReads with empty bags still renders (all UNREAD) */
   const emptyBag = ctx.hgObtcMarksPanelHtml(makePick('long', {}, {}, {}));
   ok(/FUNDAMENTALS/.test(emptyBag), 'empty perfectReads still renders with 0 reads');
-  ok(/0 of 37/.test(emptyBag), 'empty reads shows 0 of 37');
+  ok(/0 of 38/.test(emptyBag), 'empty reads shows 0 of 38 (hg-v1301 total 38)');
 }
 
 /* ------------------------------------------------------------------ */
@@ -208,7 +208,7 @@ console.log('== 7) doctrine note names hg-v966 and "nothing is gated" ==');
 }
 
 /* ------------------------------------------------------------------ */
-console.log('== 8) no gate reads any of the 37 marks (36 cells x 7 files = 259 empty) ==');
+console.log('== 8) no gate reads any of the 38 marks (hg-v1301: 38 cells x 7 files = 266 empty) ==');
 {
   const gateFiles = ['cryptogates.js', 'engine.js', 'plans.js', 'hg-gates.js',
     'hg-setup-core.js', 'hg-perfect-setup.js', 'setup-stack.js'];
@@ -229,9 +229,9 @@ console.log('== 8) no gate reads any of the 37 marks (36 cells x 7 files = 259 e
          so we only count the quoted form. Compensate by counting total/2. */
     }
   }
-  const expected = 7 * 37;
-  ok(total === expected * 2, `swept ${total/2} cells (7 files x 37 keys)`);
-  ok(empty === expected, `all ${empty} cells empty: no gate reads any of the 37 marks (quoted form)`);
+  const expected = 7 * 38;
+  ok(total === expected * 2, `swept ${total/2} cells (7 files x 38 keys)`);
+  ok(empty === expected, `all ${empty} cells empty: no gate reads any of the 38 marks (quoted form)`);
 }
 
 /* ------------------------------------------------------------------ */

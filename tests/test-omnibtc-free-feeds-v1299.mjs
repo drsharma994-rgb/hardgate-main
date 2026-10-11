@@ -76,15 +76,15 @@ console.log('== 1) hg-v1297 count was 19, hg-v1299 is 24 (ONE HOME, hg-v949) =='
   /* free: key count via regex */
   const freeKeys = Array.from(new Set((src.match(/out\['free:(\w+)'\]/g) || []).map(s => s.match(/free:(\w+)/)[1])));
   const indKeys = Array.from(new Set((src.match(/out\['ind:(\w+)'\]/g) || []).map(s => s.match(/ind:(\w+)/)[1])));
-  ok(freeKeys.length === 11, 'omnibtc.js emits exactly 11 free: keys (was 9 before hg-v1299)');
+  ok(freeKeys.length === 12, 'omnibtc.js emits exactly 12 free: keys (was 11 before hg-v1301 added mempoolFeeHigh)');
   ok(indKeys.length === 13, 'omnibtc.js emits exactly 13 ind: keys (was 10 before hg-v1299)');
   ok(freeKeys.includes('btcGoldCorr'), 'free:btcGoldCorr emitted');
   ok(freeKeys.includes('curveSlopeTrend'), 'free:curveSlopeTrend emitted');
   ok(indKeys.includes('sma50With'), 'ind:sma50With emitted');
   ok(indKeys.includes('sma200With'), 'ind:sma200With emitted');
   ok(indKeys.includes('parkHigh'), 'ind:parkHigh emitted');
-  /* 11 + 13 = 24, inside the 96 cap by 72 (plus 13 pine marks = 37 per record) */
-  ok(11 + 13 === 24, '24 total free:/ind: keys, inside 96 cap');
+  /* 12 + 13 = 25, inside the 96 cap by 71 (plus 13 pine marks = 38 per record) */
+  ok(12 + 13 === 25, '25 total free:/ind: keys, inside 96 cap');
 }
 
 /* ------------------------------------------------------------------ */
@@ -251,12 +251,12 @@ console.log('== 5) ind:parkHigh — Parkinson vs 100-window median (hg-v1158 own
 }
 
 /* ------------------------------------------------------------------ */
-console.log('== 6) hg-v1297 doctrine comment stamps 11 free + 13 ind (self-check) ==');
+console.log('== 6) hg-v1297/v1299/v1301 doctrine comment stamps 12 free + 13 ind (self-check) ==');
 {
   const src = read('omnibtc.js');
-  ok(/Eleven three-state free: marks/.test(src), 'doctrine says eleven free marks');
+  ok(/Twelve three-state free: marks/.test(src), 'doctrine says twelve free marks (was eleven before hg-v1301)');
   ok(/thirteen\s+three-state ind: marks/.test(src), 'doctrine says thirteen ind marks');
-  ok(/twenty-four keys/.test(src), 'doctrine says twenty-four keys total');
+  ok(/twenty-five keys/.test(src), 'doctrine says twenty-five keys total (hg-v1301)');
   ok(/hg-v1299\s+BTC-gold corr/.test(src), 'doctrine names hg-v1299 BTC-gold corr');
   ok(/hg-v1299\s+SMA50 \/\s+SMA200 \/\s+Parkinson20/.test(src), 'doctrine names hg-v1299 SMA/Parkinson');
 }

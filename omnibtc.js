@@ -185,27 +185,30 @@ a global hard refresh.
     }
   }
 
-  /* hg-v1297/v1299: THE OMNIBTC FREE-FEEDS AND INDICATOR-STACK MARKS -- the
-     gold-side hg-v1162-v1167 shape on this desk, built from what the scan
-     already holds and nothing more. Eleven three-state free: marks (DXY /
+  /* hg-v1297/v1299/v1301: THE OMNIBTC FREE-FEEDS AND INDICATOR-STACK MARKS
+     -- the gold-side hg-v1162-v1167 shape on this desk, built from what the
+     scan already holds and nothing more. Twelve three-state free: marks (DXY /
      10Y / real-yield / VIX / BTC.D / stables 7d / F&G extreme / rotation
-     season / news blackout + hg-v1299 BTC-gold corr / curve-slope trend)
-     read off the context the pfReads block already assembled, and thirteen
-     three-state ind: marks (ADX / DMI / BB squeeze / BB outside / RSI14 /
-     KER20 / ATR expand / vol>MA / TSMOM24h / Hurst1d + hg-v1299 SMA50 /
-     SMA200 / Parkinson20) computed on the record's OWN tape (4h for swing
-     records, 15m for scalp records via hg-v1046 -- the daily leg rides
+     season / news blackout + hg-v1299 BTC-gold corr / curve-slope trend +
+     hg-v1301 mempool fee regime -- on-chain, from onchain.js's cached fees
+     leg; the ratio bar FEE_SPIKE_MULT=3 lives in onchain.js and this reader
+     quotes it) read off the context the pfReads block already assembled,
+     and thirteen three-state ind: marks (ADX / DMI / BB squeeze / BB outside
+     / RSI14 / KER20 / ATR expand / vol>MA / TSMOM24h / Hurst1d + hg-v1299
+     SMA50 / SMA200 / Parkinson20) computed on the record's OWN tape (4h for
+     swing records, 15m for scalp records via hg-v1046 -- the daily leg rides
      match._rows1d for Hurst).
 
      Every mark is three-state (hg-v989: true WITH / false AGAINST / absent
-     NOT MEASURED). State reads (vixRising, stables7dPct, newsBlackout, every
-     ind: state read like adxTrending or bbSqueeze) read the same on long and
-     short because a regime is not a side; direction-aware reads (dxyTrend,
-     tnxTrend, realYieldTilt, btcdHigh, btcSeason, every ind: *With) flip
-     with the plan's direction. Nothing is coerced: +null, '1', 'LONG', etc.
-     each return undefined, never a guessed boolean (the +null === 0 trap).
+     NOT MEASURED). State reads (vixRising, stables7dPct, newsBlackout,
+     mempoolFeeHigh, every ind: state read like adxTrending or bbSqueeze)
+     read the same on long and short because a regime is not a side;
+     direction-aware reads (dxyTrend, tnxTrend, realYieldTilt, btcdHigh,
+     btcSeason, every ind: *With) flip with the plan's direction. Nothing
+     is coerced: +null, '1', 'LONG', etc. each return undefined, never a
+     guessed boolean (the +null === 0 trap).
 
-     No gate reads any of the twenty-four keys (asserted in the guard). The
+     No gate reads any of the twenty-five keys (asserted in the guard). The
      ledger carries them under the reads: bag -- the hg-v989 seam which has
      been open since hg-v1162 shipped the gold-side pattern -- and the
      forward split (hgFwdReadSplit('OMNIBTC')) measures them out of sample
@@ -382,6 +385,32 @@ a global hard refresh.
       if (cst === 'STEEPENING') out['free:curveSlopeTrend'] = true;
       else if (cst === 'FLATTENING') out['free:curveSlopeTrend'] = false;
     }catch(eCst){}
+
+    /* hg-v1301: free:mempoolFeeHigh -- BTC mempool congestion as a state read
+       on the fee ratio onchain.js has already cached. The one home for the
+       ratio bar is onchain.js (FEE_SPIKE_MULT = 3; a fastestFee >= 3x the
+       economyFee is what that module calls a spike and prints as "demand
+       surge, historically tags local tops/panic"). This mark quotes that
+       exact ratio: true (HIGH-DEMAND regime) when fastestFee >= 3x economyFee,
+       false (NO PRIORITY PREMIUM) when fastestFee <= 1.1x economyFee (the
+       priority tier is near the floor, so nobody is bidding), absent inside
+       the band -- a congestion regime read, not an ambiguous reading guessed
+       into a direction. STATE read, true both ways (a mempool regime is not
+       a side -- hg-v993's rule). Both numbers must be finite and economyFee
+       must be strictly > 0 (dividing by null is 0, the +null === 0 trap
+       pinned in hg-v955). onchain.js's fees leg returns null when the HTTP
+       call fails, which falls through to NOT MEASURED here -- never a guessed
+       low. hg-v966 refuses to gate on this; the forward ledger decides. */
+    try{
+      var oc = ctx.onchain;
+      var fees = (oc && typeof oc === 'object' && oc.fees && typeof oc.fees === 'object') ? oc.fees : null;
+      if (fees && typeof fees.fastestFee === 'number' && isFinite(fees.fastestFee)
+          && typeof fees.economyFee === 'number' && isFinite(fees.economyFee) && fees.economyFee > 0){
+        var feeRatio = fees.fastestFee / fees.economyFee;
+        if (feeRatio >= 3) out['free:mempoolFeeHigh'] = true;
+        else if (feeRatio <= 1.1) out['free:mempoolFeeHigh'] = false;
+      }
+    }catch(eMf){}
 
     return out;
   }
@@ -1404,17 +1433,19 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
-  /* hg-v1300: FUNDAMENTALS & FEED PANEL — the compact grouped surface the
-     user asked for after a prototype paste proposed replacing OMNIBTC with a
-     5-hard-gate verdict stack (hg-v966 trap). What ships instead reads the
-     24 free: + ind: marks (hg-v1297/v1299) and the 13 pine: marks
-     (hg-v1293/v1295/v1296) already riding every record and surfaces them
-     grouped by category -- MACRO, CRYPTO SENTIMENT, TREND / MOMENTUM,
-     VOLATILITY, PINE PORTS. One read per key; a key the mark helper left
-     absent prints UNREAD (hg-v989 three-state). Says plainly: no gate reads
-     any of these, the hg-v1294 walker still needs its first bake, and
-     everything here is record-only (hg-v966). The one home shape: this is a
-     reader of the hg-v1297 one home, not a second computation (hg-v949). */
+  /* hg-v1300/v1301: FUNDAMENTALS & FEED PANEL — the compact grouped surface
+     the user asked for after a prototype paste proposed replacing OMNIBTC
+     with a 5-hard-gate verdict stack (hg-v966 trap). What ships instead
+     reads the 25 free: + ind: marks (hg-v1297/v1299/v1301) and the 13
+     pine: marks (hg-v1293/v1295/v1296) already riding every record and
+     surfaces them grouped by category -- MACRO, CRYPTO SENTIMENT, ON-CHAIN
+     (hg-v1301 mempool fee regime from onchain.js, FEE_SPIKE_MULT=3), TREND
+     / MOMENTUM, VOLATILITY, PINE PORTS. One read per key; a key the mark
+     helper left absent prints UNREAD (hg-v989 three-state). Says plainly:
+     no gate reads any of these, the hg-v1294 walker still needs its first
+     bake, and everything here is record-only (hg-v966). The one home
+     shape: this is a reader of the hg-v1297 one home, not a second
+     computation (hg-v949). */
   var HG_OBTC_MARKS_GROUPS = [
     { title: 'MACRO', keys: [
       ['free:dxyTrend',       'DXY 20d trend'],
@@ -1430,6 +1461,9 @@ a global hard refresh.
       ['free:btcdHigh',     'BTC dominance (>55/<45)'],
       ['free:stables7dPct', 'Stablecoin flows 7d (±1.5%)'],
       ['free:btcGoldCorr',  'BTC-gold 20d corr (hg-v1299)']
+    ] },
+    { title: 'ON-CHAIN', keys: [
+      ['free:mempoolFeeHigh', 'Mempool fee regime (hg-v1301, onchain.js)']
     ] },
     { title: 'TREND / MOMENTUM', keys: [
       ['ind:adxTrending',  'ADX14 trending (≥25)'],
@@ -3408,7 +3442,20 @@ a global hard refresh.
               news: (extra && extra.news) ? extra.news : null,
               regime: rg || null,
               rotation: (typeof W.rotationState === 'function') ? W.rotationState() : null,
-              macro: (typeof W.getGoldMacroCached === 'function') ? W.getGoldMacroCached() : null
+              macro: (typeof W.getGoldMacroCached === 'function') ? W.getGoldMacroCached() : null,
+              /* hg-v1301: the mempool.space snapshot onchain.js has already
+                 cached (5-min TTL, no key). Read-only — no fetch is triggered
+                 here, so a scan that lands before onchain.js has warmed sees
+                 null and the mark records NOT MEASURED. hg-v949 one home:
+                 the ratio bar (FEE_SPIKE_MULT=3) lives in onchain.js and
+                 nowhere else; this reader quotes the number. */
+              onchain: (function(){
+                try{
+                  if (typeof W.onchainState !== 'function') return null;
+                  var oc = W.onchainState();
+                  return (oc && oc.snap) ? oc.snap : null;
+                }catch(eOc){ return null; }
+              })()
             };
             pfReads.freeFeedVerdicts = hgObtcFreeFeedVerdicts(ffCtx, pick.row.dir, 'BTCUSDT');
           }catch(eFfv){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFfv); }catch(eWfv){} }
