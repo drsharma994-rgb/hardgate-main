@@ -52,13 +52,16 @@ const ok = (c, m) => { if (!c) throw new Error('FAIL: ' + m); passed++; console.
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const SRC = read('omnibtc.js');
 
-/* The expected bank: ledger id -> the pineGoldLayerStates key it reads. */
+/* The expected bank: ledger id -> the pineGoldLayerStates key it reads.
+   hg-v1300 added the last two: BPR and Heikin Ashi, states the shared
+   reader already derived and BTC never recorded. */
 const EXPECTED = {
   'supertrend': 'supertrend', 'psar-flip': 'psar', 'hull-turn': 'hullma', 'qqe': 'qqe',
   'stoch-cross': 'stoch', 'ema-cross-rsi': 'emacross', 'fisher-zero': 'fisher',
   'trix-cross': 'trix', 'williams-reentry': 'williams', 'cci-reentry': 'cci',
   'keltner-pullback': 'keltner', 'chandelier-exit': 'chandelier', 'ichimoku': 'ichimoku',
-  'adx-di': 'adx', 'aroon-cross': 'aroon', 'efficiency': 'efficiency', 'ote': 'ote'
+  'adx-di': 'adx', 'aroon-cross': 'aroon', 'efficiency': 'efficiency', 'ote': 'ote',
+  'bpr-break': 'bpr', 'heikin-ashi': 'heikin'
 };
 const IDS = Object.keys(EXPECTED);
 

@@ -74,7 +74,10 @@ console.log('== all feeds silent: regime UNKNOWN, nothing faked ==');
   ok(r && r.regime === 'unknown', 'no directional leg measured -> unknown, never a guessed quiet');
   ok(r.bulls === 0 && r.bears === 0 && r.checked === 0, 'no votes invented from empty feeds');
   ok(r.blackout === false, 'no blackout invented from an unread calendar');
-  ok(Array.isArray(r.legs) && r.legs.length === 13, 'thirteen legs render even when every feed is dark');
+  /* hg-v1300: TOP TRADERS vs RETAIL is the fourteenth leg */
+  ok(Array.isArray(r.legs) && r.legs.length === 14, 'fourteen legs render even when every feed is dark');
+  ok(r.legs.some(function(l){ return l.key === 'toptrader' && l.state === 'unchecked'; }),
+    'the smart-$ spread leg renders UNCHECKED when its feeds are dark');
   ok(r.legs.every(function(l){ return l.state === 'unchecked'; }),
     'every dark leg says UNCHECKED — a missing feed is never a neutral vote');
 
@@ -345,6 +348,68 @@ console.log('\n== Binance retail long/short votes only at the house 65/35 lines 
   ok(hw.demote === true && /FUNDAMENTAL HEADWIND 2v0/.test((hw.chips || []).join(' ')),
     'F&G extreme plus crowded retail is two witnesses — the long becomes a watch');
   ok(both.bulls === 0 && both.bears === 2, 'the two bear votes are counted, nothing else invented');
+}
+
+console.log('\n== hg-v1300: TOP TRADERS vs RETAIL votes only on the house ±15pp spread ==');
+{
+  const W = boot();
+  const spread = function(top, ret){
+    return W.hgObtcFundamentalRegime({
+      topLs: { latest: { longPct: top } },
+      retailLs: { latest: { longPct: ret } }
+    });
+  };
+  ok(leg(spread(70, 52), 'toptrader').vote === 'bull' && leg(spread(70, 52), 'toptrader').extreme === true,
+    'top 70% vs retail 52% is +18pp — smart $ long of retail, follow top traders: bull');
+  ok(leg(spread(37, 55), 'toptrader').vote === 'bear',
+    'top 37% vs retail 55% is -18pp — smart $ short of retail: bear');
+  ok(leg(spread(67, 52), 'toptrader').vote === 'bull', 'exactly +15pp is the house line — bull');
+  ok(leg(spread(37, 52), 'toptrader').vote === 'bear', 'exactly -15pp is the house line — bear');
+  const mid = leg(spread(58, 52), 'toptrader');
+  ok(mid.state === 'checked' && mid.vote === 'neutral' && !mid.extreme,
+    '+6pp is checked and silent — a lean is not a vote');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'toptrader').state === 'unchecked',
+    'no top-trader print stays unread');
+  ok(leg(W.hgObtcFundamentalRegime({ topLs: { latest: { longPct: 70 } } }), 'toptrader').state === 'unchecked',
+    'the spread needs BOTH sides — top without retail is unread, never a guess');
+  ok(leg(W.hgObtcFundamentalRegime({ retailLs: { latest: { longPct: 52 } } }), 'toptrader').state === 'unchecked',
+    'retail without top is unread too');
+  ok(leg(spread(700, 52), 'toptrader').state === 'unchecked',
+    'a percent outside 0-100 is unread, not a fabricated spread');
+
+  const alone = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: spread(37, 55) });
+  ok(alone.demote === false && alone.chips.indexOf('SMART-$ SPREAD EXTREME') >= 0,
+    'ONE WITNESS NEVER FLIPS A SETUP — the smart-$ spread chips and does not demote');
+
+  const both = W.hgObtcFundamentalRegime({
+    fng: { v: 85, c: 'Extreme Greed' },
+    topLs: { latest: { longPct: 37 } },
+    retailLs: { latest: { longPct: 55 } }
+  });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: both });
+  ok(hw.demote === true && /FUNDAMENTAL HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'F&G extreme plus a bearish smart-$ spread is two witnesses — the long becomes a watch');
+  ok(both.bulls === 0 && both.bears === 2, 'the spread vote is counted once, nothing else invented');
+
+  /* hg-v1299 seam: the aligned stack with the spread voting WITH stamps
+     fundamentalAligned on a surviving candidate. */
+  const swingLong = { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120,
+                      clean: true, passed: 7, engine: 'SWING clean plan' };
+  const alignedExtra = {
+    fng: { v: 15, c: 'Extreme Fear' },
+    options: { rr25d: { rr25d: 9.2, extreme: true, bias: 'CALLS RICH' } },
+    topLs: { latest: { longPct: 70 } },
+    retailLs: { latest: { longPct: 52 } }
+  };
+  const app = W.hgObtcApplyEvidence(Object.assign({}, swingLong), alignedExtra);
+  ok(app.ok === true && app.row && app.row.fundamentalAligned === true,
+    'three checked legs with the long (F&G fear, RR25 calls-rich, smart-$ spread) stamp fundamentalAligned');
+  const sib = { sym: 'BTCUSD', dir: 'long', entry: 100.5, stop: 90.4, t1: 120.5,
+                passed: 6, gatesTotal: 7, engine: 'SQUEEZE', _extra: alignedExtra };
+  const crowned = W.hgObtcPick([Object.assign({}, swingLong, { _extra: alignedExtra }), sib]);
+  ok(crowned && crowned.tier === 'clean' && crowned.row.fundamentalAligned === true,
+    'the aligned stack plus a cross-family sibling crowns the CLEAN ticket');
 }
 
 console.log('\n== a dark host fetches the free sentiment reads, and a failure stays unread ==');

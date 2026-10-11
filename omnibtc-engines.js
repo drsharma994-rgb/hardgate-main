@@ -739,6 +739,33 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
           : ' — inside 35-65, no vote') };
   }
 
+  /* hg-v1300: TOP TRADERS vs RETAIL — the house smart-$ spread, taken from
+     positioning.js verbatim (topLongPct - retailLongPct, ±15pp, 'follow top
+     traders'). topLongPct is Binance's topLongShortPositionRatio (position-
+     weighted smart-$ placement); retailLongPct is the global account ratio
+     the RETAIL leg already reads. BOTH prints are required — the spread
+     needs its two sides; a missing side stays UNCHECKED, never a pass.
+     Inside the band the spread is checked and casts no vote. */
+  function hgObtcTopTraderLeg(extra){
+    var tt = extra && extra.topLs;
+    var ls = extra && extra.retailLs;
+    var top = tt && tt.latest ? +tt.latest.longPct : NaN;
+    var ret = ls && ls.latest ? +ls.latest.longPct : NaN;
+    if (!isFinite(top) || top < 0 || top > 100 || !isFinite(ret) || ret < 0 || ret > 100){
+      return { key: 'toptrader', label: 'TOP TRADERS vs RETAIL', vote: 'neutral', state: 'unchecked',
+        text: 'Binance top-trader position ratio absent' };
+    }
+    var diff = top - ret;
+    var vote = diff >= 15 ? 'bull' : (diff <= -15 ? 'bear' : 'neutral');
+    return { key: 'toptrader', label: 'TOP TRADERS vs RETAIL', vote: vote, state: 'checked',
+      extreme: vote !== 'neutral',
+      text: 'top ' + top.toFixed(1) + '% vs retail ' + ret.toFixed(1) + '% long · spread '
+        + (diff >= 0 ? '+' : '') + diff.toFixed(1) + 'pp'
+        + (vote === 'bull' ? ' — smart $ long of retail (house +15pp, follow top traders)'
+          : vote === 'bear' ? ' — smart $ short of retail (house -15pp, follow top traders)'
+          : ' — inside ±15pp, no vote') };
+  }
+
   function hgObtcAppendLeg(r, leg){
     var i;
     if (!r || !leg || !Array.isArray(r.legs)) return;
@@ -896,6 +923,7 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
   function hgObtcWithRetail(r, extra){
     if (!r || !Array.isArray(r.legs)) return r;
     hgObtcAppendLeg(r, hgObtcRetailLeg(extra));
+    hgObtcAppendLeg(r, hgObtcTopTraderLeg(extra));   /* hg-v1300: the smart-$ spread leg */
     hgObtcAppendLeg(r, hgObtcHashLeg(extra));
     hgObtcAppendLeg(r, hgObtcNvtLeg(extra));
     hgObtcAppendLeg(r, hgObtcAddrLeg(extra));
@@ -987,6 +1015,7 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
             else if (l.key === 'rr25d') out.chips.push('RR25 EXTREME');
             else if (l.key === 'dvol') out.chips.push('DVOL EXTREME');
             else if (l.key === 'retail') out.chips.push('RETAIL EXTREME');
+            else if (l.key === 'toptrader') out.chips.push('SMART-$ SPREAD EXTREME');   /* hg-v1300 */
             else if (l.key === 'hashrate') out.chips.push('HASHRATE STRESS');
             else if (l.key === 'nvt') out.chips.push('NVT RICH');
             else if (l.key === 'oidiv') out.chips.push('OI DIVERGENCE');
@@ -1158,6 +1187,19 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
         extra.retailLs = (ls && ls.latest && isFinite(+ls.latest.longPct)) ? ls : null;
       }
     }catch(eLs){ extra.retailLs = null; }
+    /* hg-v1300: TOP-TRADER POSITIONING — Binance's topLongShortPositionRatio
+       (position-weighted smart-$ placement), the free print SMART $ / OI
+       FLOW / TREND MATRIX already read house-wide through positioning.js.
+       The TOP TRADERS vs RETAIL leg pairs it with the retail print above:
+       the house read is the top-minus-retail SPREAD at ±15pp, never the raw
+       number. binance.js caches the call; a failure is a null, never an
+       error up, and the leg then honestly reads UNCHECKED. */
+    try{
+      if (gfn('binanceTopTraders')){
+        var tt = await W.binanceTopTraders('BTCUSDT', '4h', 6);
+        extra.topLs = (tt && tt.latest && isFinite(+tt.latest.longPct)) ? tt : null;
+      }
+    }catch(eTt){ extra.topLs = null; }
     try{
       var hj = await hgObtcFetchJson('https://api.blockchain.info/charts/hash-rate?format=json&timespan=30days');
       var hvals = hj && Array.isArray(hj.values) ? hj.values : null;

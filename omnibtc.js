@@ -85,6 +85,25 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              desk's best WATCH — disclosed, recorded
                              ticket:false, never a ticket. A vanish only
                              when no candidate survives.
+  SMART-$ SPREAD ........... hg-v1300: TOP TRADERS vs RETAIL joins the
+                             fundamental stack. hgObtcGatherExtra now fetches
+                             Binance's topLongShortPositionRatio (position-
+                             weighted smart-$ placement, free, cached), and
+                             the new leg reads the house spread — top minus
+                             retail, ±15pp, 'follow top traders', the same
+                             rule positioning.js applies house-wide. Both
+                             prints are required; a missing side stays
+                             UNCHECKED, never a pass. The leg votes into the
+                             regime, the headwind/tailwind evidence, the
+                             hg-v1299 fundamentalAligned flag and the card's
+                             extreme chips (SMART-$ SPREAD EXTREME).
+  RECORD BANK +2 ........... hg-v1300: Balanced Price Range (ICT/SMC
+                             structure) and Heikin Ashi (smoothed trend)
+                             join the record-only pine bank — states the
+                             shared reader already derived and BTC never
+                             recorded. RECORDED, never scored; promotion to
+                             the voting book stays dormant until the
+                             ledger's own read split measures them.
   REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
                              accepted a taker series and was never fed one —
                              the candle-approximated stand-in answered for the
@@ -674,6 +693,13 @@ a global hard refresh.
     { key: 'aroon',       id: 'aroon-cross',        label: 'Aroon',                 family: 'trend' },
     { key: 'efficiency',  id: 'efficiency',         label: 'Kaufman efficiency',    family: 'regime' },
     { key: 'ote',         id: 'ote',                label: 'OTE zone',              family: 'value' },
+    /* hg-v1300: two more states the shared reader already derives and BTC
+       never recorded. BPR (Balanced Price Range) is the ICT/SMC structure
+       read — the close through a balanced range; Heikin Ashi is the
+       smoothed-trend state. Same contract as every row above: RECORDED,
+       never scored, and a key the reader leaves null stays UNREAD. */
+    { key: 'bpr',         id: 'bpr-break',          label: 'Balanced Price Range',  family: 'structure' },
+    { key: 'heikin',      id: 'heikin-ashi',        label: 'Heikin Ashi',           family: 'trend' },
     /* the voting book already reads Donchian and MACD as fresh indicator
        crosses, so they are NOT duplicated here (hg-v949 second-copy rule). */
     /* the four primitives the gold reader also derives are deliberately left
