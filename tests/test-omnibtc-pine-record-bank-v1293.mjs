@@ -36,7 +36,7 @@
 
    WHY THIS IS NOT THE hg-v955 DEFECT (a field written and never read): the
    marks ride the forward ledger under the `pine:<id>` namespace its key
-   validator accepts, and scripts/obtc-factor-separation.mjs is the reader
+   validator accepts, and the ledger's own read split (hgFwdReadSplit) is the reader
    that measures them. A port can only be promoted into the voting OBTC_PINE
    table once that measurement releases it.
 
