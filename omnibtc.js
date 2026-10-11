@@ -97,6 +97,26 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              regime, the headwind/tailwind evidence, the
                              hg-v1299 fundamentalAligned flag and the card's
                              extreme chips (SMART-$ SPREAD EXTREME).
+  PERP FUNDING ............. hg-v1301: the BTC board gains its missing
+                             crowding read. positioning.js's FUNDING_EXTREME
+                             (±0.05%/interval) is the house's own crowded-
+                             long/short line; the leg reads Binance's BTCUSDT
+                             funding (already fetched — no new request)
+                             CONTRARIAN the way positioning.js does: longs
+                             paying past the line is bear, shorts paying past
+                             it is bull, inside the line casts no vote, and
+                             an absent print stays UNCHECKED. It votes into
+                             the regime, the headwind/tailwind evidence, the
+                             fundamentalAligned flag and a FUNDING EXTREME
+                             chip.
+  COINBASE PREMIUM ......... hg-v1301: the free US-spot read cryptoultra.js
+                             names as an un-faked gap — Coinbase USD spot
+                             against Binance's BTCUSDT perp mark (the same
+                             premiumIndex call that already carries the
+                             funding), in basis points. INFO ONLY: no house
+                             line exists for it, so it is disclosed like the
+                             EMA stack and never votes; a missing side stays
+                             UNCHECKED.
   RECORD BANK +2 ........... hg-v1300: Balanced Price Range (ICT/SMC
                              structure) and Heikin Ashi (smoothed trend)
                              join the record-only pine bank — states the

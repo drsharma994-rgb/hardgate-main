@@ -766,6 +766,52 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
           : ' — inside ±15pp, no vote') };
   }
 
+  /* hg-v1301: PERP FUNDING — the crowding read at the house line.
+     positioning.js's FUNDING_EXTREME (±0.05%/interval) is the house's own
+     crowded-long / crowded-short line and SMART $ / OI FLOW already read
+     funding through it; the BTC board never carried a funding leg. The
+     read is CONTRARIAN the way positioning.js reads it: longs paying past
+     the line is a crowded long (bear), shorts paying past it is a crowded
+     short (bull). Inside the line the print is checked and casts no vote.
+     The value is free — hgObtcGatherExtra already fetches Binance's
+     BTCUSDT perp funding — and absent stays UNCHECKED, never a pass. */
+  function hgObtcFundingLeg(extra){
+    var v = extra ? fin(extra.btcFundingBinance) : NaN;
+    if (!isFinite(v)){
+      return { key: 'funding', label: 'PERP FUNDING', vote: 'neutral', state: 'unchecked',
+        text: 'Binance BTCUSDT funding absent' };
+    }
+    var vote = v >= 0.05 ? 'bear' : (v <= -0.05 ? 'bull' : 'neutral');
+    return { key: 'funding', label: 'PERP FUNDING', vote: vote, state: 'checked',
+      extreme: vote !== 'neutral',
+      text: v.toFixed(4) + '%/8h'
+        + (vote === 'bear' ? ' — longs crowded, past the house +0.05 line'
+          : vote === 'bull' ? ' — shorts crowded, past the house -0.05 line'
+          : ' — inside ±0.05, no vote') };
+  }
+
+  /* hg-v1301: COINBASE PREMIUM — the US spot bid. This is the free
+     cross-exchange read cryptoultra.js names as an acknowledged gap
+     ('needs cross-exchange price comparison — never faked'): Coinbase USD
+     spot against Binance's BTCUSDT perp mark (the price-discovery print the
+     desk already holds from the same premiumIndex call as its funding), in
+     basis points. INFO ONLY — there is no house line for it, so it is
+     disclosed like the EMA stack and never votes; a missing side stays
+     UNCHECKED. */
+  function hgObtcCoinbaseLeg(extra){
+    var c = extra ? fin(extra.cbSpot) : NaN;
+    var m = extra ? fin(extra.btcMarkBinance) : NaN;
+    if (!isFinite(c) || !isFinite(m) || c <= 0 || m <= 0){
+      return { key: 'cbprem', label: 'COINBASE PREMIUM', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'Coinbase USD spot vs Binance mark absent' };
+    }
+    var bp = (c - m) / m * 10000;
+    return { key: 'cbprem', label: 'COINBASE PREMIUM', vote: 'neutral', state: 'checked', info: true,
+      text: (bp >= 0 ? '+' : '') + bp.toFixed(1) + ' bp — US spot '
+        + (bp > 0 ? 'above' : bp < 0 ? 'below' : 'level with')
+        + ' the perp mark (no house line, never votes)' };
+  }
+
   function hgObtcAppendLeg(r, leg){
     var i;
     if (!r || !leg || !Array.isArray(r.legs)) return;
@@ -924,6 +970,8 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     if (!r || !Array.isArray(r.legs)) return r;
     hgObtcAppendLeg(r, hgObtcRetailLeg(extra));
     hgObtcAppendLeg(r, hgObtcTopTraderLeg(extra));   /* hg-v1300: the smart-$ spread leg */
+    hgObtcAppendLeg(r, hgObtcFundingLeg(extra));     /* hg-v1301: the perp crowding leg */
+    hgObtcAppendLeg(r, hgObtcCoinbaseLeg(extra));    /* hg-v1301: the US spot bid (info) */
     hgObtcAppendLeg(r, hgObtcHashLeg(extra));
     hgObtcAppendLeg(r, hgObtcNvtLeg(extra));
     hgObtcAppendLeg(r, hgObtcAddrLeg(extra));
@@ -1016,6 +1064,7 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
             else if (l.key === 'dvol') out.chips.push('DVOL EXTREME');
             else if (l.key === 'retail') out.chips.push('RETAIL EXTREME');
             else if (l.key === 'toptrader') out.chips.push('SMART-$ SPREAD EXTREME');   /* hg-v1300 */
+            else if (l.key === 'funding') out.chips.push('FUNDING EXTREME');             /* hg-v1301 */
             else if (l.key === 'hashrate') out.chips.push('HASHRATE STRESS');
             else if (l.key === 'nvt') out.chips.push('NVT RICH');
             else if (l.key === 'oidiv') out.chips.push('OI DIVERGENCE');
@@ -1143,8 +1192,24 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       if (gfn('binanceFunding')){
         var bf = await W.binanceFunding('BTCUSDT');
         extra.btcFundingBinance = (bf && typeof bf.fundingPct === 'number' && isFinite(bf.fundingPct)) ? bf.fundingPct : null;
+        /* hg-v1301: the same premiumIndex call carries the perp MARK — the
+           reference the Coinbase premium is read against. No extra request. */
+        extra.btcMarkBinance = (bf && typeof bf.markPrice === 'number' && isFinite(bf.markPrice) && bf.markPrice > 0) ? bf.markPrice : null;
       }
-    }catch(eBf){ extra.btcFundingBinance = null; }
+    }catch(eBf){ extra.btcFundingBinance = null; extra.btcMarkBinance = null; }
+    /* hg-v1301: COINBASE PREMIUM — Coinbase's free public USD spot print,
+       cached like the other sentiment reads so a fresh price pairs with the
+       Binance mark above. A failure stays unread, never an error up. */
+    try{
+      var cbCached = hgObtcSentTake('cbspot');
+      if (isFinite(cbCached) && cbCached > 0) extra.cbSpot = cbCached;
+      else {
+        var cbj = await hgObtcFetchJson('https://api.coinbase.com/v2/prices/BTC-USD/spot');
+        var cbAmt = cbj && cbj.data ? +cbj.data.amount : NaN;
+        if (isFinite(cbAmt) && cbAmt > 0){ extra.cbSpot = cbAmt; hgObtcSentKeep('cbspot', cbAmt); }
+        else extra.cbSpot = null;
+      }
+    }catch(eCb){ extra.cbSpot = null; }
     extra.term = evidenceFromExtra(extra).term;
     extra.carry = evidenceFromExtra(extra).carry;
     /* Sentiment. The host wins when it already has a number. Otherwise one
