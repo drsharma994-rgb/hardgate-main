@@ -130,7 +130,7 @@
       "expired": true
     },
     "STRK": {
-      "at": "2026-10-11T03:15:41.053Z",
+      "at": "2026-10-11T06:56:53.520Z",
       "score": 5,
       "fresh": true,
       "ago": 5,
@@ -163,10 +163,10 @@
       "ago": -1
     },
     "BEAMX": {
-      "at": "2026-10-10T06:58:17.912Z",
+      "at": "2026-10-11T06:57:01.858Z",
       "score": 5,
       "fresh": true,
-      "ago": 5,
+      "ago": 6,
       "crossDay": "2026-10-04",
       "expired": true
     },
@@ -556,10 +556,10 @@
       "expired": true
     },
     "OGN": {
-      "at": "2026-10-10T18:02:20.423Z",
+      "at": "2026-10-11T06:56:55.133Z",
       "score": 5,
       "fresh": true,
-      "ago": 1,
+      "ago": 2,
       "crossDay": "2026-10-08",
       "expired": true
     },
@@ -580,7 +580,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-11T03:16:01.028Z",
+  "lastRunAt": "2026-10-11T06:57:16.103Z",
   "scanned": 504,
   "cards": 0
 }
