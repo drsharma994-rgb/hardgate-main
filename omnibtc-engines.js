@@ -1196,6 +1196,39 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       if (!(fin(row.passed) === 6)) row.passed = 6;
     }
     if (ev.chips && ev.chips.length) row.evidenceChips = ev.chips;
+    /* hg-v1299: ACCURACY FLAGS — the weighted verdict in hgObtcPick has
+       scored takerFlowWith and fundamentalAligned since hg-v1168, but
+       nothing ever set them, so real flow and the fundamental stack
+       silently scored ZERO. Both are now stamped here, off the same extra
+       bag the evidence gate reads.
+       takerFlowWith: the REAL Binance taker CVD slope (the desk's own
+       hgObtcCvdSlopeDir reader over extra.takerSeries) agrees with the
+       row's direction. An unreadable or flat slope sets nothing.
+       fundamentalAligned: the house fundamental stack (ctx.fundamental,
+       already resolved above with every fallback the evidence gate gets)
+       has at least two checked legs voting WITH the direction and none
+       against. A quiet, mixed or thin stack sets nothing.
+       The flags inform the accuracy score; they never mint or move
+       levels, and they are stamped on survivors only — a refused row is
+       already gone. */
+    try{
+      var rdir = dirOf(row.dir);
+      if (rdir && extra && Array.isArray(extra.takerSeries) && gfn('hgObtcCvdSlopeDir')){
+        var slopeUp = W.hgObtcCvdSlopeDir(extra.takerSeries);
+        if (slopeUp === true || slopeUp === false){
+          row.takerFlowWith = (rdir === 'long') ? (slopeUp === true) : (slopeUp === false);
+        }
+      }
+    }catch(eTf){}
+    try{
+      var rdir2 = dirOf(row.dir);
+      var fundR = ctx.fundamental;
+      if (rdir2 && fundR && Array.isArray(fundR.legs)){
+        var vWith = rdir2 === 'long' ? (fundR.bulls || 0) : (fundR.bears || 0);
+        var vAg = rdir2 === 'long' ? (fundR.bears || 0) : (fundR.bulls || 0);
+        if ((fundR.checked || 0) >= 2 && vWith >= 2 && vAg === 0) row.fundamentalAligned = true;
+      }
+    }catch(eFa){}
     return { ok: true, row: row, ev: ev };
   }
 

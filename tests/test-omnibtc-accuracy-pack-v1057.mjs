@@ -84,7 +84,14 @@ function scanStubs(cap, rows4h){
     binanceFundingHist: async () => { const a = []; for (let i = 0; i < 30; i++) a.push({ rate: 0.0001, t: LAST_T - (29 - i) * 28800 }); return a; },
     binanceSpotTakerFlow: async () => ({ latest: ratioSeries(1.2)[99], series: ratioSeries(1.2) }),
     binanceBasis: async () => ({ latest: basisSeries()[39], series: basisSeries() }),
-    hgContractReportRun: () => ({ sym: 'BTCUSD', sections: [{ id: 'omniinfo', rows: OMNI_ROWS }], indicators: [], plan: { ok: false } }),
+    /* hg-v1299: one SQUEEZE signal row beside the omniinfo rows — the
+       independent opposite-family sibling (micro vs the SWING trend, same
+       symbol, same direction) the triple gate requires before a CLEAN
+       crowns as a ticket. Levels differ from PLAN's so the win-filter can
+       never confuse the two rows. */
+    hgContractReportRun: () => ({ sym: 'BTCUSD', sections: [{ id: 'omniinfo', rows: OMNI_ROWS },
+      { id: 'engines', rows: [{ name: 'SQUEEZE', state: 'signal', dir: 'long', entry: 100.5, stop: 90.4, t1: 120.5, passed: 6, total: 7 }] }],
+      indicators: [], plan: { ok: false } }),
     hgFwdRecordScan: (tab, tf, rows, opts) => { cap.rec = { tab, tf, rows, opts }; return 1; },
     hgFwdPanelHTML: (tab) => 'FWD:' + tab,
     hgFwdPool: (tab) => (tab === 'OMNIBTC' ? { 'SWING': { samples: 40, hit: 0.55, expR: 0.3 } } : {}),

@@ -237,12 +237,29 @@ console.log('\n== pick: the stack gates the MOST PROBABLE tier ==');
 
   const aligned = { fng: { v: 15, c: 'Extreme Fear' },
                     options: { rr25d: { rr25d: 9.2, extreme: true, bias: 'CALLS RICH' } } };
-  const pickClean = W.hgObtcPick([swing(aligned)]);
-  ok(pickClean && pickClean.tier === 'clean', 'a 2-0 tailwind leaves the CLEAN ticket standing');
+  /* hg-v1299: the crown is a triple gate (CLEAN + cross-family confirm +
+     score floor), so the tailwind case adds an independent micro-structure
+     sibling agreeing on direction — and now asserts the hg-v1299 flag the
+     aligned stack stamps. */
+  const sib = function(extra){
+    return { sym: 'BTCUSD', dir: 'long', entry: 100.5, stop: 98.4, t1: 104.5,
+             passed: 6, gatesTotal: 7, engine: 'SQUEEZE', _extra: extra };
+  };
+  const pickClean = W.hgObtcPick([swing(aligned), sib(aligned)]);
+  ok(pickClean && pickClean.tier === 'clean',
+    'a 2-0 tailwind with cross-family confirmation leaves the CLEAN ticket standing');
+  ok(pickClean.row.fundamentalAligned === true,
+    'hg-v1299: the aligned stack stamps fundamentalAligned on the crowned row');
 
   const oneWitness = { fng: { v: 85, c: 'Extreme Greed' } };
   const pickOne = W.hgObtcPick([swing(oneWitness)]);
-  ok(pickOne && pickOne.tier === 'clean', 'one opposing witness does not touch the tier');
+  /* hg-v1299: one opposing witness still does not DEMOTE (the evidence gate
+     needs two net votes, so passed stays 7 and no headwind chip prints),
+     but a lone uncorroborated CLEAN no longer crowns — WATCH, not a ticket. */
+  ok(pickOne && pickOne.tier === 'near' && pickOne.row && +pickOne.row.passed === 7,
+    'one opposing witness does not demote, but an uncorroborated CLEAN is a WATCH');
+  ok(!(pickOne.row.evidenceChips || []).some(function(c){ return /HEADWIND/.test(c); }),
+    'one opposing witness prints no headwind chip — the evidence tier is untouched');
 
   const blackout = { news: { risk: 'high', blackout: true, events: [{}] } };
   ok(W.hgObtcPick([swing(blackout)]) === null,

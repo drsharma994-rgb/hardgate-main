@@ -111,13 +111,21 @@ console.log('== the gather feeds the CVD seam real flow ==');
 console.log('== the crowned pick joins the forward book ==');
 {
   const cap = {};
-  const W = boot(Object.assign({
+  /* hg-v1299: overrides land AFTER venueStubs so they win. The report seam
+     now carries one SQUEEZE signal row — the independent opposite-family
+     sibling (micro vs the SWING trend, same symbol, same direction) the
+     triple gate requires before a CLEAN crowns as a ticket. Levels differ
+     from PLAN's so the win-filter can never confuse the two rows. */
+  const W = boot(Object.assign(venueStubs(cap), {
     swingTryClean: () => Object.assign({}, PLAN),
     /* hg-v1051: the entry-refinement layer has its own dedicated tests
        (test-omnibtc-perfect-v1041) - here it passes through so this pin
        keeps proving the record writes exactly what the desk crowned */
-    hgApplyExactEntry: (p) => Object.assign({}, p)
-  }, venueStubs(cap)));
+    hgApplyExactEntry: (p) => Object.assign({}, p),
+    hgContractReportRun: (inp) => { cap.taker = inp && inp.takerSeries; return { sym: 'BTCUSD',
+      sections: [{ id: 'engines', rows: [{ name: 'SQUEEZE', state: 'signal', dir: 'long', entry: 100.5, stop: 90.4, t1: 120.5, passed: 6, total: 7 }] }],
+      indicators: [], plan: { ok: false } }; }
+  }));
   const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
   const stat = await W.hgObtcRunScan(ui);
   ok(/MOST PROBABLE/.test(stat), 'the scan crowns: ' + stat);

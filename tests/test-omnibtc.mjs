@@ -240,9 +240,32 @@ console.log('\n== one pick, never invented ==');
 
   const a = W.hgObtcPick([clean, near, scalp]);
   ok(a && a.row, 'three real BTC rows still produce a pick');
-  ok(a.tier === 'clean', 'CLEAN wins over NEAR');
+  /* hg-v1299: SWING and SCALP are BOTH trend-family engines, so no
+     opposite-family sibling exists here — the best row is a disclosed
+     WATCH, never a ticket (the triple gate: house CLEAN + cross-family
+     confirmation + the weighted score at the floor). */
+  ok(a.tier === 'near' && a.row.watchOnly === true,
+    'hg-v1299: without an opposite-family sibling a lone CLEAN is a WATCH, not a ticket');
   ok(W.hgObtcIsBtc(a.row.sym), 'the winner is BTC');
   ok(a.row === a.row, 'exactly one row object is returned');
+
+  /* hg-v1299: add an independent micro-structure sibling agreeing on
+     symbol AND direction and the same CLEAN swing crowns. */
+  const sib = {
+    sym: 'BTCUSD', dir: 'long', entry: 100.1, stop: 98.2, t1: 104.2,
+    passed: 6, gatesTotal: 7, engine: 'SQUEEZE', venue: 'delta'
+  };
+  const b = W.hgObtcPick([clean, near, scalp, sib]);
+  ok(b && b.tier === 'clean' && b.row.engine === 'SWING clean plan',
+    'CLEAN wins over NEAR once an opposite-family sibling confirms the direction');
+  ok(b.row.crossValidation === 'PASSED: confirmed by opposite family engine'
+     && b.row.accuracyScore >= 30,
+    'the crown carries its cross-validation mark and a floor-clearing score');
+  /* an OPPOSING-direction sibling never confirms: the SCALP short gets no
+     confirmation from the long SQUEEZE */
+  const c = W.hgObtcPick([scalp, sib]);
+  ok(c && c.tier === 'near' && c.row.engine === 'SCALP clean plan',
+    'an opposing-direction sibling never confirms — the short stays a WATCH');
 
   const watch = W.hgObtcPick([near]);
   ok(watch && watch.tier === 'near' && watch.row.sym === 'B-BTC_USDT',
@@ -453,7 +476,18 @@ console.log('\n== OMNIROUTE principal first, then a BTC result ==');
   const mixed = W.hgObtcPick([sniper, smc, swing]);
   ok(mixed && mixed.row && mixed.row.engine === 'SWING clean plan',
     'after principal, SWING is the result — toxic analogues are dropped');
-  ok(mixed.tier === 'clean', 'surviving SWING stays CLEAN');
+  /* hg-v1299: the toxic analogues were also the only other family — the
+     lone surviving SWING is uncorroborated, so the triple gate holds it at
+     WATCH. A cross-family sibling agreeing on direction re-crowns it. */
+  ok(mixed.tier === 'near' && mixed.row.watchOnly === true,
+    'surviving SWING is a WATCH while it stands uncorroborated');
+  const swingSib = {
+    sym: 'BTCUSD', dir: 'long', entry: 100.1, stop: 98.2, t1: 104.2,
+    passed: 6, gatesTotal: 7, engine: 'SQUEEZE', venue: 'delta'
+  };
+  const mixed2 = W.hgObtcPick([sniper, smc, Object.assign({}, swing), swingSib]);
+  ok(mixed2 && mixed2.tier === 'clean' && mixed2.row.engine === 'SWING clean plan',
+    'surviving SWING crowns CLEAN once an opposite-family sibling confirms');
 
   const refused = W.hgObtcCandidateFromOmniHit({
     kind: 'PIN-REJECT',
@@ -478,9 +512,20 @@ console.log('\n== OMNIROUTE principal first, then a BTC result ==');
   }, { symbol: 'BTCUSD', exchange: 'delta' });
   ok(ticket && ticket.kind === 'CUSUM-SHIFT' && ticket.clean === true,
     'OMNIROUTE ticket that clears the principal becomes a BTC result');
+  /* hg-v1299: a LONE cleared ticket is uncorroborated — WATCH. With an
+     independent named-family sibling agreeing on symbol AND direction, the
+     same ticket crowns (an engine outside both families is confirmed by
+     either named family). */
   const fromOmni = W.hgObtcPick([ticket]);
-  ok(fromOmni && fromOmni.tier === 'clean' && (fromOmni.row.kind === 'CUSUM-SHIFT' || fromOmni.row.omniKind === 'CUSUM-SHIFT'),
-    'cleared OMNIROUTE ticket can be the MOST PROBABLE');
+  ok(fromOmni && fromOmni.tier === 'near' && fromOmni.row.watchOnly === true,
+    'a lone cleared OMNIROUTE ticket is a WATCH while uncorroborated');
+  const omniSib = {
+    sym: 'BTCUSD', dir: 'long', entry: 100.1, stop: 98.2, t1: 104.2,
+    passed: 6, gatesTotal: 7, engine: 'SQUEEZE', venue: 'delta'
+  };
+  const fromOmni2 = W.hgObtcPick([Object.assign({}, ticket), omniSib]);
+  ok(fromOmni2 && fromOmni2.tier === 'clean' && (fromOmni2.row.kind === 'CUSUM-SHIFT' || fromOmni2.row.omniKind === 'CUSUM-SHIFT'),
+    'cleared OMNIROUTE ticket can be the MOST PROBABLE once a named-family sibling confirms');
 
   const watchHit = W.hgObtcCandidateFromOmniHit({
     kind: 'CUSUM-SHIFT',

@@ -67,6 +67,24 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              `window.HG_OBTC_HTF_LOCK = false` or
                              localStorage `hg_obtc_htf_lock = '0'` disables the
                              lock; the default is ON and read live per scan.
+  ACCURACY VERDICT ......... hg-v1299: the crown is a TRIPLE GATE —
+                             house-gates CLEAN, an independent
+                             opposite-family sibling agreeing on symbol AND
+                             direction (scored PER CANDIDATE; an opposing
+                             setup never 'confirms' a crown), and a
+                             weighted confluence score at the floor of 30
+                             (clean +20, cross-confirm +15, PINE-led +10,
+                             real taker CVD with +10, fundamental stack
+                             aligned +10, omni-principal pass +5). The flow
+                             and fundamental flags are stamped in
+                             hgObtcApplyEvidence from the REAL Binance
+                             taker CVD slope and the resolved fundamental
+                             stack — the hg-v1168 score read flags nothing
+                             ever set, so they silently scored zero.
+                             Anything short of the triple gate is the
+                             desk's best WATCH — disclosed, recorded
+                             ticket:false, never a ticket. A vanish only
+                             when no candidate survives.
   REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
                              accepted a taker series and was never fed one —
                              the candle-approximated stand-in answered for the
@@ -455,59 +473,80 @@ a global hard refresh.
       else if (microEng.some(function(m){ return up.indexOf(m) >= 0; })) fams.micro.push(n);
     }
     if (!btc.length) return null;
-    
-    /* hg-v1167: CROSS-VALIDATION REQUIREMENT — the crown must be confirmed by
-       a sibling from the opposite family (Trend/Direction vs Micro-Structure).
-       A setup with no cross-confirmation is demoted to WATCH. (hg-v1167: high-accuracy batch) */
-    var pick = gfn('hgPickMostProbableAny') ? W.hgPickMostProbableAny(btc) : { row: btc[0], tier: 'clean', source: 'clean' };
-    if (pick && pick.row){
-      var upPick = String(pick.row.engine || '').toUpperCase();
-      var isTrend = trendEng.some(function(t){ return upPick.indexOf(t) >= 0; });
-      var isMicro = microEng.some(function(m){ return upPick.indexOf(m) >= 0; });
-      var crossConfirmed = false;
-      
-      if (isTrend && fams.micro.length > 0) crossConfirmed = true;
-      else if (isMicro && fams.trend.length > 0) crossConfirmed = true;
-      
-      if (!crossConfirmed){
+
+    /* hg-v1299: PER-CANDIDATE CROSS-VALIDATION + THE ACCURACY VERDICT.
+       Two defects in the hg-v1167/hg-v1168 pair are repaired here.
+       (1) hg-v1167 stamped the cross check on the pre-pick row ONLY, so the
+       hg-v1168 scoring loop read a flag no other candidate carried — the
+       verdict was decided before it was scored. (2) A sibling counted as
+       confirmation regardless of symbol or DIRECTION — a short TRAP
+       'confirmed' a long SWING. Now every candidate is scored on its own
+       evidence, and confirmation requires an INDEPENDENT sibling that agrees
+       on symbol AND direction: a trend/direction engine needs a
+       micro-structure sibling, a micro engine needs a trend sibling, and an
+       engine outside both families (PINE-led, STAR TRADER, TSI, ADAPTIVE,
+       SPRING, COIL, DIV, TRAP, funding-fade) is confirmed by either named
+       family. The flow and fundamental flags (takerFlowWith /
+       fundamentalAligned) are stamped upstream in hgObtcApplyEvidence from
+       the REAL taker CVD slope and the house fundamental stack — hg-v1168
+       scored both but nothing ever set them, so they silently read zero. */
+    var bestScore = -1;
+    var bestPick = null;
+    var bestConfirmed = false;
+    var pick = null;
+    for (i = 0; i < btc.length; i++){
+      var cand = btc[i];
+      var upC = String(cand.engine || '').toUpperCase();
+      var cIsTrend = trendEng.some(function(t){ return upC.indexOf(t) >= 0; });
+      var cIsMicro = microEng.some(function(m){ return upC.indexOf(m) >= 0; });
+      var cDir = String(cand.dir || '').toLowerCase();
+      var pools = (cIsTrend && !cIsMicro) ? [fams.micro]
+        : (cIsMicro && !cIsTrend) ? [fams.trend]
+        : [fams.trend, fams.micro];   /* outside both families: either named family confirms */
+      var confirmed = false;
+      for (var pi = 0; pi < pools.length && !confirmed; pi++){
+        for (var si = 0; si < pools[pi].length; si++){
+          var sib = pools[pi][si];
+          if (sib && sib !== cand && sib.sym === cand.sym
+              && String(sib.dir || '').toLowerCase() === cDir){ confirmed = true; break; }
+        }
+      }
+      cand.crossValidation = confirmed
+        ? 'PASSED: confirmed by opposite family engine'
+        : 'FAILED: no sibling confirmation from opposite family';
+
+      var score = 0;
+      if (cand.clean) score += 20;
+      if (confirmed) score += 15;
+      if (cand.engine && String(cand.engine).indexOf('PINE') >= 0) score += 10;
+      if (cand.takerFlowWith) score += 10;
+      if (cand.fundamentalAligned) score += 10;
+      if (cand.omniPrincipal === 'pass') score += 5;
+      cand.accuracyScore = score;
+
+      if (score > bestScore){
+        bestScore = score;
+        bestPick = { row: cand, tier: cand.clean ? 'clean' : 'near', source: 'weighted-accuracy' };
+        bestConfirmed = confirmed;
+      }
+    }
+
+    if (bestPick){
+      pick = bestPick;
+      pick.row.accuracyScore = bestScore;
+      if (!(bestConfirmed && pick.row.clean === true && bestScore >= 30)){
+        /* THE CROWN IS A TRIPLE GATE: house-gates CLEAN, an independent
+           opposite-family sibling agreeing on direction, and a weighted
+           score at the floor. Anything short is the desk's best WATCH —
+           disclosed for what it is (the ledger records ticket:false),
+           never a ticket. A vanish only when no candidate survives. */
         pick.row.demoted = true;
         pick.row.watchOnly = true;
         pick.row.clean = false;
         pick.row.near = true;
         pick.row.nearClean = true;
         pick.tier = 'near';
-        pick.row.crossValidation = 'FAILED: no sibling confirmation from opposite family';
-      } else {
-        pick.row.crossValidation = 'PASSED: confirmed by opposite family engine';
       }
-    }
-    
-    /* hg-v1168: THE ACCURACY VERDICT — weighted confluence score.
-       A candidate is only crowned if it meets a minimum weighted score
-       based on diverse evidence (Technicals, Fundamentals, Sentiment). */
-    var bestScore = -1;
-    var bestPick = null;
-    for (i = 0; i < btc.length; i++){
-      var cand = btc[i];
-      var score = 0;
-      if (cand.clean) score += 20;
-      if (cand.crossValidation === 'PASSED: confirmed by opposite family engine') score += 15;
-      if (cand.engine && String(cand.engine).indexOf('PINE') >= 0) score += 10;
-      if (cand.takerFlowWith) score += 10;
-      if (cand.fundamentalAligned) score += 10;
-      if (cand.omniPrincipal === 'pass') score += 5;
-      
-      if (score > bestScore){
-        bestScore = score;
-        bestPick = { row: cand, tier: cand.clean ? 'clean' : 'near', source: 'weighted-accuracy' };
-      }
-    }
-    
-    if (bestScore >= 30){
-      pick = bestPick;
-      pick.row.accuracyScore = bestScore;
-    } else {
-      pick = null; // Stand aside if the weighted score is too low
     }
     
     if (!pick || !pick.row || !hgObtcIsBtc(pick.row.sym) || !hgObtcHasLevels(pick.row)) return null;
