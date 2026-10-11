@@ -1404,6 +1404,129 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
+  /* hg-v1300: FUNDAMENTALS & FEED PANEL — the compact grouped surface the
+     user asked for after a prototype paste proposed replacing OMNIBTC with a
+     5-hard-gate verdict stack (hg-v966 trap). What ships instead reads the
+     24 free: + ind: marks (hg-v1297/v1299) and the 13 pine: marks
+     (hg-v1293/v1295/v1296) already riding every record and surfaces them
+     grouped by category -- MACRO, CRYPTO SENTIMENT, TREND / MOMENTUM,
+     VOLATILITY, PINE PORTS. One read per key; a key the mark helper left
+     absent prints UNREAD (hg-v989 three-state). Says plainly: no gate reads
+     any of these, the hg-v1294 walker still needs its first bake, and
+     everything here is record-only (hg-v966). The one home shape: this is a
+     reader of the hg-v1297 one home, not a second computation (hg-v949). */
+  var HG_OBTC_MARKS_GROUPS = [
+    { title: 'MACRO', keys: [
+      ['free:dxyTrend',       'DXY 20d trend'],
+      ['free:tnxTrend',       '10Y yield 20d trend'],
+      ['free:realYieldTilt',  'Real-rate tilt (TIP ETF)'],
+      ['free:curveSlopeTrend','10y-3m curve (hg-v1299)'],
+      ['free:vixRising',      'VIX trend (regime)'],
+      ['free:newsBlackout',   'News calendar (CPI/NFP/FOMC/GDP)']
+    ] },
+    { title: 'CRYPTO SENTIMENT', keys: [
+      ['free:fngExtreme',   'Fear & Greed (BIAS S2)'],
+      ['free:btcSeason',    'Rotation season (BTC vs alt)'],
+      ['free:btcdHigh',     'BTC dominance (>55/<45)'],
+      ['free:stables7dPct', 'Stablecoin flows 7d (±1.5%)'],
+      ['free:btcGoldCorr',  'BTC-gold 20d corr (hg-v1299)']
+    ] },
+    { title: 'TREND / MOMENTUM', keys: [
+      ['ind:adxTrending',  'ADX14 trending (≥25)'],
+      ['ind:dmiWith',      '+DI vs -DI'],
+      ['ind:rsiWith',      'RSI14 vs 50'],
+      ['ind:kerTrend',     'KER20 (≥0.6 trend / ≤0.3 chop)'],
+      ['ind:tsmomWith',    'TSMOM 24h'],
+      ['ind:sma50With',    'SMA50 (hg-v1299)'],
+      ['ind:sma200With',   'SMA200 (hg-v1299)'],
+      ['ind:hurstTrending','Hurst(1d) ≥0.55 trend']
+    ] },
+    { title: 'VOLATILITY', keys: [
+      ['ind:bbSqueeze',    'BB in KC (squeeze)'],
+      ['ind:bbOutside',    'Close outside BB bands'],
+      ['ind:atrExpanding', 'ATR14 vs ATR50'],
+      ['ind:volAboveMa',   'Volume vs 20-bar MA'],
+      ['ind:parkHigh',     'Parkinson vol vs median (hg-v1299)']
+    ] },
+    { title: 'PINE PORTS', keys: [
+      ['pine:lor',        'Lorentzian KNN'],
+      ['pine:ht',         'HalfTrend'],
+      ['pine:sqz',        'Squeeze momentum'],
+      ['pine:smf',        'Smart Money Flow'],
+      ['pine:msb',        'MSB-OB (SMC)'],
+      ['pine:smc',        'SMC core'],
+      ['pine:cipher',     'VuManChu Cipher B'],
+      ['pine:rfilter',    'Range Filter'],
+      ['pine:nwenv',      'Nadaraya-Watson envelope'],
+      ['pine:wavwap',     'Weekly AVWAP'],
+      ['pine:supertrend', 'Supertrend (hg-v1295)'],
+      ['pine:macd',       'MACD cross (hg-v1295)'],
+      ['pine:cci',        'CCI re-entry (hg-v1295)']
+    ] }
+  ];
+
+  function hgObtcMarkState(bag, keyWithPrefix){
+    /* The three-state read: strict boolean true/false, otherwise unread.
+       Mark bags store the colon-prefixed form; pine bag stores bare keys. */
+    if (!bag || typeof bag !== 'object') return undefined;
+    if (bag[keyWithPrefix] === true || bag[keyWithPrefix] === false) return bag[keyWithPrefix];
+    return undefined;
+  }
+
+  function hgObtcMarksPanelHtml(pick){
+    try{
+      if (!pick || !pick.row || !pick.row.perfectReads) return '';
+      var pr = pick.row.perfectReads;
+      var ff = (pr && pr.freeFeedVerdicts && typeof pr.freeFeedVerdicts === 'object') ? pr.freeFeedVerdicts : null;
+      var im = (pr && pr.indMarks && typeof pr.indMarks === 'object') ? pr.indMarks : null;
+      var pm = (pr && pr.pineMarks && typeof pr.pineMarks === 'object') ? pr.pineMarks : null;
+      /* Pine marks use bare keys (lor, ht, etc.) not pine:*; map to colon
+         form for one consistent reader. */
+      var pmColon = {};
+      if (pm){
+        for (var k in pm){
+          if (!Object.prototype.hasOwnProperty.call(pm, k)) continue;
+          var v = pm[k];
+          if (v === 'long') pmColon['pine:' + k] = true;
+          else if (v === 'short') pmColon['pine:' + k] = false;
+        }
+      }
+      var dir = pick.row.dir || '';
+      var totalRead = 0, totalCells = 0;
+      var html = '';
+      for (var gi = 0; gi < HG_OBTC_MARKS_GROUPS.length; gi++){
+        var g = HG_OBTC_MARKS_GROUPS[gi];
+        var rows = '';
+        var groupRead = 0;
+        for (var ki = 0; ki < g.keys.length; ki++){
+          var key = g.keys[ki][0], label = g.keys[ki][1];
+          totalCells++;
+          var state;
+          if (key.indexOf('free:') === 0) state = hgObtcMarkState(ff, key);
+          else if (key.indexOf('ind:') === 0) state = hgObtcMarkState(im, key);
+          else if (key.indexOf('pine:') === 0) state = hgObtcMarkState(pmColon, key);
+          var cls, vText;
+          if (state === true){ cls = 'ok'; vText = 'WITH'; totalRead++; groupRead++; }
+          else if (state === false){ cls = 'warn'; vText = 'AGAINST'; totalRead++; groupRead++; }
+          else { cls = ''; vText = 'UNREAD'; }
+          rows += '<div class="kv"><span class="k">' + esc(label) + '</span>'
+            + '<span class="v ' + cls + '">' + vText + '</span></div>';
+        }
+        html += '<div style="margin-top:10px"><div class="note" style="letter-spacing:.06em;opacity:.75">'
+          + esc(g.title) + ' · ' + groupRead + ' of ' + g.keys.length + ' read</div>'
+          + rows + '</div>';
+      }
+      var header = '<h3>FUNDAMENTALS &amp; FEED <span>'
+        + totalRead + ' of ' + totalCells + ' three-state marks read this scan · plan direction '
+        + esc(dir ? dir.toUpperCase() : 'n/a')
+        + ' · record-only, nothing is gated on these</span></h3>';
+      var leadNote = '<div class="note" style="margin-top:4px">'
+        + 'WITH / AGAINST / UNREAD on this plan\'s direction. These are the hg-v1297 (free: + ind:) and hg-v1293/v1295 (pine:) marks the forward ledger already stamps on every record. The hg-v1294 walker has not yet baked on this environment, so the ledger has not yet separated winners by any of them. Doctrine: hg-v966 refuses an unmeasured gate; what is here surfaces what the ledger carries, nothing more.'
+        + '</div>';
+      return '<div class="panel" style="margin-top:10px">' + header + leadNote + html + '</div>';
+    }catch(e){ return ''; }
+  }
+
   /* hg-v1039: THE FUNDING WITNESS — the same one-rule read the shared
      PERFECT formation consumes (hgFundingAgainstMark), printed beside the
      pick so the crowding verdict that shaped the crown is visible.
@@ -2697,6 +2820,7 @@ a global hard refresh.
       dhtml += hgObtcCycleContextHtml(snap && snap.extra, snap);
       dhtml += hgObtcFundingWitnessHtml(snap, pick);
       dhtml += hgObtcEvidenceWitnessesHtml(pick);
+      dhtml += hgObtcMarksPanelHtml(pick);  /* hg-v1300: FUNDAMENTALS & FEED — reader of hg-v1297/v1299/v1295/v1296 marks, record-only */
       dhtml += hgObtcScalpAnchorHtml(pick);   /* hg-v1058: the honest scalp anchor — real VWAP + ATR bands */
       dhtml += hgObtcPerfectLedgerHtml(pick);
       if (snap && snap.measured && gfn('hgProvenEdgeChipHtml')){
@@ -3319,6 +3443,25 @@ a global hard refresh.
           }
         }catch(eAn){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAn); }catch(eWan){} }
         hgObtcPerfectFormation(pick, pfReads);
+        /* hg-v1300: FUNDAMENTALS & FEED surface — the hg-v1297/v1299 ind: marks
+           and the hg-v1293/v1295 pine: marks were computed only inside the
+           fwdRow builder (for the ledger), never stashed on the live row for
+           the card to read. Compute them once on the live path too (same tape
+           the ledger will read: winnerRows is the 4h signal tape, with daily
+           for Hurst) and stash on pfReads so hgObtcMarksPanelHtml can render
+           what the ledger already carries. hg-v955: a reader exists for every
+           field this writes; hg-v966 refuses to gate on any of them. */
+        try{
+          var liveIndReads = hgObtcIndicatorReads(winnerRows, {
+            rows1d: (match && Array.isArray(match._rows1d) && match._rows1d.length >= 60) ? match._rows1d : null,
+            tsmomN: 6
+          });
+          var liveIndMarks = hgObtcIndicatorMarks(liveIndReads, pick.row.dir);
+          var livePineMarks = (typeof hgObtcPineMarks === 'function') ? hgObtcPineMarks(winnerRows) : null;
+          pfReads.indReads = liveIndReads;
+          pfReads.indMarks = liveIndMarks;
+          pfReads.pineMarks = livePineMarks;
+        }catch(eLm){}
         pick.row.perfectReads = pfReads;   /* the ledger reads the same bag the predicate consumed */
         /* hg-v1060: THE TWO GRID SETUPS — each grid stands on its own:
            the real matrix when it prints (CLEAN), the near matrix when it
@@ -3681,6 +3824,11 @@ a global hard refresh.
   W.hgObtcIndicatorReads = hgObtcIndicatorReads;
   W.hgObtcIndicatorMarks = hgObtcIndicatorMarks;
   W.HG_OBTC_PINE_FIELDS = HG_OBTC_PINE_FIELDS;
+  /* hg-v1300: FUNDAMENTALS & FEED panel reader (hg-v955: a reader for the
+     hg-v1297/v1299/v1295 marks that previously only landed in the ledger).
+     Exported so the guard drives the real function; no gate reads it. */
+  W.hgObtcMarksPanelHtml = hgObtcMarksPanelHtml;
+  W.HG_OBTC_MARKS_GROUPS = HG_OBTC_MARKS_GROUPS;
   /* hg-v1294: the OMNIBTC replay literal and its one reader (hg-v921 /
      hg-v955: a generated thing writes itself; a reader with nothing to
      read is a claim). */
