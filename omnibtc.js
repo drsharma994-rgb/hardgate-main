@@ -1042,12 +1042,30 @@ a global hard refresh.
         var pickMech = mechOf(pick.row);
         var pickV = W.hgProvenEdgeVerdict('omnibtc', pickMech, { pool: 'OMNIBTC', mechanic: pickMech });
         if (!(pickV && pickV.state === 'proven')){
-          for (var bi = 0; bi < btc.length; bi++){
-            if (!btc[bi].clean) continue;
-            var bm = mechOf(btc[bi]);
+          /* hg-v1302: iterate in a stable order so "first proven" is not
+             insertion-order-dependent — the engine loop above pushes
+             candidates in whatever order the leg/engine arrays yield, and
+             two refreshes with the same proven mechanics but different
+             push order could crown different rows. Sort by (mechanic, sym)
+             alphabetical: deterministic, independent of fetch order, and
+             preserves the existing semantic (first-proven wins) by giving
+             "first" a stable meaning. hg-v955: this does not change which
+             rows are considered proven, only which one is picked under a
+             tie that was previously undefined. */
+          var btcForProven = btc.slice().sort(function(a, b){
+            var ma = String((a && (a.omniKind || a.kind || a.engine)) || '').toUpperCase();
+            var mb = String((b && (b.omniKind || b.kind || b.engine)) || '').toUpperCase();
+            if (ma !== mb) return ma < mb ? -1 : 1;
+            var sa = String((a && a.sym) || '');
+            var sb = String((b && b.sym) || '');
+            return sa.localeCompare(sb);
+          });
+          for (var bi = 0; bi < btcForProven.length; bi++){
+            if (!btcForProven[bi].clean) continue;
+            var bm = mechOf(btcForProven[bi]);
             var bv = W.hgProvenEdgeVerdict('omnibtc', bm, { pool: 'OMNIBTC', mechanic: bm });
             if (bv && bv.state === 'proven'){
-              pick = { row: btc[bi], tier: 'clean', source: 'measured-rank' };
+              pick = { row: btcForProven[bi], tier: 'clean', source: 'measured-rank' };
               pick.row.measuredRanked = true;
               break;
             }
@@ -2529,7 +2547,57 @@ a global hard refresh.
     };
   }
 
+  /* hg-v1302: SessionStorage pin for the resolved OMNIBTC legs. The reason
+     the shown setup "changes again and again when I refresh the tab" is
+     structural, not a sort-order defect: xuMergeLegs collapses the BTC
+     base to ONE venue by live turnoverUsd, and when Delta / CoinDCX /
+     Binance exchange leader positions minute-to-minute (one leg 429s or
+     CORS-blocks on a given refresh, or turnover genuinely shifts), the
+     "winning" venue flips. A flipped venue is a different candle series
+     (BTCUSD vs B-BTC_USDT vs BTCUSDT), which produces different ATR /
+     RVOL / structure / RSI reads, which flips which engines fire — the
+     pick itself (hgCmpSetupQuality in plans.js) is deterministic given
+     identical inputs. So the fix freezes the inputs: on a successful
+     resolve we write the merged legs to sessionStorage with a 30-min
+     TTL, and the next resolve (tab refresh within the same tab session)
+     returns those legs unchanged. sessionStorage survives a reload within
+     the same tab and clears on tab close, so a new tab or a new session
+     resumes the live turnover-max behaviour — this is a pin for the
+     reader who is refreshing, not a permanent override. Fails open at
+     every seam (no sessionStorage, parse error, empty array, throwing
+     storage) so hg-v966 doctrine holds: no new gate, nothing withheld;
+     the pick is stabler, the gate chain is identical. */
+  var LEGS_PIN_KEY = 'hg_omnibtc_legs_pin_v1302';
+  var LEGS_PIN_TTL_MS = 30 * 60 * 1000;
+
+  function hgObtcReadLegPin(){
+    try{
+      if (typeof sessionStorage === 'undefined') return null;
+      var raw = sessionStorage.getItem(LEGS_PIN_KEY);
+      if (!raw || typeof raw !== 'string') return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (typeof parsed.at !== 'number' || !isFinite(parsed.at) || parsed.at <= 0) return null;
+      if ((Date.now() - parsed.at) >= LEGS_PIN_TTL_MS) return null;
+      if (!Array.isArray(parsed.legs) || !parsed.legs.length) return null;
+      return parsed.legs;
+    }catch(ePin){ return null; }
+  }
+
+  function hgObtcWriteLegPin(legs){
+    try{
+      if (typeof sessionStorage === 'undefined') return;
+      if (!Array.isArray(legs) || !legs.length) return;
+      sessionStorage.setItem(LEGS_PIN_KEY, JSON.stringify({ at: Date.now(), legs: legs }));
+    }catch(eSave){}
+  }
+
   async function hgObtcResolveLegs(){
+    var pinned = hgObtcReadLegPin();
+    if (pinned){
+      var fromPin = hgObtcFilterUniverse(pinned);
+      if (fromPin && fromPin.length) return fromPin;
+    }
     var out = [];
     if (gfn('xuUniverse')){
       try{
@@ -2538,7 +2606,9 @@ a global hard refresh.
       }catch(e){ out = []; }
     }
     if (!out.length) out = hgObtcDefaultLegs();
-    return hgObtcFilterUniverse(out);
+    out = hgObtcFilterUniverse(out);
+    if (out && out.length) hgObtcWriteLegPin(out);
+    return out;
   }
 
   async function loadBars(item, tf, n){
