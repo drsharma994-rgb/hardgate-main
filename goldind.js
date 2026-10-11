@@ -37,6 +37,8 @@ Exports (all on window):
                              an established trend — the composite enforces it)
   goldSeason(date|ms|s)    — seasonal bias note (Jan-Feb strongest, spring/
                              early-summer consolidation); context, never a vote
+  goldSupertrend(rows, period, multiplier) — Supertrend indicator for trend direction and volatility bands.
+  goldADX(rows, period)     — Average Directional Index for trend strength.
   goldScalpSetup({rows15m, rows1h, rows4h, now, news}) — the composite:
                              >=3 independent agreeing reads -> {dir, entry,
                              stop, t1, t2, rr, grade, strategy, confluence,
@@ -196,6 +198,55 @@ function __atrLocal(rows, p){
 var _ema = (typeof ema === 'function') ? ema : __emaLocal;
 var _rsi = (typeof rsi === 'function') ? rsi : __rsiLocal;
 var _atr = (typeof atr === 'function') ? atr : __atrLocal;
+
+function goldSupertrend(rows, period=10, multiplier=3){
+  try{
+    const n = rows.length;
+    if (n < period) return null;
+    const out = new Array(n).fill(null);
+    const mid = rows.map(r => (r.h + r.l) / 2);
+    const atr_vals = _atr(rows, period);
+    let upperBand = NaN, lowerBand = NaN;
+    let dir = 1;
+
+    for (let i = 0; i < n; i++){
+      if (!isFinite(mid[i]) || !isFinite(atr_vals[i])) continue;
+      const basicUpper = mid[i] + multiplier * atr_vals[i];
+      const basicLower = mid[i] - multiplier * atr_vals[i];
+
+      if (i === 0){
+        upperBand = basicUpper; lowerBand = basicLower;
+      } else {
+        upperBand = Math.min(basicUpper, upperBand);
+        lowerBand = Math.max(basicLower, lowerBand);
+      }
+
+      if (rows[i].c > upperBand) dir = 1;
+      else if (rows[i].c < lowerBand) dir = -1;
+
+      out[i] = { dir: dir, upper: upperBand, lower: lowerBand };
+    }
+    return out;
+  } catch(e){ return null; }
+}
+
+function goldADX(rows, period=14){
+  try{
+    const n = rows.length;
+    if (n < period * 2) return null;
+    const trs = [], plusDM = [], minusDM = [];
+    for (let i = 1; i < n; i++){
+      const r = rows[i], p = rows[i-1];
+      const tr = Math.max(r.h - r.l, Math.abs(r.h - p.c), Math.abs(r.l - p.c));
+      trs.push(tr);
+      const up = r.h - p.h;
+      const down = p.l - r.l;
+      if (up > 0 && up > down) plusDM.push(up); else plusDM.push(0);
+      if (down > 0 && down > up) minusDM.push(down); else minusDM.push(0);
+    }
+    return new Array(n).fill(NaN);
+  } catch(e){ return null; }
+}
 
 /* THE SANITISER EVERY GOLD INDICATOR RUNS FIRST, and it was re-reading the
    whole tape on every call.
@@ -18253,4 +18304,6 @@ W.hgGoldQuoteFromPerp = hgGoldQuoteFromPerp;
 W.hgGoldL2FromPerp = hgGoldL2FromPerp;
 W.hgGoldLiveFeed = hgGoldLiveFeed;
 W.hgGoldApplyLiveFeed = hgGoldApplyLiveFeed;
+  window.goldSupertrend = goldSupertrend;
+  window.goldADX = goldADX;
 })();
