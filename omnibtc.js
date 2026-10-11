@@ -35,11 +35,38 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              against the candidate demote it to watch — one
                              witness never flips a setup. The stack never
                              mints levels and never moves rank math.
-  PINE ..................... READ ONLY. pineScan() is a snapshot the PINE tab
-                             computes; this reads a BTC row when one is
-                             already there and contributes nothing when it is
-                             not. It never runs pine and never mints a signal
-                             pine did not produce.
+  PINE ..................... READ ONLY snapshot. pineScan() does not mint a
+                             signal the PINE tab did not already produce.
+                             The ten house pine cores also run on this
+                             desk's own BTC 4h tape, split into independent
+                             families (trend, momentum, structure, flow,
+                             value). Two scripts in one family are one vote.
+                             A crown stays a ticket only when two families
+                             fired fresh the same way and none fired against
+                             it, or one family fired fresh and a second house
+                             strategy already has levels the same way, or one
+                             family fired fresh and a house indicator (EMA
+                             20/50, MACD histogram, Donchian 20, a fresh RSI
+                             cross of 50, or a liquidity sweep) crossed fresh
+                             the same way. RSI parked between 40 and 60 is
+                             not a pass. The EMA 50/200 stack is shown and
+                             never votes. A fresh 1h core the other way
+                             leaves a watch. A standing bias is not a fresh
+                             signal. A script that did not fire is not a
+                             vote. A script that is not loaded stays unread.
+  HTF ACCURACY LOCK ........ hg-v1295: the SAME ten cores also run on the 1d
+                             tape the desk already loads. A fresh daily core
+                             the other way demotes the crown to a watch
+                             ("1d PINE AGAINST") — a 4h confluence trading
+                             into the daily is not the most accurate setup
+                             here. OPPOSING-ONLY: a daily core that agrees is
+                             disclosed in the note and counted NOWHERE, so it
+                             cannot grow `fams` and cannot make the two-family
+                             ticket easier. The 15m tape is a DISCLOSED
+                             three-state read and never a veto. Lever:
+                             `window.HG_OBTC_HTF_LOCK = false` or
+                             localStorage `hg_obtc_htf_lock = '0'` disables the
+                             lock; the default is ON and read live per scan.
   REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
                              accepted a taker series and was never fed one —
                              the candle-approximated stand-in answered for the
@@ -493,6 +520,667 @@ a global hard refresh.
     return pick;
   }
 
+  /* The ten cores the PINE tab already runs, each tagged with the idea it
+     actually measures. Two trend scripts are one vote. includeContext is
+     deliberately off: a standing bias is not a fresh signal and must not
+     vote. A missing function is unread. */
+  var OBTC_PINE = [
+    { id: 'lorentzian-kernel', label: 'Lorentzian', family: 'trend', fn: 'pineLorentzianKernel', minBars: 260,
+      opts: { kNeighbors: 8, lookback: 250, scoreLimit: 2, kernelLookback: 8, kernelBandwidth: 3 } },
+    { id: 'msb-ob', label: 'MSB / OB', family: 'structure', fn: 'pineMsbOb', minBars: 80,
+      opts: { leftBars: 5, rightBars: 5 } },
+    { id: 'squeeze-momentum', label: 'Squeeze Momentum', family: 'momentum', fn: 'pineSqueezeMomentum', minBars: 50,
+      opts: { length: 20, bbMult: 2, kcMult: 1.5 } },
+    { id: 'smart-money-flow', label: 'Smart Money Flow', family: 'flow', fn: 'pineSmartMoneyFlow', minBars: 30,
+      opts: { length: 21, threshold: 0.10 } },
+    { id: 'half-trend', label: 'HalfTrend', family: 'trend', fn: 'pineHalfTrend', minBars: 120,
+      opts: { amplitude: 2, atrMult: 2.0, atrLen: 100 } },
+    { id: 'smc-core', label: 'SMC Core', family: 'structure', fn: 'pineSmcCore', minBars: 30,
+      opts: { pivotLength: 5, atrLen: 14, recentBars: 5 } },
+    { id: 'vumanchu-cipher', label: 'VuManChu Cipher', family: 'momentum', fn: 'pineVumanchuCipher', minBars: 40,
+      opts: { wtChannelLen: 9, wtAvgLen: 21, osLevel: -53, obLevel: 53, recentBars: 5 } },
+    { id: 'range-filter', label: 'Range Filter', family: 'trend', fn: 'pineRangeFilter', minBars: 210,
+      opts: { period: 100, mult: 3.0 } },
+    { id: 'nw-envelope', label: 'NW Envelope', family: 'value', fn: 'pineNwEnvelope', minBars: 60,
+      opts: { bandwidth: 8.0, mult: 2.5, lookback: 50, atrLen: 100 } },
+    { id: 'weekly-avwap', label: 'Weekly AVWAP', family: 'value', fn: 'pineWeeklyAvwap', minBars: 20,
+      opts: { bandMult: 2.0 } }
+  ];
+
+  /* hg-v1293: THE RECORD-ONLY GENERIC PORTS.
+     ------------------------------------------------------------------
+     Twenty generic, timeframe-agnostic Pine mechanics are already
+     implemented and tested in this repo (they carry a `pineGold` prefix only
+     because the gold desks built them first) and OMNIBTC reads none of them:
+     Supertrend, PSAR flip, Hull turn, QQE, Stoch cross, EMA-cross-RSI,
+     Fisher zero, TRIX cross, Williams %R re-entry, CCI re-entry, Keltner
+     pullback, Chandelier exit, Ichimoku, ADX/DI, Aroon, Efficiency, OTE.
+     They read plain `rows` — no gold input — so they work on BTC as-is
+     (hg-v949's one home; re-implementing them for BTC would be the
+     second-copy failure).
+
+     THIS TABLE CASTS NO VOTE. Said plainly, and for the reason the repo has
+     measured three separate times: hg-v987 (no signal-time read separates
+     OMNIROUTE's 2,833-trade replay), hg-v945 (the additive well is dry on
+     this desk's own evidence) and hg-v922 (nothing either desk ranks by
+     separates across four disjoint windows). Wiring twenty unmeasured ports
+     into `OBTC_PINE` above would not be a free win even if they were
+     measured, because that book has TWO outcomes per port: an agreeing port
+     grows `pineFamilies` and makes the hg-v1292 two-family ticket EASIER,
+     while a disagreeing port hits `if (oppose.length) return
+     hgObtcDemoteWatch(...)` and stands a good crown down. Unmeasured weight
+     that can both flood and veto is the hg-v966 trap.
+
+     So these are RECORDED, never scored — the pattern the gold desks use for
+     their 27 unmeasured layers — and the forward ledger's own separation
+     reads decide out of sample whether any of them pays. That reader is why
+     marks are stamped under the forward ledger's existing 96-key cap in the
+     `pine:<key>` namespace ON THE RECORD, and the ledger's own read split
+     (`hgFwdReadSplit`) measures each port against its complement out of
+     sample. A port can only be promoted into `OBTC_PINE` above once that
+     measurement releases it.
+     CORRECTION: an earlier version of this comment named
+     `scripts/obtc-factor-separation.mjs` as the reader. NO SUCH SCRIPT EXISTS
+     (there is no `scripts/obtc-*` at all) and no walk stamps these marks, so
+     the promotion path above is open but DORMANT until one is written. What
+     makes the bank measurable today is the record hand-in below, which hands
+     the states to `hgFwdReadSplit` through the shared `reads` seam.
+
+     `key` is the pineGoldLayerStates output to read (the shared reader owns
+     the derivation); `id` is the ledger/display name. One row per port, so the
+     key and the name cannot drift apart. */
+  var OBTC_PINE_RECORD = [
+    { key: 'supertrend',  id: 'supertrend',         label: 'Supertrend',            family: 'trend' },
+    { key: 'psar',        id: 'psar-flip',          label: 'PSAR',                  family: 'trend' },
+    { key: 'hullma',      id: 'hull-turn',          label: 'Hull MA',               family: 'trend' },
+    { key: 'qqe',         id: 'qqe',                label: 'QQE',                   family: 'momentum' },
+    { key: 'stoch',       id: 'stoch-cross',        label: 'Stochastic',            family: 'momentum' },
+    { key: 'emacross',    id: 'ema-cross-rsi',      label: 'EMA cross',             family: 'momentum' },
+    { key: 'fisher',      id: 'fisher-zero',        label: 'Fisher Transform',      family: 'momentum' },
+    { key: 'trix',        id: 'trix-cross',         label: 'TRIX',                  family: 'momentum' },
+    { key: 'williams',    id: 'williams-reentry',   label: 'Williams %R',           family: 'momentum' },
+    { key: 'cci',         id: 'cci-reentry',        label: 'CCI',                   family: 'momentum' },
+    { key: 'keltner',     id: 'keltner-pullback',   label: 'Keltner',               family: 'value' },
+    { key: 'chandelier',  id: 'chandelier-exit',    label: 'Chandelier',            family: 'trend' },
+    { key: 'ichimoku',    id: 'ichimoku',           label: 'Ichimoku',              family: 'structure' },
+    { key: 'adx',         id: 'adx-di',             label: 'ADX / DI',              family: 'trend' },
+    { key: 'aroon',       id: 'aroon-cross',        label: 'Aroon',                 family: 'trend' },
+    { key: 'efficiency',  id: 'efficiency',         label: 'Kaufman efficiency',    family: 'regime' },
+    { key: 'ote',         id: 'ote',                label: 'OTE zone',              family: 'value' },
+    /* the voting book already reads Donchian and MACD as fresh indicator
+       crosses, so they are NOT duplicated here (hg-v949 second-copy rule). */
+    /* the four primitives the gold reader also derives are deliberately left
+       out: `macd`, `donchian`, `emacross`-as-macd and `sessvwap` either
+       duplicate the voting bank or carry no independent BTC meaning. */
+  ];
+
+  /* The three-state read of the record-only bank.
+     ------------------------------------------------------------------
+     THIS CALLS THE SHARED STATE READER. The first draft of this bank called
+     each port and read `res.dir` — which is the port's SIGNAL EVENT, not its
+     state, so on 400-bar clean up, down and flat tapes exactly ONE of the
+     seventeen ports ever produced a read. The gold desks had already solved
+     this: `pineGoldLayerStates` reads the port's underlying SERIES and takes
+     the current side every record, and says so in its own comment —
+     "the state read for the record stack, not the port's signal event".
+
+     So this reuses that one implementation rather than writing a second copy
+     of seventeen state derivations (hg-v949's one home). Each row's `key` is
+     the reader output to read; a key the reader leaves null is UNREAD — the
+     record carries nothing for it rather than a guessed side. */
+  function hgObtcPineRecordBook(rows){
+    var out = { loaded: 0, ran: 0, states: {} };
+    var statesFn = W.pineGoldLayerStates;
+    if (typeof statesFn !== 'function') return out;      /* reader absent: nothing read */
+    out.loaded = OBTC_PINE_RECORD.length;
+    if (!rows || rows.length < 60) return out;           /* the reader's own floor */
+    var s;
+    try{ s = statesFn(rows); }catch(ePr){ return out; }
+    if (!s || typeof s !== 'object') return out;
+    out.ran = out.loaded;
+    for (var i = 0; i < OBTC_PINE_RECORD.length; i++){
+      var spec = OBTC_PINE_RECORD[i], v = s[spec.key];
+      if (v === 'long' || v === 'short') out.states[spec.id] = v;
+    }
+    return out;
+  }
+
+  function hgObtcPineFresh(res){
+    if (!res) return false;
+    if (res.newLong || res.newShort) return true;
+    var ago = +res.barsAgo;
+    return isFinite(ago) && ago > 0 && ago <= 5;
+  }
+
+  function hgObtcPineBook(rows){
+    var out = { loaded: 0, ran: 0, fresh: [] };
+    var i, spec, fn, res, dir;
+    for (i = 0; i < OBTC_PINE.length; i++){
+      spec = OBTC_PINE[i];
+      fn = W[spec.fn];
+      if (typeof fn !== 'function') continue;
+      out.loaded++;
+      if (!rows || rows.length < spec.minBars) continue;
+      try{ res = fn(rows, spec.opts); }catch(ePn){ res = null; }
+      out.ran++;
+      if (!hgObtcPineFresh(res)) continue;
+      dir = String(res.dir || '').toLowerCase();
+      if (dir !== 'long' && dir !== 'short') continue;
+      out.fresh.push({ id: spec.id, label: spec.label, dir: dir, family: spec.family || 'pine' });
+    }
+    return out;
+  }
+
+  /* Last 6 signs of a series. A hole in that window is unread, not a zero. */
+  function hgObtcWindowStates(series){
+    var n, states, i, s;
+    if (!series || series.length < 6) return null;
+    n = series.length;
+    states = [];
+    for (i = n - 6; i < n; i++){
+      s = +series[i];
+      if (!isFinite(s)) return null;
+      states.push(s > 0 ? 1 : (s < 0 ? -1 : 0));
+    }
+    return states;
+  }
+
+  /* Exactly one side-change, still on that side. A standing lean and a chop
+     that flipped twice are not votes. */
+  function hgObtcSoleFlip(states){
+    var last, flips, changed, i, a, b;
+    if (!states || states.length < 2) return null;
+    last = states[states.length - 1];
+    if (last !== 1 && last !== -1) return null;
+    flips = 0;
+    changed = false;
+    for (i = 1; i < states.length; i++){
+      a = states[i - 1];
+      b = states[i];
+      if (a === 0 || b === 0) continue;
+      if (a !== b) flips++;
+    }
+    for (i = 0; i < states.length - 1; i++){
+      if (states[i] !== 0 && states[i] !== last) changed = true;
+    }
+    if (!changed || flips !== 1) return null;
+    return last === 1 ? 'long' : 'short';
+  }
+
+  /* Exactly one break out of the channel, still outside, never the other side.
+     Sitting outside already is a bias, not a fresh cross. */
+  function hgObtcSoleBreak(states){
+    var last, outs, opp, i;
+    if (!states || states.length < 2) return null;
+    last = states[states.length - 1];
+    if (last !== 1 && last !== -1) return null;
+    outs = 0;
+    opp = 0;
+    for (i = 0; i < states.length; i++){
+      if (states[i] !== 0 && states[i] !== last) opp++;
+    }
+    for (i = 1; i < states.length; i++){
+      if (states[i] === last && states[i - 1] !== last) outs++;
+    }
+    if (outs === 1 && opp === 0) return last === 1 ? 'long' : 'short';
+    return null;
+  }
+
+  function hgObtcCloses(rows){
+    var out = [], i, c;
+    if (!rows) return null;
+    for (i = 0; i < rows.length; i++){
+      c = rows[i] && +rows[i].c;
+      if (!isFinite(c)) return null;
+      out.push(c);
+    }
+    return out;
+  }
+
+  /* House indicators. A cross in the last five bars votes. A level that has
+     been leaning for longer does not. A missing function stays unread. */
+  function hgObtcIndBook(rows){
+    var out = { loaded: 0, ran: 0, fresh: [] };
+    var closes, fast, slow, diff, i, hist, dc, states, dir;
+    if (!rows || rows.length < 20) return out;
+    closes = hgObtcCloses(rows);
+    if (!closes) return out;
+    if (typeof W.ema === 'function'){
+      out.loaded++;
+      if (closes.length >= 55){
+        out.ran++;
+        try{
+          fast = W.ema(closes, 20);
+          slow = W.ema(closes, 50);
+          diff = [];
+          for (i = 0; i < closes.length; i++) diff.push((+fast[i]) - (+slow[i]));
+          dir = hgObtcSoleFlip(hgObtcWindowStates(diff));
+          if (dir) out.fresh.push({ id: 'ema-20-50', label: 'EMA 20/50', dir: dir, family: 'indicator' });
+        }catch(eEm){}
+      }
+    }
+    if (typeof W.macdHist === 'function'){
+      out.loaded++;
+      if (closes.length >= 40){
+        out.ran++;
+        try{
+          hist = W.macdHist(closes);
+          dir = hgObtcSoleFlip(hgObtcWindowStates(hist));
+          if (dir) out.fresh.push({ id: 'macd-hist', label: 'MACD histogram', dir: dir, family: 'indicator' });
+        }catch(eMc){}
+      }
+    }
+    if (typeof W.donchian === 'function'){
+      out.loaded++;
+      if (rows.length >= 30){
+        out.ran++;
+        try{
+          dc = W.donchian(rows, 20);
+          states = null;
+          if (dc && dc.up && dc.lo && dc.up.length >= 6){
+            states = [];
+            for (i = rows.length - 6; i < rows.length; i++){
+              if (!isFinite(+dc.up[i]) || !isFinite(+dc.lo[i]) || !isFinite(+rows[i].c)){ states = null; break; }
+              if (+rows[i].c > +dc.up[i]) states.push(1);
+              else if (+rows[i].c < +dc.lo[i]) states.push(-1);
+              else states.push(0);
+            }
+          }
+          dir = hgObtcSoleBreak(states);
+          if (dir) out.fresh.push({ id: 'donchian-20', label: 'Donchian 20', dir: dir, family: 'indicator' });
+        }catch(eDc){}
+      }
+    }
+    dir = hgObtcEngulfDir(rows);
+    if (dir) out.fresh.push({ id: 'engulfing', label: 'Engulfing', dir: dir, family: 'indicator' });
+    if (typeof W.rsi === 'function'){
+      out.loaded++;
+      if (closes.length >= 20){
+        out.ran++;
+        try{
+          var rs = W.rsi(closes, 14);
+          var adj = [], k;
+          for (k = 0; k < rs.length; k++) adj.push(isFinite(+rs[k]) ? (+rs[k] - 50) : NaN);
+          dir = hgObtcSoleFlip(hgObtcWindowStates(adj));
+          if (dir) out.fresh.push({ id: 'rsi-14', label: 'RSI 14', dir: dir, family: 'indicator' });
+        }catch(eRs){}
+      }
+    }
+    dir = hgObtcSweepDir(rows);
+    if (dir) out.fresh.push({ id: 'liq-sweep', label: 'Liquidity sweep', dir: dir, family: 'indicator' });
+    return out;
+  }
+
+  /* One fresh engulfing body in the last five bars. Both directions in that
+     window, or none, is not a vote. This is the MTF engulfing idea run on
+     the tape the desk already holds. It does not mint a stop. */
+  function hgObtcEngulfDir(rows){
+    var n, states, i, o, c, po, pc, bull, bear;
+    if (!rows || rows.length < 7) return null;
+    n = rows.length;
+    states = [];
+    for (i = n - 6; i < n; i++){
+      o = +rows[i].o; c = +rows[i].c; po = +rows[i - 1].o; pc = +rows[i - 1].c;
+      if (!isFinite(o) || !isFinite(c) || !isFinite(po) || !isFinite(pc)) return null;
+      bull = c > o && pc < po && c > po && o < pc;
+      bear = c < o && pc > po && c < po && o > pc;
+      if (bull && bear) return null;
+      states.push(bull ? 1 : (bear ? -1 : 0));
+    }
+    return hgObtcSoleBreak(states);
+  }
+
+  /* A wick through the prior ten bars that closes back inside. A close that
+     stays outside is a break, which Donchian already reads. Both sides in
+     the window, or none, is not a vote. */
+  function hgObtcSweepDir(rows){
+    var n, states, i, j, priorLo, priorHi, lo, hi, c, bull, bear;
+    if (!rows || rows.length < 16) return null;
+    n = rows.length;
+    states = [];
+    for (i = n - 6; i < n; i++){
+      priorLo = Infinity;
+      priorHi = -Infinity;
+      for (j = i - 10; j < i; j++){
+        if (!isFinite(+rows[j].l) || !isFinite(+rows[j].h)) return null;
+        if (+rows[j].l < priorLo) priorLo = +rows[j].l;
+        if (+rows[j].h > priorHi) priorHi = +rows[j].h;
+      }
+      lo = +rows[i].l; hi = +rows[i].h; c = +rows[i].c;
+      if (!isFinite(lo) || !isFinite(hi) || !isFinite(c)) return null;
+      bull = lo < priorLo && c > priorLo;
+      bear = hi > priorHi && c < priorHi;
+      if (bull && bear) return null;
+      states.push(bull ? 1 : (bear ? -1 : 0));
+    }
+    return hgObtcSoleBreak(states);
+  }
+
+  /* Standing EMA 50/200 location. Shown later as an info prior. It does
+     not vote, and a tape shorter than 200 bars stays unread. */
+  function hgObtcEmaStack(rows){
+    var closes, e50, e200, px, a, b;
+    if (!rows || typeof W.ema !== 'function') return undefined;
+    closes = hgObtcCloses(rows);
+    if (!closes || closes.length < 200) return null;
+    try{
+      e50 = W.ema(closes, 50);
+      e200 = W.ema(closes, 200);
+    }catch(eEm){ return undefined; }
+    px = closes[closes.length - 1];
+    a = e50 && +e50[e50.length - 1];
+    b = e200 && +e200[e200.length - 1];
+    if (!isFinite(px) || !isFinite(a) || !isFinite(b)) return null;
+    if (px > a && a > b) return { side: 'bull' };
+    if (px < a && a < b) return { side: 'bear' };
+    return { side: 'mixed' };
+  }
+
+  function hgObtcFamilies(list){
+    var names = [], seen = {}, i, f;
+    for (i = 0; i < (list || []).length; i++){
+      f = String((list[i] && list[i].family) || '');
+      if (!f || seen[f]) continue;
+      seen[f] = 1;
+      names.push(f);
+    }
+    return names;
+  }
+
+  function hgObtcCoreAgree(cands, row){
+    var names = [], seen = {}, i, c, eng;
+    var mine = String((row && (row.engine || row.strategy)) || '');
+    var dir = String((row && row.dir) || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') return names;
+    for (i = 0; i < (cands || []).length; i++){
+      c = cands[i];
+      if (!c || String(c.dir || '').toLowerCase() !== dir) continue;
+      if (!hgObtcHasLevels(c)) continue;
+      eng = String(c.engine || c.strategy || '');
+      if (!eng || eng === mine || seen[eng]) continue;
+      seen[eng] = 1;
+      names.push(eng);
+    }
+    return names;
+  }
+
+  function hgObtcDemoteWatch(pick, note){
+    pick.row.clean = false;
+    pick.row.near = true;
+    pick.row.nearClean = true;
+    pick.tier = 'near';
+    pick.row.pineRefused = true;
+    pick.row.pineNote = note;
+    return pick;
+  }
+
+  /* hg-v1296: THE TAPE-REGIME GATE OMNIBTC NEVER APPLIED.
+     ------------------------------------------------------------------
+     `hgRegimeAllowsSetup` (plans.js:114) is a HARD veto every other crypto
+     desk already runs on its own 4h tape: `setup-stack.js:115`,
+     `supersetup.js:161`, `chartvision-tab.js:402`, `contract-report.js:404`.
+     A `volatile` tape refuses a trend-continuation entry outright and a
+     `compression` tape refuses swing/edge/best — on every desk except this
+     one. OMNIBTC DISPLAYED `atrRegime` on its TECHNICAL line and read
+     `efficiency` as one witness, and consulted the veto NOWHERE: measured,
+     `hgRegimeAllowsSetup` and `detectRegime` appear zero times in
+     omnibtc.js. So a crown could print a ticket on a volatile 4h tape that
+     the identical tape would have refused on SWING, SCALP, SUPER or the
+     chart-vision desk.
+
+     This is the same shape the desk already uses for its other stand-downs,
+     and it obeys the doctrine this repo holds everywhere:
+       - DEMOTE, do not hide. The crown keeps its card, its levels and its
+         note; only the ticket is withheld (hg-v552 / hg-v572).
+       - THREE-STATE. `hgRegimeAllowsSetup` fails OPEN and reports
+         `unchecked: true` when it cannot read the tape. An unreadable
+         regime is NOT a verdict, so it never demotes here.
+       - NO UNMEASURED WEIGHT. This gate can only ever WITHHOLD a ticket. It
+         adds no vote to `fams`, `agree` or `oppose` and cannot make a
+         ticket easier, so it cannot flood the ticket side (the hg-v966
+         trap).
+       - ONE HOME. It calls the shared `hgRegimeAllowsSetup`; it does not
+         re-derive a second regime read.
+
+     Lever (the hg-v1156 chain shape): `window.HG_OBTC_REGIME_GATE = false`
+     or `localStorage hg_obtc_regime_gate = '0'` disables it. Default ON,
+     read live per scan so a console flip needs no reload. An unreadable
+     lever is ON (the safe side). */
+  function hgObtcRegimeGateOn(){
+    try{
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_REGIME_GATE === false) return false;
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_REGIME_GATE === true) return true;
+      if (W && W.localStorage){
+        var v = W.localStorage.getItem('hg_obtc_regime_gate');
+        if (v === '0' || v === 'false') return false;
+      }
+    }catch(eLv){}
+    return true;
+  }
+
+  /* Returns null when the tape is allowed, could not be read, or the shared
+     gate is absent — i.e. every case where this desk must NOT invent a
+     refusal. Returns the reason string only on a real veto. */
+  function hgObtcRegimeWhy(rows){
+    if (typeof W === 'undefined' || !W || typeof W.hgRegimeAllowsSetup !== 'function') return null;
+    if (!rows || !rows.length) return null;
+    var r = null;
+    try{ r = W.hgRegimeAllowsSetup(rows, 'swing'); }catch(eRg){ return null; }
+    if (!r || typeof r !== 'object') return null;
+    if (r.unchecked === true) return null;      /* unreadable is not a verdict */
+    if (r.allow === false && r.reason) return String(r.reason);
+    return null;
+  }
+
+  /* hg-v1295: THE HIGHER-TIMEFRAME ACCURACY LOCK.
+     ------------------------------------------------------------------
+     The pine and indicator books read the 4h tape and the 1h tape. The
+     desk LOADS a 1d tape and stashes it on every candidate
+     (`c._rows1d`), paints it in the timeframe line, and handed it to
+     NEITHER book — so a crown whose 4h confluence fought the daily tape
+     still printed as a full ticket.
+
+     This is the same shape every time-based read on this repo already
+     uses (the gold desks' MTF conjunction, hg-v1016/v1017): a higher
+     timeframe that disagrees stands the setup down, and a higher
+     timeframe that agrees is DISCLOSED, never counted. It is
+     OPPOSING-ONLY by construction — `dAgree` is read by the note and by
+     nothing else, so it can never grow `fams` and can never make the
+     hg-v1292 two-family ticket easier. The lock can only withhold a
+     ticket that fights the daily; it cannot mint one.
+
+     Lever (the hg-v1156 chain shape): `window.HG_OBTC_HTF_LOCK = false`
+     or `localStorage hg_obtc_htf_lock = '0'` disables the lock. The
+     default is ON, and read live at every scan so a console flip needs
+     no reload. An unreadable lever is ON (the safe side). */
+  function hgObtcHtfLockOn(){
+    try{
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_HTF_LOCK === false) return false;
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_HTF_LOCK === true) return true;
+      if (W && W.localStorage){
+        var v = W.localStorage.getItem('hg_obtc_htf_lock');
+        if (v === '0' || v === 'false') return false;
+      }
+    }catch(eLv){}
+    return true;
+  }
+
+  /* A sendable crown needs two independent fresh reads. Two scripts that
+     measure the same idea are one read. Silence and opposition are not
+     tickets. An unloaded bank, a missing tape, and an indicator that did
+     not cross stay unread. */
+  function hgObtcApplyPineAccuracy(pick, rows, cands, rows1h, rows1d, rows15m){
+    if (!pick || !pick.row) return pick;
+    if (!rows || rows.length < 20){
+      pick.row.pineNote = 'pine bank unread — no 4h tape, so the scripts were not run';
+      return pick;
+    }
+    var book = hgObtcPineBook(rows);
+    pick.row.pineFresh = book.fresh;
+    /* hg-v1293: the record-only bank, read on the same 4h tape but kept OUT of
+       every vote below. Stamped here so the forward ledger carries a
+       three-state read per port and the separation harness can decide, out of
+       sample, whether any of them pays. Absent state = that port did not fire
+       or is not loaded; it is never a guessed side. Nothing in this function
+       reads `pineRecord` back into `fams`, `agree`, or `oppose`. */
+    var recBook = hgObtcPineRecordBook(rows);
+    pick.row.pineRecord = recBook.states;
+    pick.row.pineRecordRan = recBook.ran;
+    pick.row.pineRecordLoaded = recBook.loaded;
+    /* hg-v1295: the daily book, read on the same reader as the 4h book and
+       stamped beside it. It decides a LOCK (below) and is disclosed on the
+       row; it never enters `fams`, `agree` or `oppose`. Read before the
+       vote vectors are built so this stays a pre-vote stamp. */
+    var htfOn = hgObtcHtfLockOn();
+    var dBook = null;
+    if (rows1d && rows1d.length >= 120) dBook = hgObtcPineBook(rows1d);
+    /* hg-v1295: the daily split, computed on the pure 4h book (no 1h recursion).
+       Stamped HERE, before any vote vector is built, so the hg-v1293 invariant
+       ("every record-bank use precedes every vote assignment") still holds —
+       the read banks are reads, the vote vectors are votes. */
+    var dAgree = [], dOppose = [], htfRan = 0;
+    if (dBook){
+      htfRan = dBook.ran;
+      for (var di = 0; di < dBook.fresh.length; di++){
+        var df = dBook.fresh[di];
+        if (df.dir === String(pick.row.dir || '').toLowerCase()) dAgree.push(df.label);
+        else dOppose.push(df.label);
+      }
+    }
+    pick.row.htfRan = htfRan;
+    pick.row.htfLock = htfOn;
+    pick.row.htfAgree = dAgree.length ? dAgree.slice() : undefined;
+    pick.row.htfOppose = dOppose.length ? dOppose.slice() : undefined;
+    /* hg-v1295: the 15m DISCLOSURE read. Deliberately NOT a veto — a 15m
+       EMA9/21 wiggle must never stand down a 4h swing ticket (the hg-v1292
+       opposing read is a different, independent 4h/1h measurement). Stamped
+       as a three-state mark so the ledger can split on it later. */
+    var m15 = hgObtcTapeDir(rows15m);
+    if (m15 === 'long' || m15 === 'short'){
+      pick.row.pine15m = (m15 === String(pick.row.dir || '').toLowerCase()) ? 'with' : 'against';
+    } else if (rows15m && rows15m.length >= 30){
+      pick.row.pine15m = 'unread';
+    }
+    /* hg-v1295: the daily disclosure text, built HERE with the other read
+       stamps and read by the three surviving ticket branches below. It is a
+       sentence, never a vote: it appends to `pineNote` and reaches `fams`,
+       `agree` and `oppose` nowhere.
+       The lever-OFF-but-daily-opposing case is named explicitly: reporting
+       "none fresh" there would be FALSE — the daily cores did fire and the
+       LEVER is what withheld them, so a reader must be told which. */
+    var dNote = '';
+    if (dAgree.length) dNote = ' · 1d agrees: ' + dAgree.join(', ');
+    else if (dOppose.length && !htfOn) dNote = ' · 1d PINE AGAINST (' + dOppose.join(', ')
+      + ') — lock OFF, so the daily conflict was NOT a stand-down';
+    else if (dOppose.length) dNote = ' · 1d against: ' + dOppose.join(', ');
+    else if (htfRan) dNote = ' · 1d read ' + htfRan + ' cores, none fresh';
+    else dNote = ' · 1d tape too thin to read';
+    /* hg-v1297: the tape-regime stand-down, FIRST among the stand-downs, and
+       placed ABOVE the loaded-bank guard on purpose: this veto depends on the
+       4h TAPE and on nothing in the pine bank, so an unloaded bank must not be
+       able to mask it. Every other crypto desk refuses a trend-continuation
+       entry on a volatile tape and a swing/best entry on a compression tape;
+       this desk did not, so a crown could print a ticket on a tape the
+       identical setup would have been refused on everywhere else. The shared
+       gate's reason is stamped verbatim. Unreadable regime -> null -> no
+       refusal (three-state). */
+    if (hgObtcRegimeGateOn()){
+      var rgWhy = hgObtcRegimeWhy(rows);
+      if (rgWhy){
+        pick.row.regimeRefused = true;
+        return hgObtcDemoteWatch(pick, 'TAPE REGIME — ' + rgWhy
+          + '. Watch only, not a ticket.');
+      }
+    }
+    if (!book.loaded){
+      pick.row.pineNote = 'pine bank unread — the scripts are not loaded, so they cast no vote';
+      return pick;
+    }
+    var dir = String(pick.row.dir || '').toLowerCase();
+    var agree = [], agreeItems = [], oppose = [], i, f;
+    for (i = 0; i < book.fresh.length; i++){
+      f = book.fresh[i];
+      if (f.dir === dir){ agree.push(f.label); agreeItems.push(f); }
+      else oppose.push(f.label);
+    }
+    var ind = hgObtcIndBook(rows);
+    var indAgree = [], indOppose = [];
+    for (i = 0; i < ind.fresh.length; i++){
+      f = ind.fresh[i];
+      if (f.dir === dir) indAgree.push(f.label);
+      else indOppose.push(f.label);
+    }
+    var h1Oppose = [], h1Agree = [];
+    if (rows1h && rows1h.length >= 20){
+      var book1 = hgObtcPineBook(rows1h);
+      for (i = 0; i < book1.fresh.length; i++){
+        f = book1.fresh[i];
+        if (f.dir === dir) h1Agree.push(f.label);
+        else h1Oppose.push(f.label);
+      }
+    }
+    var cores = hgObtcCoreAgree(cands, pick.row);
+    var fams = hgObtcFamilies(agreeItems);
+    pick.row.pineAgree = agree;
+    pick.row.pineOppose = oppose;
+    pick.row.pineFamilies = fams;
+    pick.row.coreAgree = cores;
+    pick.row.indAgree = indAgree;
+    pick.row.indOppose = indOppose;
+    if (oppose.length){
+      return hgObtcDemoteWatch(pick, 'PINE AGAINST — ' + oppose.join(', ')
+        + ' fired the other way. Watch only, not a ticket.');
+    }
+    if (indOppose.length){
+      return hgObtcDemoteWatch(pick, 'INDICATOR AGAINST — ' + indOppose.join(', ')
+        + ' crossed the other way. Watch only, not a ticket.');
+    }
+    if (h1Oppose.length){
+      return hgObtcDemoteWatch(pick, '1h PINE AGAINST — ' + h1Oppose.join(', ')
+        + ' fired the other way on the 1h tape. Watch only, not a ticket.');
+    }
+    /* hg-v1295: the daily lock. Opposing-only, and the earliest stand-down:
+       a crown trading into a fresh daily pine read is not the most accurate
+       setup on this desk, whatever its 4h confluence says. Ordered LAST among
+       the stand-downs so a 4h/1h conflict — the narrower, more actionable
+       read — names itself first when more than one fires. */
+    if (htfOn && dOppose.length){
+      return hgObtcDemoteWatch(pick, '1d PINE AGAINST — ' + dOppose.join(', ')
+        + ' fired the other way on the daily tape. Watch only, not a ticket.');
+    }
+    var extra = (indAgree.length ? (' · ' + indAgree.join(', ') + ' crossed the same way') : '')
+      + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '')
+      + dNote;
+    if (fams.length >= 2){
+      pick.row.pineNote = 'PINE CONFIRM — ' + agree.join(', ')
+        + (cores.length ? (' · also ' + cores.join(', ')) : '')
+        + extra;
+      return pick;
+    }
+    if (fams.length === 1 && cores.length >= 1){
+      pick.row.pineNote = 'PINE + CORE — ' + agree.join(', ') + ' fresh, and '
+        + cores.join(', ') + ' already has levels the same way' + extra;
+      return pick;
+    }
+    if (fams.length === 1 && indAgree.length >= 1){
+      pick.row.pineNote = 'PINE + INDICATOR — ' + agree.join(', ') + ' fresh, and '
+        + indAgree.join(', ') + ' crossed the same way'
+        + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '')
+        + dNote;
+      return pick;
+    }
+    if (fams.length === 1 && agree.length === 1){
+      return hgObtcDemoteWatch(pick, 'only ' + agree[0]
+        + ' fired fresh, and no second house strategy has levels this way. Watch only.');
+    }
+    if (fams.length === 1){
+      return hgObtcDemoteWatch(pick, 'only the ' + fams[0] + ' family fired fresh ('
+        + agree.join(', ') + '), and no second house strategy or fresh indicator cross is this way. Watch only.');
+    }
+    return hgObtcDemoteWatch(pick, 'no fresh pine script on this 4h tape ('
+      + book.ran + ' of ' + book.loaded + ' cores ran). Watch only, not a ticket.');
+  }
+
   /* hg-v1035: THE PERFECT SETUP tier — the shared PERFECT formation predicate
      (hg-perfect-setup.js hgPerfectFormation) applied to the desk's ONE MOST
      PROBABLE crown. OmniBTC already combines every engine (technical) with
@@ -526,6 +1214,23 @@ a global hard refresh.
       oppose: 0,
       demoted: !!(r.demoted), vetoed: !!(r.vetoed)
     };
+  }
+
+  /* hg-v1295: the directional FUNDAMENTAL / SENTIMENT verdict the card
+     prints, mapped to the shared PERFECT predicate's leg. Same 2+ net rule
+     the demote uses: a decisive tailwind reads 'with', a decisive headwind
+     reads 'against', anything else stays UNREAD (no verdict). Exported so
+     the wiring is testable and never drifts from the card. */
+  function hgObtcFundamentalVerdict(fund, dir){
+    try{
+      if (!fund || !dir) return null;
+      if (!(fund.bears || fund.bulls)) return null;
+      var against = dir === 'long' ? (fund.bears || 0) : (fund.bulls || 0);
+      var withDir = dir === 'long' ? (fund.bulls || 0) : (fund.bears || 0);
+      if (against - withDir >= 2) return 'against';
+      if (withDir - against >= 2) return 'with';
+      return null;
+    }catch(e){ return null; }
   }
 
   function hgObtcPerfectFormation(pick, reads){
@@ -1171,6 +1876,15 @@ a global hard refresh.
       if (r.dvolState) sLines.push('DVOL ' + (+r.dvolState.dvol).toFixed(1));
       if (isFinite(reads.cvdContext)) { } /* context string below */
       if (reads.cvdContext) sLines.push('CVD ' + reads.cvdContext);
+      /* hg-v1295: the directional free-sentiment verdict (F&G, retail
+         long/short, hashrate, NVT, OI divergence) — read WITH the crown's
+         direction and fed to the shared PERFECT tier. */
+      if (reads.fundamentalVerdict){
+        sLines.push('sentiment stack ' + reads.fundamentalVerdict
+          + ' (feeds ★ PERFECT⁺ — an ' + reads.fundamentalVerdict + ' read is a ' + (reads.fundamentalVerdict === 'with' ? 'tailwind' : 'headwind') + ' the perfect tier must clear)');
+        if (reads.fundamentalVerdict === 'against'){ sVerd = 'AGAINST'; sCls = ' bad'; }
+        else if (reads.fundamentalVerdict === 'with' && sVerd === 'UNREAD') sVerd = 'ALIGNED';
+      }
       html += dim('SENTIMENTAL', sVerd, sCls, sLines);
       /* ---- MACRO: dominance, news, leverage cycle, basis ---- */
       var mLines = [], mVerd = 'UNREAD', mCls = '';
@@ -1634,6 +2348,7 @@ a global hard refresh.
     html += '<div class="dim">' + esc(r.engine || r.strategy || 'engine');
     if (r.venue) html += ' · ' + esc(String(r.venue).toUpperCase());
     html += clean ? ' · ticket' : ' · watch only</div></div>';
+    if (r.pineNote) html += '<div class="note" data-obtc-pine="1">' + esc(r.pineNote) + '</div>';
     if (r.evidenceChips && r.evidenceChips.length){
       html += '<div class="dim" style="width:100%">' + esc(r.evidenceChips.join(' · ')) + '</div>';
     }
@@ -1824,7 +2539,7 @@ a global hard refresh.
         item = legs[i];
         if (!hgObtcIsBtc(item.sym || item.symbol)) continue;
         tk = tickerOf(item);
-        r4 = await loadBars(item, '4h', 220);
+        r4 = await loadBars(item, '4h', 280);
         r1 = await loadBars(item, '1h', 180);
         r15 = await loadBars(item, '15m', 180);
         /* the 1d leg is what squeezeClassify and trendScore read for the
@@ -1837,6 +2552,12 @@ a global hard refresh.
         extra = extra || {};
         if (gfn('hgObtcGatherExtra')){
           try{ extra = await W.hgObtcGatherExtra(tk.symbol, tk) || extra; }catch(eX){}
+        }
+        if (extra && r4 && gfn('hgObtcOiDivRead') && extra.oiHist){
+          try{ extra.oiDiv = W.hgObtcOiDivRead(r4, extra.oiHist); }catch(eOd){}
+        }
+        if (extra && r4){
+          try{ extra.emaStack = hgObtcEmaStack(r4); }catch(eEs){}
         }
         if (gfn('hgContractReportRun')){
           try{
@@ -1934,6 +2655,10 @@ a global hard refresh.
             && c.entry === pick.row.entry && c.stop === pick.row.stop;
         })[0];
         winnerRows = match && match._rows;
+        /* hg-v1295: the daily and 15m tapes the desk already loads and stashes
+           are handed to the accuracy gate — the daily as an opposing-only
+           lock, the 15m as a disclosed read. Both were unread before. */
+        try{ hgObtcApplyPineAccuracy(pick, winnerRows, all, match && match._rows1, match && match._rows1d, match && match._rows15); }catch(ePine){}
         /* hg-v1051: ENTRY-EDGE REFINEMENT — the pick's entry is snapped
            to the structure edge the house exact-entry seam prices (edge
            signal / swing enrichment on the winner's own tape), then
@@ -2039,6 +2764,20 @@ a global hard refresh.
         }catch(eVen){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eVen); }catch(eWv){} }
         try{
           if (fundamental && fundamental.blackout) pfReads.newsRisk = 'blackout';
+          /* hg-v1295: FUNDAMENTAL / SENTIMENT VERDICT — the same directional
+             count the card prints (bears vs bulls from the free sentiment
+             stack: F&G, retail long/short, hashrate, NVT, OI divergence). A
+             decisive 2+ net tailwind WITH the crown's direction reads 'with'
+             (so PERFECT⁺ cannot be earned without it); a decisive 2+ net
+             headwind reads 'against' (a fail-closed belt over the demote
+             rule — such a row is normally already a watch, never a ticket).
+             No decisive checked vote stays UNREAD: no verdict either way. */
+          if (fundamental && pick.row.dir){
+            try{
+              var fndV = hgObtcFundamentalVerdict(fundamental, pick.row.dir);
+              if (fndV) pfReads.fundamentalVerdict = fndV;
+            }catch(eFv){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFv); }catch(eWfv){} }
+          }
           if (pick.row.omniCvdWith === true) pfReads.takerFlowVerdict = 'with';
           else if (pick.row.omniCvdWith === false) pfReads.takerFlowVerdict = 'against';
           /* hg-v1057: TAKER-FLOW ACCEPTANCE — an opposed flow verdict that
@@ -2484,6 +3223,23 @@ a global hard refresh.
               /* hg-v1046: how many scanned venues crowned this direction —
                  the cross-venue confirmation read mark */
               venueAgreeCount: isFinite(pfReads.venuesAgree) ? pfReads.venuesAgree : undefined,
+              /* the hg-v1293 record-only bank, made MEASURABLE. The seventeen
+                 states rode the row and the card but no record ever carried
+                 them, so hgFwdReadSplit read zero rows by construction. They
+                 now ride the hg-v989 reads seam as booleans: true when the
+                 port agrees WITH the plan direction, false when it opposes,
+                 absent when the reader left it UNREAD (never a guessed side). */
+              reads: (function(){
+                var pr = pick.row && pick.row.pineRecord, out = {}, rk;
+                if (!pr || typeof pr !== 'object') return undefined;
+                var rd = String(pick.row.dir || '').toLowerCase();
+                for (rk in pr){
+                  if (!Object.prototype.hasOwnProperty.call(pr, rk)) continue;
+                  if (pr[rk] !== 'long' && pr[rk] !== 'short') continue;
+                  out['pine:' + rk + 'With'] = (pr[rk] === rd);
+                }
+                return Object.keys(out).length ? out : undefined;
+              })(),
               /* hg-v1047: the measured-edge verdict for this mechanic —
                  recorded only once armed (proven / losing), never while
                  the floor has not been reached */
@@ -2510,8 +3266,36 @@ a global hard refresh.
                  the Bollinger squeeze state, recorded only when readable */
               vwapDevPct: (isFinite(pfReads.vwapDevPct) ? pfReads.vwapDevPct : undefined),
               bbSqueeze: (pfReads.bbSqueeze || undefined),
+              /* hg-v1295: the higher-timeframe pine read marks — how many
+                 daily cores produced a read at all, and the 15m tape's
+                 three-state agreement. Recorded so the ledger can split on
+                 the daily-vs-4h interaction; they gate nothing at read time
+                 (the lock decision already happened upstream and is stamped
+                 as `htfLocked` below). */
+              htfRan: (pick.row.htfRan ? pick.row.htfRan : undefined),
+              htfLocked: (pick.row.htfLock && Array.isArray(pick.row.htfOppose) && pick.row.htfOppose.length ? true : undefined),
+              htfLock: (pick.row.htfLock === false ? false : undefined),
+              pine15m: (pick.row.pine15m || undefined),
               session: (pfReads.sessName || undefined)
             };
+            /* hg-v1293: the record-only generic Pine ports, one three-state
+               mark per port under the `pine:<id>` namespace the ledger's key
+               validator accepts. Read straight off the crown row so the mark
+               cannot drift from what the desk actually saw. A port that did
+               not fire, is not loaded, or threw is ABSENT — recorded as
+               nothing rather than as a guessed side, so the separation split
+               counts it as unread instead of as evidence. These gate NOTHING:
+               no rule above or below this literal reads them back. */
+            try{
+              var recStates = (pick.row && pick.row.pineRecord) || null;
+              if (recStates){
+                for (var rk in recStates){
+                  if (!Object.prototype.hasOwnProperty.call(recStates, rk)) continue;
+                  var rv = recStates[rk];
+                  if (rv === 'long' || rv === 'short') fwdRow['pine:' + rk] = rv;
+                }
+              }
+            }catch(eRec){}
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
             /* the record array is a named variable so the call-shape censuses
                (test-crypto-funding-mark / test-crypto-ledger-fill-mark) read the
@@ -2629,6 +3413,10 @@ a global hard refresh.
   W.hgObtcCandidateFromOmniHit = hgObtcCandidateFromOmniHit;
   W.hgObtcPrincipalBannerHtml = hgObtcPrincipalBannerHtml;
   W.hgObtcPick = hgObtcPick;
+  W.hgObtcPineBook = hgObtcPineBook;
+  W.hgObtcIndBook = hgObtcIndBook;
+  W.hgObtcApplyPineAccuracy = hgObtcApplyPineAccuracy;
+  W.hgObtcHtfLockOn = hgObtcHtfLockOn;      /* hg-v1295: the daily-lock lever */
   /* hg-v1057: the accuracy-pack seams, exported so the test drives the real
      computation rather than a re-implementation */
   W.hgObtcFlowAcceptance = hgObtcFlowAcceptance;
@@ -2663,6 +3451,7 @@ a global hard refresh.
       };
     }catch(e){ return null; }
   };
+  W.hgObtcFundamentalVerdict = hgObtcFundamentalVerdict;   /* hg-v1295: fundamental/sentiment leg for the PERFECT tier */
   W.hgObtcPerfectCandidate = hgObtcPerfectCandidate;   /* hg-v1035: the PERFECT tier */
   W.hgObtcPerfectFormation = hgObtcPerfectFormation;
   W.hgObtcPerfectStamp = hgObtcPerfectStamp;

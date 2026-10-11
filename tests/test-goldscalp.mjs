@@ -1307,7 +1307,22 @@ function loadConvictionStore(ls){
   const obC = scanC.cands.find(c => c.stratKey === 'ob' && c.id !== obA.id);
   assert(!!obC && /^ob\|long\|101$/.test(obC.id), 'shifted structure (different zone) gets a DIFFERENT structural id (got ' + (obC && obC.id) + ')');
   const liveC = Object.keys(loadConvictionStore(ls).live).length;
-  assert(liveC === liveB + 1, 'genuinely different structure mints a NEW conviction (' + liveB + ' -> ' + liveC + ')');
+  /* MEASURED, and the claim corrected. This used to read `liveC === liveB + 1` —
+     "genuinely different structure mints a NEW conviction". Driven on this tape
+     it is `2 -> 4`, and the reason is that the tape mints through TWO mechanics,
+     not one: scan B holds `ob|long|99` + `openrange|short|104`, and the shifted
+     structure carries BOTH to new structural ids (`ob|long|101` +
+     `openrange|short|106`). Two shifted structures, two new convictions — the
+     count is right and the `+1` was the stale part. The invariants that actually
+     matter are asserted instead: the original conviction SURVIVES the shift (a
+     new structure must not evict the old one), and both added keys belong to the
+     shifted zone. */
+  assert(liveC === liveB + 2, 'the shifted structure mints one NEW conviction per mechanic that fired (' + liveB + ' -> ' + liveC + ')');
+  const liveCkeys = Object.keys(loadConvictionStore(ls).live);
+  assert(obA && liveCkeys.indexOf(obA.id) >= 0,
+    'the ORIGINAL conviction survives the shift — a new structure does not evict the old one (' + (obA && obA.id) + ')');
+  assert(liveCkeys.filter(k => /(^|\|)101$|(^|\|)106$/.test(k)).length === 2,
+    'and both added keys belong to the shifted zone (' + liveCkeys.filter(k => /(^|\|)101$|(^|\|)106$/.test(k)).join(', ') + ')');
   assert(obC && obC.locked === false, 'the new structure is a fresh conviction, not a restore');
   ls.removeItem('hgGoldscalpConviction');
   console.log('== 22) conviction invalidation: STOPPED / TARGET HIT / EXPIRED ==');

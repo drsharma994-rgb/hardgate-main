@@ -307,16 +307,15 @@
       }
     }
     if (isFinite(hour) && hour >= 18.25 && hour <= 18.5 && !paceDead(__pace)){
-      var strike = Math.round(last.c / 5) * 5;
-      var pin = Math.abs(last.c - strike);
-      if (pin >= 3 && pin <= 5.5){
-        if (last.c > strike && last.c < last.o){
-          var pinS = hit('GS-10', 'COMEX Settlement Pin', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'Between 18:15 and 18:30 UTC price sat 3 to 5.50 dollars above the nearest five-dollar strike, and this bar closed back toward it.');
-          if (pinS) out.push(pinS);
-        } else if (last.c < strike && last.c > last.o){
-          var pinL = hit('GS-10', 'COMEX Settlement Pin', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'Between 18:15 and 18:30 UTC price sat 3 to 5.50 dollars under the nearest five-dollar strike, and this bar closed back toward it.');
-          if (pinL) out.push(pinL);
-        }
+      var strike = Math.round(last.o / 5) * 5;
+      var upExt = last.h - strike;
+      var dnExt = strike - last.l;
+      if (upExt >= 3 && upExt <= 5.5 && last.c < strike && last.c < last.o){
+        var pinS = hit('GS-10', 'COMEX Settlement Pin', 'short', last.c, last.h + Math.max(a * 0.35, 2.5), 'The 18:15 UTC bar ran 3 to 5.50 dollars through the five-dollar strike nearest its open and closed back through that strike.');
+        if (pinS) out.push(pinS);
+      } else if (dnExt >= 3 && dnExt <= 5.5 && last.c > strike && last.c > last.o){
+        var pinL = hit('GS-10', 'COMEX Settlement Pin', 'long', last.c, last.l - Math.max(a * 0.35, 2.5), 'The 18:15 UTC bar ran 3 to 5.50 dollars through the five-dollar strike nearest its open and closed back through that strike.');
+        if (pinL) out.push(pinL);
       }
     }
     if (isFinite(hour) && hour >= 3 && hour <= 4.5 && today && !paceDead(__pace)){

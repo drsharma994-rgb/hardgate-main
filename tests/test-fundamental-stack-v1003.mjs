@@ -287,8 +287,24 @@ console.log('\n== OMNIBTC delegates to the shared stack, behaviour intact ==');
 {
   const W = boot(['indicators.js', 'indicators2.js', 'plans.js', 'omnibtc-engines.js', 'omnibtc.js']);
   const r = W.hgObtcFundamentalRegime({ fng: { v: 85, c: 'Extreme Greed' } });
-  ok(r.regime === 'bearish' && r.bears === 1 && r.legs.length === 7,
-    'the delegate returns the shared BTC board with the v1002 semantics');
+  /* hg-v1294 grew the OMNIBTC delegate from the shared five-leg BTC board to
+     NINE: hashrate, NVT, active addresses and OI divergence joined it. The
+     shared board itself (hgFundamentalRegime) is untouched at seven — asserted
+     above. Here the v1002 semantics are the point, not the count: one extreme
+     F&G reading is still exactly one bear, and every unsupplied leg still
+     reports `unchecked` rather than voting. */
+  const unchecked = (r.legs || []).filter(l => l.state === 'unchecked').length;
+  /* hg-v1294 grew the OMNIBTC delegate from the shared five-leg BTC board to
+     TWELVE: onchain, term, fng, rr25d, dvol, dom and news from the shared
+     stack, then retail, hashrate, NVT, active addresses and OI divergence.
+     The shared board itself is asserted at seven above and is untouched. What
+     this assertion is FOR is the v1002 SEMANTICS over whatever the board has
+     become: one extreme F&G reading is still exactly one bear, and every leg
+     that was not supplied still reports `unchecked` rather than voting. */
+  ok(r.regime === 'bearish' && r.bears === 1 && r.legs.length === 12 && unchecked === 11,
+    'the delegate returns the shared BTC board with the v1002 semantics, now over twelve legs '
+    + '(got regime=' + r.regime + ' bears=' + r.bears + ' legs=' + (r.legs || []).length
+    + ' unchecked=' + unchecked + ')');
   const ev = W.hgObtcEvidenceDecide({ dir: 'long', entry: 100, stop: 90, t1: 120 }, {
     fundamental: W.hgObtcFundamentalRegime({
       fng: { v: 85, c: 'Extreme Greed' }, options: { rr25d: { rr25d: -9.2, extreme: true, bias: 'PUTS RICH' } } })

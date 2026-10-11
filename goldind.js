@@ -3300,10 +3300,16 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
        Asian-range strategy trades its own session; everything else is
        demoted and held to a +2 higher tally bar in goldRankSetups. */
     var inKillzone = !!(D.kz && D.kz.weight > 0);
+    /* A COMEX pin only exists on the 18:15 bar, and a Tokyo break only exists
+       inside 03:00-04:30. Those windows are outside the London/NY killzone on
+       purpose. Demoting them for that throws away the only bar they can fire. */
+    var nativeHour = (D.kz && isFinite(D.kz.hourGMT)) ? D.kz.hourGMT : NaN;
+    var nativeSess = (key === 'gs10' && nativeHour === 18)
+      || (key === 'gs11' && (nativeHour === 3 || nativeHour === 4));
     /* hg-v944: the lever, defaulting to ON (unchanged). See
        hgGoldSessionSepPanelHtml for what this withholds and what measures it. */
     if (hgGoldOffSessionDemoteOn()
-        && !inKillzone && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
+        && !inKillzone && !nativeSess && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
       demoted = true; offSess = true; stamps.push('OFF-SESSION');
       gateNotes.push('detected ' + (D.kz ? (D.kz.label || 'OFF-HOURS') : 'OFF-HOURS')
         + ' — outside every ICT killzone; held to a +2 higher confluence-tally bar');
@@ -4221,8 +4227,15 @@ function goldScalpSetups(inp){
         D.__part6 = hgGoldPart6Engine(rows, {
           newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
           now: nowMs,
-          dxyRows: (inp && (inp.dxyRows || inp.dxyCandles)) || null,
+          dxyRows: (function(){
+            var intra = inp && inp.dxyIntraday;
+            if (intra && intra.length && isFinite(+intra[0].h) && isFinite(+intra[0].l)) return intra;
+            var daily = inp && (inp.dxyCandles || inp.dxyRows);
+            if (daily && daily.length && isFinite(+daily[0].h) && isFinite(+daily[0].l)) return daily;
+            return null;
+          })(),
           btcRows: (inp && inp.btcRows) || null,
+          goldDaily: (inp && (inp.goldDaily || inp.dailyCandles)) || null,
           events: (inp && inp.events) || null,
           dom: (inp && inp.dom) || null,
           skew: (inp && inp.skew) || null
@@ -4262,6 +4275,8 @@ function goldScalpSetups(inp){
           usdInr: (inp && inp.usdInr) || null,
           kToday: (inp && inp.kToday) || null,
           silverRows: (inp && inp.silverRows) || null,
+          silverDaily: (inp && inp.silverDaily) || null,
+          goldDaily: (inp && (inp.goldDaily || inp.dailyCandles)) || null,
           mcxRows: (inp && inp.mcxRows) || null,
           priorDay: (inp && inp.priorDay) || null,
           tradesToday: (inp && inp.tradesToday) || 0,
@@ -4725,7 +4740,7 @@ function goldScalpSetups(inp){
     try{
       var suite = (typeof window !== 'undefined') ? window.HG_GoldSuite : null;
       if (suite && typeof suite.scalpHits === 'function'){
-        var spec = suite.scalpHits(rows, rows) || [];
+        var spec = suite.scalpHits(rows, rows, { newsRelease: hgGoldTier1OnBar(newsState, rows[rows.length - 1]) }) || [];
         for (var si = 0; si < spec.length; si++){
           var sh = spec[si];
           if (!sh || sh.id === 'GS-1') continue;
@@ -6027,6 +6042,40 @@ function goldRankSetups(cands, ctx){
       rc.tally = tally;
       rc.tallyParts = parts;
       if (freeAgainst > 0) rc.oppose = (isFinite(+rc.oppose) ? +rc.oppose : 0) + freeAgainst;
+      /* hg-v1291: THE GOLD FREE-FEED WITNESS. Every free internet resource this
+         desk already fetched and scored travels in `freeReads`, and each verdict
+         is ALREADY oriented to this candidate's own direction
+         (hgGoldFreeFeedVerdicts: true = favourable for this trade, false =
+         against it, absent = the series never loaded). The shared PERFECT
+         predicate read none of them, so a whole library of free evidence — the
+         Yahoo metal and cross-ratio complex (GC=F, SI=F, HG=F, PL=F, PA=F, GDX,
+         CPER, ^VIX, TLT, UUP, JPY=X, AUD=X, CNY=X), Frankfurter DXY, the
+         Treasury 10Y, CFTC managed-money COT, alternative.me Fear & Greed, PAXG
+         perp funding and basis, GVZ, GLD volume, the yield curve — was invisible
+         to the badge. It becomes ONE leg: did any series answer, and did any
+         single one object. Computed HERE (not later) because the free block above
+         is what fills the map. Zero new requests: these marks already existed. */
+      try{
+        var pfFr = freeReads || {}, pfFrKeys = Object.keys(pfFr);
+        var pfFrReadable = 0, pfFrAgainst = [];
+        for (var pfFk = 0; pfFk < pfFrKeys.length; pfFk++){
+          var pfFkey = pfFrKeys[pfFk];
+          if (pfFkey.indexOf('free:') !== 0) continue;
+          var pfFval = pfFr[pfFkey];
+          if (pfFval !== true && pfFval !== false) continue;   /* not readable: no verdict */
+          pfFrReadable++;
+          if (pfFval === false) pfFrAgainst.push(pfFkey.slice(5));
+        }
+        if (pfFrReadable > 0){
+          rc.goldFreeWitness = {
+            readable: true,
+            against: pfFrAgainst.length > 0,
+            names: pfFrAgainst.join(', '),
+            readableCount: pfFrReadable,
+            againstCount: pfFrAgainst.length
+          };
+        }
+      }catch(eFrw){}
       try{
         var gradeFn = (typeof window !== 'undefined' && window.hgGoldGradeFromScore) ? window.hgGoldGradeFromScore : null;
         if (gradeFn){
@@ -6172,6 +6221,51 @@ function goldRankSetups(cands, ctx){
               }
             }
           }catch(eSt4){}
+          /* hg-v1291: the VOLATILITY-REGIME leg — one of the legs the shared
+             predicate READS but this desk never FED, so it stayed permanently
+             unread and could never witness anything. Read off the desk's OWN 4h
+             bars through the house ATR percentile (the same classifier TREND
+             MATRIX uses: <20 DEAD, >80 BLOWOFF, else HEALTHY), so the leg means
+             the same thing here as on the crypto desks. HEALTHY is readable-WITH,
+             DEAD is readable-neutral, BLOWOFF disqualifies, and a tape too thin
+             for the classifier stays absent. Zero new requests. */
+          try{
+            if (typeof window !== 'undefined' && typeof window.hgAtrPercentile === 'function'
+                && ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 30){
+              var pfAtrPct = window.hgAtrPercentile(ctx.rows4h, 14, 100);
+              if (isFinite(pfAtrPct)){
+                pfReads.atrRegime = (pfAtrPct < 20) ? 'DEAD' : ((pfAtrPct > 80) ? 'BLOWOFF' : 'HEALTHY');
+                pfReads.atrPercentile = pfAtrPct;
+              }
+            }
+          }catch(eAtr4){}
+          /* hg-v1291: the TREND-QUALITY leg — the second leg the predicate reads
+             and this desk never fed. The Dreiss Choppiness Index and the Kaufman
+             efficiency ratio, read together off the desk's own 4h bars, exactly
+             as the crypto desks read them (omnibtc.js hgObtcTrendQualityOf): CHOP
+             means BOTH chop is high AND efficiency is low — a trend setup on a
+             tape with no trend to ride, the state the predicate counts against.
+             TREND is the with-state; anything in between is readable-neutral; a
+             tape too thin for the windows stays absent. Choppiness comes from
+             indicators.js's own hgChoppiness and efficiency from this file's
+             calculateKaufmanER, so no new maths and no new request. */
+          try{
+            if (ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 25
+                && typeof hgChoppiness === 'function' && typeof calculateKaufmanER === 'function'){
+              var pfChopS = hgChoppiness(ctx.rows4h, 14);
+              var pfKer = calculateKaufmanER(ctx.rows4h, 20);
+              if (Array.isArray(pfChopS) && pfChopS.length){
+                var pfChop = +pfChopS[pfChopS.length - 1];
+                var pfEr = (pfKer && isFinite(+pfKer.er)) ? +pfKer.er : NaN;
+                if (isFinite(pfChop)){
+                  pfReads.chopVal = pfChop;
+                  if (isFinite(pfEr)) pfReads.kerVal = pfEr;
+                  if (pfChop >= 61.8 && isFinite(pfEr) && pfEr < 0.3) pfReads.trendQuality = 'CHOP';
+                  else if (pfChop <= 38.2 && isFinite(pfEr) && pfEr > 0.4) pfReads.trendQuality = 'TREND';
+                }
+              }
+            }
+          }catch(eTq4){}
           try{
             if (isFinite(+ctx.fundingRate) && typeof window !== 'undefined' && typeof window.hgFundingAgainstMark === 'function'){
               var pfFam = window.hgFundingAgainstMark(+ctx.fundingRate, rc.dir);
@@ -9238,6 +9332,26 @@ function hgGoldNewsEvents(news){
   }catch(e){ return []; }
 }
 
+function hgGoldTier1OnBar(news, bar){
+  try{
+    if (!news || !bar) return false;
+    var open = __toMs(bar.t);
+    if (!isFinite(open)) return false;
+    var evs = hgGoldNewsEvents(news), i, ev, t, title;
+    for (i = 0; i < evs.length; i++){
+      ev = evs[i];
+      if (!ev) continue;
+      title = ev.title || ev.name || ev.event || '';
+      if (!hgGoldNewsIsTier1(title) && !ev.fomcDecision) continue;
+      t = (ev.t != null) ? ev.t : ev.timestamp;
+      t = (+t < 1e12) ? (+t) * 1000 : +t;
+      if (!isFinite(t)) continue;
+      if (t >= open && t < open + 15 * 60 * 1000) return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
 function hgGoldNewsGate(news, nowMs){
   var out = { lock: false, title: null, reason: null, unchecked: false };
   try{
@@ -10178,6 +10292,17 @@ function hgGoldSessionGate(nowMs, rows, stratKey, opt){
     else if (h >= 0 && h < 8){ out.session = 'ASIAN'; out.weight = 0; }
     else { out.session = 'OFF'; out.weight = 0; }
 
+    /* Tokyo compression and the COMEX pin are their own windows. A vwap
+       attempt at 03:20 stays blocked. These two do not. */
+    if (stratKey === 'gs11' && h >= 3 && h < 4.5){
+      out.session = 'TOKYO'; out.weight = 1; out.ok = true; out.reject = false; out.demote = false; out.reason = '';
+      return out;
+    }
+    if (stratKey === 'gs10' && h >= 18.25 && h <= 18.5){
+      out.session = 'COMEX_PIN'; out.weight = 1; out.ok = true; out.reject = false; out.demote = false; out.reason = '';
+      return out;
+    }
+
     if (out.session !== 'ASIAN') return out;
 
     var asianStrat = stratKey === 'asian';
@@ -10219,7 +10344,7 @@ function hgGoldInstFilter(cand, ctx){
     var scalp = ctx.scalp !== false;
     var newsG = hgGoldNewsGate(ctx.news, ctx.nowMs);
     cand.newsGate = newsG;
-    if (newsG.lock){
+    if (newsG.lock && key !== 'gs14'){
       cand.dropped = true;
       cand.reason = newsG.reason;
       return cand;
@@ -14321,7 +14446,9 @@ function hgGoldPart6Engine(rows, opts){
     out.z = hgGoldPart6ZScore(rows);
     out.ac = hgGoldPart6Autocorr(rows);
     out.hurst = hgGoldPart6Hurst(rows);
-    out.corr = opts.btcRows ? hgGoldPart6Corr(rows, opts.btcRows) : { ok: false, why: 'BTC unread' };
+    var gCorr = __rows(opts.goldDaily);
+    if (!gCorr || gCorr.length < 30) gCorr = rows;
+    out.corr = opts.btcRows ? hgGoldPart6Corr(gCorr, opts.btcRows) : { ok: false, why: 'BTC unread' };
     if (!out.corr.ok) out.unchecked.push('gold–BTC corr');
 
     var ker = typeof hgGoldPart5KerRegime === 'function' ? hgGoldPart5KerRegime(rows) : null;
@@ -14817,10 +14944,18 @@ function hgGoldPart7Engine(rows, opts){
       ? hgGoldPart7McxGapFade(opts.mcxRows, { parityInr: opts.parityInr })
       : { ok: false, why: 'S40 MCX unread' };
     if (!opts.mcxRows) out.unchecked.push('S40 MCX gap');
-    out.ratio = opts.silverRows
-      ? hgGoldPart7RatioPair(rows, opts.silverRows)
-      : { ok: false, why: 'S43 silver unread' };
-    if (!opts.silverRows) out.unchecked.push('S43 gold/silver');
+    var gDaily = __rows(opts.goldDaily);
+    var sDaily = __rows(opts.silverDaily);
+    if (gDaily && sDaily && gDaily.length >= 60 && sDaily.length >= 60){
+      out.ratio = hgGoldPart7RatioPair(gDaily, sDaily);
+    } else if (opts.silverRows){
+      out.ratio = hgGoldPart7RatioPair(rows, opts.silverRows);
+    } else if (sDaily || opts.silverDaily){
+      out.ratio = { ok: false, why: 'S43 need ≥60 daily gold and silver sessions' };
+    } else {
+      out.ratio = { ok: false, why: 'S43 silver unread' };
+    }
+    if (!opts.silverRows && !(sDaily && sDaily.length)) out.unchecked.push('S43 gold/silver');
 
     var last = rows[rows.length - 1];
     var parity = hgGoldPart7McxParity(last.c, opts.usdInr, opts.kToday);
@@ -15210,6 +15345,72 @@ function hgGoldPart8ApplyIlliqScale(cand, illiq){
     if (illiq.thin && cand.stamps.indexOf('S55 THIN') < 0) cand.stamps.push('S55 THIN');
     return cand;
   }catch(e){ return cand; }
+}
+
+/**
+ * §5 Macro-residual. Needs opts.residSeries (ε_t array) OR daily return series
+ * gold/dxy/real/spx/oil. Fail-open when unread.
+ *
+ * hgGoldAlignLogReturns builds those return arrays from daily OHLC, aligned on
+ * the UTC date. A series with a hole is left off — it is not filled with zero
+ * and it does not shorten the gold/dollar sample. Under 40 shared returns the
+ * whole pack is null.
+ */
+function __dayKeySec(t){
+  var n = +t;
+  if (!isFinite(n)) return null;
+  if (n > 1e12) n = Math.floor(n / 1000);
+  return Math.floor(n / 86400);
+}
+function __dayCloseMap(rows){
+  rows = __rows(rows);
+  if (!rows) return null;
+  var m = {}, i, k, n = 0;
+  for (i = 0; i < rows.length; i++){
+    k = __dayKeySec(rows[i].t);
+    if (k == null || !(+rows[i].c > 0)) continue;
+    m[k] = +rows[i].c;
+    n++;
+  }
+  return n ? m : null;
+}
+function hgGoldAlignLogReturns(goldRows, other){
+  try{
+    other = other || {};
+    var g = __dayCloseMap(goldRows);
+    var d = __dayCloseMap(other.dxy || other.dxyRows);
+    if (!g || !d) return null;
+    var days = [], k;
+    for (k in g){
+      if (Object.prototype.hasOwnProperty.call(g, k) && d[k] > 0) days.push(+k);
+    }
+    days.sort(function(a, b){ return a - b; });
+    if (days.length < 41) return null;
+    function rets(map){
+      var out = [], i, a, b;
+      for (i = 1; i < days.length; i++){
+        a = map[days[i - 1]]; b = map[days[i]];
+        if (!(a > 0) || !(b > 0)) return null;
+        out.push(Math.log(b / a));
+      }
+      return out.length >= 40 ? out : null;
+    }
+    var rGold = rets(g), rDxy = rets(d);
+    if (!rGold || !rDxy || rGold.length !== rDxy.length) return null;
+    var out = { rGold: rGold, rDxy: rDxy };
+    function extra(rows){
+      var m = __dayCloseMap(rows);
+      if (!m) return null;
+      var i;
+      for (i = 0; i < days.length; i++) if (!(m[days[i]] > 0)) return null;
+      return rets(m);
+    }
+    var sp = extra(other.spx || other.spxRows);
+    var oil = extra(other.oil || other.oilRows);
+    if (sp && sp.length === rGold.length) out.rSpx = sp;
+    if (oil && oil.length === rGold.length) out.rOil = oil;
+    return out;
+  }catch(e){ return null; }
 }
 
 /**
@@ -17146,6 +17347,7 @@ function hgGoldFormingStack(inp){
       now: inp.now || Date.now(),
       dxyRows: inp.dxyRows || inp.dxyCandles || null,
       btcRows: inp.btcRows || null,
+      goldDaily: inp.goldDaily || inp.dailyCandles || null,
       events: inp.events || null,
       skew: inp.skew || null,
       dom: inp.dom || null
@@ -17156,6 +17358,8 @@ function hgGoldFormingStack(inp){
       usdInr: inp.usdInr || null,
       kToday: inp.kToday || null,
       silverRows: inp.silverRows || null,
+      silverDaily: inp.silverDaily || null,
+      goldDaily: inp.goldDaily || inp.dailyCandles || null,
       mcxRows: inp.mcxRows || null,
       priorDay: inp.priorDay || null,
       gvzMinusRealized: inp.gvzMinusRealized,
@@ -17957,6 +18161,7 @@ W.hgGoldVpin = hgGoldVpin;
 W.hgGoldPart8ApplyVpinFilter = hgGoldPart8ApplyVpinFilter;
 W.hgGoldAmihudIlliq = hgGoldAmihudIlliq;
 W.hgGoldPart8ApplyIlliqScale = hgGoldPart8ApplyIlliqScale;
+W.hgGoldAlignLogReturns = hgGoldAlignLogReturns;
 W.hgGoldMacroResidual = hgGoldMacroResidual;
 W.hgGoldPart8ResidualTrade = hgGoldPart8ResidualTrade;
 W.hgGoldRegimeCluster = hgGoldRegimeCluster;
@@ -18025,6 +18230,7 @@ W.hgGoldBarRvol = hgGoldBarRvol;
 W.hgGoldRealYieldBias = hgGoldRealYieldBias;
 W.hgGoldDollarBias = hgGoldDollarBias;
 W.hgGoldNewsIsTier1 = hgGoldNewsIsTier1;
+W.hgGoldTier1OnBar = hgGoldTier1OnBar;
 W.hgGoldNewsGate = hgGoldNewsGate;
 W.hgGoldNewsEvents = hgGoldNewsEvents;   /* test seam: proves the reader copies */
 W.hgGoldMergeFedFomc = hgGoldMergeFedFomc;

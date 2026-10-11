@@ -151,6 +151,56 @@ console.log('\n== session: Asia blocked unless violent AH/AL sweep; London 08:00
   ok(lo.ok === true && lo.weight >= 3, 'London 08:00 GMT is priority-weighted (got ' + lo.weight + ')');
   const ny = W.hgGoldSessionGate(ny12, rows, 'ob');
   ok(ny.ok === true && ny.weight >= 3, 'NY overlap 12:00–16:00 GMT is priority-weighted (got ' + ny.weight + ')');
+  const tokyo = W.hgGoldSessionGate(Date.UTC(2024, 0, 16, 3, 20, 0), rows, 'gs11');
+  ok(tokyo.ok === true && tokyo.session === 'TOKYO' && tokyo.demote === false,
+     'Tokyo compression keeps its own 03:00-04:30 window (' + tokyo.session + ')');
+  const tokyoOther = W.hgGoldSessionGate(Date.UTC(2024, 0, 16, 3, 20, 0), rows, 'vwap');
+  ok(tokyoOther.ok === false, 'the Tokyo window does not open the rest of Asia');
+  const pin = W.hgGoldSessionGate(Date.UTC(2024, 0, 16, 18, 20, 0), rows, 'gs10');
+  ok(pin.ok === true && pin.session === 'COMEX_PIN', 'COMEX pin keeps its 18:15-18:30 window');
+}
+
+console.log('\n== a tier-1 print on this bar is a fade, not a lock ==');
+{
+  const W = boot();
+  const open = Date.UTC(2024, 0, 16, 12, 30, 0);
+  const bar = { t: open, o: 2400, h: 2401, l: 2399, c: 2400 };
+  ok(W.hgGoldTier1OnBar({ events: [{ title: 'US CPI', t: open + 60000 }] }, bar) === true,
+     'CPI inside this 15m bar is a release');
+  ok(W.hgGoldTier1OnBar({ events: [{ title: 'US CPI', t: open - 3600000 }] }, bar) === false,
+     'a CPI an hour earlier is not this bar');
+  ok(W.hgGoldTier1OnBar({ events: [{ title: 'Crude inventories', t: open + 60000 }] }, bar) === false,
+     'a non-tier-1 print is not a release');
+  const rows = bars(80, 2400, 900, 4);
+  const fade = W.hgGoldInstFilter(
+    { stratKey: 'gs14', dir: 'short', id: 'gs14|short|2400', strategy: 'NEWS EXHAUSTION', stamps: [], gateNotes: [] },
+    { rows: rows, nowMs: open + 5 * 60000, news: { events: [{ title: 'US CPI', impact: 'high', t: open + 60000 }] },
+      scalp: true, hardReject: false, macro: goldMacroFor('short') }
+  );
+  ok(!fade || !/NEWS GATE/.test(String((fade && fade.reason) || '')),
+     'the news lock does not delete the exhaustion fade (' + ((fade && fade.reason) || 'kept') + ')');
+}
+
+console.log('\n== DXY Asia box needs highs, not a close-only dollar series ==');
+{
+  const W = boot();
+  const day = Math.floor(Date.UTC(2026, 0, 6) / 1000);
+  const gold = [];
+  const dxy = [];
+  for (let i = 0; i < 48; i++){
+    const t = day - 4 * 3600 + i * 900;
+    gold.push({ t: t, o: 2600, h: 2602, l: 2598, c: 2600, v: 100 });
+    dxy.push({ t: t, o: 104.1, h: 104.2, l: 104.0, c: 104.1, v: 100 });
+  }
+  gold.push({ t: day + 8 * 3600, o: 2600, h: 2603, l: 2594, c: 2601, v: 200 });
+  dxy.push({ t: day + 8 * 3600, o: 104.1, h: 104.15, l: 104.05, c: 104.1, v: 100 });
+  const hit = W.hgGoldPart6SmtSweep(gold, dxy);
+  ok(hit && hit.ok === true && hit.dir === 'long',
+     'gold swept the Asia low and DXY did not take its Asia high (' + (hit && hit.why) + ')');
+  const bare = dxy.map(function(b){ return { t: b.t, c: b.c }; });
+  const unread = W.hgGoldPart6SmtSweep(gold, bare);
+  ok(unread && unread.ok !== true && /unread/i.test(String(unread.why || '')),
+     'a close-only dollar series stays unread (' + (unread && unread.why) + ')');
 }
 
 console.log('\n== ATR floor is 1.5×, never a cap ==');

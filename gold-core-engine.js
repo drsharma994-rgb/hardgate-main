@@ -730,7 +730,7 @@
       + ' · NYMO ' + (report.nymo && !report.nymo.unread && fin(report.nymo.nymo) ? ('$' + report.nymo.nymo.toFixed(2)) : 'unread') + ' · DXY r ' + (report.corr && !report.corr.unread ? (report.corr.r + (report.corr.flightToSafety ? ' flight' : '')) : 'unread') + ' · ADR ' + (report.adr && !report.adr.unread ? (report.adr.pctUsed + '% of $' + report.adr.adrDollars) : 'unread') + ' · delta ' + (report.cvd && report.cvd.unread ? 'unread' : (report.cvd && report.cvd.deltaDivergence ? 'absorption' : 'no divergence')) + ' · Gann ' + (report.gann && !report.gann.unread ? ('$' + report.gann.closestLevel + ' ' + report.gann.distanceToGann + ' away') : 'unread') + (report.vi ? (' · ' + report.vi.type + ' $' + report.vi.gapSize) : '') + ' · kinetic ' + (report.kinetic ? report.kinetic.velocityScore : '—') + (report.poc && report.poc.trappedSide && report.poc.trappedSide !== 'NONE' ? (' · ' + report.poc.trappedSide) : '') + ' · range ' + esc((report.dealing && report.dealing.zone) || 'UNREAD') + (report.dealing && fin(report.dealing.percentile) ? (' ' + Math.round(report.dealing.percentile * 100) + '%') : '') + (report.apex && report.apex.isIbWindow ? ' · IB FORMING' : '') + ' · Asia ' + esc(rg.regime || 'UNKNOWN') + (fin(rg.rangePct) ? (' ' + rg.rangePct + '% ' + (rg.drift || '')) : '')
       + ' · ' + esc(smtTxt)
       + ' · ' + esc(bpr)
-      + (va && fin(va.poc) ? (' · POC $' + va.poc + ' VAH $' + va.vah + ' VAL $' + va.val) : '')
+      + (va && fin(va.poc) ? (' · POC $' + va.poc.toFixed(2) + ' VAH $' + va.vah.toFixed(2) + ' VAL $' + va.val.toFixed(2)) : '')
       + ' · DXY ' + esc(report.view.dxyRaw)
       + ' · ATR $' + (fin(report.atr) ? report.atr.toFixed(2) : '—')
       + ' · box ' + esc(asia)

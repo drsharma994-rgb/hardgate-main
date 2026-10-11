@@ -121,7 +121,11 @@ function asiaBox(rows){
   try{
     var lo = Infinity, hi = -Infinity;
     for (var i = rows.length - 1; i >= 0; i--){
-      if (new Date(+rows[i].t).getUTCHours() >= 8) break;
+      /* hg-v1288: route the instant through ggBarMs so seconds-based rows
+         (hg-v1154 trap) don't read in 1970 and break on the first bar. */
+      var ms = ggBarMs(rows[i].t);
+      if (ms === null) continue;
+      if (new Date(ms).getUTCHours() >= 8) break;
       if (+rows[i].h > hi) hi = +rows[i].h;
       if (+rows[i].l < lo) lo = +rows[i].l;
     }
@@ -244,7 +248,13 @@ async function ganeshGoldEval(style){
   try{
     var anchor = 0;
     for (var a2 = ex.length - 1; a2 >= 0; a2--){
-      var dd = new Date(+ex[a2].t);
+      /* hg-v1288: route the instant through ggBarMs so the 00:00-UTC anchor
+         actually lands on the daily session boundary; the earlier code did
+         new Date(+ex[a2].t).getUTCHours() on seconds-based rows and never
+         saw hour 0, so the AVWAP anchor drifted to the oldest bar. */
+      var dms = ggBarMs(ex[a2].t);
+      if (dms === null) continue;
+      var dd = new Date(dms);
       if (dd.getUTCHours() === 0 && a2 < ex.length - 1){ anchor = a2; break; }
     }
     var av = W.hgAVWAP(ex, anchor);

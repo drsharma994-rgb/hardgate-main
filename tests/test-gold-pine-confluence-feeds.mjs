@@ -202,7 +202,7 @@ console.log('== 3) the Pine stack: states, marks, the majority, the line ==');
   assert(Object.keys(W.pineGoldPineMarks(null, 'long')).length === 0 && Object.keys(W.pineGoldPineMarks({ ok: false }, 'long')).length === 0 && Object.keys(W.pineGoldPineMarks(su, 'x')).length === 0, 'no states, a failed read or no direction mark nothing');
   /* the line */
   const html = W.pineGoldStackLineHtml(mixed, mM);
-  assert(/data-hg-pine-stack="1"/.test(html) && /PINE STACK/.test(html) && /\d+ of 24 gold Pine layers readable/.test(html), 'the line carries its marker and the readable count (of twenty-four since hg-v1207)');
+  assert(/data-hg-pine-stack="1"/.test(html) && /PINE STACK/.test(html) && /\d+ of 27 gold Pine layers readable/.test(html), 'the line carries its marker and the readable count (of twenty-seven since hg-v1220 appended HalfTrend / Range Filter / NW Envelope)');
   assert(/Supertrend 10x3<\/b> LONG/.test(html) && /Ichimoku TK Cross<\/b> UNREAD/.test(html) && /MAJORITY<\/b> SPLIT 2L\/1S/.test(html) && /gates nothing/.test(html), 'each layer prints its state (UNREAD where neither), the majority prints SPLIT with the tally, and the line says it gates nothing');
   assert(/MAJORITY<\/b> WITH/.test(W.pineGoldStackLineHtml(su, mL)) && /MAJORITY<\/b> AGAINST/.test(W.pineGoldStackLineHtml(su, mS)), 'a majority prints WITH or AGAINST by the marks');
   assert(W.pineGoldStackLineHtml(null, mL) === '' && W.pineGoldStackLineHtml({ ok: false }, {}) === '', 'no states: no line');

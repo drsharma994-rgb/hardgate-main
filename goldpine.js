@@ -209,7 +209,7 @@ function setupFromNative(c, mode, source, forming){
     score: tally,
     maxScore: PINE_GOLD_MAX,
     factors: [{ cat: forming ? 'Forming' : 'Native', ok: true, pts: tally, note: note }],
-    price: fin(+c.entry) ? +c.entry : null,
+    price: (fin(+c.entry) && +c.entry > 0) ? +c.entry : null,
     entry: c.entry,
     stop: c.stop,
     t1: c.t1,
@@ -486,7 +486,9 @@ function hgGpRecord(list, mode, bars){
     var cands = [];
     for (var i = 0; i < list.length; i++){
       var s = list[i];
-      if (!s || !s.dir || !fin(+s.entry) || !fin(+s.stop)) continue;
+      /* hg-v1288: +null===0 passes fin() — add the >0 belt so a null entry/stop
+         doesn't record entry:0/stop:0 into the forward ledger (hg-v948 trap). */
+      if (!s || !s.dir || !fin(+s.entry) || !fin(+s.stop) || +s.entry <= 0 || +s.stop <= 0) continue;
       cands.push({
         mechanic: hgGpKind(s),
         sym: 'XAUUSD',
@@ -503,6 +505,11 @@ function hgGpRecord(list, mode, bars){
            print, for the ledger's read split and funding split */
         reads: (s.freeReads && typeof s.freeReads === 'object') ? s.freeReads : undefined,
         fundingPct: (typeof s.fundingPct === 'number' && isFinite(s.fundingPct)) ? s.fundingPct : undefined,
+        /* hg-v1288: the hg-v955 seam goldscalp/goldswing closed and goldpine
+           missed — the gold-weekend calendar verdict must reach the ledger so
+           weekend-formed rows can be separated out of sample. Three-state:
+           true shut, false open, undefined unknown (hg-v989). */
+        goldShut: (s.goldShut === true || s.goldShut === false) ? s.goldShut : undefined,
         sol: (s.solidity && fin(+s.solidity.score)) ? +s.solidity.score : undefined,
         solTier: (s.solidity && s.solidity.grade) ? s.solidity.grade : undefined
       });
@@ -853,6 +860,23 @@ function runGoldPineScan(bars, ctx){
      arrays carry a non-enumerable .killedCount for the UI's killed note. */
   hgGpStampSolidity(swing, 'swing', scanCtx);
   hgGpStampSolidity(scalp, 'scalp', scanCtx);
+
+  /* hg-v950: did the bar these setups were read on print while GOLD WAS
+     SHUT? PER MODE, from that mode's own last closed bar — swing evaluates
+     on 4h and scalp on 15m, so one instant for both would mislabel one of
+     them. These setups carry no timestamp of their own, which is why the
+     instant comes from the series rather than from the setup. Null when the
+     calendar or the bars cannot be read, and then nothing changes.
+
+     hg-v1288: moved ABOVE hgGpRecord so the field is populated on the setup
+     object before the record builder reads s.goldShut (hg-v955 seam closed
+     at last — goldscalp/goldswing had this, goldpine was writing undefined). */
+  var gpShutSwing = gpWeekendVerdict(bars.rows4h);
+  var gpShutScalp = gpWeekendVerdict(bars.rows15m);
+  var gpI;
+  for (gpI = 0; gpI < swing.length; gpI++) if (swing[gpI]) swing[gpI].goldShut = gpShutSwing;
+  for (gpI = 0; gpI < scalp.length; gpI++) if (scalp[gpI]) scalp[gpI].goldShut = gpShutScalp;
+
   hgGpRecord(swing, 'swing', bars);
   hgGpRecord(scalp, 'scalp', bars);
   swing = hgGpReorder(swing);
@@ -882,18 +906,6 @@ function runGoldPineScan(bars, ctx){
   var tapeScalp = gpTapeOf(bars && bars.rows15m);
   gpTapeStamp(swing, tapeSwing);
   gpTapeStamp(scalp, tapeScalp);
-
-  /* hg-v950: did the bar these setups were read on print while GOLD WAS
-     SHUT? PER MODE, from that mode's own last closed bar — swing evaluates
-     on 4h and scalp on 15m, so one instant for both would mislabel one of
-     them. These setups carry no timestamp of their own, which is why the
-     instant comes from the series rather than from the setup. Null when the
-     calendar or the bars cannot be read, and then nothing changes. */
-  var gpShutSwing = gpWeekendVerdict(bars.rows4h);
-  var gpShutScalp = gpWeekendVerdict(bars.rows15m);
-  var gpI;
-  for (gpI = 0; gpI < swing.length; gpI++) if (swing[gpI]) swing[gpI].goldShut = gpShutSwing;
-  for (gpI = 0; gpI < scalp.length; gpI++) if (scalp[gpI]) scalp[gpI].goldShut = gpShutScalp;
 
   /* hg-v1005: THE FUNDAMENTAL STACK, at the scan seam every other gold desk
      runs it at. A red-folder blackout refuses fresh formations outright —
@@ -1195,7 +1207,11 @@ function gpHandoffFloor(mode){
   return (String(mode) === 'scalp') ? scalp : swing;
 }
 function gpHandoffBlock(s){
-  var rr = fin(+s.rr) ? +s.rr : NaN;
+  /* hg-v1288: fin(+null)===true (coerces to 0 and passes isFinite),
+     so a null R:R was reading as 0 and vetoing the handoff — the
+     opposite of 'unmeasured is not a veto'. Require typeof number to
+     let null/undefined fall through to the NaN branch. */
+  var rr = (s && typeof s.rr === 'number' && isFinite(s.rr)) ? s.rr : NaN;
   if (!isFinite(rr)) return null;            /* unmeasured is not a veto */
   var floor = gpHandoffFloor(s.mode);
   if (rr >= floor) return null;
