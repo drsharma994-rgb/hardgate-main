@@ -130,7 +130,7 @@
       "expired": true
     },
     "STRK": {
-      "at": "2026-10-11T10:38:16.059Z",
+      "at": "2026-10-11T12:28:53.908Z",
       "score": 5,
       "fresh": true,
       "ago": 5,
@@ -246,7 +246,7 @@
       "crossDay": "2026-10-05"
     },
     "SYRUP": {
-      "at": "2026-10-11T10:38:24.201Z",
+      "at": "2026-10-11T12:29:00.467Z",
       "score": 2,
       "fresh": true,
       "ago": 7,
@@ -254,10 +254,10 @@
       "expired": true
     },
     "SENT": {
-      "at": "2026-10-08T11:53:04.677Z",
-      "score": 5,
+      "at": "2026-10-11T12:28:55.314Z",
+      "score": 3,
       "fresh": true,
-      "ago": 3,
+      "ago": 6,
       "crossDay": "2026-10-04",
       "expired": true
     },
@@ -500,7 +500,7 @@
       "expired": true
     },
     "SEI": {
-      "at": "2026-10-11T03:15:43.603Z",
+      "at": "2026-10-11T12:28:56.469Z",
       "score": 3,
       "fresh": true,
       "ago": 4,
@@ -580,7 +580,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-11T10:38:36.032Z",
+  "lastRunAt": "2026-10-11T12:29:10.149Z",
   "scanned": 504,
   "cards": 0
 }
