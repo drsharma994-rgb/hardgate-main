@@ -482,6 +482,34 @@ a global hard refresh.
       }
     }
     
+    /* hg-v1168: THE ACCURACY VERDICT — weighted confluence score.
+       A candidate is only crowned if it meets a minimum weighted score
+       based on diverse evidence (Technicals, Fundamentals, Sentiment). */
+    var bestScore = -1;
+    var bestPick = null;
+    for (i = 0; i < btc.length; i++){
+      var cand = btc[i];
+      var score = 0;
+      if (cand.clean) score += 20;
+      if (cand.crossValidation === 'PASSED: confirmed by opposite family engine') score += 15;
+      if (cand.engine && String(cand.engine).indexOf('PINE') >= 0) score += 10;
+      if (cand.takerFlowWith) score += 10;
+      if (cand.fundamentalAligned) score += 10;
+      if (cand.omniPrincipal === 'pass') score += 5;
+      
+      if (score > bestScore){
+        bestScore = score;
+        bestPick = { row: cand, tier: cand.clean ? 'clean' : 'near', source: 'weighted-accuracy' };
+      }
+    }
+    
+    if (bestScore >= 30){
+      pick = bestPick;
+      pick.row.accuracyScore = bestScore;
+    } else {
+      pick = null; // Stand aside if the weighted score is too low
+    }
+    
     if (!pick || !pick.row || !hgObtcIsBtc(pick.row.sym) || !hgObtcHasLevels(pick.row)) return null;
     /* hg-v1051: MEASURED RANKING — when the ledger is armed, a CLEAN
        candidate from a PROVEN mechanic beats the rest; while records
