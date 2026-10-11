@@ -124,6 +124,7 @@ const CONNECT_SRC = [
   'https://nfs.faireconomy.media',            /* macro-calendar.js USD high-impact */
   'https://api.blockchain.info',               /* omnibtc-engines.js BTC hashrate (hg-v1294) */
   'https://community-api.coinmetrics.io',      /* omnibtc-engines.js BTC NVT + active addresses (hg-v1294) */
+  'https://api.coinbase.com',                  /* omnibtc-engines.js Coinbase BTC-USD spot cross-check (hg-v1301) */
 ].join(' ');
 
 /* vercel.json parity — security headers on every response */
