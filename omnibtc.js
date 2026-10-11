@@ -379,6 +379,10 @@ a global hard refresh.
 
   function hgObtcPick(cands){
     var btc = [], i, n, raw;
+    var fams = { trend: [], micro: [] };
+    var trendEng = ['SWING', 'SCALP', 'TREND MATRIX', 'EDGE'];
+    var microEng = ['SQUEEZE', 'SMC', 'LIQUIDITY FLUSH', 'REVERSAL SNIPER', 'MEAN REVERSION'];
+    
     for (i = 0; i < (cands || []).length; i++){
       raw = cands[i];
       n = gfn('hgNormalizeSetupRow') ? W.hgNormalizeSetupRow(raw) : (hgObtcHasLevels(raw) ? raw : null);
@@ -418,9 +422,39 @@ a global hard refresh.
       var prin = hgObtcApplyOmniPrincipal(n, { rows: raw._rows || n._rows });
       if (!prin.pickable) continue;
       btc.push(n);
+      
+      var up = String(n.engine || '').toUpperCase();
+      if (trendEng.some(function(t){ return up.indexOf(t) >= 0; })) fams.trend.push(n);
+      else if (microEng.some(function(m){ return up.indexOf(m) >= 0; })) fams.micro.push(n);
     }
     if (!btc.length) return null;
+    
+    /* hg-v1167: CROSS-VALIDATION REQUIREMENT — the crown must be confirmed by
+       a sibling from the opposite family (Trend/Direction vs Micro-Structure).
+       A setup with no cross-confirmation is demoted to WATCH. (hg-v1167: high-accuracy batch) */
     var pick = gfn('hgPickMostProbableAny') ? W.hgPickMostProbableAny(btc) : { row: btc[0], tier: 'clean', source: 'clean' };
+    if (pick && pick.row){
+      var upPick = String(pick.row.engine || '').toUpperCase();
+      var isTrend = trendEng.some(function(t){ return upPick.indexOf(t) >= 0; });
+      var isMicro = microEng.some(function(m){ return upPick.indexOf(m) >= 0; });
+      var crossConfirmed = false;
+      
+      if (isTrend && fams.micro.length > 0) crossConfirmed = true;
+      else if (isMicro && fams.trend.length > 0) crossConfirmed = true;
+      
+      if (!crossConfirmed){
+        pick.row.demoted = true;
+        pick.row.watchOnly = true;
+        pick.row.clean = false;
+        pick.row.near = true;
+        pick.row.nearClean = true;
+        pick.tier = 'near';
+        pick.row.crossValidation = 'FAILED: no sibling confirmation from opposite family';
+      } else {
+        pick.row.crossValidation = 'PASSED: confirmed by opposite family engine';
+      }
+    }
+    
     if (!pick || !pick.row || !hgObtcIsBtc(pick.row.sym) || !hgObtcHasLevels(pick.row)) return null;
     /* hg-v1051: MEASURED RANKING — when the ledger is armed, a CLEAN
        candidate from a PROVEN mechanic beats the rest; while records
