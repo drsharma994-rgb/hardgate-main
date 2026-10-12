@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — goldind.js
+HARDGATE — goldind.js (v1303)
 GOLD SCALP indicator engine: pure, DOM-free, fetch-free Smart-Money-Concept
 and classical detectors for gold scalping, plus the confluence composite
 goldScalpSetup. Loaded as a classic script BEFORE goldscalp.js.
@@ -1105,8 +1105,8 @@ function goldScalpSetup(inp){
     var rr = Math.abs(t1 - entry)/risk, rr2 = Math.abs(t2 - entry)/risk;
 
     /* --- strategy name: strongest structural read first --- */
-    var PRIORITY = ['sweep', 'breaker', 'ob', 'asian', 'openrange', 'adrfade', 'bosalign', 'vwapband', 'squeeze', 'fvg', 'vwap', 'stochrsi', 'rsidiv'];
-    var NAMES = { sweep: 'LIQUIDITY SWEEP REVERSAL', breaker: 'BREAKER BLOCK REVERSAL',
+    var PRIORITY = ['supertrend', 'sweep', 'breaker', 'ob', 'asian', 'openrange', 'adrfade', 'bosalign', 'vwapband', 'squeeze', 'fvg', 'vwap', 'stochrsi', 'rsidiv'];
+    var NAMES = { supertrend: 'SUPERTREND + ADX CONFLUENCE', sweep: 'LIQUIDITY SWEEP REVERSAL', breaker: 'BREAKER BLOCK REVERSAL',
                   ob: 'ORDER BLOCK RETRACE', asian: 'ASIAN RANGE BREAKOUT',
                   openrange: 'OPENING RANGE BREAKOUT', adrfade: 'ADR EXHAUSTION FADE',
                   bosalign: 'BOS ALIGNMENT ENTRY', vwapband: 'VWAP BAND MEAN-REVERSION',
@@ -3580,6 +3580,21 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   var mfi = D.mfi = goldMFI(rows, volOpts);
   if (mfi.last === 'GREEN') add(lastBar.c >= lastBar.o ? 'long' : 'short', 'mfi', 'MFI green bar — volume-driven trend');
   else if (mfi.last === 'SQUAT') D.notes.push('MFI pink bar — high volume + low range: manipulation / breakout watch, confirmation required');
+
+  /* --- NEW: Trend & Momentum Confluence (Phase 2) --- */
+  const stArr = goldSupertrend(rows, 10, 3);
+  if (stArr && stArr.length > 0) {
+    const st = stArr[stArr.length - 1];
+    if (st.dir === 1) add('long', 'supertrend', 'Supertrend bullish trend confirmation');
+    else if (st.dir === -1) add('short', 'supertrend', 'Supertrend bearish trend confirmation');
+  }
+
+  const adxR = goldADX(rows);
+  if (adxR && adxR.state === 'TRENDING') {
+    add(null, 'adx', 'ADX trending (' + adxR.adx.toFixed(1) + ') — market momentum active');
+  } else if (adxR && adxR.state === 'CHOP') {
+    D.notes.push('ADX ' + adxR.adx.toFixed(1) + ' — chop regime, mean-reversion favored');
+  }
 
   /* volume profile POC / HVN proximity reads (vprof computed at bundle start) */
   if (D.vprof && D.vpOk && isFinite(D.vprof.pocPrice)){
