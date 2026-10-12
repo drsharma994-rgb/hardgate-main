@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — goldind.js (v13-5)
+HARDGATE — goldind.js (v14-0)
 GOLD SCALP indicator engine: pure, DOM-free, fetch-free Smart-Money-Concept
 and classical detectors for gold scalping, plus the confluence composite
 goldScalpSetup. Loaded as a classic script BEFORE goldscalp.js.
@@ -3400,6 +3400,68 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
   }catch(e){ return null; }
 }
 
+function goldAdvancedSMCSweep(rows) {
+  try {
+    const n = rows.length;
+    if (n < 50) return null;
+    const sweeps = goldSweeps(rows);
+    if (!sweeps || !sweeps.dir) return null;
+
+    const swings = goldSwings(rows, 10, 10);
+    if (!swings || !swings.highs.length || !swings.lows.length) return null;
+
+    const recentSweep = sweeps.all ? sweeps.all.find(s => s.barsAgo <= 25) : null;
+    if (!recentSweep) return null;
+
+    const atr_vals = _atr(rows, 14);
+    const currentAtr = __last(atr_vals);
+    if (!isFinite(currentAtr)) return null;
+
+    let mssDetected = false;
+    let dir = recentSweep.dir;
+
+    for (let i = n - 15; i < n; i++) {
+      if (!rows[i] || !isFinite(rows[i].c)) continue;
+      if (dir === 'bullish' && rows[i].c > swings.highs[swings.highs.length-1].price) {
+        const body = Math.abs(rows[i].c - rows[i].o);
+        if (body > 0.7 * currentAtr) { mssDetected = true; break; }
+      } else if (dir === 'bearish' && rows[i].c < swings.lows[swings.lows.length-1].price) {
+        const body = Math.abs(rows[i].c - rows[i].o);
+        if (body > 0.7 * currentAtr) { mssDetected = true; break; }
+      }
+    }
+
+    if (mssDetected) return { trigger: true, dir: dir, level: recentSweep.level, type: 'SMC_SWEEP', age: recentSweep.barsAgo };
+  } catch (e) {}
+  return null;
+}
+
+function goldVolumeProfileRejection(rows) {
+  try {
+    const n = rows.length;
+    if (n < 50) return null;
+    const vprof = goldVolumeProfile(rows, 100, 40);
+    if (!vprof || !vprof.pocPrice) return null;
+
+    const lastBar = rows[n-1];
+    const atr_vals = _atr(rows, 14);
+    const currentAtr = __last(atr_vals);
+    if (!isFinite(currentAtr)) return null;
+
+    const poc = vprof.pocPrice;
+    const distToPoc = Math.abs(lastBar.c - poc);
+
+    if (distToPoc < currentAtr * 0.6) {
+      const body = Math.abs(lastBar.c - lastBar.o);
+      const wickSize = (lastBar.h - lastBar.l) - body;
+      if (wickSize > body && wickSize > currentAtr * 0.25) {
+        return { trigger: true, dir: null, level: poc, type: 'VP_REJECTION', dist: distToPoc };
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 /* detector bundle + the shared agreeing-reads ledger (same read logic as the
    goldScalpSetup composite, exposed once for all strategy candidates). */
 function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
@@ -3451,6 +3513,13 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
     var er = D.scalpEval.reads[sei];
     add(er.side, er.tag, er.label);
   }
+
+  // SMC & Volume Profile Confluence
+  const smcSweep = goldAdvancedSMCSweep(rows);
+  if (smcSweep) add(smcSweep.dir, 'SMC_SWEEP', 'SMC Sweep + MSS (' + smcSweep.age + 'b ago)', true);
+
+  const vpRej = goldVolumeProfileRejection(rows);
+  if (vpRej) add('neutral', 'VP_REJECTION', 'Vol Profile Rejection at ' + vpRej.level.toFixed(2), true);
   var vpRange0 = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
     ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
   D.vpOk = isFinite(vpRange0) && vpRange0 >= 2.5*a15;
@@ -17985,6 +18054,8 @@ W.HG_GOLD_EDGE_BARS = HG_GOLD_EDGE_BARS;
 W.hgGoldEdgeBarsFor = hgGoldEdgeBarsFor;
 W.hgGoldEdgeTierInUse = hgGoldEdgeTierInUse;
 W.hgGoldEdgeBarReach = hgGoldEdgeBarReach;
+W.goldAdvancedSMCSweep = goldAdvancedSMCSweep;
+W.goldVolumeProfileRejection = goldVolumeProfileRejection;
 W.hgGoldEdgeVerdictDepartures = hgGoldEdgeVerdictDepartures;
 W.hgGoldSetEdgeRetune = hgGoldSetEdgeRetune;
 W.hgGoldEdgeRetuneInit = hgGoldEdgeRetuneInit;
