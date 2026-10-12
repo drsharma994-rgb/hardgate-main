@@ -758,7 +758,25 @@ a global hard refresh.
     if (gfn('hgSetupHasLevels')) return W.hgSetupHasLevels(row);
     if (!row) return false;
     var e = fin(row.entry), s = fin(row.stop), t1 = fin(row.t1);
-    return isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0;
+    if (!(isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0)) return false;
+    /* hg-v1304: fallback matches plans.js hg-v675 direction geometry so a
+       wrong-side plan cannot slip through when hgSetupHasLevels is not
+       loaded (headless Node tests, early boot, custom harness, the
+       hg-v1303 medium-confidence defensive gap). The browser shell loads
+       plans.js before omnibtc.js so the delegation above runs; this
+       branch covers every other caller. Direction unknown passes — the
+       picker resolves it before acting (same hg-v675 convention). */
+    var dir = String(row.dir || '').toLowerCase();
+    if (dir === 'long'){
+      if (!(s < e && t1 > e)) return false;
+      var t2L = fin(row.t2);
+      if (isFinite(t2L) && t2L > 0 && !(t2L > e)) return false;
+    } else if (dir === 'short'){
+      if (!(s > e && t1 < e)) return false;
+      var t2S = fin(row.t2);
+      if (isFinite(t2S) && t2S > 0 && !(t2S < e)) return false;
+    }
+    return true;
   }
 
   /* Same analogue map OMNIROUTE uses (hg-v612). Local copy so the BTC
@@ -930,6 +948,22 @@ a global hard refresh.
     var entry = fin(r.entry), stop = fin(r.stop), t1 = fin(r.t1);
     if (!(isFinite(entry) && entry > 0 && isFinite(stop) && stop > 0 && entry !== stop && isFinite(t1) && t1 > 0))
       return null;
+    /* hg-v1304: direction geometry invariant at the ingest site. A long
+       with t1 ≤ entry or stop ≥ entry is mathematically unable to
+       profit (TP1 is on the loss side; the stop sits above the "entry");
+       mirror for shorts. plans.js hgSetupHasLevels enforces this at the
+       picker, but a wrong-side plan still entered `all` and was
+       published to snap.candidates — any downstream reader (COMBI,
+       SETUP CONFIRM, CONTRACT REPORT) could surface it. Refusing at
+       ingest means the candidate pool is clean by construction. Nothing
+       new is measured — hg-v675 shape, extended one layer earlier. */
+    if (dir === 'long' && !(stop < entry && t1 > entry)) return null;
+    if (dir === 'short' && !(stop > entry && t1 < entry)) return null;
+    var __t2chk = fin(r.t2);
+    if (isFinite(__t2chk) && __t2chk > 0){
+      if (dir === 'long' && !(__t2chk > entry)) return null;
+      if (dir === 'short' && !(__t2chk < entry)) return null;
+    }
     var passed = fin(r.passed != null ? r.passed : r.gatesPassed);
     var total = fin(r.total != null ? r.total : r.gatesTotal);
     if (!isFinite(total) || total <= 0) total = 7;

@@ -55,8 +55,13 @@ console.log('== extra engines never claim 7/7 CLEAN ==');
 {
   const W = boot();
   W.smartSetup = function(){ return Object.assign({}, PLAN); };
-  W.oiflowSetup = function(){ return Object.assign({}, PLAN, { dir: 'short', t1: 80, stop: 110 }); };
-  W.swingTryFundingFade = function(){ return Object.assign({}, PLAN, { dir: 'short', t1: 80, stop: 110 }); };
+  /* hg-v1304: flipping dir to 'short' without flipping t2 inherited an
+     invalid short geometry (t2:135 above entry:100). The pre-pack ingest
+     accepted it on finite/positive alone; the hg-v1304 direction
+     geometry refuses it, as it should. Flip t2 to 65 so these fixtures
+     describe a valid short — stop>entry>t1>t2. */
+  W.oiflowSetup = function(){ return Object.assign({}, PLAN, { dir: 'short', t1: 80, stop: 110, t2: 65 }); };
+  W.swingTryFundingFade = function(){ return Object.assign({}, PLAN, { dir: 'short', t1: 80, stop: 110, t2: 65 }); };
   W.pineSmcCore = function(){ return Object.assign({}, PLAN); };
   W.stSynthesize = function(){ return { plan: Object.assign({}, PLAN, { clean: true }), tier: 'PRIME', planDraft: false }; };
   W.smartClassify = function(){ return { dir: 'long' }; };
