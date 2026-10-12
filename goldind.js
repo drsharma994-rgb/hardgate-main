@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — goldind.js (v1303)
+HARDGATE — goldind.js (v13-4)
 GOLD SCALP indicator engine: pure, DOM-free, fetch-free Smart-Money-Concept
 and classical detectors for gold scalping, plus the confluence composite
 goldScalpSetup. Loaded as a classic script BEFORE goldscalp.js.
