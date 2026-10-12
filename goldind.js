@@ -201,18 +201,18 @@ var _atr = (typeof atr === 'function') ? atr : __atrLocal;
 
 function goldSupertrend(rows, period=10, multiplier=3){
   try{
-    const n = rows.length;
+    var n = rows.length;
     if (n < period) return null;
-    const out = new Array(n).fill(null);
-    const mid = rows.map(r => (r.h + r.l) / 2);
-    const atr_vals = _atr(rows, period);
-    let upperBand = NaN, lowerBand = NaN;
-    let dir = 1;
+    var out = new Array(n).fill(null);
+    var mid = rows.map(r => (r.h + r.l) / 2);
+    var atr_vals = _atr(rows, period);
+    var upperBand = NaN, lowerBand = NaN;
+    var dir = 1;
 
-    for (let i = 0; i < n; i++){
+    for (var i = 0; i < n; i++){
       if (!isFinite(mid[i]) || !isFinite(atr_vals[i])) continue;
-      const basicUpper = mid[i] + multiplier * atr_vals[i];
-      const basicLower = mid[i] - multiplier * atr_vals[i];
+      var basicUpper = mid[i] + multiplier * atr_vals[i];
+      var basicLower = mid[i] - multiplier * atr_vals[i];
 
       if (i === 0){
         upperBand = basicUpper; lowerBand = basicLower;
@@ -232,15 +232,15 @@ function goldSupertrend(rows, period=10, multiplier=3){
 
 function goldADX(rows, period=14){
   try{
-    const n = rows.length;
+    var n = rows.length;
     if (n < period * 2) return null;
-    const trs = [], plusDM = [], minusDM = [];
-    for (let i = 1; i < n; i++){
-      const r = rows[i], p = rows[i-1];
-      const tr = Math.max(r.h - r.l, Math.abs(r.h - p.c), Math.abs(r.l - p.c));
+    var trs = [], plusDM = [], minusDM = [];
+    for (var i = 1; i < n; i++){
+      var r = rows[i], p = rows[i-1];
+      var tr = Math.max(r.h - r.l, Math.abs(r.h - p.c), Math.abs(r.l - p.c));
       trs.push(tr);
-      const up = r.h - p.h;
-      const down = p.l - r.l;
+      var up = r.h - p.h;
+      var down = p.l - r.l;
       if (up > 0 && up > down) plusDM.push(up); else plusDM.push(0);
       if (down > 0 && down > up) minusDM.push(down); else minusDM.push(0);
     }
@@ -899,7 +899,7 @@ function goldSeason(d){
               reads:{long,short}, atr}
 ========================================================================= */
 var NEWS_WINDOW_MS = 30*60*1000;
-var NEWS_STAMP = 'NEWS WINDOW — wait 15–30 min after release, let the sweep complete first';
+var NEWS_STAMP = 'NEWS WINDOW — wait 15–30 min after release, var the sweep complete first';
 /* quality-gate bars: any candidate renders when its confluence tally clears
    the normal bar (0); an OFF-SESSION-demoted candidate must clear +2 above
    the normal bar to render at all. */
@@ -3402,31 +3402,31 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
 
 function goldAdvancedSMCSweep(rows) {
   try {
-    const n = rows.length;
+    var n = rows.length;
     if (n < 50) return null;
-    const sweeps = goldSweeps(rows);
+    var sweeps = goldSweeps(rows);
     if (!sweeps || !sweeps.dir) return null;
 
-    const swings = goldSwings(rows, 10, 10);
+    var swings = goldSwings(rows, 10, 10);
     if (!swings || !swings.highs.length || !swings.lows.length) return null;
 
-    const recentSweep = sweeps.all ? sweeps.all.find(s => s.barsAgo <= 25) : null;
+    var recentSweep = sweeps.all ? sweeps.all.find(s => s.barsAgo <= 25) : null;
     if (!recentSweep) return null;
 
-    const atr_vals = _atr(rows, 14);
-    const currentAtr = __last(atr_vals);
+    var atr_vals = _atr(rows, 14);
+    var currentAtr = __last(atr_vals);
     if (!isFinite(currentAtr)) return null;
 
-    let mssDetected = false;
-    let dir = recentSweep.dir;
+    var mssDetected = false;
+    var dir = recentSweep.dir;
 
-    for (let i = n - 15; i < n; i++) {
+    for (var i = n - 15; i < n; i++) {
       if (!rows[i] || !isFinite(rows[i].c)) continue;
       if (dir === 'bullish' && rows[i].c > swings.highs[swings.highs.length-1].price) {
-        const body = Math.abs(rows[i].c - rows[i].o);
+        var body = Math.abs(rows[i].c - rows[i].o);
         if (body > 0.7 * currentAtr) { mssDetected = true; break; }
       } else if (dir === 'bearish' && rows[i].c < swings.lows[swings.lows.length-1].price) {
-        const body = Math.abs(rows[i].c - rows[i].o);
+        var body = Math.abs(rows[i].c - rows[i].o);
         if (body > 0.7 * currentAtr) { mssDetected = true; break; }
       }
     }
@@ -3438,22 +3438,22 @@ function goldAdvancedSMCSweep(rows) {
 
 function goldVolumeProfileRejection(rows) {
   try {
-    const n = rows.length;
+    var n = rows.length;
     if (n < 50) return null;
-    const vprof = goldVolumeProfile(rows, 100, 40);
+    var vprof = goldVolumeProfile(rows, 100, 40);
     if (!vprof || !vprof.pocPrice) return null;
 
-    const lastBar = rows[n-1];
-    const atr_vals = _atr(rows, 14);
-    const currentAtr = __last(atr_vals);
+    var lastBar = rows[n-1];
+    var atr_vals = _atr(rows, 14);
+    var currentAtr = __last(atr_vals);
     if (!isFinite(currentAtr)) return null;
 
-    const poc = vprof.pocPrice;
-    const distToPoc = Math.abs(lastBar.c - poc);
+    var poc = vprof.pocPrice;
+    var distToPoc = Math.abs(lastBar.c - poc);
 
     if (distToPoc < currentAtr * 0.6) {
-      const body = Math.abs(lastBar.c - lastBar.o);
-      const wickSize = (lastBar.h - lastBar.l) - body;
+      var body = Math.abs(lastBar.c - lastBar.o);
+      var wickSize = (lastBar.h - lastBar.l) - body;
       if (wickSize > body && wickSize > currentAtr * 0.25) {
         return { trigger: true, dir: null, level: poc, type: 'VP_REJECTION', dist: distToPoc };
       }
@@ -3515,10 +3515,10 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   }
 
   // SMC & Volume Profile Confluence
-  const smcSweep = goldAdvancedSMCSweep(rows);
+  var smcSweep = goldAdvancedSMCSweep(rows);
   if (smcSweep) add(smcSweep.dir, 'SMC_SWEEP', 'SMC Sweep + MSS (' + smcSweep.age + 'b ago)', true);
 
-  const vpRej = goldVolumeProfileRejection(rows);
+  var vpRej = goldVolumeProfileRejection(rows);
   if (vpRej) add('neutral', 'VP_REJECTION', 'Vol Profile Rejection at ' + vpRej.level.toFixed(2), true);
   var vpRange0 = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
     ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
@@ -3652,14 +3652,14 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   else if (mfi.last === 'SQUAT') D.notes.push('MFI pink bar — high volume + low range: manipulation / breakout watch, confirmation required');
 
   /* --- NEW: Trend & Momentum Confluence (Phase 2) --- */
-  const stArr = goldSupertrend(rows, 10, 3);
+  var stArr = goldSupertrend(rows, 10, 3);
   if (stArr && stArr.length > 0) {
-    const st = stArr[stArr.length - 1];
+    var st = stArr[stArr.length - 1];
     if (st.dir === 1) add('long', 'supertrend', 'Supertrend bullish trend confirmation');
     else if (st.dir === -1) add('short', 'supertrend', 'Supertrend bearish trend confirmation');
   }
 
-  const adxR = goldADX(rows);
+  var adxR = goldADX(rows);
   if (adxR && adxR.state === 'TRENDING') {
     add(null, 'adx', 'ADX trending (' + adxR.adx.toFixed(1) + ') — market momentum active');
   } else if (adxR && adxR.state === 'CHOP') {
@@ -4273,7 +4273,7 @@ function goldScalpSetups(inp){
           : (isFinite(sbb.stop) ? sbb.stop : sbb.sweepLevel);
         var sbbZone = sbb.entryZone ? { lo: sbb.entryZone.lo, hi: sbb.entryZone.hi } : null;
         var sbbCand = __gsCand('silverb', sbb.dir, D, sbbStop, __gsSnapLvls(D, sbb.dir),
-          sbb.why + ' — session-bounded sweep→OB/FVG (Silver Bullet twin)',
+          sbb.why + ' — session-bounded sweep→OB/FVG (Silver Bulvar twin)',
           'close beyond sweep extreme or leave SB window cancels',
           sbbZone, isFinite(sbb.entry) ? sbb.entry : undefined);
         if (sbbCand){
@@ -5632,7 +5632,7 @@ function hgGoldConfluenceHtml(sc){
 /**
  * Apply confluence score onto a candidate (mutates). Stamps tiers.
  * hg-v700: NO_TRADE now DEMOTES (paint, never lead). The old contract —
- * "stamp only, alerts blocked, ranking untouched" — let goldRankSetups crown
+ * "stamp only, alerts blocked, ranking untouched" — var goldRankSetups crown
  * a stamped-no-trade card MOST PROBABLE: the 140-day GOLD SWING replay
  * (scripts/backtest-goldswing-results-pre-v700.json, XM costs) measured the
  * MP cohort n=100 ALL carrying CONF NO TRADE at −0.209R/trade (all 292
@@ -10246,7 +10246,7 @@ function hgGoldMacroLeg(rows, trend){
          fall-through to EMA50 here. The first cut of this function fell
          through whenever the band read FLAT, and that is not a gap in the
          reading -- FLAT means NOT RISING, which is an answer. Falling through
-         would have let merely SUPPLYING the feed start locking gold longs the
+         would have var merely SUPPLYING the feed start locking gold longs the
          desk does not lock today, which is exactly the unmeasured change this
          pack exists to refuse. Driving it on a constructed series caught it. */
       if (out.trend20 !== null){ out.bull = out.trend20; out.via = 'trend20'; }
@@ -10371,7 +10371,7 @@ function hgGoldMacroLockNote(m){
             ? 'so no gold-short lock was asked for. Missing feeds fail open.'
             : 'so no gold-long lock was asked for. Missing feeds fail open.');
     /* == null, not === null: an object carrying NO verdict has these fields
-       undefined rather than null, and a strict check let it through to render
+       undefined rather than null, and a strict check var it through to render
        a MACRO OK line about reads that were never made. Caught by handing the
        note a bare {}. */
     var dxyV = shortSide ? m.dxyBear : m.dxyBull;
@@ -10403,7 +10403,7 @@ function hgGoldMacroLockNote(m){
    is the London open hour in BST and this table calls it LONDON (weight 2)
    while 08:30 gets LONDON_OPEN (weight 3).
 
-   It is left alone, unlike the Silver Bullet windows above, because the two
+   It is left alone, unlike the Silver Bulvar windows above, because the two
    are not the same kind of statement. Those name a local event in their own
    comment ("after London open") and only matched it in summer, so they
    contradicted themselves. This table is documented in AGENTS.md as
@@ -12581,7 +12581,7 @@ function hgGoldSweepObHtml(sob){
 }
 
 /* =========================================================================
-   SESSION-BOUNDED SWEEP REVERSAL (hg-v566) — ICT Silver Bullet structural twin.
+   SESSION-BOUNDED SWEEP REVERSAL (hg-v566) — ICT Silver Bulvar structural twin.
    Time-windowed Asia (or prior-hour) sweep → close reclaim → OB/FVG entry.
    London open 07:00–09:30 UTC primary; NY open 12:00–13:30 UTC secondary.
    Algorithm reference only — no third-party import into HARDGATE.
@@ -12670,12 +12670,12 @@ function hgGoldSessionBoundWindow(nowMs){
       : '--:--'; }
     if (hgGoldSbIn(nowMs, 'lon')){
       out.name = 'LONDON_SB'; out.inWindow = true; out.grade = 'A';
-      out.why = 'London open Silver Bullet window 08:00–10:30 London (now ' + clk(lh) + ')';
+      out.why = 'London open Silver Bulvar window 08:00–10:30 London (now ' + clk(lh) + ')';
       return out;
     }
     if (hgGoldSbIn(nowMs, 'ny')){
       out.name = 'NY_SB'; out.inWindow = true; out.grade = 'A';
-      out.why = 'NY open Silver Bullet window 08:00–09:30 New York (now ' + clk(nh) + ')';
+      out.why = 'NY open Silver Bulvar window 08:00–09:30 New York (now ' + clk(nh) + ')';
       return out;
     }
     out.why = 'outside session-bound windows (London 08:00–10:30 local ' + clk(lh)
@@ -12684,7 +12684,7 @@ function hgGoldSessionBoundWindow(nowMs){
   }catch(e){ out.why = 'window error'; return out; }
 }
 
-/** Prior complete UTC clock-hour H/L (Silver Bullet prior-hour pool). */
+/** Prior complete UTC clock-hour H/L (Silver Bulvar prior-hour pool). */
 function hgGoldPriorHourRange(rows, nowMs){
   var out = { ok: false, hi: NaN, lo: NaN, mid: NaN, hourIso: '', bars: 0, why: '' };
   try{
@@ -12710,7 +12710,7 @@ function hgGoldPriorHourRange(rows, nowMs){
 }
 
 /**
- * Session-bounded Asia→London (Silver Bullet twin) detector.
+ * Session-bounded Asia→London (Silver Bulvar twin) detector.
  * Sweep of Asia box (preferred) or prior-hour H/L inside the open window,
  * close reclaim, then fresh OB/FVG for entry.
  */
@@ -17678,7 +17678,7 @@ function hgGoldFormingStack(inp){
         });
       }
     }
-    /* Session-bounded Silver Bullet twin (London/NY open window) */
+    /* Session-bounded Silver Bulvar twin (London/NY open window) */
     if (out.sessionBound && out.sessionBound.ok && out.sessionBound.dir
         && (out.sessionBound.confirmed || out.sessionBound.tier === 'alert' || out.sessionBound.reclaimOk)){
       out.strategies.push({
