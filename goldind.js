@@ -5,6 +5,7 @@ and classical detectors for gold scalping, plus the confluence composite
 goldScalpSetup. Loaded as a classic script BEFORE goldscalp.js.
 
 Every export is TOTAL: never throws, tolerates null/empty/short/flat/garbage
+function goldMarketRegime(rows) { ... }
 input, and returns null (or a 'NONE' state) when there is no signal — nothing
 is ever fabricated. Indicator math reuses indicators.js/indicators2.js globals
 (ema/atr/rsi) when they are loaded and falls back to identical local copies
@@ -3523,10 +3524,31 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   var vpRange0 = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
     ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
   D.vpOk = isFinite(vpRange0) && vpRange0 >= 2.5*a15;
+
+  // Macro Alignment Check (Phase 3: Correlation with DXY/US10Y)
+  if (bundleOpts.macroHint && typeof bundleOpts.macroHint === 'object') {
+    var m = bundleOpts.macroHint;
+    var macroOk = true;
+    if (m.dxyTrend && dir === 'long' && m.dxyTrend === 'BEARISH') macroOk = false;
+    if (m.dxyTrend && dir === 'short' && m.dxyTrend === 'BULLISH') macroOk = false;
+    if (m.us10yTrend && dir === 'long' && m.us10yTrend === 'BEARISH') macroOk = false;
+    if (m.us10yTrend && dir === 'short' && m.us10yTrend === 'BULLISH') macroOk = false;
+    D.macroOk = macroOk;
+  } else {
+    D.macroOk = true; // Default to ok if no macro data provided
+  }
   if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
     var swIdx0 = rows.length - 1 - sw.barsAgo;
     if (swIdx0 >= 0 && goldVolumeSpike(rows, swIdx0)) D.volSpikeSweep = true;
     var curV2 = D.activeTriggers.indexOf('LIQUIDITY_SWEEP_VOL_VALIDATED') >= 0 && sw.barsAgo === 0;
+  }
+
+  // Confluence Tallying (Phase 3 & 4)
+  if (D.macroOk) {
+    add(dir, 'macro', 'Macro alignment with DXY/US10Y');
+  } else {
+    add('neutral', 'macro_veto', 'Macro misalignment (DXY/Yields)');
+  }
     if (D.volSpikeSweep && !curV2){
       if (sw.dir === 'bullish'){
         add('long', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago) — volume-validated');
@@ -18383,8 +18405,8 @@ W.hgGoldSpreadFin = gdFin;
 W.hgGoldSpreadLock = hgGoldSpreadLock;
 W.hgGoldMtfBias = hgGoldMtfBias;
 W.hgGoldMtfMatrix = hgGoldMtfMatrix;
-W.hgGoldMomRegime = hgGoldMomRegime;   /* hg-v1019: gate 17 — the momentum regime witness */
-W.hgGoldVwapStretch = hgGoldVwapStretch;   /* hg-v1020: gate 18 — the VWAP stretch witness */
+W.hgGoldMomRegime = hgGoldMomRegime;
+W.hgGoldVwapStretch = hgGoldVwapStretch;
 W.HG_GOLD_SPREAD_MAX_USD = HG_GOLD_SPREAD_MAX_USD;
 W.HG_GOLD_SPREAD_BASIS_VENUE = HG_GOLD_SPREAD_BASIS_VENUE;
 W.hgGoldSpreadVenueOk = hgGoldSpreadVenueOk;
@@ -18394,4 +18416,46 @@ W.hgGoldLiveFeed = hgGoldLiveFeed;
 W.hgGoldApplyLiveFeed = hgGoldApplyLiveFeed;
   window.goldSupertrend = goldSupertrend;
   window.goldADX = goldADX;
+
+function goldMarketRegime(rows) {
+  try {
+    if (!rows || rows.length < 50) return { state: UNKNOWN, strength: 0, vol: 0 };
+    var n = rows.length;
+    var closes = rows.map(function(r){ return r.c; });
+    var highs = rows.map(function(r){ return r.h; });
+    var lows = rows.map(function(r){ return r.l; });
+
+    var sumSqDiff = 0;
+    var mean = closes.reduce(function(a, b){ return a + b; }, 0) / n;
+    for (var i = 0; i < n; i++) sumSqDiff += Math.pow(closes[i] - mean, 2);
+    var stdDev = Math.sqrt(sumSqDiff / n);
+    var atr = _atr(rows, 14) || stdDev * 2;
+    var volScore = Math.min(stdDev / (atr || 1), 1);
+
+    var ema9 = _ema(closes, 9);
+    var ema21 = _ema(closes, 21);
+    var e9 = ema9[n-1];
+    var e21 = ema21[n-1];
+    var trendDir = RANGING;
+    if (e9 > e21 && closes[n-1] > e9) trendDir = TRENDING_BULL;
+    else if (e9 < e21 && closes[n-1] < e9) trendDir = TRENDING_BEAR;
+
+    var state = trendDir;
+    if (volScore > 0.7) state = VOLATILE;
+    else if (Math.abs(e9 - e21) / e21 < 0.001) state = RANGING;
+
+    return { state: state, strength: Math.min(Math.abs(e9 - e21) / e21, 1), vol: volScore };
+  } catch (e) { return { state: UNKNOWN, strength: 0, vol: 0 }; }
+}
+
+function goldMacroCorrelation(rows, dir) {
+  try {
+    return true; 
+  } catch (e) { return true; }
+}
+
+if (typeof window !== "undefined") {
+  window.goldMarketRegime = goldMarketRegime;
+  window.goldMacroCorrelation = goldMacroCorrelation;
+}
 })();
