@@ -71,7 +71,7 @@
       "ago": -1
     },
     "GTC": {
-      "at": "2026-10-12T14:18:11.869Z",
+      "at": "2026-10-12T17:59:28.376Z",
       "score": 5,
       "fresh": true,
       "ago": 9,
@@ -557,10 +557,10 @@
       "expired": true
     },
     "OGN": {
-      "at": "2026-10-11T06:56:55.133Z",
-      "score": 5,
+      "at": "2026-10-12T17:59:29.307Z",
+      "score": 4,
       "fresh": true,
-      "ago": 2,
+      "ago": 3,
       "crossDay": "2026-10-08",
       "expired": true
     },
@@ -573,7 +573,7 @@
       "expired": true
     },
     "RLC": {
-      "at": "2026-10-12T14:18:12.298Z",
+      "at": "2026-10-12T17:59:29.290Z",
       "score": 5,
       "fresh": true,
       "ago": 3,
@@ -589,7 +589,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-12T14:18:26.473Z",
+  "lastRunAt": "2026-10-12T17:59:48.550Z",
   "scanned": 504,
   "cards": 0
 }
