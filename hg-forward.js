@@ -1396,7 +1396,15 @@ localStorage. Never throws.
        So: recorded, reported, and used for NOTHING. No filter keys off it,
        no weight reads it, no ordering changed. If it is real it will show
        here in a year; if it was in-sample noise, that will show here too. */
-    var byDir = { long:{n:0,w:0}, short:{n:0,w:0} };
+    /* hg-v1305: byDir buckets also carry rrSum so a per-direction expectancy
+       is computable. The hg-v1303 defect (b) ran because hgProvenEdgeVerdict
+       read the pooled verdict for every candidate, and a mechanic positive
+       on longs and negative on shorts shows positive in the pool — so a
+       short was crowned on the long side's record. rrSum rides beside n/w
+       at both ends (live loop below, aggregate seed above, fold at
+       ~1788) so the per-direction split outlives the live cap and the
+       verdict can read a mechanic that paid long, failed short. */
+    var byDir = { long:{n:0,w:0,rrSum:0}, short:{n:0,w:0,rrSum:0} };
     /* Start from any evidence already folded out of the record list. Without
        this, everything pruned would silently vanish from the numbers.
        ticketOnly cannot be answered from the aggregate — it does not keep that
@@ -1413,8 +1421,11 @@ localStorage. Never throws.
                 /* the side split rides the same unfiltered path — it exists
                    to be read over years, so it must not be a live-window
                    view of the last four weeks */
-                if (a.dir_long){ byDir.long.n += (a.dir_long.n || 0); byDir.long.w += (a.dir_long.w || 0); }
-                if (a.dir_short){ byDir.short.n += (a.dir_short.n || 0); byDir.short.w += (a.dir_short.w || 0); } }
+                /* hg-v1305: rrSum rides across the aggregate seed too, or a
+                   per-direction verdict would be answerable only in the
+                   live window — defeating the whole reason this split folds. */
+                if (a.dir_long){ byDir.long.n += (a.dir_long.n || 0); byDir.long.w += (a.dir_long.w || 0); byDir.long.rrSum += (a.dir_long.rrSum || 0); }
+                if (a.dir_short){ byDir.short.n += (a.dir_short.n || 0); byDir.short.w += (a.dir_short.w || 0); byDir.short.rrSum += (a.dir_short.rrSum || 0); } }
       }
     }
     /* The gate-clear split DOES survive pruning now (see hgFwdFold), so a
@@ -1498,7 +1509,10 @@ localStorage. Never throws.
          'long', which would hand one half the other's losses */
       if ((r.state === 't1' || r.state === 'stop') && byDir[r.dir]){
         byDir[r.dir].n++;
-        if (r.state === 't1') byDir[r.dir].w++;
+        /* hg-v1305: rrSum ONLY on t1 so the per-direction avgRr matches the
+           pooled convention (rrSum/wins), and because a stop contributes
+           -1R by construction when the judge computes expectancy. */
+        if (r.state === 't1'){ byDir[r.dir].w++; byDir[r.dir].rrSum += (num(r.rr) || 0); }
       }
     }
     var settled = wins + losses;
@@ -1787,9 +1801,14 @@ localStorage. Never throws.
          rest of the aggregate. */
       if ((r.state === 't1' || r.state === 'stop') && (r.dir === 'long' || r.dir === 'short')){
         var dk = 'dir_' + r.dir;
-        if (!out[key][dk]) out[key][dk] = { n: 0, w: 0 };
+        /* hg-v1305: rrSum folds beside n/w so a per-direction expectancy
+           survives pruning — the mechanic's long record can read PROVEN
+           while its short record reads LOSING, years after the live list
+           has rolled off, which is what hgProvenEdgeVerdict's opts.dir
+           branch (proven-edge.js) consults on every OMNIBTC crown. */
+        if (!out[key][dk]) out[key][dk] = { n: 0, w: 0, rrSum: 0 };
         out[key][dk].n++;
-        if (r.state === 't1') out[key][dk].w++;
+        if (r.state === 't1'){ out[key][dk].w++; out[key][dk].rrSum += (num(r.rr) || 0); }
       }
     }
     return out;

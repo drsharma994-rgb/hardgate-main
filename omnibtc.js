@@ -1096,7 +1096,11 @@ a global hard refresh.
             }
           }
         }
-        var pickV = W.hgProvenEdgeVerdict('omnibtc', pickMech, { pool: 'OMNIBTC', mechanic: pickMech });
+        /* hg-v1305: pass the candidate's direction so a mechanic positive on
+           longs and negative on shorts reads 'proven' only for the side its
+           record paid on. Without this (hg-v1303 defect b), the pooled
+           verdict crowned a short on the long side's record. */
+        var pickV = W.hgProvenEdgeVerdict('omnibtc', pickMech, { pool: 'OMNIBTC', mechanic: pickMech, dir: pick.row && pick.row.dir });
         if (!(pickV && pickV.state === 'proven')){
           /* hg-v1302: iterate in a stable order so "first proven" is not
              insertion-order-dependent — the engine loop above pushes
@@ -1119,7 +1123,12 @@ a global hard refresh.
           for (var bi = 0; bi < btcForProven.length; bi++){
             if (!btcForProven[bi].clean) continue;
             var bm = mechOf(btcForProven[bi]);
-            var bv = W.hgProvenEdgeVerdict('omnibtc', bm, { pool: 'OMNIBTC', mechanic: bm });
+            /* hg-v1305: same direction-aware verdict for every candidate
+               the override iterates over, so a mechanic that paid on longs
+               cannot crown a short — asserted behaviourally in the guard
+               by crafting MMOVE long-proven / short-losing and proving the
+               override refuses the short crown it used to make. */
+            var bv = W.hgProvenEdgeVerdict('omnibtc', bm, { pool: 'OMNIBTC', mechanic: bm, dir: btcForProven[bi] && btcForProven[bi].dir });
             if (bv && bv.state === 'proven'){
               pick = { row: btcForProven[bi], tier: 'clean', source: 'measured-rank' };
               pick.row.measuredRanked = true;
@@ -3797,7 +3806,12 @@ a global hard refresh.
         try{
           if (gfn('hgProvenEdgeVerdict')){
             var mechName = String(pick.row.omniKind || pick.row.kind || pick.row.engine || 'UNKNOWN').toUpperCase().slice(0, 28);
-            measured = W.hgProvenEdgeVerdict('omnibtc', mechName, { pool: 'OMNIBTC', mechanic: mechName });
+            /* hg-v1305: the final demote-to-NEAR check reads the mechanic's
+               record for THIS pick's direction, so a mechanic that paid
+               long and lost short demotes a short crown (correctly) and
+               keeps a long crown (correctly) — the pooled verdict could
+               do neither. */
+            measured = W.hgProvenEdgeVerdict('omnibtc', mechName, { pool: 'OMNIBTC', mechanic: mechName, dir: pick.row && pick.row.dir });
           }
         }catch(eMe){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eMe); }catch(eWm){} }
         if (measured && measured.state === 'losing'){

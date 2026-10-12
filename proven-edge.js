@@ -150,6 +150,44 @@ Classic script, IIFE, feature-checked by every caller, never throws.
         ? opts.mechanic : String(stratId || scanId).toUpperCase();
       out.pool = pool; out.mechanic = mech;
       var stats = W.hgFwdStats(pool, mech, false);
+      /* hg-v1305: THE DIRECTION BRANCH. hg-v1303 named the defect in its
+         own entry: a mechanic positive on longs and negative on shorts
+         reads 'proven' in the pooled verdict, and the OMNIBTC measured-rank
+         override at omnibtc.js:1122 would crown a short on exactly that
+         record. hgFwdStats carries a byDir split with per-direction n, w
+         and (since this pack) rrSum, which is everything the judge needs
+         for a per-direction verdict. STRICT 'long' / 'short' — a missing or
+         junk opts.dir falls through to the pooled verdict (backward compat,
+         what every reader outside OMNIBTC still asks for). Fill-aware
+         fields are intentionally absent on this branch: the per-direction
+         fill split would need another ledger pass and the fillSamples=0
+         path is correct here (judge falls back to the raw tally). */
+      if (opts && (opts.dir === 'long' || opts.dir === 'short') && stats && stats.byDir && stats.byDir[opts.dir]){
+        var d = stats.byDir[opts.dir];
+        var dN = fin(d.n), dW = fin(d.w), dRrSum = fin(d.rrSum);
+        if (!isFinite(dN)) dN = 0;
+        if (!isFinite(dW)) dW = 0;
+        if (!isFinite(dRrSum)) dRrSum = 0;
+        var dL = Math.max(0, dN - dW);
+        var dHit = dN ? dW / dN : NaN;
+        var dAvgRr = dW ? (dRrSum / dW) : NaN;
+        var dExpR;
+        if (!dN) dExpR = NaN;
+        else if (!dW) dExpR = -1;
+        else if (isFinite(dAvgRr)) dExpR = dHit * dAvgRr - (1 - dHit);
+        else dExpR = NaN;
+        stats = {
+          samples: dN, wins: dW, losses: dL, open: 0, expired: 0,
+          hit: dHit, avgRr: dAvgRr, expR: dExpR,
+          fillSamples: 0, fillWins: 0, fillLosses: 0,
+          fillHit: NaN, fillExpR: NaN,
+          fillUnfilled: 0, fillUnprovable: 0,
+          /* preserve the full byDir so a downstream caller that asks the
+             same verdict for the OTHER direction gets the same answer */
+          byDir: stats.byDir
+        };
+        out.dir = opts.dir;
+      }
       var j = W.hgFwdJudgeSample(stats, out.floor);
       if (!isFinite(fin(j && j.n))){
         /* Below the floor. Report progress against it: the larger of the two
