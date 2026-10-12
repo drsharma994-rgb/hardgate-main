@@ -49,7 +49,7 @@ the next candle's range, direction, TP, and SL.
         t: r[0],
         o: parseFloat(r[1]),
         h: parseFloat(r[2]),
-        l: parseFloat(r[3],
+        l: parseFloat(r[3]),
         c: parseFloat(r[4]),
         v: parseFloat(r[5])
       }));
