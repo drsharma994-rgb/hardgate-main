@@ -945,6 +945,7 @@ function goldScalpSetup(inp){
       try{ newsState = W.hgNewsState(); }catch(eN){ newsState = null; }
     }
     var news = __newsCaution(newsState, nowMs);
+    if (news && news.lock) return [];
 
     var reads = [];   /* {side:'long'|'short', tag, label} */
     var notes = [];   /* neutral observations — never counted */
@@ -3774,6 +3775,7 @@ function goldScalpSetups(inp){
       try{ newsState = W.hgNewsState(); }catch(eN){ newsState = null; }
     }
     var news = __newsCaution(newsState, nowMs);
+    if (news && news.lock) return [];
 
     var bundleOpts = {};
     if (inp.dxyCandles) bundleOpts.dxyCandles = inp.dxyCandles;
