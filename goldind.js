@@ -18459,3 +18459,38 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
+function goldCandleForecast(rows) {
+  try {
+    if (!rows || rows.length < 20) return null;
+    var n = rows.length;
+    var current = rows[n-1];
+    var atr_vals = _atr(rows, 14);
+    var atr = __last(atr_vals) || (current.h - current.l);
+    if (!isFinite(atr) || atr <= 0) return null;
+
+    var closes = rows.map(function(r){ return r.c; });
+    var ema9 = _ema(closes, 9);
+    var dir = (ema9[n-1] > ema9[n-2]) ? 'BULL' : 'BEAR';
+
+    var expectedRange = atr * 0.8;
+    var high = current.h + (dir === 'BULL' ? expectedRange : -expectedRange);
+    var low = current.l - (dir === 'BULL' ? expectedRange : -expectedRange);
+
+    var risk = Math.abs(current.c - low);
+    if (risk < 0.1) risk = atr * 0.5;
+
+    return {
+      dir: dir,
+      expectedHigh: +high.toFixed(2),
+      expectedLow: +low.toFixed(2),
+      tp1: +(current.c + (dir === 'BULL' ? risk * 1 : -risk)).toFixed(2),
+      tp2: +(current.c + (dir === 'BULL' ? risk * 2 : -risk * 2)).toFixed(2),
+      sl: dir === 'BULL' ? low : high,
+      confidence: Math.min(1, atr / current.c)
+    };
+  } catch (e) { return null; }
+}
+
+if (typeof window !== "undefined") {
+  window.goldCandleForecast = goldCandleForecast;
+}

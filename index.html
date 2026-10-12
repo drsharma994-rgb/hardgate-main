@@ -349,6 +349,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="./hg-api-base.js?v=14-0"></script>
 <script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=14-0"></script>
 <script src="./vendor/lightweight-charts-4.2.0.js?v=14-0"></script>
+<script src="gold-candle-forecast.js?v=14-1"></script>
 </head>
 <body>
 <script>
@@ -378,7 +379,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <header class="hg-header">
   <div class="header-primary">
 
-      <div class="brand">HARDGATE<span id="hgVerBadge" class="verbadge" title="build version — bumped on every deploy">v1150</span><a href="./?hgkill=1" style="font-size:10px;margin-left:8px;color:var(--gold)" title="wipe the offline cache and reload - use when the version looks old">fix old version</a><small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
+      <div class="brand">HARDGATE<span id="hgVerBadge" class="verbadge" title="build version — bumped on every deploy">v14-1</span><a href="./?hgkill=1" style="font-size:10px;margin-left:8px;color:var(--gold)" title="wipe the offline cache and reload - use when the version looks old">fix old version</a><small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
 
     <div class="xtoggle">
       <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
@@ -467,6 +468,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   <button id="tabB_scalp" onclick="showTab('scalp')">SCALP SCAN</button>
   <button id="tabB_smart" onclick="showTab('smart')">SMART $</button>
   <button id="tabB_gold" onclick="showTab('gold')">GOLD</button>
+  <button id="tabB_candleforecast" onclick="showTab('candle-forecast')">CANDLE FORECAST</button>
   <button id="tabB_coil" onclick="showTab('coil')">COIL WATCHLIST</button>
   <button id="tabB_apex" onclick="showTab('apex')">APEX (RS)</button>
   <button id="tabB_trap" onclick="showTab('trap')">LIQUIDITY TRAP</button>
@@ -484,6 +486,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   <div class="panel">
     <h2>BRAIN <span>meta-intelligence · loading…</span></h2>
     <div class="note">BRAIN synthesizes every intelligence layer. Click RUN SYNTHESIS when loaded.</div>
+  </div>
+</section>
+
+<!-- ================= CANDLE FORECAST ================= -->
+<section id="tab_candle-forecast" class="tabpane">
+  <div class="panel">
+    <h2>Candle Forecast <span id="cfVersion">v14-0</span></h2>
+    <div id="cfContent" class="empty">Waiting for data...</div>
   </div>
 </section>
 
@@ -3681,7 +3691,7 @@ const HG_NAV_GROUPS = [
      next to the risk sizer and the search box. Listed here they sit with the
      rest of the gold book: composites and pick engines first, then the
      swing/scalp engines, then the context tabs. */
-  { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent'] },
+  { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent','candle-forecast'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','recon','basis','search','finder','tradeos','hey','aiagent'] },
 ];
