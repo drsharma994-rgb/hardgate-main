@@ -164,4 +164,23 @@ console.log('\n== 5) the tab shows both, labelled, and fails open ==');
   ok(/hg-v1318/.test(SRC), 'the pack is identified in the source (hg-v956 textual pin)');
 }
 
+console.log('\n== 6) the TAPE VETO is disclosed, and decides nothing here (hg-v1322) ==');
+{
+  const fn = lift(SRC, 'hgCfBuildSetup');
+  ok(/out\.tapeVeto = null/.test(fn), 'the builder carries a tapeVeto field');
+  ok(/pineGoldTapeVeto/.test(fn), 'read through the shared reader, not re-derived');
+  ok(/mode: \/\^4h\$\/\.test\(tf\) \? 'swing' : 'scalp'/.test(fn), 'and the desk mode follows the horizon');
+  /* THE INVARIANT: it is disclosure. It must not rewrite the verdict, and there must
+     be no second veto — the engine's formation rule owns that decision (hg-v949). */
+  ok(/out\.tapeVeto = String\(tvWhy\)/.test(fn), 'the reason is recorded');
+  ok(!/if \(out\.tapeVeto\)[\s\S]{0,120}(formed|why|dir)\s*=/.test(fn),
+    'and it never rewrites the verdict — a second veto here would be a second home for the decision');
+  ok(/catch \(eTv\) \{ out\.tapeVeto = null; \}/.test(fn), 'fails open: no reader, no reason, no effect');
+  ok(/barsPerDay: null, tapeVeto: null \}/.test(fn), 'the field exists on the base object so an early return carries it');
+  ok(/Gold tape veto:/.test(TAB), 'the card prints the reason');
+  /* the comment wraps, so match across the line break rather than pinning one line */
+  ok(/no signal formed[\s\S]{0,120}tape refused the signal/.test(TAB),
+    'and its comment states why the line exists: "no signal formed" and "the tape refused the signal" are different facts');
+}
+
 console.log('\ntest-candle-forecast-two-horizons: ' + pass + ' passed, 0 failed');

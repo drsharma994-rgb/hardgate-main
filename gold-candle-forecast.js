@@ -363,7 +363,14 @@ on every page load since v14-2:
           ? ('<div class="note">' + cv.familiesWith + ' families net with' + (cv.familiesAgainst ? (', ' + cv.familiesAgainst + ' net against') : ', none net against') + (cv.ticket ? ' · confluence setup' : '') + '</div>')
           : (bracket.confluenceWhy ? ('<div class="note">' + String(bracket.confluenceWhy).replace(/</g, '') + (bracket.ticket ? ' · confluence setup' : '') + '</div>') : '');
         var hi = bracket.higher ? ('<div class="note">Higher: ' + String(bracket.higher).replace(/</g, '') + '</div>') : '';
-        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + '</td>';
+        /* hg-v1322: the gold tape's own refusal, when there is one. Without this a
+           reader sees "not a setup" and cannot tell "no signal formed" from "the
+           tape refused the signal" — the desks withhold a TICKET on exactly these
+           tapes, and the reason belongs on the card. */
+        var veto = bracket.tapeVeto
+          ? ('<div class="note warn">Gold tape veto: ' + String(bracket.tapeVeto).replace(/</g, '') + '</div>')
+          : '';
+        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + veto + '</td>';
       }).join('');
       horizonsHtml = '<div class="note" data-cf-horizons="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>SCALP AND SWING</b> <span class="note">— both built by one builder, each on its own tape</span><table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>' + cells + '</tr></table><div class="note">A scalp stop and a swing stop in dollars are not the same risk: read each against its own ATR above.</div></div>';
     })();
