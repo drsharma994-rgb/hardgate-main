@@ -195,6 +195,11 @@
       "version": "hg-v1338",
       "built": "2026-10-14T10:00:00Z",
       "note": "CANDLE FORECAST reads again. The engine outside the gold file had been replaced with a call to a private ATR helper and a missing core, so every scan threw and the tab failed closed. The shared atr and ema read is restored. A readable tape is a read. A tape that cannot be measured still returns nothing, and nothing is invented."
+    },
+    {
+      "version": "hg-v1339",
+      "built": "2026-10-14T11:00:00Z",
+      "note": "CANDLE FORECAST names a key reversal, an outside key reversal, a pipe top and a pipe bottom, and a runaway gap. They are disclosure. They do not vote and they do not move the stop. A runaway gap can name the shape only when the 20-bar drift agrees. A key reversal or a pipe can name it only where that pattern means something. The cached free gold feeds that were still unnamed are listed beside the call: USDJPY, gold against copper, platinum and palladium, the yuan, the 10y-3m curve, GLD volume, TLT, the Australian dollar, and the gold correlations with the S&P and bitcoin. A fresh sentiment print is listed the same way. A stale or missing print stays unread. News and these feeds do not cast a second vote. Nothing is invented."
     }
   ]
 }
