@@ -18600,6 +18600,174 @@ function hgCfCandlePatterns(rows, atrLast) {
   return out;
 }
 
+function hgCfAdvancedPatterns(rows, atrLast) {
+  /* hg-v1311: THE ADVANCED PATTERN LAYER — DISCLOSURE, NOT WEIGHT.
+     WHY IT DOES NOT VOTE. `hgCfCandlePatterns` above DOES vote: its families add
+     to `bulls`/`bears` (the direction call) and its stops become the trade's stop
+     (`rawStop = dir === 'BULL' ? pat.longStop : pat.shortStop`). Adding voting
+     families here would silently double the pattern weight of a live trade
+     decision — the hg-v966 unmeasured-weight trap, and hg-v1153's own warning that
+     counting a 3-bar pattern twice inflates a bar. So every pattern in this layer
+     is RECORDED with a named lean and a truthful location, and the forward ledger
+     decides out of sample whether it separates winners. Nothing here is read by
+     any gate, threshold, level or ticket.
+     WHAT IT ADDS THAT THE THREE-BAR VOTER CANNOT SEE: the four-bar reversals
+     (three-line strike, three outside), the continuation patterns (rising and
+     falling three methods, tasuki gap, side-by-side white lines), the volume-based
+     exhaustion pair (three-bar climax), inside/outside structural runs, and — the
+     part that actually sharpens a read — a LOCATION AND TREND CONTEXT for every
+     pattern: a hammer at a swing low is a reversal, the same hammer at a swing
+     high is a trap, and the voter above cannot tell them apart. */
+  /* FAIL OPEN on an unusable tape: null rather than a throw, so a caller that
+     forgets to guard cannot take a scan down over a display-layer read. The
+     array check must come BEFORE the length read — reading .length on a null is
+     exactly the throw this is here to prevent. */
+  if (!Array.isArray(rows)) return null;
+  var n = rows.length;
+  var out = { names: [], leans: [], notes: [], where: null, aligned: null, stops: { long: null, short: null } };
+  if (!(atrLast > 0) || n < 20) return out;
+  var p = [], i;
+  for (i = 0; i < n; i++) p.push(hgCfPack(rows[i]));
+  var a = p[n - 4], b = p[n - 3], c = p[n - 2], d = p[n - 1];
+  if (!a || !b || !c || !d) return out;
+  function ok(x) { return x && isFinite(x.range); }
+  if (!ok(a) || !ok(b) || !ok(c) || !ok(d)) return out;
+  var big = function (x) { return x.range >= atrLast * 0.35; };
+  var mid = function (x) { return x.body >= atrLast * 0.25; };
+
+  /* ---- LOCATION AND TREND CONTEXT (the accuracy half) ----
+     Where the pattern printed, measured over the 20 bars before it, and whether
+     its natural direction agrees with the drift of those bars. Three-state: a
+     degenerate window leaves `where` null rather than guessing. */
+  var win = p.slice(Math.max(0, n - 21), n - 1);
+  var wHi = -Infinity, wLo = Infinity, j;
+  for (j = 0; j < win.length; j++) {
+    if (isFinite(win[j].h) && win[j].h > wHi) wHi = win[j].h;
+    if (isFinite(win[j].l) && win[j].l < wLo) wLo = win[j].l;
+  }
+  if (isFinite(wHi) && isFinite(wLo) && wHi > wLo) {
+    var pos = (d.c - wLo) / (wHi - wLo);
+    out.where = pos >= 0.7 ? 'at the range high' : (pos <= 0.3 ? 'at the range low' : 'mid-range');
+    out.wherePos = +pos.toFixed(3);
+  }
+  if (win.length >= 5) {
+    var first = win[0], lastW = win[win.length - 1];
+    var net = lastW.c - first.c;
+    out.aligned = Math.abs(net) < atrLast * 0.5 ? 'flat'
+      : (net > 0 ? 'up' : 'down');
+  }
+  function record(name, lean) {
+    out.names.push(name);
+    if (lean) out.leans.push({ name: name, lean: lean });
+    /* a pattern stop is recorded only when the pattern actually points
+       somewhere; it is never promoted into the trade's own stop */
+    if (lean === 1 && isFinite(d.l)) out.stops.long = out.stops.long == null ? d.l : Math.min(out.stops.long, d.l);
+    if (lean === -1 && isFinite(d.h)) out.stops.short = out.stops.short == null ? d.h : Math.max(out.stops.short, d.h);
+  }
+  /* does the location support the lean? true=with it, false=against it, null=unread */
+  function located(lean) {
+    if (!out.where || !lean) return null;
+    if (lean === 1) return out.where === 'at the range low' ? true : (out.where === 'at the range high' ? false : null);
+    return out.where === 'at the range high' ? true : (out.where === 'at the range low' ? false : null);
+  }
+  function tag(lean, name) {
+    var w = located(lean);
+    if (w === true) out.notes.push(name + ' sits ' + out.where + ' — where this pattern means something');
+    else if (w === false) out.notes.push(name + ' sits ' + out.where + ' — a trap at this location, not a reversal');
+    return lean;
+  }
+
+  /* ---- FOUR-BAR REVERSALS ---- */
+  /* THREE-LINE STRIKE: three bars in one direction, then a fourth that engulfs
+     all three and closes beyond the first. A continuation pattern, and the fourth
+     bar must genuinely swallow the run. */
+  if (big(a) && big(b) && big(c) && big(d) && mid(a) && mid(b) && mid(c)) {
+    var run3 = a.bear && b.bear && c.bear ? -1 : (a.bull && b.bull && c.bull ? 1 : 0);
+    if (run3 === -1 && d.bull && d.c > a.o && d.o <= c.c && d.body >= (a.body + b.body + c.body) * 0.9)
+      record('bullish three-line strike', tag(1, 'bullish three-line strike'));
+    else if (run3 === 1 && d.bear && d.c < a.o && d.o >= c.c && d.body >= (a.body + b.body + c.body) * 0.9)
+      record('bearish three-line strike', tag(-1, 'bearish three-line strike'));
+  }
+  /* THREE OUTSIDE UP / DOWN: a harami is followed by a bar closing beyond the
+     FIRST bar of the three. Distinct from three-line strike (which needs a
+     3-bar run) and from engulfing (which is two bars).
+     NOTE the inside bar is NOT required to have a large body: a harami is by
+     definition a SMALL bar inside the previous one, so a `mid(b)` test here
+     contradicts the pattern and rejects exactly the bars it is looking for. */
+  if (big(a) && mid(a) && b.h <= a.h && b.l >= a.l && b.body < a.body) {
+    if (a.bear && c.bull && c.c > a.h) record('three outside up', tag(1, 'three outside up'));
+    else if (a.bull && c.bear && c.c < a.l) record('three outside down', tag(-1, 'three outside down'));
+  }
+  /* ABANDONED BABY: an engulfing pair with a doji gapped away on BOTH sides — the
+     most demanding of the star family, and the only one that requires a gap. */
+  if (big(a) && big(c) && mid(a) && mid(c) && b.range <= atrLast * 0.15) {
+    if (a.bear && c.bull && b.h < a.c && b.l < a.c && c.c > a.o)
+      record('bullish abandoned baby', tag(1, 'bullish abandoned baby'));
+    else if (a.bull && c.bear && b.l > a.c && b.h > a.c && c.c < a.o)
+      record('bearish abandoned baby', tag(-1, 'bearish abandoned baby'));
+  }
+
+  /* ---- CONTINUATION PATTERNS ---- */
+  /* RISING / FALLING THREE METHODS: a long bar, three small bars that stay inside
+     its range, then a long bar resuming the direction. */
+  if (n >= 6) {
+    var e = p[n - 5], f = p[n - 6];
+    if (ok(e) && ok(f) && big(f) && big(d) && f.bull && d.bull && d.c > f.c
+        && mid(b) && mid(c) && mid(e)
+        && Math.min(b.l, c.l, e.l) >= f.l && Math.max(b.h, c.h, e.h) <= f.h)
+      record('rising three methods', tag(1, 'rising three methods'));
+    if (ok(e) && ok(f) && big(f) && big(d) && f.bear && d.bear && d.c < f.c
+        && mid(b) && mid(c) && mid(e)
+        && Math.min(b.l, c.l, e.l) >= f.l && Math.max(b.h, c.h, e.h) <= f.h)
+      record('falling three methods', tag(-1, 'falling three methods'));
+  }
+  /* TASUKI GAP: a gap in the direction of the move, then a bar that closes part
+     of the gap without filling it. The unfilled gap is the whole point. */
+  if (big(a) && big(c) && a.bull && b.l > a.h && c.bear && c.c > a.h && c.c < b.l)
+    record('bullish tasuki gap', tag(1, 'bullish tasuki gap'));
+  if (big(a) && big(c) && a.bear && b.h < a.l && c.bull && c.c < a.l && c.c > b.h)
+    record('bearish tasuki gap', tag(-1, 'bearish tasuki gap'));
+  /* SIDE-BY-SIDE WHITE LINES: two same-sized bullish bodies at the same level
+     after a gap — a continuation, and explicitly NOT an engulfing (the bodies
+     are equal, not swallowed). */
+  if (big(a) && mid(b) && mid(c) && b.bull && c.bull && b.l > a.h
+      && Math.abs(b.c - c.c) <= atrLast * 0.15 && Math.abs(b.o - c.o) <= atrLast * 0.15)
+    record('side-by-side white lines', tag(1, 'side-by-side white lines'));
+
+  /* ---- EXHAUSTION / STRUCTURE ---- */
+  /* THREE-BAR CLIMAX: three consecutive expanding ranges with shrinking bodies —
+     participation rising into a stall. Location decides what it means, which is
+     exactly why it is reported WITH the location rather than as a bare vote. */
+  if (big(a) && big(b) && big(c) && c.range > b.range && b.range > a.range
+      && c.body < b.body && b.body < a.body)
+    record('three-bar climax — expansion into a stall', null);
+  /* INSIDE / OUTSIDE RUNS: the structural compression and expansion the
+     two-bar voter only sees one bar at a time. */
+  if (c.h <= b.h && c.l >= b.l && b.h <= a.h && b.l >= a.l)
+    record('double inside — compression', null);
+  if (c.h > b.h && c.l < b.l && b.h > a.h && b.l < a.l)
+    record('double outside — expansion', null);
+
+  /* ---- the trend the pattern landed in ----
+     A reversal pattern that fights a strong drift is a different proposition from
+     one that runs with it. Disclosed, three-state, never used as a veto here. */
+  if (out.aligned && out.leans.length) {
+    var agree = 0, against = 0, k;
+    for (k = 0; k < out.leans.length; k++) {
+      if (out.aligned === 'flat') continue;
+      var wantsUp = out.leans[k].lean === 1;
+      if ((wantsUp && out.aligned === 'up') || (!wantsUp && out.aligned === 'down')) agree++;
+      else against++;
+    }
+    if (agree || against) {
+      out.notes.push('the 20-bar drift is ' + out.aligned + ': ' + agree + ' pattern lean'
+        + (agree === 1 ? '' : 's') + ' with it, ' + against + ' against');
+    }
+  }
+  if (!out.names.length) out.notes.push('no advanced pattern in the last four bars');
+  return out;
+}
+
 function goldCandleForecast(rows) {
   try {
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
@@ -18696,6 +18864,16 @@ function goldCandleForecast(rows) {
     if (pat.names.length) reasons.push('patterns: ' + pat.names.join(', '));
     else reasons.push('no candlestick pattern');
     for (pi = 0; pi < pat.notes.length; pi++) reasons.push(pat.notes[pi]);
+    /* hg-v1311: the advanced pattern layer. DISCLOSED ONLY — it is deliberately
+       NOT added to bulls/bears/checked and never touches rawStop below, because
+       that would double the live pattern weight (hg-v966) and could re-count a
+       three-bar pattern the voter above already counted. It rides the result so
+       the card can name it and the forward ledger can measure it. */
+    var adv = hgCfAdvancedPatterns(rows, atrLast);
+    if (adv.names.length) reasons.push('advanced patterns: ' + adv.names.join(', '));
+    if (adv.where) reasons.push('pattern location: ' + adv.where
+      + (adv.aligned ? ' · the 20-bar drift is ' + adv.aligned : ''));
+    for (pi = 0; pi < adv.notes.length; pi++) reasons.push(adv.notes[pi]);
 
     var dir = null;
     /* hg-v1309: A TIE OF ZEROES IS NOT A TIE. The 60th-percentile-of-zeroes
@@ -18810,6 +18988,13 @@ function goldCandleForecast(rows) {
       checked: checked,
       reasons: reasons,
       patterns: pat.names,
+      /* hg-v1311: the advanced layer, named and located. Read by nothing that
+         gates, scores or prices — the card prints it and the ledger measures it. */
+      advancedPatterns: adv.names,
+      patternLeans: adv.leans,
+      patternWhere: adv.where,
+      patternWherePos: (typeof adv.wherePos === 'number' ? adv.wherePos : null),
+      patternDrift: adv.aligned,
       stopSource: stopSource,
       expectedHigh: +(c + expectedRange).toFixed(2),
       expectedLow: +(c - expectedRange).toFixed(2),
