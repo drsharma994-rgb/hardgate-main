@@ -40,6 +40,21 @@
       "version": "hg-v1304",
       "built": "2026-10-11T18:00:00Z",
       "note": "SETUP CONFIRM now reads the TAPE. The desk own header said it never fetches market data of its own, so CONFIRMED only ever meant \"several desks agree\" and nothing on the tab had looked at the candles those desks read. Added cfCandleContext: a pure, three-state read of the repo ONE candle seam (W.getCandles, the same one book.js and brain.js use), disclosing range position, tape lean vs the direction, ATR expansion, last-bar volume participation, wrong-ended EXTENDED entries and whether the last closed bar finished with the direction. Readout only - adds no weight and cannot promote, demote or block; fails open on every path and is bounded to 8 symbols with a 6s per-read timeout."
+    },
+    {
+      "version": "hg-v1305",
+      "built": "2026-10-11T19:00:00Z",
+      "note": "upstream: rebuilt the CANDLE FORECAST engine on real estimators and added its first guard; Candle Forecast prints an actionable TP/SL bracket; CRITICAL fix - goldind.js did not parse at all (stray brace), so the Candle Forecast tab and every gold desk were dead"
+    },
+    {
+      "version": "hg-v1306",
+      "built": "2026-10-11T20:00:00Z",
+      "note": "upstream: one unopposed candle read is a long or short with stop and targets"
+    },
+    {
+      "version": "hg-v1307",
+      "built": "2026-10-13T03:22:00Z",
+      "note": "upstream: a split candle tape still calls a side with stop and targets; candle forecast leans only when two reads agree. Also carries this branch: SETUP CONFIRM reads historical candles (cfCandleContext, three-state, readout only) and three CSP-blocked news hosts permitted"
     }
   ]
 }
