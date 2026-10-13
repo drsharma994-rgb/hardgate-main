@@ -21149,6 +21149,14 @@ function hgCfDaySwings(rows, opts) {
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
   window.hgCfConfluence = hgCfConfluence;
+  /* hg-v1336: the one-home candle pattern engine, exported so TREND MATRIX
+     (and any later caller) reads the same ATR-gated hammer/engulfing/
+     piercing/star/marubozu rules the gold candle forecast reads, rather
+     than a second copy (hg-v949). Reads `(rows, atrLast)` and returns
+     { bullVotes, bearVotes, names, bullNames, bearNames, notes,
+       longStop, shortStop } — three-state by construction: a pattern that
+     fires names its direction, a tie or no fire leaves the names empty. */
+  window.hgCfCandlePatterns = hgCfCandlePatterns;
   /* hg-v1317: the per-desk vote, exported so a guard can drive it directly and the
      tab can show which OTHER gold desks formed a side on the same tape. */
   window.hgCfDeskVotes = hgCfDeskVotes;

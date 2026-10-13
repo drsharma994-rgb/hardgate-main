@@ -205,16 +205,9 @@ function trendmxPaintDeskSections(refs, state){
   forming.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
   if (refs.cards){
     if (!clean.length){
-      /* hg-v1331: on a fully empty board (no clean, no golden, no death, no crypto)
-         prepend the WHY NO SETUPS panel that aggregates the held.stack reasons
-         across all three mint paths. Fails open: with no state, no held stacks
-         or no reasons, trendmxWhyEmptyHtml returns ''. */
-      var emptyWhy = '';
-      try { emptyWhy = trendmxWhyEmptyHtml(state) || ''; } catch (eWhy) { emptyWhy = ''; }
-      var emptyNote = (typeof hgSetupEmptyHTML === 'function')
+      refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')
         ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. The golden and death cross desks and the limit board surface actionable rows when gates + plan align.' })   /* hg-v1015: two cross desks now */
         : '<div class="empty">No CLEAN tickets.</div>';
-      refs.cards.innerHTML = emptyWhy + emptyNote;
     } else {
       var ch = '<div class="note" style="margin:0 0 10px"><b>CLEAN TICKETS</b> — 7/7 gates + valid plan + min R:R ' + TM_MIN_RR + '.</div>';
       for (var ci = 0; ci < Math.min(clean.length, 12); ci++) ch += trendmxSetupCardHTML(clean[ci], 'clean');

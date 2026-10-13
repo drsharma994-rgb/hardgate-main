@@ -77,88 +77,6 @@ function trendmxGridBlockHtml(title, gridLbl, s, callDir){
   }catch(e){ return ''; }
 }
 
-/* hg-v1331: WHY NOTHING FORMED — the empty-state narrator. A scan that
-   mints no CLEAN tickets, no golden-cross tickets, no death-cross tickets
-   and no crypto-formation tickets used to paint four separate empty-state
-   notes (and the DEATH DESK was invisible by return ''). This aggregates
-   held.stack reasons across the three cross/crypto desks + the formation
-   pass's hard[] list and renders ONE panel that names the top binding
-   reasons. The hg-v924 OMNIGOLD WHY NOTHING TICKETED precedent, applied
-   to this desk's own held stacks.
-   Doctrine: NO GATE IS LOOSENED. Per the AGENTS Cluster C standing
-   conclusion, the 325 hard-gate rules (hg-v1242..v1268, each individually
-   measured) are the correct behaviour on an ensemble so tight; this pack
-   makes the empty state readable, not shorter. The user complaint "not
-   forming any setups" is answered by naming WHY, not by relaxing a rule.
-   Fails open: with no state, no state.golden/death/crypto, or empty held
-   stacks, the panel renders ''. */
-function trendmxWhyEmptyHtml(state){
-  try{
-    state = state || {};
-    var golden = state.goldenCross || state.golden || [];
-    var death  = state.deathCross  || state.death  || [];
-    var crypto = state.cryptoSetups || state.crypto || [];
-    /* paint only when the three mint paths all produced ZERO tickets.
-       A non-empty cards board handles its own narration (hg-v552). */
-    if ((golden.length | 0) + (death.length | 0) + (crypto.length | 0) > 0) return '';
-    var buckets = { gates: 0, grade: 0, cascade: 0, waiting: 0 };
-    var reasonCounts = {};
-    function addStack(bag){
-      if (!bag) return;
-      if (bag.waiting) buckets.waiting += bag.waiting | 0;
-      if (bag.gates)   buckets.gates   += bag.gates   | 0;
-      if (bag.cascade) buckets.cascade += bag.cascade | 0;
-      if (bag.grade)   buckets.grade   += bag.grade   | 0;
-      var stack = bag.stack;
-      if (!Array.isArray(stack)) return;
-      for (var i = 0; i < stack.length; i++){
-        var row = stack[i];
-        if (!row || !Array.isArray(row.reasons)) continue;
-        for (var j = 0; j < row.reasons.length; j++){
-          var k = String(row.reasons[j] || '').trim();
-          if (!k) continue;
-          reasonCounts[k] = (reasonCounts[k] | 0) + 1;
-        }
-      }
-    }
-    addStack(golden && golden.held);
-    addStack(death  && death.held);
-    addStack(crypto && crypto.held);
-    /* rank reasons by frequency, cap at top 6 */
-    var ranked = Object.keys(reasonCounts).map(function(k){
-      return { reason: k, n: reasonCounts[k] };
-    }).sort(function(a, b){ return b.n - a.n; });
-    var top = ranked.slice(0, 6);
-    var totalHeld = buckets.waiting + buckets.gates + buckets.cascade + buckets.grade;
-    /* nothing to say if every bucket is zero and no stack reasons */
-    if (!totalHeld && !top.length) return '';
-    var bucketBits = [];
-    if (buckets.cascade) bucketBits.push(buckets.cascade + ' had no 4h cascade');
-    if (buckets.gates)   bucketBits.push(buckets.gates + ' failed the 7-gate matrix');
-    if (buckets.grade)   bucketBits.push(buckets.grade + ' failed the TRADE grade');
-    if (buckets.waiting) bucketBits.push(buckets.waiting + ' waiting for the EMA tag');
-    var reasonHtml = '';
-    if (top.length){
-      reasonHtml = '<div style="margin-top:6px;font-size:12px"><b>Top binding reasons</b><ul style="margin:4px 0 0 20px;padding:0">';
-      for (var ti = 0; ti < top.length; ti++){
-        reasonHtml += '<li>' + top[ti].reason + ' <span style="color:#64748b">×' + top[ti].n + '</span></li>';
-      }
-      reasonHtml += '</ul></div>';
-    }
-    var bucketLine = bucketBits.length
-      ? '<div style="margin-top:4px">' + bucketBits.join(' · ') + '.</div>'
-      : '';
-    return '<div class="panel" style="margin:12px 0;border-left:4px solid #ca8a04">'
-      + '<h2>WHY NO SETUPS <span>no CLEAN tickets, no golden/death cross, no crypto formation — the 325 hard-gate ensemble (hg-v1242..v1268) is deciding, as designed</span></h2>'
-      + '<div class="note">The three mint paths each ran, and together refused every candidate. '
-      + 'Each individual rule is measured and documented; the ensemble is Cluster C — adding or removing a single rule here does not fix an over-tight AND. '
-      + 'The reasons below are what each held candidate hit first.</div>'
-      + bucketLine
-      + reasonHtml
-      + '</div>';
-  }catch(e){ return ''; }
-}
-
 /* hg-v1066: THE CROWN — the OMNIBTC treatment on the TREND MATRIX: a
    single bold call (the strongest majority row with a minted plan), a
    verdict line, the five-dimension complete analysis from the row's own
@@ -211,7 +129,7 @@ function trendmxCrownPanelHTML(state){
     if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
     if (isFinite(+pfR.dvolVal)) tech.push('DVOL ' + (+pfR.dvolVal).toFixed(1) + (pfR.dvolRegime ? ' ' + String(pfR.dvolRegime) : ''));
-    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb || pfR.pineCipher || pfR.pineRangeFilter || pfR.pineNwEnvelope || pfR.pineWavwap || pfR.pineSupertrend || pfR.pineMacd || pfR.pineCci){
+    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb || pfR.pineCipher || pfR.pineRangeFilter || pfR.pineNwEnvelope || pfR.pineWavwap){
       var pineBits = [];
       if (pfR.pineLorKnn) pineBits.push('LorKNN ' + pfR.pineLorKnn);
       if (pfR.pineHalfTrend) pineBits.push('half-trend ' + pfR.pineHalfTrend);
@@ -223,10 +141,6 @@ function trendmxCrownPanelHTML(state){
       if (pfR.pineRangeFilter) pineBits.push('range ' + pfR.pineRangeFilter);
       if (pfR.pineNwEnvelope) pineBits.push('NW ' + pfR.pineNwEnvelope);
       if (pfR.pineWavwap) pineBits.push('wAVWAP ' + pfR.pineWavwap);
-      /* hg-v1295: three more Pine state readers. */
-      if (pfR.pineSupertrend) pineBits.push('supertrend ' + pfR.pineSupertrend);
-      if (pfR.pineMacd) pineBits.push('MACD ' + pfR.pineMacd);
-      if (pfR.pineCci) pineBits.push('CCI ' + pfR.pineCci);
       tech.push('PINE ' + pineBits.join(' | '));
     }
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
@@ -401,7 +315,7 @@ function tmStructureDir(rows){
    five). All four already exist in pinemath.js and were read by nothing on
    this desk. Record-only like the five; nothing scores on them. */
 function trendmxPineMarks(rows){
-  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null, supertrend: null, macd: null, cci: null };
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null };
   try{
     if (!Array.isArray(rows) || rows.length < 30) return out;
     if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
@@ -414,15 +328,6 @@ function trendmxPineMarks(rows){
     if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
     if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
     if (typeof W.pineSmcCore === 'function'){ var sc = W.pineSmcCore(rows, { includeContext: true }); if (sc && sc.dir) out.smc = String(sc.dir).toLowerCase(); }
-    /* hg-v1295: three more bar-only Pine state readers. Record-only like
-       the ten above; the forward ledger measures each separation out of
-       sample. Supertrend/MACD/CCI are distinct from HalfTrend/Squeeze/
-       Cipher respectively (ATR-band flip vs amplitude-pivot flip,
-       signal-line cross vs BB-in-KC release, extreme re-entry vs
-       WaveTrend). */
-    if (typeof W.pineSupertrend === 'function'){ var st = W.pineSupertrend(rows, {}); if (st && st.dir) out.supertrend = String(st.dir).toLowerCase(); }
-    if (typeof W.pineMacd === 'function'){ var md = W.pineMacd(rows, {}); if (md && md.dir) out.macd = String(md.dir).toLowerCase(); }
-    if (typeof W.pineCci === 'function'){ var cc = W.pineCci(rows, {}); if (cc && cc.dir) out.cci = String(cc.dir).toLowerCase(); }
   }catch(e){ }
   return out;
 }
