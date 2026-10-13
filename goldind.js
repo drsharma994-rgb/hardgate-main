@@ -18960,6 +18960,64 @@ function hgCfAdvancedPatterns(rows, atrLast) {
   if (big(d) && d.body > 0 && d.body <= d.range * 0.34 && d.upper >= d.body && d.lower >= d.body)
     record('spinning top — indecision, no lean', null);
 
+  /* hg-v1321: shapes still missing from both voters. Disclosure only.
+     A homing pigeon is two black bars, the second inside the first — a bullish
+     reversal, not a harami (a harami needs the opposite colour). A descending
+     hawk is the white mirror. A hikkake is an inside bar, a false break, then
+     a close back through. Two black gapping, identical three crows, and the
+     gap-three-methods are continuations the three-bar voter does not name.
+     Three gaps is the exhaustion of a window run. A breakaway is five bars.
+     None of these is added to bulls, bears, checked, or the trade stop. */
+  if (c.bear && d.bear && mid(c) && d.body > 0 && d.body < c.body) {
+    var hpHi = Math.max(c.o, c.c), hpLo = Math.min(c.o, c.c);
+    if (Math.max(d.o, d.c) <= hpHi && Math.min(d.o, d.c) >= hpLo)
+      record('homing pigeon', tag(1, 'homing pigeon'));
+  }
+  if (c.bull && d.bull && mid(c) && d.body > 0 && d.body < c.body) {
+    var hkHi = Math.max(c.o, c.c), hkLo = Math.min(c.o, c.c);
+    if (Math.max(d.o, d.c) <= hkHi && Math.min(d.o, d.c) >= hkLo)
+      record('descending hawk', tag(-1, 'descending hawk'));
+  }
+  if (b.h <= a.h && b.l >= a.l && b.range < a.range && b.range > 0) {
+    if (c.l < b.l && d.bull && d.c > b.h) record('bullish hikkake', tag(1, 'bullish hikkake'));
+    if (c.h > b.h && d.bear && d.c < b.l) record('bearish hikkake', tag(-1, 'bearish hikkake'));
+  }
+  if (c.bear && d.bear && mid(c) && mid(d) && d.o < c.c && d.h < c.l)
+    record('two black gapping', tag(-1, 'two black gapping'));
+  if (b.bear && c.bear && d.bear && mid(b) && mid(c) && mid(d)
+      && c.c < b.c && d.c < c.c
+      && Math.abs(c.o - b.c) <= atrLast * 0.05 && Math.abs(d.o - c.c) <= atrLast * 0.05)
+    record('identical three crows', tag(-1, 'identical three crows'));
+  if (b.bear && c.bear && mid(b) && mid(c) && c.h < b.l && d.bull && d.o < c.o && d.c > c.h && d.c < b.l)
+    record('downside gap three methods', tag(-1, 'downside gap three methods'));
+  if (b.bull && c.bull && mid(b) && mid(c) && c.l > b.h && d.bear && d.o > c.o && d.c < c.l && d.c > b.h)
+    record('upside gap three methods', tag(1, 'upside gap three methods'));
+  if (gapUp(b, a) && gapUp(c, b) && gapUp(d, c))
+    record('three gaps up', tag(-1, 'three gaps up'));
+  if (gapDn(b, a) && gapDn(c, b) && gapDn(d, c))
+    record('three gaps down', tag(1, 'three gaps down'));
+  if (n >= 6) {
+    var g0 = p[n - 5];
+    if (ok(g0) && big(g0) && mid(g0) && g0.bear && p[n - 4].bear && p[n - 4].h < g0.l
+        && p[n - 3].c <= p[n - 4].c && big(d) && d.bull && d.c > p[n - 4].h && d.c < g0.o)
+      record('bullish breakaway', tag(1, 'bullish breakaway'));
+    if (ok(g0) && big(g0) && mid(g0) && g0.bull && p[n - 4].bull && p[n - 4].l > g0.h
+        && p[n - 3].c >= p[n - 4].c && big(d) && d.bear && d.c < p[n - 4].l && d.c > g0.o)
+      record('bearish breakaway', tag(-1, 'bearish breakaway'));
+  }
+  if (b.bear && mid(b) && c.bear && c.l < b.l && c.lower >= c.body && c.body > 0
+      && d.bull && d.body > 0 && d.body < c.body && d.c <= c.o)
+    record('unique three river bottom', tag(1, 'unique three river bottom'));
+  if (b.bull && c.bull && d.bull && big(b) && big(c) && mid(b) && mid(c)
+      && d.body > 0 && d.body < c.body * 0.5 && d.o >= c.c && d.c > c.c)
+    record('deliberation', tag(-1, 'deliberation'));
+  if (big(c) && mid(c) && d.range > 0 && d.body <= d.range * 0.1 && d.body <= atrLast * 0.15) {
+    if (c.bear && d.l > c.h) record('bullish doji star', tag(1, 'bullish doji star'));
+    if (c.bull && d.h < c.l) record('bearish doji star', tag(-1, 'bearish doji star'));
+  }
+  if (big(d) && d.body <= d.range * 0.25 && d.upper >= d.range * 0.3 && d.lower >= d.range * 0.3)
+    record('high wave — long shadows, no lean', null);
+
   /* ---- EXHAUSTION / STRUCTURE ---- */
   /* THREE-BAR CLIMAX: three consecutive expanding ranges with shrinking bodies —
      participation rising into a stall. Location decides what it means, which is
@@ -19259,14 +19317,20 @@ function hgCfDeskVotes(rows, opts, dir) {
 
     /* count the sides a candidate list carries — the desk's own formed bias */
     function tally(list) {
-      var lng = 0, sht = 0, i, d;
-      if (!Array.isArray(list)) return { long: 0, short: 0 };
+      var lng = 0, sht = 0, notes = [], i, d, row, bit;
+      if (!Array.isArray(list)) return { long: 0, short: 0, notes: notes };
       for (i = 0; i < list.length; i++) {
-        d = String((list[i] && (list[i].dir || list[i].direction)) || '').toLowerCase();
+        row = list[i] || {};
+        d = String((row.dir || row.direction) || '').toLowerCase();
         if (d === 'long' || d === 'bull' || d === 'bullish') lng++;
         else if (d === 'short' || d === 'bear' || d === 'bearish') sht++;
+        bit = row.why || row.reason || row.note || row.label || '';
+        if (bit && notes.length < 3) {
+          bit = String(bit).replace(/\s+/g, ' ').trim();
+          if (bit) notes.push(bit.slice(0, 72));
+        }
       }
-      return { long: lng, short: sht };
+      return { long: lng, short: sht, notes: notes };
     }
     function push(name, label, formed, why) {
       var lean = null;
@@ -19295,8 +19359,9 @@ function hgCfDeskVotes(rows, opts, dir) {
         var r = fn();
         var t = tally(r);
         var total = t.long + t.short;
+        var said = (t.notes && t.notes.length) ? (' · ' + t.notes.join(' · ')) : '';
         push(name, label, t, total
-          ? (t.long + ' long / ' + t.short + ' short formed')
+          ? (t.long + ' long / ' + t.short + ' short formed' + said)
           : 'formed nothing on this tape');
       } catch (e) {
         /* name the cause rather than a bare "threw" — a desk that could not read
@@ -19360,8 +19425,9 @@ function hgCfDeskVotes(rows, opts, dir) {
       try {
         var r = run(f);
         var t = tally(Array.isArray(r) ? r : []);
+        var saidOnce = (t.notes && t.notes.length) ? (' · ' + t.notes.join(' · ')) : '';
         push(label, label, t, (t.long + t.short)
-          ? (t.long + ' long / ' + t.short + ' short formed')
+          ? (t.long + ' long / ' + t.short + ' short formed' + saidOnce)
           : 'formed nothing on this tape');
       } catch (eOnce) {
         push(label, label, null, 'engine unavailable: ' + String((eOnce && eOnce.message) || eOnce).slice(0, 60));
@@ -19503,6 +19569,26 @@ function hgCfBuildSetup(rows, opts, fc) {
     out.higher = f.higher || null;
     out.confluenceWhy = (f.confluence && f.confluence.why) || '';
     out.ticket = !!(f.confluence && f.confluence.ticket);
+    out.confluenceView = null;
+    if (f.confluence && f.confluence.ok) {
+      out.confluenceView = {
+        ok: true,
+        why: f.confluence.why || '',
+        ticket: !!f.confluence.ticket,
+        familiesWith: f.confluence.familiesWith,
+        familiesAgainst: f.confluence.familiesAgainst,
+        with_: f.confluence.with_,
+        against: f.confluence.against,
+        unread: f.confluence.unread,
+        voters: (f.confluence.voters || []).map(function (v) {
+          return { family: v.family, name: v.name, lean: v.lean, why: v.why || '' };
+        }),
+        desks: (f.confluence.desks || []).map(function (dsk) {
+          return { desk: dsk.desk, lean: dsk.lean, long: dsk.long, short: dsk.short, why: dsk.why || '' };
+        }),
+        deskWhy: f.confluence.deskWhy || ''
+      };
+    }
     out.strength = f.strength;
     /* the horizon, stated in BARS rather than in prose, so a reader can see that the
        scalp's stop lives inside one session and the swing's spans several */
@@ -19583,7 +19669,7 @@ function hgCfLocatedSide(adv) {
      clash and names nothing. This does not add a vote. */
   var out = { bull: [], bear: [], clash: false };
   if (!adv || !Array.isArray(adv.leans)) return out;
-  var cont = /tasuki|side-by-side|mat hold|on-neck|in-neck|separating/;
+  var cont = /tasuki|side-by-side|mat hold|on-neck|in-neck|separating|two black gapping|gap three methods|identical three crows/;
   var i, L, notes, n, sits, agrees;
   for (i = 0; i < adv.leans.length; i++) {
     L = adv.leans[i];
@@ -19752,6 +19838,32 @@ function hgCfConfluence(rows, opts, fc) {
       else if (isFinite(ac) && ac !== 0) acLean = ((ac > 0) === wantsUp);
       if (isFinite(ac)) cfam.ac1 = +ac.toFixed(3);
       tech('return autocorrelation', acLean);
+      /* hg-v1321: where the close sits versus the averages the bag already
+         published. One read. A split across 20, 50 and 200 is unread. The
+         rest of the bag (ADX, HV, Parkinson, ATR, hour range, volume) is
+         context: a quiet tape is not a side. */
+      var pxMa = +ind.close, maAgree = 0, maFight = 0, maN = 0, maList = [+ind.sma20, +ind.sma50, +ind.sma200], mi;
+      for (mi = 0; mi < maList.length; mi++) {
+        if (!isFinite(pxMa) || !isFinite(maList[mi]) || maList[mi] === pxMa) continue;
+        maN++;
+        if ((pxMa > maList[mi]) === wantsUp) maAgree++; else maFight++;
+      }
+      if (maN && maAgree === maN) tech('price vs the SMAs', true);
+      else if (maN && maFight === maN) tech('price vs the SMAs', false);
+      else tech('price vs the SMAs', null);
+      var stackBits = [];
+      if (isFinite(+ind.adx)) stackBits.push('ADX ' + (+ind.adx).toFixed(1) + (ind.adxState ? (' ' + ind.adxState) : ''));
+      else stackBits.push('ADX unread');
+      if (isFinite(+ind.sma200)) stackBits.push('SMA200 ' + (+ind.sma200).toFixed(2));
+      else stackBits.push('SMA200 unread');
+      if (isFinite(+ind.hv20)) stackBits.push('HV20 ' + ((+ind.hv20) * 100).toFixed(3) + '%');
+      if (isFinite(+ind.park20)) stackBits.push('Parkinson ' + ((+ind.park20) * 100).toFixed(3) + '%');
+      if (isFinite(+ind.atr14)) stackBits.push('ATR14 ' + (+ind.atr14).toFixed(2));
+      if (isFinite(+ind.atrRegime)) stackBits.push('ATR regime ' + (+ind.atrRegime).toFixed(2));
+      if (ind.hourRangeHigh === true || ind.hourRangeHigh === false) stackBits.push('hour range ' + (ind.hourRangeHigh ? 'at or above its p80' : 'under its p80'));
+      else stackBits.push('hour range unread');
+      if (isFinite(+ind.volRatio)) stackBits.push('volume ' + (+ind.volRatio).toFixed(2) + 'x');
+      voter('technicals', 'indicator stack context', null, stackBits.join(' · ') + ' — context, not a side');
       /* volatility regime and volume are CONTEXT, not direction — a quiet tape is
          not bullish, so they are disclosed and never voted */
       var hv = +ind.hv20, hvm = +ind.hv20Med;
@@ -19787,6 +19899,24 @@ function hgCfConfluence(rows, opts, fc) {
       if (cat.crsi && cat.crsi.ok && isFinite(+cat.crsi.crsi))
         stratWhy += ' · Connors RSI ' + (+cat.crsi.crsi).toFixed(1);
       if (cat.live && cat.live.length) stratWhy += ' · live ' + cat.live.slice(0, 6).join(', ');
+      if (cat.core) stratWhy += ' · CORE ' + cat.core + ' · OPTIONAL ' + (cat.optional || 0);
+      if (cat.awr && cat.awr.ok && cat.awr.why) stratWhy += ' · ' + cat.awr.why;
+      if (Array.isArray(cat.strategies) && cat.strategies.length) {
+        var stratBits = [], si;
+        for (si = 0; si < cat.strategies.length && stratBits.length < 6; si++) {
+          if (cat.strategies[si] && cat.strategies[si].why)
+            stratBits.push(String(cat.strategies[si].key) + ' ' + cat.strategies[si].why);
+        }
+        if (stratBits.length) stratWhy += ' · ' + stratBits.join(' | ');
+      }
+      if (cat.families && typeof cat.families === 'object') {
+        var famKeys = Object.keys(cat.families), famBits = [], fi, famRec;
+        for (fi = 0; fi < famKeys.length && famBits.length < 8; fi++) {
+          famRec = cat.families[famKeys[fi]];
+          if (famRec && famRec.core) famBits.push(famKeys[fi] + ' core ' + famRec.core);
+        }
+        if (famBits.length) stratWhy += ' · ' + famBits.join(', ');
+      }
       voter('strategies', 'Master Catalog frame', null, stratWhy);
     } else {
       voter('strategies', 'Master Catalog frame', null, 'catalog engine unavailable');
@@ -19806,6 +19936,15 @@ function hgCfConfluence(rows, opts, fc) {
       if (fund.regime === 'bullish') fLean = wantsUp;
       else if (fund.regime === 'bearish') fLean = !wantsUp;
       /* mixed and quiet are genuinely neither — unread, not agreement */
+      if (Array.isArray(fund.legs)) {
+        var legBits = [], li2, leg;
+        for (li2 = 0; li2 < fund.legs.length; li2++) {
+          leg = fund.legs[li2];
+          if (!leg || leg.state !== 'checked') continue;
+          legBits.push(String(leg.key || leg.name || 'leg') + ' ' + String(leg.vote || 'no vote'));
+        }
+        if (legBits.length) fWhy += ' · ' + legBits.join(', ');
+      }
       out.families.fundamentals = { regime: fund.regime, bulls: fund.bulls, bears: fund.bears, checked: fund.checked, blackout: !!fund.blackout };
       voter('fundamentals', 'GOLD fundamental regime', fLean, fWhy);
     } else {

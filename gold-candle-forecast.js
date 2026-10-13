@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Each one prints a setup only when a named candlestick pattern is confirmed by structure, a gold-desk read, or a higher timeframe, and no higher timeframe is against it. The confluence beside that setup counts the candle, the shared indicators, the catalog frame, the gold fundamentals, higher-timeframe structure, and every gold tab. A family leans only when its reads net one way. Unread is not agreement. The stop is still the pattern extreme, or one ATR. Tab prices are not the stop.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Each one prints its own confluence: the candle shapes, the shared indicator stack, the catalog frame (core strategies disclosed, not turned into a side), the gold fundamental legs, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed by structure, a gold-desk read, or a higher timeframe, and no higher timeframe is against it. A family leans only when its reads net one way. Unread is not agreement. The stop is still the pattern extreme, or one ATR. Tab prices are not the stop.
           </div>
         </div>
       `;
@@ -358,7 +358,10 @@ on every page load since v14-2:
           : '<div class="note" style="margin-top:4px;">' + String(bracket.why || '').replace(/</g, '') + '</div>';
         var pat = (bracket.patterns && bracket.patterns.length) ? bracket.patterns.join(', ') : 'no named pattern';
         var adv = (bracket.advancedPatterns && bracket.advancedPatterns.length) ? (' · ' + bracket.advancedPatterns.join(', ')) : '';
-        var conf = bracket.confluenceWhy ? ('<div class="note">' + String(bracket.confluenceWhy).replace(/</g, '') + (bracket.ticket ? ' · confluence setup' : '') + '</div>') : '';
+        var cv = bracket.confluenceView;
+        var conf = cv
+          ? ('<div class="note">' + cv.familiesWith + ' families net with' + (cv.familiesAgainst ? (', ' + cv.familiesAgainst + ' net against') : ', none net against') + (cv.ticket ? ' · confluence setup' : '') + '</div>')
+          : (bracket.confluenceWhy ? ('<div class="note">' + String(bracket.confluenceWhy).replace(/</g, '') + (bracket.ticket ? ' · confluence setup' : '') + '</div>') : '');
         var hi = bracket.higher ? ('<div class="note">Higher: ' + String(bracket.higher).replace(/</g, '') + '</div>') : '';
         return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + '</td>';
       }).join('');
@@ -390,6 +393,26 @@ on every page load since v14-2:
     } else if (cfl) {
       conflHtml = '<div class="note" data-cf-confluence="unread" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>CONFLUENCE</b> — not read: ' + String(cfl.why || 'unavailable').replace(/</g, '') + '</div>';
     }
+    var swingView = forecast.swing && forecast.swing.confluenceView;
+    var swingConflHtml = '';
+    if (swingView && swingView.why) {
+      var swRows = (swingView.voters || []).map(function (v) {
+        var mark = v.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>' : (v.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>' : '<span class="note">unread</span>');
+        var why = v.why ? (' <span class="note">— ' + String(v.why).replace(/</g, '') + '</span>') : '';
+        return '<li>' + mark + ' <b>' + String(v.name).replace(/</g, '') + '</b> <span class="note">(' + String(v.family) + ')</span>' + why + '</li>';
+      }).join('');
+      var swDesks = (swingView.desks || []).map(function (d) {
+        var mark = d.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>' : (d.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>' : '<span class="note">formed nothing</span>');
+        return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/</g, '')) : '') + '</span></li>';
+      }).join('');
+      var swVerdict = swingView.ticket ? '<b class="pos">CONFLUENCE SETUP</b>' : '<b>CONFLUENCE READ</b> <span class="note">· NOT A TICKET</span>';
+      swingConflHtml = '<div class="note" data-cf-swing="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
+        + '<div style="margin-bottom:4px;"><b>SWING 4h</b> ' + swVerdict + ' <span class="note">— ' + String(swingView.why).replace(/</g, '') + '</span></div>'
+        + '<div class="note" style="margin-bottom:4px;"><b>' + swingView.familiesWith + ' famil' + (swingView.familiesWith === 1 ? 'y' : 'ies') + ' net with the call' + (swingView.familiesAgainst ? (', ' + swingView.familiesAgainst + ' net AGAINST') : ', no family net against') + '</b></div>'
+        + '<ul class="lst">' + swRows + '</ul>'
+        + (swDesks ? ('<div class="note" style="margin-top:6px;"><b>GOLD DESKS ON THE 4h TAPE</b> — <span class="note">' + String(swingView.deskWhy || '').replace(/</g, '') + '</span><ul class="lst">' + swDesks + '</ul></div>') : '')
+        + '</div>';
+    }
 
     container.className = '';
     container.innerHTML = `
@@ -404,6 +427,7 @@ on every page load since v14-2:
         <ul class="lst">${reasons}</ul>
         ${horizonsHtml}
         ${conflHtml}
+        ${swingConflHtml}
         <div class="note" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">
           ${forecast.note || ''}
         </div>
