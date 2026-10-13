@@ -3917,7 +3917,6 @@ function trendScore(rows1d, rows4h){
 
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
-
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -4610,7 +4609,6 @@ function trendmxCardStack(r, dir){
       style: 'swing', asset: 'crypto', ticker: ticker,
       clean: !!(gate && gate.clean7),
       nearClean: !!(gate && gate.nearClean),
-
       gatesPassed: gate ? gate.gatesPassed : undefined,
       gatesTotal: 7,
       tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
@@ -4817,6 +4815,112 @@ function trendmxDeathCrossSetups(rows){
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
 
+/* hg-v1337: TREND MATRIX reads the shared candlestick engine. It does not
+   copy the pattern math and it does not let the advanced layer vote inside
+   the gold engine. A setup exists only when that read names one side and
+   the row's own trend side is the same side. Prices come from trendmxPlan.
+   The pattern stop is not copied. Unread is not agreement. */
+function tmCandlePick(name){
+  if (typeof W !== 'undefined' && W && typeof W[name] === 'function') return W[name];
+  return null;
+}
+function trendmxCandleRead(rows){
+  var unread = function(why){ return { state: 'unread', side: null, names: [], why: why, source: null }; };
+  var none = function(why){ return { state: 'none', side: null, names: [], why: why, source: null }; };
+  var clash = function(why, names){ return { state: 'clash', side: null, names: names || [], why: why, source: null }; };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) return unread('4h tape is too short to read a candle pattern');
+    var patterns = tmCandlePick('hgCfCandlePatterns');
+    var atrFn = tmCandlePick('atr');
+    if (!patterns || !atrFn) return unread('candle engine unread');
+    var series = atrFn(rows, 14);
+    var atrLast = (series && series.length) ? series[series.length - 1] : NaN;
+    if (!(atrLast > 0)) return unread('ATR is not readable');
+    var pat = patterns(rows, atrLast);
+    if (!pat) return unread('candle pattern read returned nothing');
+    var bull = +pat.bullVotes || 0;
+    var bear = +pat.bearVotes || 0;
+    function namesOf(sideNames){
+      var list = Array.isArray(sideNames) ? sideNames.filter(Boolean) : [];
+      if (!list.length && Array.isArray(pat.names)) list = pat.names.filter(Boolean);
+      return list.slice();
+    }
+    if (bull > 0 && bear > 0) return clash('3-bar voter is on both sides', namesOf(pat.bullNames).concat(namesOf(pat.bearNames)));
+    if (bull > 0 && bear === 0){
+      var bullNames = namesOf(pat.bullNames);
+      if (!bullNames.length) return none('3-bar voter had no name');
+      return { state: 'named', side: 'long', names: bullNames, why: '3-bar voter is long', source: 'voter' };
+    }
+    if (bear > 0 && bull === 0){
+      var bearNames = namesOf(pat.bearNames);
+      if (!bearNames.length) return none('3-bar voter had no name');
+      return { state: 'named', side: 'short', names: bearNames, why: '3-bar voter is short', source: 'voter' };
+    }
+    var advanced = tmCandlePick('hgCfAdvancedPatterns');
+    var located = tmCandlePick('hgCfLocatedSide');
+    if (!advanced || !located) return none('no 3-bar vote, and the advanced reader is unread');
+    var loc = located(advanced(rows, atrLast));
+    if (!loc) return none('no named candle shape');
+    var locBull = Array.isArray(loc.bull) ? loc.bull.filter(Boolean) : [];
+    var locBear = Array.isArray(loc.bear) ? loc.bear.filter(Boolean) : [];
+    if (loc.clash || (locBull.length && locBear.length)) return clash('advanced leans clash', locBull.concat(locBear));
+    if (locBull.length) return { state: 'named', side: 'long', names: locBull.slice(), why: 'location-confirmed advanced lean is long', source: 'advanced' };
+    if (locBear.length) return { state: 'named', side: 'short', names: locBear.slice(), why: 'location-confirmed advanced lean is short', source: 'advanced' };
+    return none('no named candle shape');
+  } catch (e) {
+    return unread('candle engine unread');
+  }
+}
+function trendmxCandleSetups(rows){
+  var out = [];
+  out.held = { unread: 0, none: 0, clash: 0, against: 0, noDir: 0, plan: 0, noRow: 0, noTape: 0 };
+  out.why = null;
+  if (!Array.isArray(rows)){
+    out.why = 'The shared candlestick engine is not loaded. Unread is not agreement. Nothing was formed.';
+    return out;
+  }
+  if (!tmCandlePick('hgCfCandlePatterns') || !tmCandlePick('atr')){
+    out.why = 'The shared candlestick engine is not loaded. Unread is not agreement. Nothing was formed.';
+    out.held.unread = rows.length;
+    return out;
+  }
+  var cands = [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r){ out.held.noRow++; continue; }
+    if (!Array.isArray(r.rows4h) || r.rows4h.length < 2){ out.held.noTape++; continue; }
+    var tape = tmClosedRows(r.rows4h, 14400);
+    var read = trendmxCandleRead(tape);
+    if (!read || read.state === 'unread'){ out.held.unread++; continue; }
+    if (read.state === 'clash'){ out.held.clash++; continue; }
+    if (read.state !== 'named' || (read.side !== 'long' && read.side !== 'short') || !read.names || !read.names.length){
+      out.held.none++; continue;
+    }
+    var dir = tmDirOf(r);
+    if (dir !== 'long' && dir !== 'short'){ out.held.noDir++; continue; }
+    if (dir !== read.side){ out.held.against++; continue; }
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir, rows4h: tape }));
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
+    cands.push({
+      sym: r.sym, dir: dir,
+      entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+      rr1: plan.rr1, rr2: plan.rr2, note: plan.note, score: r.score,
+      names: read.names.slice(), source: read.source,
+      candleNote: (read.source === 'advanced' ? 'Advanced lean' : '3-bar shape')
+        + ' ' + read.names.join(', ')
+        + ' agrees with the trend ' + dir
+        + '. Prices are the trend plan. The pattern stop was not copied.'
+    });
+  }
+  cands.sort(function(a, b){
+    var sa = isFinite(+a.score) ? Math.abs(+a.score) : -1;
+    var sb = isFinite(+b.score) ? Math.abs(+b.score) : -1;
+    return sb - sa;
+  });
+  for (var j = 0; j < cands.length; j++) out.push(cands[j]);
+  return out;
+}
+
 /* ---------------- SMC context (record-only) ----------------
    hgSmcEnrich attaches .smc (structure bias, OB/FVG confluence, a grade) and
    records one SMC_CONTEXT signal. Nothing in this file reads .smc except the
@@ -5001,7 +5105,6 @@ function trendmxFlowScan(rows){
       if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
     });
   }
-
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -5438,7 +5541,6 @@ function tmVolumeProfile(rows){
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
   var pivots = [];
-
   for (var i = 2; i < rows.length - 2; i++){
     if (dir === 'long'){
       if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
@@ -5980,7 +6082,6 @@ async function trendmxFormOne(ticket, row, ctx){
     var n = rows4.length - 1;
     if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
-
     var lastHigh = null, lastLow = null, si;
     for (si = 0; si < swings.length; si++){
       if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
@@ -6821,7 +6922,6 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     /* hg-v1012: the flow split, read off the stamps the scan left — the
        summary names the evidence the same way the cards do */
     if (r.flow && r.flow.verdict === 'with') flowW++;
-
     else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
@@ -6920,6 +7020,54 @@ function trendmxDeathDeskHTML(death){
   for (var i = 0; i < Math.min(death.length, 4); i++) cards += trendmxCrossCardHTML(death[i]);
   return '<div class="panel" style="margin:12px 0;border-left:4px solid #b91c1c">'
     + '<h2>⚡ DEATH CROSS DESK <span>EMA50/200 BEAR cross ≤10 daily bars — fresh SHORTS · conviction + valid plan · Telegram every 15m</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
+function trendmxCandleCardHTML(g){
+  if (!g || !fin(+g.entry) || !fin(+g.stop) || !fin(+g.t1)) return '';
+  var isShort = g.dir === 'short';
+  var col = isShort ? '#b91c1c' : '#047857';
+  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: 'trendmx-candle' })
+    : '';
+  var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(180,83,9,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:#fff">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + '</span>'
+    + '<span class="stamp">CANDLE</span>'
+    + '<span class="stamp ' + (isShort ? 'bad' : 'pass') + '">' + (isShort ? 'SHORT' : 'LONG') + '</span>'
+    + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.candleNote || '') + '</div>'
+    + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
+    + tradeBtn
+    + '</div>';
+}
+
+function trendmxCandleDeskHTML(list){
+  list = list || [];
+  var held = list.held || {};
+  var shown = Math.min(list.length, 6);
+  var cards = '';
+  for (var i = 0; i < shown; i++) cards += trendmxCandleCardHTML(list[i]);
+  var stood = list.length - shown;
+  var why = '';
+  if (!list.length){
+    why = list.why
+      ? '<div class="note">' + escH(list.why) + '</div>'
+      : ('<div class="note">No candle confluence setup. A setup needs the row\'s own trend side and a one-sided named shape from the shared candlestick engine. A clash is not a setup. A pattern against the trend is not a setup. Unread is not agreement. Nothing was invented.'
+        + (held.unread ? ' ' + held.unread + ' tapes unread.' : '')
+        + (held.clash ? ' ' + held.clash + ' clashed.' : '')
+        + (held.against ? ' ' + held.against + ' named a shape against the trend.' : '')
+        + (held.none ? ' ' + held.none + ' had no named shape.' : '')
+        + (held.noDir ? ' ' + held.noDir + ' had no trend side.' : '')
+        + (held.plan ? ' ' + held.plan + ' had no valid trend plan.' : '')
+        + '</div>');
+  }
+  var extra = stood > 0 ? '<div class="note">' + stood + ' more agreed and are stood down. Six are enough on this desk.</div>' : '';
+  return '<div class="panel" data-tm-candles="1" style="margin:12px 0;border-left:4px solid #b45309">'
+    + '<h2>CANDLE CONFLUENCE <span>shared candlestick engine · the trend side must agree · the pattern stop is not the trade stop</span></h2>'
+    + why + extra
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
     + '</div>';
 }
@@ -7183,7 +7331,6 @@ function trendmxPerfectState(r){
    drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
 function trendmxAtrRegime(r){
   try{
-
     if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
     if (typeof hgAtrPercentile !== 'function') return null;
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
@@ -7540,7 +7687,6 @@ function trendmxFivePillars(r){
     if (r.flow.verdict === 'against') sentAgainst = true;
     if (r.flow.verdict === 'with') sentWith = true;
   }
-
   if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
     sentRead = true;
     try{
@@ -7732,6 +7878,7 @@ function trendmxPaintDeskSections(refs, state){
   if (refs.crypto) refs.crypto.innerHTML = trendmxCryptoDeskHTML(state.crypto || []);
   if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
   if (refs.death) refs.death.innerHTML = trendmxDeathDeskHTML(death);
+  if (refs.candles) refs.candles.innerHTML = trendmxCandleDeskHTML(trendmxCandleSetups(rows));
   var clean = [], near = [], forming = [];
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -7916,7 +8063,6 @@ function trendmxTrendFormHTML(rows){
         var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
           + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
         /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
-
            minted tiers; anything below the NEAR floor (or a forming row with
            no majority, whose gate is null) is the house DRAFT ladder, never
            a fabricated 6/7 NEAR. */
@@ -8295,7 +8441,6 @@ async function trendmxPerfectEvidencePass(rows){
         }catch(eLc){ }
       }
       if (isFinite(+r.fundingPct)){
-
         reads.venueFundingPct = +r.fundingPct;
       /* hg-v1144: venue premium = venue funding minus the Binance twin */
       if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
@@ -8503,6 +8648,7 @@ function hgPaintTrendmxFromSnap(){
       crypto: el.querySelector('[data-r="crypto"]'),
       golden: el.querySelector('[data-r="golden"]'),
       death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
+      candles: el.querySelector('[data-r="candles"]'), /* hg-v1337 */
       cards: el.querySelector('[data-r="cards"]'),
       near: el.querySelector('[data-r="near"]'),
       forming: el.querySelector('[data-r="forming"]'),
@@ -8664,6 +8810,7 @@ function mountTrendMatrix(el){
       '<div data-r="crypto"></div>' +
       '<div data-r="golden"></div>' +
       '<div data-r="death"></div>' +   /* hg-v1015: the bear desk stands on its own, right under the bull desk */
+      '<div data-r="candles"></div>' + /* hg-v1337: candle confluence, shared engine, trend side must agree */
       '<div class="cards" data-r="cards"></div>' +
       '<div data-r="near"></div>' +
       '<div data-r="forming"></div>' +
@@ -8706,7 +8853,7 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
-
+    candles: el.querySelector('[data-r="candles"]'),   /* hg-v1337 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -9282,9 +9429,12 @@ W.trendmxLimitDeskHTML = trendmxLimitDeskHTML;
 W.trendmxSummaryLine = trendmxSummaryLine;
 W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
 W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
+W.trendmxCandleRead = trendmxCandleRead;               /* hg-v1337: shared candlestick engine, read only */
+W.trendmxCandleSetups = trendmxCandleSetups;           /* hg-v1337: trend side must agree; prices are trendmxPlan */
 W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
 W.trendmxGoldenDeskHTML = trendmxGoldenDeskHTML;   /* hg-v1015 */
 W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
+W.trendmxCandleDeskHTML = trendmxCandleDeskHTML; /* hg-v1337 */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
