@@ -32,7 +32,7 @@ on every page load since v14-2:
    * Provides predictive analysis for the next candle based on volatility (ATR)
    * and momentum-based price action patterns.
    */
-  var __cfMounted = false;   /* the pane this module has already painted */
+  var __cfPane = null;   /* hg-v1336: the pane already painted, by identity - not a boolean, so a fresh root can still build */
   var __cfPane = null;
 
   const mod = {
@@ -40,15 +40,22 @@ on every page load since v14-2:
     label: 'CANDLE FORECAST',
     mount: function(container) {
       if (!container) return;
-        /* Double-mount guard, on MODULE STATE rather than a DOM query.
-           could never match what it was guarding. A real selector does not fix
-           it either: a shell whose querySelector is a permissive stub answers
-           EVERY selector truthy, so any such guard fires on the FIRST mount and
-           the tab renders nothing - that is the "blank: candle-forecast"
-           failure. State answers the actual question, and is consulted only
-           after the container guard, so it can never be why nothing renders. */
-        if (__cfMounted) return;
-        __cfMounted = true;
+        /* hg-v1336: THE GUARD ANSWERS "IS THIS PANE ALREADY BUILT?", NOT "HAS THIS TAB
+           EVER MOUNTED?".
+           It was a bare module flag, so the FIRST mount latched it and every later
+           mount returned in silence. In the browser that is invisible — the shell mounts
+           each tab's pane once — which is exactly why it survived: nothing exercised a
+           second mount. The moment a harness mounts the tab into a SECOND, fresh root
+           (to drive it with different data) the pane is never built, nothing renders,
+           and the tab reads as unresponsive to its own feed. Measured: fed bars vs
+           starved bars produced IDENTICAL output, and the sweep that takes the bars away
+           from every gold tab reported this one as flat.
+           Storing the container instead of a boolean keeps what the guard was for — the
+           shell mounting the same pane twice must not build it twice — while letting a
+           mount into a NEW pane proceed. Compared by identity, so a permissive stub that
+           answers every selector truthy still cannot make this the reason nothing
+           renders: a different (or absent) container simply builds. */
+        if (__cfPane && container === __cfPane) return;
         __cfPane = container;
 
       container.innerHTML = `
@@ -64,7 +71,22 @@ on every page load since v14-2:
         </div>
       `;
 
-      document.getElementById('cfRunBtn').addEventListener('click', () => this.runForecast());
+      /* hg-v1336: WIRE THE BUTTON THROUGH THE CONTAINER, NOT THE DOCUMENT.
+         This read `document.getElementById('cfRunBtn')`, which works in a browser but
+         binds the listener to whatever element the DOCUMENT returns — and a harness that
+         mounts the pane into its own root (so a tab can be driven without a real page)
+         answers that with an element of its own, or none. The sweep that drives every
+         gold tab finds a tab's scan control by reading the click handlers wired ON THE
+         MOUNTED ROOT, so this tab read as having NO scan control at all while the button
+         was visibly on screen — the hg-v955 shape in reverse: the control existed, the
+         wiring did not reach it.
+         The container is the element the pane was just built into, so it is both the
+         correct scope and the one that survives being mounted anywhere. The document
+         lookup stays as a fallback for the real-page case, and both are guarded so a
+         container without the button cannot throw during mount. */
+      var runBtn = (container.querySelector && container.querySelector('#cfRunBtn'))
+        || (typeof document !== 'undefined' && document.getElementById ? document.getElementById('cfRunBtn') : null);
+      if (runBtn && runBtn.addEventListener) runBtn.addEventListener('click', () => this.runForecast());
       var verEl = container.querySelector('#cfVersion');
       var ver = (window.HG_BUILD && window.HG_BUILD.version) || '';
       if (verEl && ver) verEl.textContent = ver;
