@@ -19619,7 +19619,7 @@ function hgCfBuildSetup(rows, opts, fc) {
      in the same direction, and no opposing structure or desk. Nothing new is
      thresholded here; the builder only turns a verdict the engine already reached
      into entry, stop and two targets. */
-  var out = { ok: false, tf: (opts && opts.tf) || '15m', dir: null, formed: false, why: '', entry: null, stop: null, tp1: null, tp2: null, risk: null, rr: null, riskAtr: null, stopSource: null, parts: '', barsPerDay: null };
+  var out = { ok: false, tf: (opts && opts.tf) || '15m', dir: null, formed: false, why: '', entry: null, stop: null, tp1: null, tp2: null, risk: null, rr: null, riskAtr: null, stopSource: null, parts: '', barsPerDay: null, tapeVeto: null };
   try {
     if (!Array.isArray(rows) || rows.length < 30) { out.why = 'tape too thin for a ' + out.tf + ' setup'; return out; }
     var f = fc;
@@ -19667,6 +19667,28 @@ function hgCfBuildSetup(rows, opts, fc) {
        scalp's stop lives inside one session and the swing's spans several */
     var tf = String(out.tf).toLowerCase();
     out.barsPerDay = /^15m$/.test(tf) ? 96 : (/^1h$/.test(tf) ? 24 : (/^4h$/.test(tf) ? 6 : (/^1d$/.test(tf) ? 1 : null)));
+    /* hg-v1322: WHY A CROWN WAS WITHHELD — disclosed, never decided here.
+       The other gold desks withhold a TICKET on a tape the gold veto refuses (a scalp
+       long in premium without a sweep, a long under a falling higher-timeframe average,
+       and the rest of that chain in pinegoldmath). This tab showed NONE of it: a reader
+       saw "NOT A SETUP" with no way to learn that the TAPE was the reason, which reads
+       as "no signal" when the truth is "the signal was refused".
+       DISCLOSURE ONLY, on purpose: this does not gate, demote or withhold anything —
+       the formation decision below is the engine's and has one home (hg-v949); a second
+       veto here would be a second home for it. Fail-open: no reader, no reason, no
+       effect. */
+    out.tapeVeto = null;
+    try {
+      var tvFn = (typeof pineGoldTapeVeto === 'function') ? pineGoldTapeVeto
+        : ((typeof W !== 'undefined' && W && typeof W.pineGoldTapeVeto === 'function') ? W.pineGoldTapeVeto : null);
+      if (tvFn && out.dir && out.dir !== 'NEUTRAL') {
+        var tvWhy = tvFn(rows, out.dir === 'BULL' ? 'long' : 'short', {
+          mode: /^4h$/.test(tf) ? 'swing' : 'scalp',
+          macro: (opts && opts.macro) || null
+        });
+        if (tvWhy) out.tapeVeto = String(tvWhy);
+      }
+    } catch (eTv) { out.tapeVeto = null; }
     /* FORMATION — the engine's own rule, read off the result rather than re-run */
     if (f.setup) {
       out.formed = true;

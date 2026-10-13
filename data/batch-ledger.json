@@ -128,8 +128,18 @@
     },
     {
       "version": "hg-v1323",
-      "built": "2026-10-13T22:05:00Z",
-      "note": "hg-v1323: CANDLE FORECAST adds Ultimate AI Confluence. It names a side only when the 15m scalp and the 4h swing read the same way. An ultimate setup also needs a formed setup and a clean confluence ticket on both tapes, and no family net against. Unread is not agreement. A split or a neutral horizon is not a side. The engine does not invent a third entry, stop or target. Each horizon keeps its own stop, the pattern extreme or one ATR."
+      "built": "2026-10-13T22:30:00Z",
+      "note": "CANDLE FORECAST now prints WHY a crown was withheld - the gold tape veto - instead of leaving a reader to guess. Found while chasing a third guard that expected a TICKET and got WATCH: the desks withhold a TICKET on a tape the gold veto refuses (a scalp long in premium without a sweep, a long under a falling higher-timeframe average, and the rest of the chain in pinegoldmath), and this tab showed NONE of it. A reader saw \"not a setup\" and could not tell \"no signal formed\" from \"the tape refused the signal\" - two very different facts about the same card. hgCfBuildSetup now reads pineGoldTapeVeto - the SHARED reader, called with the horizon own mode (swing on the 4h, scalp otherwise) - and records the reason. DISCLOSURE ONLY, on purpose: it does not gate, demote or withhold anything. The engine formation rule already owns that decision and a second veto here would be a second home for it (hg-v949). It fails open: no reader, no reason line, no effect. The field sits on the base object too, so an early return still reports it. THE GUARD THAT SENT ME HERE: test-gold-pine-twelve-layers and two siblings expect GANESH GOLD to crown a TICKET and get WATCH. Measured directly, the fixture own 4h tape does NOT trip the higher-timeframe slope veto (pineGoldHtfSlopeVeto(long) returns null on it - the EMA rises and price is above), but pineGoldTapeVeto(long) DOES return \"Scalp long in premium without a sweep\". So the crown is being withheld CORRECTLY: the guard fixture pairs a long scalp with a tape the gold veto refuses. That is a STALE FIXTURE, not a production defect, and it is recorded here rather than papered over by loosening the assertion. Left red on purpose; the three GOLD PINE suites remain open work. Tests: tests/test-candle-forecast-two-horizons.mjs, now 37 assertions over 6 sections, with a new section pinning the disclosure and the no-second-veto invariant. MERGED WITH UPSTREAM hg-v1322, which shipped the SAME id for DIFFERENT content (it names the rest of the classic candlestick set - harami cross, tri-star, three-line strike variants and more). Both packs are on this tree. The id was moved to hg-v1323 because one version number cannot describe two different contents: a client holding a cached 1322 would otherwise run code that does not match the ledger."
+    },
+    {
+      "version": "hg-v1324",
+      "built": "2026-10-13T22:45:00Z",
+      "note": "ULTIMATE AI CONFLUENCE engine landed in the candle forecast tab: fifteen reads, each -1, 0 or +1, netted as a count. The stamp moved to hg-v1324 without a ledger line; this entry records that batch. The tally still re-reads the 15m tape on its own and does not replace the scalp stop or the swing stop."
+    },
+    {
+      "version": "hg-v1325",
+      "built": "2026-10-13T23:15:00Z",
+      "note": "ULTIMATE AI CONFLUENCE stays on the candle forecast card after a scan. It names a side only when the 15m scalp and the 4h swing agree. An ultimate setup needs both tapes formed, both confluence tickets clean, and no family net against. Unread is not agreement. A split is not a side. There is no third stop. The fifteen-read tally now paints under the card instead of being wiped, and a thin count prints no stop. A side on that tally shows its own one-ATR illustration and says it is not the scalp stop and not the swing stop. The gold tape veto stays a disclosed reason and does not decide the setup."
     }
   ]
 }

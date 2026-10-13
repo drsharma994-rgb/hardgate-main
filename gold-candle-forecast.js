@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. Each horizon still prints its own confluence: every named candle shape, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR.
           </div>
         </div>
       `;
@@ -138,6 +138,7 @@ on every page load since v14-2:
         return;
       }
       forecast.source = loaded.source || '';
+
       /* hg-v1315: hand the confluence the HOUSE MACRO SNAPSHOT.
          The first cut passed an empty options bag, so `hgFundamentalRegime('GOLD')`
          ran with no `extra` and every macro leg read UNCHECKED — the fundamental
@@ -227,6 +228,14 @@ on every page load since v14-2:
         if (typeof window.hgCfUltimate === 'function') forecast.ultimate = window.hgCfUltimate(forecast.scalp, forecast.swing);
       } catch (eUlt) { forecast.ultimate = null; }
       this.renderResult(resultArea, statusEl, forecast);
+      /* hg-v1325: the wide tally paints AFTER the card. The earlier call sat
+         above renderResult, and the card replaces innerHTML, so the tally
+         never stayed on screen. A thin count prints no stop. */
+      try {
+        var conf = (typeof window.hgUltimateConfluence === 'function')
+          ? window.hgUltimateConfluence(candles) : null;
+        if (conf) this.renderConfluence(resultArea, statusEl, conf);
+      } catch (eConf) { /* optional read; the card stands on its own */ }
 
     } catch (error) {
       console.error('[CandleForecast] Error:', error);
@@ -366,7 +375,14 @@ on every page load since v14-2:
           ? ('<div class="note">' + cv.familiesWith + ' families net with' + (cv.familiesAgainst ? (', ' + cv.familiesAgainst + ' net against') : ', none net against') + (cv.ticket ? ' · confluence setup' : '') + '</div>')
           : (bracket.confluenceWhy ? ('<div class="note">' + String(bracket.confluenceWhy).replace(/</g, '') + (bracket.ticket ? ' · confluence setup' : '') + '</div>') : '');
         var hi = bracket.higher ? ('<div class="note">Higher: ' + String(bracket.higher).replace(/</g, '') + '</div>') : '';
-        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + '</td>';
+        /* hg-v1322: the gold tape's own refusal, when there is one. Without this a
+           reader sees "not a setup" and cannot tell "no signal formed" from "the
+           tape refused the signal" — the desks withhold a TICKET on exactly these
+           tapes, and the reason belongs on the card. */
+        var veto = bracket.tapeVeto
+          ? ('<div class="note warn">Gold tape veto: ' + String(bracket.tapeVeto).replace(/</g, '') + '</div>')
+          : '';
+        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + veto + '</td>';
       }).join('');
       horizonsHtml = '<div class="note" data-cf-horizons="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>SCALP AND SWING</b> <span class="note">— both built by one builder, each on its own tape</span><table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>' + cells + '</tr></table><div class="note">A scalp stop and a swing stop in dollars are not the same risk: read each against its own ATR above.</div></div>';
     })();
@@ -451,6 +467,44 @@ on every page load since v14-2:
       </div>
     `;
     statusEl.textContent = called ? dirLabel : 'NEUTRAL';
+  };
+
+  /**
+   * Wide tally under the card. Fifteen reads vote -1/0/+1 and the net is a
+   * count, not a probability. A side prints one ATR bracket and says it is
+   * not the scalp stop and not the swing stop. No side prints no stop.
+   */
+  mod.renderConfluence = function(container, statusEl, c) {
+    var called = c.dir === 'BULL' || c.dir === 'BEAR';
+    var color = c.dir === 'BEAR' ? '#dc262c' : (c.dir === 'BULL' ? '#15803d' : '#64748b');
+    var rows = (c.reads || []).map(function(r) {
+      var tag = r.vote > 0 ? 'LONG' : (r.vote < 0 ? 'SHORT' : 'no vote');
+      var cls = r.vote > 0 ? 'pos' : (r.vote < 0 ? 'neg' : 'na');
+      return '<li>' + String(r.label).replace(/</g, '') + ' — <span class="' + cls + '">'
+        + tag + '</span> <span class="note">(' + String(r.note).replace(/</g, '') + ')</span></li>';
+    }).join('');
+    var self = this;
+    var levels = called
+      ? ('<li><b>' + (c.bracket.side === 'long' ? 'LONG' : 'SHORT') + ' illustration:</b> entry <b>'
+        + self.fmt(c.bracket.entry) + '</b> · SL <b>' + self.fmt(c.bracket.sl) + '</b> · TP1 <b>'
+        + self.fmt(c.bracket.tp1) + '</b> · TP2 <b>' + self.fmt(c.bracket.tp2)
+        + '</b> <span class="note">— this tally\'s own one-ATR band. It is not the scalp stop and not the swing stop.</span></li>')
+      : '<li class="note">No side. A thin tally prints no stop.</li>';
+    container.insertAdjacentHTML('beforeend',
+      '<div class="panel" data-cf-wide="1" style="margin-top:12px; border-left:4px solid ' + color + ';">'
+      + '<h3 style="margin:0 0 6px;">WIDE TALLY <span class="note">— fifteen reads on the 15m tape</span> — '
+      + '<span style="color:' + color + ';">' + (called ? c.dir : 'NO CALL') + '</span>'
+      + ' <span class="note">(' + String(c.grade).replace(/</g, '') + ')</span></h3>'
+      + '<ul class="lst">'
+      + '<li class="note">This tally does not name the ultimate setup. That line is above, and only when the scalp and the swing agree.</li>'
+      + '<li><b>Net:</b> <b>' + c.score + '</b> — long votes minus short votes, a count, not a probability. '
+      + c.agree + ' long, ' + c.oppose + ' short, ' + c.abstain + ' abstained, of ' + c.checked + '</li>'
+      + '<li><b>Last close:</b> ' + self.fmt(c.close) + ' · <b>ATR band:</b> '
+      + (c.bandLow != null ? (self.fmt(c.bandLow) + ' – ' + self.fmt(c.bandHigh)) : 'unread') + '</li>'
+      + levels + '</ul>'
+      + '<ul class="lst" style="max-height:260px; overflow:auto;">' + rows + '</ul>'
+      + '<div class="note" style="margin-top:8px; border-top:1px solid var(--line); padding-top:8px;">'
+      + String(c.note).replace(/</g, '') + '</div></div>');
   };
 
   mod.fmt = function(n) { return Number(n).toFixed(2); };

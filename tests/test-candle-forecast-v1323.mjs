@@ -57,6 +57,11 @@ const tab = fs.readFileSync(path.join(root, 'gold-candle-forecast.js'), 'utf8');
 ok(/data-cf-ultimate="1"/.test(tab), 'the card has an ultimate block');
 ok(/ULTIMATE AI CONFLUENCE/.test(tab), 'the card names Ultimate AI Confluence');
 ok(/window\.hgCfUltimate\(forecast\.scalp, forecast\.swing\)/.test(tab), 'the tab asks the engine after both horizons exist');
+ok(/this\.renderResult\(resultArea, statusEl, forecast\);[\s\S]{0,500}hgUltimateConfluence\(candles\)/.test(tab),
+  'the wide tally is painted after the card, so the card cannot wipe it');
+ok(/data-cf-wide="1"/.test(tab), 'the wide tally has its own block');
+ok(/A thin tally prints no stop/.test(tab), 'a thin tally prints no stop');
+ok(!/bothBrackets/.test(tab), 'the card does not paint both brackets');
 ok(!/tp1\s*=\s*[^=]/.test(tab) && !/stop\s*=\s*[^=]/.test(tab), 'the tab still computes no stop or target');
 ok(/not the same risk/.test(tab), 'the scalp and swing stops are still not the same risk');
 
