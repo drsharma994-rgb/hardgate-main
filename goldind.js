@@ -18789,6 +18789,94 @@ function hgCfAdvancedPatterns(rows, atrLast) {
     record('bullish tasuki gap', tag(1, 'bullish tasuki gap'));
   if (big(a) && big(c) && a.bear && b.h < a.l && c.bull && c.c < a.l && c.c > b.h)
     record('bearish tasuki gap', tag(-1, 'bearish tasuki gap'));
+
+  /* ---- GAPS / WINDOWS, AND THE STRUCTURES THEY BUILD ----
+     hg-v1313. The classic set above has forty-odd shapes and NOT ONE of them reads
+     a gap as a gap: the two-bar and three-bar voters only look at bodies, wicks and
+     containment, so a window — a bar whose entire range sits clear of the previous
+     bar's range — is invisible to them unless it happens to form an engulfing or a
+     tasuki pattern on top. That is the largest remaining blind spot, and it is the
+     one that matters most for SETUP FORMATION, because the STAGE of a gap is what
+     tells a reader whether a move is starting, running or exhausting. So the gap is
+     detected first and then CLASSIFIED by where it sits in the move it belongs to.
+     All disclosure: nothing here votes (see the header). */
+  function gapUp(x, y) { return x.l > y.h; }
+  function gapDn(x, y) { return x.h < y.l; }
+  /* the leg a gap continues: the net move over the run-up window, in ATRs */
+  var runWindow = p.slice(Math.max(0, n - 14), n - 3);
+  var legAtr = 0;
+  if (runWindow.length >= 4) {
+    var legHi = -Infinity, legLo = Infinity, lw;
+    for (lw = 0; lw < runWindow.length; lw++) {
+      if (runWindow[lw].h > legHi) legHi = runWindow[lw].h;
+      if (runWindow[lw].l < legLo) legLo = runWindow[lw].l;
+    }
+    if (isFinite(legHi) && isFinite(legLo)) legAtr = (legHi - legLo) / atrLast;
+  }
+  /* a gap is classified by the size of the move that PRECEDED it:
+       small leg  -> BREAKAWAY  (a move is starting; the gap opens the range)
+       mid leg    -> RUNAWAY    (a move is running; continuation)
+       large leg  -> EXHAUSTION (a move is late; the gap is the last gasp)
+     Thresholds are stated in ATRs of the run-up so this reads the same on any
+     volatility regime, and an unmeasurable window leaves the stage unread rather
+     than guessed. */
+  function gapStage() {
+    if (!(legAtr > 0)) return 'stage unread';
+    if (legAtr < 1.5) return 'breakaway';
+    if (legAtr <= 4) return 'runaway';
+    return 'exhaustion';
+  }
+  /* the LATEST bar's window, classified by stage. Only d can open a "gap up" in
+     this read — an earlier bar's window is the island/three-bar logic's business
+     below, and letting it fire here reported a stale gap as a fresh one. */
+  if (big(c) && gapUp(d, c)) {
+    record('gap up on the last bar (' + gapStage() + ')', null);
+    if (gapStage() === 'exhaustion') record('exhaustion gap up — a late move, not a fresh one', null);
+  }
+  if (big(c) && gapDn(d, c)) {
+    record('gap down on the last bar (' + gapStage() + ')', null);
+    if (gapStage() === 'exhaustion') record('exhaustion gap down — a late move, not a fresh one', null);
+  }
+  /* ISLAND REVERSAL: a gap in, one or more bars holding clear of the previous
+     range, then a gap back out on the other side. The island is cut off from both
+     sides, which is why traders read it as a completed reversal rather than a
+     pause — the single strongest structure in the gap family, and nothing in the
+     file could see it. A gap is required on BOTH sides, so a one-sided window
+     never qualifies, and the two directions are independent (a bullish and a
+     bearish island cannot both be true, but neither is an `else` of the other —
+     an `else` silently suppressed the second when both tests ran). */
+  if (n >= 6) {
+    var i1 = p[n - 5], i2 = p[n - 4], i3 = p[n - 3], i4 = p[n - 2];
+    if (i3.l > i1.h && i3.l > i2.h && i4.h < i3.l) record('bullish island reversal — gapped away on both sides', tag(1, 'bullish island reversal'));
+    if (i3.h < i1.l && i3.h < i2.l && i4.l > i3.h) record('bearish island reversal — gapped away on both sides', tag(-1, 'bearish island reversal'));
+  }
+  /* THREE-BAR REVERSAL (the "three-bar reversal" / "three-bar play"): a bar, a bar
+     that takes out its extreme and closes BACK INSIDE it, then a bar that closes
+     beyond the first bar's other extreme. Part of the classic canon and absent
+     here — nothing in the file tests a failed breakout followed by a confirmation.
+     Eight variants exist in the literature; this reads the four that a bar chart
+     can distinguish unambiguously. */
+  if (mid(a) && mid(c)) {
+    var bTookLow = b.l < a.l && b.c > a.l;
+    var bTookHigh = b.h > a.h && b.c < a.h;
+    if (bTookLow && c.bull && c.c > a.h) record('bullish three-bar reversal (failed low)', tag(1, 'bullish three-bar reversal'));
+    if (bTookHigh && c.bear && c.c < a.l) record('bearish three-bar reversal (failed high)', tag(-1, 'bearish three-bar reversal'));
+  }
+  /* LADDER BOTTOM / TOP: a run of declining closes, then a strong bar that opens
+     above the last of them and closes up through it. A slow, grinding reversal
+     rather than a single-bar rejection, which is why the run (not one bar) is the
+     condition. Note the run is tested on the three bars BEFORE the reversal bar,
+     and the reversal bar is `c` (rows[n-2]) here, not `d` — a first version keyed
+     the whole test off `c` and could therefore never fire. */
+  if (n >= 6) {
+    var L1 = p[n - 5], L2 = p[n - 4], L3 = p[n - 3];
+    if (L1.bear && L2.bear && L3.bear && L2.c < L1.c && L3.c < L2.c && big(c)
+        && c.bull && c.o > L3.c && c.c > L3.c)
+      record('ladder bottom', tag(1, 'ladder bottom'));
+    if (L1.bull && L2.bull && L3.bull && L2.c > L1.c && L3.c > L2.c && big(c)
+        && c.bear && c.o < L3.c && c.c < L3.c)
+      record('ladder top', tag(-1, 'ladder top'));
+  }
   /* SIDE-BY-SIDE WHITE LINES: two same-sized bullish bodies at the same level
      after a gap — a continuation, and explicitly NOT an engulfing (the bodies
      are equal, not swallowed). */

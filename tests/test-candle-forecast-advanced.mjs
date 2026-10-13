@@ -159,6 +159,91 @@ console.log('\n== 4) location and drift context are measured, and are three-stat
   ok(r.aligned === 'flat', 'a flat 20-bar window reads flat, not up or down (' + r.aligned + ')');
 }
 
+console.log('\n== 4b) the GAP / WINDOW family, and the stages it distinguishes (hg-v1313) ==');
+{
+  /* A window — a bar whose whole range sits clear of the previous bar's range —
+     was invisible to every voter in the file, because they read bodies, wicks and
+     containment and never compare two bars' RANGES. These are the structures built
+     on it. */
+  const pad = [];
+  for (let i = 0; i < 30; i++) pad.push(bar(2300, 2300.6, 2299.4, 2300.2));
+
+  /* a gap up on the LAST bar, after a small leg -> BREAKAWAY */
+  let g = ctx.hgCfAdvancedPatterns(pad.concat([
+    bar(2300, 2302.6, 2299.6, 2302.4),
+    bar(2302.4, 2304.2, 2302.0, 2304.0),
+    bar(2304.8, 2306.6, 2304.4, 2306.4)
+  ]), ATR);
+  ok(g.names.some(n => /gap up on the last bar \(breakaway\)/.test(n)),
+    'a window after a small leg is a BREAKAWAY gap (' + g.names.join(' | ') + ')');
+
+  /* the same window after a long run -> EXHAUSTION, and it says so explicitly */
+  const run = [];
+  for (let i = 0; i < 14; i++) run.push(bar(2300 + i * 1.2, 2301.4 + i * 1.2, 2299.8 + i * 1.2, 2301.2 + i * 1.2));
+  const lastPx = 2300 + 13 * 1.2 + 1.2;
+  g = ctx.hgCfAdvancedPatterns(pad.concat(run).concat([
+    bar(lastPx, lastPx + 1.6, lastPx - 0.4, lastPx + 1.4),
+    bar(lastPx + 2.4, lastPx + 4.2, lastPx + 2.0, lastPx + 4.0)
+  ]), ATR);
+  ok(g.names.some(n => /exhaustion/.test(n)),
+    'the same window after a long run is EXHAUSTION, not a fresh move (' + g.names.join(' | ') + ')');
+
+  /* a BULLISH ISLAND: gapped in, held clear, gapped back out */
+  g = ctx.hgCfAdvancedPatterns(pad.concat([
+    bar(2300, 2301, 2299, 2300.4),
+    bar(2301, 2302, 2300, 2301.4),
+    bar(2303.5, 2305.5, 2303.2, 2305.2),
+    bar(2301.5, 2302.5, 2300.9, 2301.2),
+    bar(2301.2, 2302.0, 2300.6, 2301.0)
+  ]), ATR);
+  ok(g.names.indexOf('bullish island reversal — gapped away on both sides') >= 0,
+    'a bullish island reversal is named (' + g.names.join(' | ') + ')');
+  ok(g.leans.some(l => l.name.indexOf('island') >= 0 && l.lean === 1),
+    'and it carries a lean rather than being a bare label');
+
+  /* a BEARISH ISLAND is the mirror, and is NOT the else of the bullish one */
+  g = ctx.hgCfAdvancedPatterns(pad.concat([
+    bar(2310, 2312, 2310, 2311.6),
+    bar(2311, 2312, 2310, 2311.4),
+    bar(2306.5, 2308.0, 2306.2, 2306.4),
+    bar(2309.0, 2310.5, 2308.6, 2310.2),
+    bar(2310.2, 2311.0, 2309.6, 2310.8)
+  ]), ATR);
+  ok(g.names.indexOf('bearish island reversal — gapped away on both sides') >= 0,
+    'a bearish island reversal is named (' + g.names.join(' | ') + ')');
+
+  /* THREE-BAR REVERSAL: the middle bar takes out the first bar's low and closes
+     back inside it, the third closes beyond the other extreme. */
+  g = ctx.hgCfAdvancedPatterns(pad.concat([
+    bar(2300, 2302, 2299, 2301.6),
+    bar(2300.4, 2301.4, 2297, 2301.0),
+    bar(2301.0, 2304.4, 2300.8, 2304.2),
+    bar(2304.2, 2305.0, 2303.8, 2304.8)
+  ]), ATR);
+  ok(g.names.some(n => /bullish three-bar reversal/.test(n)),
+    'a bullish three-bar reversal (failed low) is named (' + g.names.join(' | ') + ')');
+
+  /* LADDER BOTTOM: a run of declining closes, then a strong bar opening above the
+     last of them. The run sits at n-5..n-3, so a LEAD-IN bar at n-6 is required —
+     the same slot rule that caught three earlier fixtures in this file. */
+  g = ctx.hgCfAdvancedPatterns(pad.concat([
+    bar(2311.0, 2311.6, 2310.0, 2310.4),   /* lead, n-6 */
+    bar(2310.4, 2310.8, 2308.6, 2308.8),   /* n-5 */
+    bar(2308.8, 2309.4, 2307.2, 2307.6),   /* n-4 */
+    bar(2307.6, 2308.2, 2306.0, 2306.4),   /* n-3 */
+    bar(2306.8, 2310.6, 2306.6, 2310.2),   /* n-2 the reversal bar */
+    bar(2310.2, 2311.0, 2309.6, 2310.8)    /* n-1 free */
+  ]), ATR);
+  ok(g.names.some(n => /ladder bottom/.test(n)),
+    'a ladder bottom is named (' + g.names.join(' | ') + ')');
+
+  /* the gap family is disclosure too — it must not have leaked a vote */
+  const src = SRC;
+  ok(!/bulls\s*\+=[^\n]*gapStage|bears\s*\+=[^\n]*gapStage/.test(src),
+    'the gap stage never reaches the vote counts');
+  ok(/hg-v1313/.test(src), 'the pack is identified in the source (hg-v956 textual pin)');
+}
+
 console.log('\n== 5) thin, junk and degenerate tapes never throw and never invent ==');
 {
   /* `null` for an unusable tape, an object otherwise — the same two-state
