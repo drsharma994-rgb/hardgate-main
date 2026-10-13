@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Each one prints its own confluence: every named candle shape, including a shape that finished one bar ago, the shared indicator values, every catalog read (core strategies disclosed, not turned into a side), every fundamental leg, higher-timeframe structure, and every gold tab with that tab's own strategy and stamps. A setup prints only when a named candlestick pattern is confirmed by structure, a gold-desk read, or a higher timeframe, and no higher timeframe is against it. A family leans only when its reads net one way. Unread is not agreement. The stop is still the pattern extreme, or one ATR. Tab prices are not the stop.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. Each horizon still prints its own confluence: every named candle shape, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR.
           </div>
         </div>
       `;
@@ -223,6 +223,9 @@ on every page load since v14-2:
       } catch (eSw) {
         forecast.swing = { ok: false, tf: '4h', formed: false, why: 'the 4h tape failed: ' + String((eSw && eSw.message) || eSw) };
       }
+      try {
+        if (typeof window.hgCfUltimate === 'function') forecast.ultimate = window.hgCfUltimate(forecast.scalp, forecast.swing);
+      } catch (eUlt) { forecast.ultimate = null; }
       this.renderResult(resultArea, statusEl, forecast);
 
     } catch (error) {
@@ -413,6 +416,19 @@ on every page load since v14-2:
         + (swDesks ? ('<div class="note" style="margin-top:6px;"><b>GOLD DESKS ON THE 4h TAPE</b> — <span class="note">' + String(swingView.deskWhy || '').replace(/</g, '') + '</span><ul class="lst">' + swDesks + '</ul></div>') : '')
         + '</div>';
     }
+    var ult = forecast.ultimate;
+    var ultHtml = '';
+    if (ult && ult.ok) {
+      var ultCall = ult.formed
+        ? (ult.side === 'BULL' ? 'ULTIMATE LONG SETUP' : 'ULTIMATE SHORT SETUP')
+        : (ult.side === 'BULL' ? 'LONG READ · NOT AN ULTIMATE SETUP' : (ult.side === 'BEAR' ? 'SHORT READ · NOT AN ULTIMATE SETUP' : (ult.side === 'SPLIT' ? 'SPLIT · NOT A SIDE' : (ult.side === 'NEUTRAL' ? 'NEUTRAL' : 'UNREAD'))));
+      ultHtml = '<div class="note" data-cf-ultimate="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
+        + '<div style="margin-bottom:4px;"><b>ULTIMATE AI CONFLUENCE</b> <span class="' + (ult.formed ? 'pos' : 'note') + '" style="font-weight:700;">' + ultCall + '</span></div>'
+        + '<div class="note">' + String(ult.why || '').replace(/</g, '') + '</div>'
+        + '<div class="note">' + String(ult.scalp || '').replace(/</g, '') + '</div>'
+        + '<div class="note">' + String(ult.swing || '').replace(/</g, '') + '</div>'
+        + '<div class="note">The two stops are not combined. Read the scalp against the 15m ATR and the swing against the 4h ATR.</div></div>';
+    }
 
     container.className = '';
     container.innerHTML = `
@@ -425,6 +441,7 @@ on every page load since v14-2:
           ${forecast.source ? '<li><b>Tape:</b> ' + String(forecast.source).replace(/</g, '') + '</li>' : ''}
         </ul>
         <ul class="lst">${reasons}</ul>
+        ${ultHtml}
         ${horizonsHtml}
         ${conflHtml}
         ${swingConflHtml}
