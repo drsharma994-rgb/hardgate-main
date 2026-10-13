@@ -1,23 +1,29 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (hg-v1315)
+HARDGATE — gold-candle-forecast.js (hg-v1316)
 CANDLE FORECAST tab for the GOLD group.
 
-hg-v1315 extends hg-v1314 with three concrete additions:
-  (A) FURTHER patterns — hgCfAdvancedPatterns adds 15 more candlestick
-      patterns beyond the hg-v1314 16 (abandoned baby, three inside/outside
-      up/down, belt hold, harami cross, spinning top, high wave,
-      rising/falling three methods, mat hold, separating lines, three line
-      strike, tri-star, stick sandwich, deliberation, breakaway), each ATR
-      gated the same way.
-  (B) EVERY gold tab as confluence — hgCfGoldDeskReads adds three more
-      directional readers (hgGoldSevenStep, hgGoldSweepOb, pineGoldConfluence)
-      on top of the hg-v1314 four. Plus a BOTH-ways news-lock read and four
-      informational desks for the card (forming stack, inst filter, catalog
-      USED count, VP targets).
-  (C) SCALP + SWING setups — the engine takes ctx.mode ('scalp' | 'swing').
-      This module fetches BOTH the 15m feed (scalp) and the 4h feed
-      (swing), runs the engine on each, and renders two cards side by
-      side.
+hg-v1316 extends hg-v1315 with three concrete additions:
+  (A) MAXIMUM patterns — hgCfMaxPatterns adds 15 further candlestick
+      patterns beyond the hg-v1314 16 and hg-v1315 15 (46 total): takuri
+      line, rickshaw man, doji star bull/bear, island reversal, advance
+      block, three stars in the south, matching high/low, upside/downside
+      tasuki gap, last engulfing top/bottom, closing marubozu bull/bear,
+      in-neck/on-neck/thrusting line, hikkake, side-by-side white lines,
+      ladder bottom/top, concealing baby swallow. Each ATR-gated the same
+      way.
+  (B) MAXIMUM gold-tab readers — hgCfGoldDeskReads now carries TEN
+      directional readers (hg-v1315 three plus seven more): hgGoldMacroLock
+      (DXY+TNX directional lock, hg-v1016 both-ways), hgGoldMtfMatrix
+      (H4+Daily EMA20>EMA50 cascade), hgGoldHtfBias (HTF structure +
+      ribbon), hgGoldSweepEngine (confirmed liquidity sweep direction),
+      hgGoldSessionBoundSweep (Silver Bullet session window sweep),
+      hgGoldNyExhaustion (NY raid-takeover fade), hgGoldOiTrap (soft
+      unchecked when no OI feed). News-lock BOTH-ways restriction and
+      four informational desks preserved from hg-v1315.
+  (C) SCALP + SWING setups — preserved from hg-v1315. The engine takes
+      ctx.mode ('scalp' | 'swing'). This module fetches BOTH the 15m feed
+      (scalp) and the 4h feed (swing), runs the engine on each, and
+      renders two cards side by side.
 
 DOCTRINE (hg-v966 / hg-v955): DISPLAY tool, not a gate. No setup leaves
 any board on it. No forward-ledger mark. No threshold moves. Confluence
@@ -48,10 +54,10 @@ function mount(container){
   __cfMounted = container;
   container.innerHTML = ''
     + '<div class="panel">'
-    +   '<h2>Candle Forecast <span id="cfVersion" class="verbadge">v1315</span></h2>'
+    +   '<h2>Candle Forecast <span id="cfVersion" class="verbadge">v1316</span></h2>'
     +   '<div class="hg-lead" style="margin-bottom:10px">'
-    +     'SCALP (15m) and SWING (4h) forecasts side by side. Each card runs 31 candlestick patterns + 8 structural reads + every gold-tab reader'
-    +     ' (free feeds, 18 indicators, Pine states, regime, Playbook 1-9 bias, sweep→OB, Pine confluence, news gate, inst filter, catalog, forming stack).'
+    +     'SCALP (15m) and SWING (4h) forecasts side by side. Each card runs 46 candlestick patterns + 8 structural reads + every gold-tab reader'
+    +     ' (free feeds, 18 indicators, Pine states, regime, Playbook 1-9 bias, sweep→OB, Pine confluence, macro lock, MTF matrix, HTF bias, sweep engine, session sweep, NY exhaustion, OI trap, news gate, inst filter, catalog, forming stack).'
     +     ' DISPLAY only — nothing is gated on this.'
     +   '</div>'
     +   '<div class="row" style="margin-bottom:12px">'
@@ -240,7 +246,7 @@ function renderCard(f, modeLabel, bars){
                : /* conflict */ (modeLabel + ' · ' + (f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' — CONFLUENCE AGAINST');
   var color = (f.dir === 'BULL') ? '#15803d' : '#dc262c';
 
-  /* confluence summary (hg-v1314 four + hg-v1315 three) */
+  /* confluence summary (hg-v1314 four + hg-v1315 three + hg-v1316 seven = ten desk readers) */
   var conf = f.confluence || null;
   var desk = f.deskReads || null;
   var confSummary = '';

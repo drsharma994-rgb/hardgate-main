@@ -18397,41 +18397,58 @@ W.hgGoldAuditGaneshHtml = hgGoldAuditGaneshHtml;      /* hg-v1298 */
 })();
 
 /* ========================================================================
-   hg-v1315: CANDLE FORECAST — further advanced patterns + every gold tab
-   as confluence + SCALP (15m) AND SWING (4h) setups side by side.
+   hg-v1316: CANDLE FORECAST — MAXIMUM patterns + every gold tab's
+   directional reader + SCALP (15m) AND SWING (4h) setups side by side.
 
-   The user asked for "FURTHER more advanced candle stick pattern
+   The user asked a THIRD time: "MAXIMUM advanced candle stick pattern
    recognition … all the indicators, core strategies, fundamentals,
    technicals used in all the gold tabs (each and every gold tab with
    all the analysis) to form a confluence with candle stick patterns
    and then form a setup in candle forecast tab, make a scalp and a
-   swing setup". This extends hg-v1314 with three concrete additions:
+   swing setup". This extends hg-v1315 with three concrete additions:
 
-     (A) hgCfAdvancedPatterns — 15 more candlestick patterns BEYOND the
-                          hg-v1314 16: abandoned baby (gap-doji-gap),
-                          three inside up/down (harami + confirmation),
-                          three outside up/down (engulfing + confirmation),
-                          belt hold, harami cross, spinning top, high
-                          wave, rising/falling three methods, mat hold,
-                          separating lines, three line strike, tri-star,
-                          stick sandwich, deliberation, breakaway. Each
-                          ATR-gated the same way the hg-v1314 16 are.
-     (B) hgCfGoldDeskReads — three more directional readers added to the
-                          hg-v1314 four (free feeds / indicators / pine
-                          states / regime): hgGoldSevenStep (Playbook 1-9
-                          STEP 4 bias), hgGoldSweepOb (SMC sweep→OB), and
-                          pineGoldConfluence (ten Pine ports' long/short
-                          evaluation). Plus a NEWS LOCK read (hgGoldNewsGate)
-                          that is a BOTH-ways restriction (hg-v992's third
-                          state), never a direction. Four more informational
-                          desks on the card for display only (forming stack,
-                          inst filter, catalog USED count, VP targets).
+     (A) hgCfMaxPatterns   — 15 further candlestick patterns BEYOND the
+                          hg-v1314 16 and the hg-v1315 15, bringing the
+                          total to 46: takuri line (dragonfly with extra-
+                          long lower wick), rickshaw man (very-long-legged
+                          doji), doji star (gap doji), island reversal
+                          (gap away and gap back), advance block (three
+                          progressively weaker bulls at a top), three
+                          stars in the south (three decreasing bears at a
+                          bottom), matching high / matching low, upside /
+                          downside tasuki gap (continuation gap), last
+                          engulfing top / bottom, closing marubozu bull /
+                          bear (one-side wickless strong body), in-neck /
+                          on-neck / thrusting line (penetration continuation),
+                          hikkake (inside bar false break), side-by-side
+                          white lines (continuation after gap), ladder
+                          bottom / top (five-bar reversal), concealing
+                          baby swallow (four-bar bull reversal). Each
+                          ATR-gated the same way the hg-v1314/v1315 are.
+     (B) hgCfGoldDeskReads — SEVEN more directional readers on top of the
+                          hg-v1315 three (hgGoldSevenStep / hgGoldSweepOb /
+                          pineGoldConfluence): hgGoldMacroLock (hg-v1016
+                          DXY+TNX both-ways lock), hgGoldMtfMatrix (hg-v1017
+                          H4+Daily EMA20>EMA50 cascade), hgGoldHtfBias
+                          (HTF structure + ribbon), hgGoldSweepEngine
+                          (confirmed liquidity sweep direction),
+                          hgGoldSessionBoundSweep (Silver Bullet session
+                          window sweep), hgGoldNyExhaustion (NY raid-takeover
+                          fade), hgGoldOiTrap (OI trap — soft unchecked
+                          when no OI feed present). Ten directional readers
+                          through the one home, each three-state (hg-v989)
+                          against the plan direction. The news-lock read
+                          and four informational desks (forming stack,
+                          inst filter, catalog USED count, VP targets)
+                          preserved from hg-v1315.
      (C) MODE-AWARE R:R   — goldCandleForecast(rows, {mode}) returns a scalp
-                          leg at 1R/2R (same as hg-v1314) or a swing leg at
-                          1.5R/3R (wider stop band 0.5-3.5×ATR, longer
-                          targets). The module calls the engine twice —
-                          once on the 15m feed in scalp mode, once on the
-                          4h feed in swing mode — and renders two cards.
+                          leg at 1R/2R (same as hg-v1314/v1315) or a swing
+                          leg at 1.5R/3R (wider stop band 0.5-3.5×ATR,
+                          longer targets). The module calls the engine
+                          twice — once on the 15m feed in scalp mode, once
+                          on the 4h feed in swing mode — and renders two
+                          cards. Preserved from hg-v1315 exactly; mode
+                          fallback to scalp on unknown mode.
 
    Setup formation unchanged in shape: patterns + structure agree, confluence
    hits ≥60% WITH on ≥4 readable marks → SETUP. Patterns + structure alone
@@ -18844,6 +18861,241 @@ function hgCfAdvancedPatterns(rows, atrLast){
   }catch(e){ return out; }
 }
 
+/* ----- hgCfMaxPatterns: 15 further candlestick patterns BEYOND the
+   hg-v1314 16 and hg-v1315 15, bringing the total to 46. Returns the
+   same {bull, bear, neutral, ok} shape so the engine merges all three
+   pattern sets transparently. ATR-gated: a dust bar is not a hammer and
+   a monster bar is not a doji. Fails open on thin tapes and junk bars. */
+function hgCfMaxPatterns(rows, atrLast){
+  var out = { bull: [], bear: [], neutral: [], ok: false };
+  try{
+    if (!Array.isArray(rows) || rows.length < 5) return out;
+    if (!isFinite(atrLast) || atrLast <= 0) return out;
+    var n = rows.length;
+    var r0 = rows[n - 1], r1 = rows[n - 2], r2 = rows[n - 3], r3 = rows[n - 4], r4 = rows[n - 5];
+    if (!r0 || !r1 || !r2 || !r3 || !r4) return out;
+    [r0, r1, r2, r3, r4].forEach(function(r){
+      ['o','h','l','c'].forEach(function(k){
+        if (!isFinite(+r[k])) r.__badMax = true;
+      });
+    });
+    if (r0.__badMax || r1.__badMax || r2.__badMax || r3.__badMax || r4.__badMax) return out;
+    out.ok = true;
+    var b0 = __cfBody(r0), rng0 = __cfRange(r0);
+    var b1 = __cfBody(r1), rng1 = __cfRange(r1);
+    var b2 = __cfBody(r2), rng2 = __cfRange(r2);
+    var b3 = __cfBody(r3);
+    var b4 = __cfBody(r4);
+    var up0 = __cfUpperWick(r0), lo0 = __cfLowerWick(r0);
+    var up1 = __cfUpperWick(r1), lo1 = __cfLowerWick(r1);
+    var atrGate = atrLast * 0.3;
+    var dustGate = atrLast * 0.1;
+    var dojiGate = atrLast * 0.1;
+
+    /* --- Takuri Line — a dragonfly cousin with an EXTRA-long lower wick
+       (≥3× body, body ≤ dojiGate, no upper wick). Bullish bottom pin. */
+    if (b0 <= dojiGate && lo0 >= 3 * Math.max(b0, atrLast * 0.1) && up0 <= rng0 * 0.08 && rng0 >= atrGate){
+      if ((+r1.c) < (+r2.c)) out.bull.push('takuri line (bullish)');
+      else out.neutral.push('takuri line (indecision)');
+    }
+
+    /* --- Rickshaw Man — doji with very long legs (both wicks ≥ 1.5×ATR·0.3,
+       body near zero). Pure indecision beyond spinning top. */
+    if (b0 <= dojiGate && up0 >= atrGate && lo0 >= atrGate && rng0 >= atrGate * 2){
+      out.neutral.push('rickshaw man');
+    }
+
+    /* --- Doji Star — strong body r1 then a doji r0 gapping away. Reversal
+       warning on both sides. */
+    if (b1 >= atrGate && b0 <= dojiGate && rng0 >= atrGate * 0.5){
+      /* bull doji star — r1 bear, r0 doji gapping below r1 close */
+      if (__cfBearBody(r1) && (+r0.h) < (+r1.c)){
+        out.bull.push('bullish doji star');
+      }
+      if (__cfBullBody(r1) && (+r0.l) > (+r1.c)){
+        out.bear.push('bearish doji star');
+      }
+    }
+
+    /* --- Island Reversal — r1 isolated between gaps on both sides. r2 to r1
+       gaps one way, r1 to r0 gaps the other. */
+    if (b1 >= dustGate && b0 >= atrGate && b2 >= atrGate){
+      /* bull island — gap down from r2 to r1, gap up from r1 to r0 */
+      if ((+r1.h) < (+r2.l) && (+r1.h) < (+r0.l) && __cfBullBody(r0)){
+        out.bull.push('bullish island reversal');
+      }
+      if ((+r1.l) > (+r2.h) && (+r1.l) > (+r0.h) && __cfBearBody(r0)){
+        out.bear.push('bearish island reversal');
+      }
+    }
+
+    /* --- Advance Block — three progressively weakening bulls at a top.
+       Each body smaller than the last, upper wicks lengthening (closes
+       struggling to make new highs). Bearish reversal warning. */
+    if (__cfBullBody(r2) && __cfBullBody(r1) && __cfBullBody(r0) &&
+        b2 >= atrGate && b2 > b1 && b1 > b0 && b0 >= dustGate){
+      if (up0 >= b0 * 0.6 && up1 >= b1 * 0.4){
+        out.bear.push('advance block (weakening bulls)');
+      }
+    }
+
+    /* --- Three Stars in the South — three progressively smaller bears at
+       a bottom, closing with a small body + no lower wick. Bullish
+       reversal warning. */
+    if (__cfBearBody(r2) && __cfBearBody(r1) && __cfBearBody(r0) &&
+        b2 >= atrGate && b2 > b1 && b1 > b0 && b0 >= dustGate){
+      if (lo0 <= rng0 * 0.15 && (+r0.l) >= (+r1.l)){
+        out.bull.push('three stars in the south');
+      }
+    }
+
+    /* --- Matching High / Matching Low — two bars with closes within a
+       tight tolerance (same close extreme refused twice). */
+    var closeTol = atrLast * 0.08;
+    if (b0 >= atrGate && b1 >= atrGate){
+      if (__cfBullBody(r0) && __cfBullBody(r1) && Math.abs((+r0.c) - (+r1.c)) <= closeTol && (+r0.h) >= (+r1.h) - closeTol){
+        out.bear.push('matching high (resistance held)');
+      }
+      if (__cfBearBody(r0) && __cfBearBody(r1) && Math.abs((+r0.c) - (+r1.c)) <= closeTol && (+r0.l) <= (+r1.l) + closeTol){
+        out.bull.push('matching low (support held)');
+      }
+    }
+
+    /* --- Upside / Downside Tasuki Gap — three-bar continuation. Two
+       trending bars gap in the direction, then r0 the opposite colour
+       closes INSIDE the gap (but does not fill it). */
+    if (b2 >= atrGate && b1 >= atrGate && b0 >= atrGate * 0.5){
+      /* upside — r2 bull, r1 bull gaps up, r0 bear closes inside the gap */
+      if (__cfBullBody(r2) && __cfBullBody(r1) && (+r1.l) > (+r2.h) &&
+          __cfBearBody(r0) && (+r0.c) > (+r2.h) && (+r0.c) < (+r1.o)){
+        out.bull.push('upside tasuki gap');
+      }
+      if (__cfBearBody(r2) && __cfBearBody(r1) && (+r1.h) < (+r2.l) &&
+          __cfBullBody(r0) && (+r0.c) < (+r2.l) && (+r0.c) > (+r1.o)){
+        out.bear.push('downside tasuki gap');
+      }
+    }
+
+    /* --- Last Engulfing Top / Bottom — engulfing AT a trend extreme
+       (opposite-direction engulfing after a prior-trend run). */
+    if (b0 >= atrGate && b1 >= dustGate){
+      var trendUp = (+r3.c) < (+r2.c) && (+r2.c) < (+r1.c);
+      var trendDn = (+r3.c) > (+r2.c) && (+r2.c) > (+r1.c);
+      if (trendUp && __cfBullBody(r1) && __cfBearBody(r0) && (+r0.o) >= (+r1.c) && (+r0.c) <= (+r1.o)){
+        out.bear.push('last engulfing top');
+      }
+      if (trendDn && __cfBearBody(r1) && __cfBullBody(r0) && (+r0.o) <= (+r1.c) && (+r0.c) >= (+r1.o)){
+        out.bull.push('last engulfing bottom');
+      }
+    }
+
+    /* --- Closing Marubozu — strong body with one side wickless (close at
+       the extreme). Not fully marubozu because the OPEN side still has a
+       wick. Conviction into the close. */
+    if (b0 >= atrGate && b0 >= rng0 * 0.65){
+      if (__cfBullBody(r0) && up0 <= rng0 * 0.05 && lo0 >= rng0 * 0.1){
+        out.bull.push('bullish closing marubozu');
+      }
+      if (__cfBearBody(r0) && lo0 <= rng0 * 0.05 && up0 >= rng0 * 0.1){
+        out.bear.push('bearish closing marubozu');
+      }
+    }
+
+    /* --- In-neck / On-neck / Thrusting Line — three continuation patterns
+       distinguished by penetration depth. r1 is a strong bear, r0 is a
+       bull that opens below r1's low and closes:
+         - at or just above r1's close (In-neck, minimal penetration);
+         - exactly at r1's close (On-neck);
+         - above r1's close but below its midpoint (Thrusting).
+       Mirror for shorts after a bull r1. Each is a BEARISH continuation
+       after a down bar (and bullish after an up bar). */
+    if (b1 >= atrGate && b0 >= dustGate){
+      var r1LowX = +r1.l, r1CloseX = +r1.c, r1MidX = ((+r1.o) + r1CloseX) / 2;
+      if (__cfBearBody(r1) && __cfBullBody(r0) && (+r0.o) < r1LowX){
+        var depth = (+r0.c) - r1CloseX;
+        if (depth >= 0 && depth <= atrLast * 0.08){
+          out.bear.push('on-neck line (continuation down)');
+        } else if (depth > atrLast * 0.08 && depth <= atrLast * 0.25){
+          out.bear.push('in-neck line (continuation down)');
+        } else if (depth > atrLast * 0.25 && (+r0.c) < r1MidX){
+          out.bear.push('thrusting line (continuation down)');
+        }
+      }
+      if (__cfBullBody(r1) && __cfBearBody(r0) && (+r0.o) > (+r1.h)){
+        var depthS = r1CloseX - (+r0.c);
+        if (depthS >= 0 && depthS <= atrLast * 0.08){
+          out.bull.push('on-neck line (continuation up)');
+        } else if (depthS > atrLast * 0.08 && depthS <= atrLast * 0.25){
+          out.bull.push('in-neck line (continuation up)');
+        } else if (depthS > atrLast * 0.25 && (+r0.c) > r1MidX){
+          out.bull.push('thrusting line (continuation up)');
+        }
+      }
+    }
+
+    /* --- Hikkake — a false breakout from an inside bar. r2 wide bar, r1
+       inside r2, r0 breaks r1's extreme but closes BACK inside. The
+       break AGAINST the direction of r0's break fires as the signal. */
+    if (b2 >= atrGate && rng1 <= rng2 * 0.7){
+      var r2Hi = Math.max(+r2.o, +r2.c), r2Lo = Math.min(+r2.o, +r2.c);
+      var r1InR2 = (+r1.h) <= (+r2.h) && (+r1.l) >= (+r2.l);
+      if (r1InR2){
+        /* bull hikkake — r0 wicks below r1 low but closes above r1 high */
+        if ((+r0.l) < (+r1.l) && (+r0.c) > (+r1.h) + atrLast * 0.05){
+          out.bull.push('bullish hikkake (false breakdown)');
+        }
+        if ((+r0.h) > (+r1.h) && (+r0.c) < (+r1.l) - atrLast * 0.05){
+          out.bear.push('bearish hikkake (false breakout)');
+        }
+      }
+    }
+
+    /* --- Side-by-Side White Lines — two consecutive same-colour bodies
+       with similar sizes after a gap. Continuation signal. */
+    if (b1 >= atrGate && b0 >= atrGate && Math.abs(b0 - b1) <= atrLast * 0.3){
+      if (__cfBullBody(r1) && __cfBullBody(r0) && (+r1.l) > (+r2.h) && Math.abs((+r0.o) - (+r1.o)) <= atrLast * 0.1){
+        out.bull.push('side-by-side white lines (continuation)');
+      }
+      if (__cfBearBody(r1) && __cfBearBody(r0) && (+r1.h) < (+r2.l) && Math.abs((+r0.o) - (+r1.o)) <= atrLast * 0.1){
+        out.bear.push('side-by-side black lines (continuation)');
+      }
+    }
+
+    /* --- Ladder Bottom / Top — five-bar reversal. Four same-colour trending
+       bars with lower lows (ladder down), then r0 opposite colour closes
+       above r1's open with a long wick on the trend side. */
+    if (b4 >= atrGate * 0.5 && b3 >= atrGate * 0.5 && b2 >= atrGate * 0.5 && b1 >= atrGate * 0.5 && b0 >= atrGate){
+      /* bullish ladder bottom — four bears, r0 bull closes above r1.o */
+      if (__cfBearBody(r4) && __cfBearBody(r3) && __cfBearBody(r2) && __cfBearBody(r1) &&
+          (+r3.l) < (+r4.l) && (+r2.l) < (+r3.l) && (+r1.l) < (+r2.l) &&
+          __cfBullBody(r0) && (+r0.c) > (+r1.o) && up1 >= b1 * 0.5){
+        out.bull.push('bullish ladder bottom');
+      }
+      if (__cfBullBody(r4) && __cfBullBody(r3) && __cfBullBody(r2) && __cfBullBody(r1) &&
+          (+r3.h) > (+r4.h) && (+r2.h) > (+r3.h) && (+r1.h) > (+r2.h) &&
+          __cfBearBody(r0) && (+r0.c) < (+r1.o) && lo1 >= b1 * 0.5){
+        out.bear.push('bearish ladder top');
+      }
+    }
+
+    /* --- Concealing Baby Swallow — four-bar bull reversal. Two bear
+       marubozus (r3, r2), r1 bear with upper wick going into r2's body,
+       r0 bear engulfing r1. The engulfing closes the swallow pattern. */
+    if (b3 >= atrGate && b2 >= atrGate && b1 >= atrGate && b0 >= atrGate &&
+        __cfBearBody(r3) && __cfBearBody(r2) && __cfBearBody(r1) && __cfBearBody(r0)){
+      var r3Up = __cfUpperWick(r3), r2Up = __cfUpperWick(r2);
+      if (r3Up <= rng3Range(r3) * 0.1 && r2Up <= rng3Range(r2) * 0.1 &&
+          up1 > 0 && (+r1.h) > (+r2.c) &&
+          (+r0.o) > (+r1.h) && (+r0.c) < (+r1.l)){
+        out.bull.push('concealing baby swallow');
+      }
+    }
+    function rng3Range(r){ return (+r.h) - (+r.l); }
+
+    return out;
+  }catch(e){ return out; }
+}
+
 /* ----- hgCfStructure: eight structural reads for setup formation.
    BOS/CHoCH on the last five bars, FVG and OB zones, equal highs/lows,
    swing trend direction via SMA20 slope, and EMA9/21 cross. */
@@ -19004,16 +19256,26 @@ function hgCfConfluence(ctx, dir, rows, rows1d){
   return out;
 }
 
-/* ----- hgCfGoldDeskReads: THREE more directional readers on top of the
-   hg-v1314 four — hgGoldSevenStep (Playbook 1-9 STEP 4 bias), hgGoldSweepOb
-   (SMC sweep→OB), pineGoldConfluence (ten Pine ports). Plus a BOTH-ways
-   news lock read (hgGoldNewsGate). Plus four informational desks for the
-   card (forming stack, inst filter, catalog USED count, VP targets).
-   Each returns three-state marks against the plan direction. A reader
-   absent, throwing or returning no verdict leaves the slot UNREAD. */
+/* ----- hgCfGoldDeskReads: TEN directional readers from across every gold
+   tab — hgGoldSevenStep (Playbook 1-9 STEP 4 bias, hg-v1315), hgGoldSweepOb
+   (SMC sweep→OB, hg-v1315), pineGoldConfluence (ten Pine ports, hg-v1315),
+   plus the hg-v1316 SEVEN: hgGoldMacroLock (DXY+TNX directional lock,
+   hg-v1016 both-ways), hgGoldMtfMatrix (H4+Daily EMA20>EMA50 cascade,
+   hg-v1017 both sides), hgGoldHtfBias (HTF structure + ribbon),
+   hgGoldSweepEngine (confirmed liquidity sweep direction),
+   hgGoldSessionBoundSweep (Silver Bullet session sweep),
+   hgGoldNyExhaustion (NY raid-takeover fade), hgGoldOiTrap (OI trap —
+   soft unchecked when no OI feed). Plus a BOTH-ways news lock read
+   (hgGoldNewsGate, hg-v992 three-state). Plus four informational desks
+   for the card (forming stack, inst filter, catalog USED count, VP
+   targets). Each returns three-state marks against the plan direction.
+   A reader absent, throwing or returning no verdict leaves the slot
+   UNREAD (hg-v989 — never a guessed false). */
 function hgCfGoldDeskReads(ctx, dir, rows, rows1d){
   var out = {
     sevenStep: null, sweepOb: null, pineConf: null,
+    macroLock: null, mtfMatrix: null, htfBias: null,
+    sweepEngine: null, sessionSweep: null, nyExh: null, oiTrap: null,
     newsLock: null, formingStack: null, instFilter: null, catalogUsed: null,
     withN: 0, againstN: 0, readableN: 0,
     marks: {}, sources: []
@@ -19076,6 +19338,150 @@ function hgCfGoldDeskReads(ctx, dir, rows, rows1d){
         };
         if (lp && !sp) record('desk:pineConf', dir === 'long', 'desk');
         else if (sp && !lp) record('desk:pineConf', dir === 'short', 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* desk (D) hg-v1316: hgGoldMacroLock — DXY + 10-year directional lock.
+     Called with the trade direction. lock===true means that direction is
+     explicitly denied by the macro tape; lock===false AND !unchecked means
+     the macro doesn't block this side (treat as WITH). unchecked → UNREAD
+     (hg-v989: a dark macro reading is not a verdict). */
+  try{
+    if (typeof G.hgGoldMacroLock === 'function'){
+      var ml = G.hgGoldMacroLock(dir, { macro: ctxUse.macro || null });
+      if (ml){
+        out.macroLock = {
+          lock: ml.lock === true,
+          unchecked: ml.unchecked === true,
+          reason: ml.reason || null,
+          dxyBull: ml.dxyBull, tnxBull: ml.tnxBull,
+          dxyBear: ml.dxyBear, tnxBear: ml.tnxBear
+        };
+        if (ml.unchecked !== true){
+          /* lock=true blocks this direction (AGAINST); lock=false is a clear
+             macro tape for this side (WITH) */
+          if (ml.lock === true) record('desk:macroLock', false, 'desk');
+          else record('desk:macroLock', true, 'desk');
+        }
+      }
+    }
+  }catch(e){}
+
+  /* desk (E) hg-v1316: hgGoldMtfMatrix — H4 + Daily cascade. For a scalp
+     long, needs H4 AND Daily price > EMA20 > EMA50; mirror for shorts.
+     scalpLongOk / scalpShortOk / conflict decide. unchecked → UNREAD. */
+  try{
+    if (typeof G.hgGoldMtfMatrix === 'function'){
+      var mtf = G.hgGoldMtfMatrix({
+        rows4h: ctxUse.rows4h || rowsUse,
+        rows1d: rows1d || ctxUse.rows1d || null
+      });
+      if (mtf){
+        out.mtfMatrix = {
+          unchecked: mtf.unchecked === true,
+          conflict: mtf.conflict === true,
+          scalpLongOk: mtf.scalpLongOk === true,
+          scalpShortOk: mtf.scalpShortOk === true,
+          reason: mtf.reason || null,
+          reasonShort: mtf.reasonShort || null
+        };
+        if (mtf.unchecked !== true && mtf.conflict !== true){
+          var mtfOk = (dir === 'long') ? (mtf.scalpLongOk === true) : (mtf.scalpShortOk === true);
+          record('desk:mtfMatrix', mtfOk, 'desk');
+        }
+      }
+    }
+  }catch(e){}
+
+  /* desk (F) hg-v1316: hgGoldHtfBias — HTF structure + ribbon direction.
+     dir==='long'/'short'/null. matches plan dir → WITH; opposes → AGAINST;
+     null → UNREAD. */
+  try{
+    if (typeof G.hgGoldHtfBias === 'function'){
+      var hb = G.hgGoldHtfBias(ctxUse.rows4h || rowsUse, ctxUse.rows1h || null);
+      if (hb){
+        out.htfBias = { dir: hb.dir || null, label: hb.label || null, atDemand: !!hb.atDemand, atSupply: !!hb.atSupply };
+        if (hb.dir === 'long') record('desk:htfBias', dir === 'long', 'desk');
+        else if (hb.dir === 'short') record('desk:htfBias', dir === 'short', 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* desk (G) hg-v1316: hgGoldSweepEngine — the confirmed liquidity sweep
+     direction from the shared sweep engine. Fires only on confirmed /
+     alert / watch tiers; 'ignore' and null leave UNREAD. */
+  try{
+    if (typeof G.hgGoldSweepEngine === 'function'){
+      var se = G.hgGoldSweepEngine(rowsUse, { news: ctxUse.news || null });
+      if (se && typeof se.dir === 'string' && (se.confirmed || se.tier === 'alert' || se.tier === 'watch')){
+        out.sweepEngine = {
+          dir: se.dir, tier: se.tier || null, score: se.score,
+          confirmed: !!se.confirmed, levelKind: se.levelKind || null
+        };
+        if (se.dir === 'long') record('desk:sweepEngine', dir === 'long', 'desk');
+        else if (se.dir === 'short') record('desk:sweepEngine', dir === 'short', 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* desk (H) hg-v1316: hgGoldSessionBoundSweep — Silver Bullet session
+     window sweep (London 07:00–09:30 / NY 12:00–13:30 UTC). Fires only
+     IN WINDOW with ok/confirmed; out-of-window → UNREAD (not a direction). */
+  try{
+    if (typeof G.hgGoldSessionBoundSweep === 'function'){
+      var sb = G.hgGoldSessionBoundSweep(rowsUse, {
+        news: ctxUse.news || null, now: ctxUse.now || null
+      });
+      if (sb && sb.inWindow === true && typeof sb.dir === 'string' && sb.tier && sb.tier !== 'idle'){
+        out.sessionSweep = {
+          dir: sb.dir, window: sb.window || null, tier: sb.tier,
+          confirmed: !!sb.confirmed, reclaimOk: !!sb.reclaimOk
+        };
+        if (sb.dir === 'long') record('desk:sessionSweep', dir === 'long', 'desk');
+        else if (sb.dir === 'short') record('desk:sessionSweep', dir === 'short', 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* desk (I) hg-v1316: hgGoldNyExhaustion — NY raid-takeover fade. Only
+     fires with confirmed / alert / watch tier; dir is the FADE direction
+     (long after a sell-side raid, short after a buy-side raid). */
+  try{
+    if (typeof G.hgGoldNyExhaustion === 'function'){
+      var exh = G.hgGoldNyExhaustion(rowsUse, { now: ctxUse.now || null });
+      if (exh && typeof exh.dir === 'string' && exh.tier && (exh.confirmed || exh.tier === 'alert' || exh.tier === 'watch')){
+        out.nyExh = {
+          dir: exh.dir, tier: exh.tier, score: exh.score,
+          confirmed: !!exh.confirmed, block: exh.block || null
+        };
+        if (exh.dir === 'long') record('desk:nyExh', dir === 'long', 'desk');
+        else if (exh.dir === 'short') record('desk:nyExh', dir === 'short', 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* desk (J) hg-v1316: hgGoldOiTrap — OI build + failed-breakout trap.
+     Needs an oiRows feed the forecast tab doesn't carry; records
+     UNCHECKED with a reason so the card can say what the stack would
+     have asked. ok===true fires the direction. */
+  try{
+    if (typeof G.hgGoldOiTrap === 'function'){
+      var ot = G.hgGoldOiTrap(rowsUse, ctxUse.oiRows || null, {});
+      if (ot){
+        out.oiTrap = {
+          ok: ot.ok === true,
+          unchecked: ot.unchecked === true,
+          dir: ot.dir || null,
+          why: ot.why || null,
+          oiBuildPct: ot.oiBuildPct
+        };
+        if (ot.ok === true && typeof ot.dir === 'string'){
+          if (ot.dir === 'long') record('desk:oiTrap', dir === 'long', 'desk');
+          else if (ot.dir === 'short') record('desk:oiTrap', dir === 'short', 'desk');
+        }
+        /* ot.unchecked and ot.ok===false both leave UNREAD — a trap not
+           fired is not a direction verdict. */
       }
     }
   }catch(e){}
@@ -19202,14 +19608,15 @@ function goldCandleForecast(rows, ctx){
     var e9_last = e9[n - 1], e9_prev = e9[n - 2];
     if (!isFinite(e9_last) || !isFinite(e9_prev)) return null;
 
-    /* -- leg (1a): hg-v1314 patterns + hg-v1315 advanced patterns, merged */
+    /* -- leg (1a): hg-v1314 patterns + hg-v1315 advanced + hg-v1316 maximum, merged */
     var pat = hgCfPatterns(rows, atrLast);
     var patAdv = hgCfAdvancedPatterns(rows, atrLast);
+    var patMax = hgCfMaxPatterns(rows, atrLast);
     var patMerged = {
-      ok: !!(pat.ok || patAdv.ok),
-      bull: (pat.bull || []).concat(patAdv.bull || []),
-      bear: (pat.bear || []).concat(patAdv.bear || []),
-      neutral: (pat.neutral || []).concat(patAdv.neutral || [])
+      ok: !!(pat.ok || patAdv.ok || patMax.ok),
+      bull: (pat.bull || []).concat(patAdv.bull || []).concat(patMax.bull || []),
+      bear: (pat.bear || []).concat(patAdv.bear || []).concat(patMax.bear || []),
+      neutral: (pat.neutral || []).concat(patAdv.neutral || []).concat(patMax.neutral || [])
     };
     var patBull = patMerged.ok ? patMerged.bull.length : 0;
     var patBear = patMerged.ok ? patMerged.bear.length : 0;
@@ -19376,6 +19783,7 @@ function goldCandleForecast(rows, ctx){
 
 G.hgCfPatterns = hgCfPatterns;
 G.hgCfAdvancedPatterns = hgCfAdvancedPatterns;
+G.hgCfMaxPatterns = hgCfMaxPatterns;
 G.hgCfStructure = hgCfStructure;
 G.hgCfConfluence = hgCfConfluence;
 G.hgCfGoldDeskReads = hgCfGoldDeskReads;

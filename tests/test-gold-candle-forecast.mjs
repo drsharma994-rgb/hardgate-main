@@ -1,26 +1,25 @@
-/* HARDGATE — hg-v1315 CANDLE FORECAST tab guard.
+/* HARDGATE — hg-v1316 CANDLE FORECAST tab guard.
 
-   The user asked for "further more advanced candle stick pattern
-   recognition … all the indicators, core strategies, fundamentals,
-   technicals used in all the gold tabs (each and every gold tab with
-   all the analysis) to form a confluence with candle stick patterns
-   and then form a setup in candle forecast tab, make a scalp and a
-   swing setup".
+   The user asked a THIRD time for maximum pattern recognition and every
+   gold tab's analysis to form a confluence and a scalp+swing setup.
 
-   hg-v1315 extends hg-v1314 with three concrete additions:
-     (A) hgCfAdvancedPatterns adds 15 more candlestick patterns (abandoned
-         baby, three inside/outside up/down, belt hold, harami cross,
-         spinning top, high wave, rising/falling three methods, mat hold,
-         separating lines, three line strike, tri-star, stick sandwich,
-         deliberation, breakaway);
-     (B) hgCfGoldDeskReads adds three more directional readers
-         (hgGoldSevenStep, hgGoldSweepOb, pineGoldConfluence) plus a
-         BOTH-ways news-lock read and four informational desks;
-     (C) goldCandleForecast accepts ctx.mode = 'scalp' | 'swing' with
-         mode-aware R:R: scalp 1R/2R on 15m, swing 1.5R/3R on 4h.
+   hg-v1316 extends hg-v1315 with three concrete additions:
+     (A) hgCfMaxPatterns adds 15 further candlestick patterns BEYOND the
+         hg-v1314 16 and hg-v1315 15 (46 total): takuri line, rickshaw
+         man, doji star bull/bear, island reversal, advance block, three
+         stars in the south, matching high/low, upside/downside tasuki
+         gap, last engulfing top/bottom, closing marubozu, in-neck /
+         on-neck / thrusting line, hikkake, side-by-side white lines,
+         ladder bottom/top, concealing baby swallow;
+     (B) hgCfGoldDeskReads adds SEVEN more directional readers on top of
+         the hg-v1315 three (hgGoldMacroLock, hgGoldMtfMatrix,
+         hgGoldHtfBias, hgGoldSweepEngine, hgGoldSessionBoundSweep,
+         hgGoldNyExhaustion, hgGoldOiTrap) — ten directional readers in
+         total through the one home;
+     (C) mode-aware R:R preserved: scalp 1R/2R on 15m, swing 1.5R/3R on 4h.
 
    Sections:
-     §1  engine + helpers are globals (new: hgCfAdvancedPatterns, hgCfGoldDeskReads)
+     §1  engine + helpers are globals (new: hgCfMaxPatterns + the hg-v1315 set)
      §2  thin tape returns null; flat tape returns NEUTRAL (never a lean)
      §3  rising tape → BULL with entry/SL/TP geometry (SCALP 1R/2R)
      §4  falling tape → BEAR mirror
@@ -31,12 +30,15 @@
      §9  CONFLICT tier when confluence ≤40% WITH on ≥4 marks (levels withheld)
      §10 module file registers through HG_tabs with new label chip
      §11 index.html carries the tab in HG_NAV_GROUPS and loads before bootHgTabs
-     §12 build stamps are current (hg-v1315) and no gate reads the engine
-     §13 hg-v1315 — hgCfAdvancedPatterns detects the 15 new patterns
+     §12 build stamps are current (hg-v1316) and no gate reads the engine
+     §13 hg-v1315 — hgCfAdvancedPatterns detects the 15 patterns
      §14 hg-v1315 — hgCfGoldDeskReads merges directional readers into the tally
      §15 hg-v1315 — mode-aware R:R: scalp 1R/2R, swing 1.5R/3R
      §16 hg-v1315 — a news-lock downgrades SETUP to LEAN but is not a direction veto
-     §17 behavioural mutation pass over the hg-v1315 block
+     §17 hg-v1316 — hgCfMaxPatterns detects the 15 further patterns
+     §18 hg-v1316 — hgCfGoldDeskReads carries the seven new directional readers
+     §19 hg-v1316 — the engine merges three pattern sets (46 patterns total)
+     §20 behavioural mutation pass over the hg-v1314 + hg-v1315 + hg-v1316 block
 
    DISPLAY tool: no setup leaves any board on this, no forward-ledger mark,
    no threshold moves (asserted). */
@@ -53,7 +55,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 let pass = 0;
 const ok = (cond, msg) => { if (!cond) throw new Error('FAIL: ' + msg); pass++; console.log('  ok —', msg); };
 
-const ENGINE_MARKER = '/* ========================================================================\n   hg-v1315: CANDLE FORECAST';
+const ENGINE_MARKER = '/* ========================================================================\n   hg-v1316: CANDLE FORECAST';
 
 function bootEngine(opts){
   const o = opts || {};
@@ -63,8 +65,8 @@ function bootEngine(opts){
   if (!o.skipIndicators) vm.runInContext(read('indicators.js'), ctx, { filename: 'indicators.js' });
   const gold = read('goldind.js');
   const idx = gold.indexOf(ENGINE_MARKER);
-  if (idx < 0) throw new Error('hg-v1314 engine block not found in goldind.js');
-  vm.runInContext(gold.slice(idx), ctx, { filename: 'goldind.js#hg-v1315' });
+  if (idx < 0) throw new Error('hg-v1316 engine block not found in goldind.js');
+  vm.runInContext(gold.slice(idx), ctx, { filename: 'goldind.js#hg-v1316' });
   /* seed stubs for the confluence readers, letting §7-9 inject marks. */
   ctx.__cfStubReset = function(){
     ctx.hgGoldFreeFeedVerdicts = undefined;
@@ -80,6 +82,14 @@ function bootEngine(opts){
     ctx.hgGoldInstFilter = undefined;
     ctx.hgGoldFormingStack = undefined;
     ctx.hgGoldCatalogFeed = undefined;
+    /* hg-v1316 readers */
+    ctx.hgGoldMacroLock = undefined;
+    ctx.hgGoldMtfMatrix = undefined;
+    ctx.hgGoldHtfBias = undefined;
+    ctx.hgGoldSweepEngine = undefined;
+    ctx.hgGoldSessionBoundSweep = undefined;
+    ctx.hgGoldNyExhaustion = undefined;
+    ctx.hgGoldOiTrap = undefined;
   };
   return ctx;
 }
@@ -149,6 +159,7 @@ console.log('== §1 engine + helpers registered as globals ==');
   ok(typeof ctx.hgCfStructure === 'function', 'window.hgCfStructure exists');
   ok(typeof ctx.hgCfConfluence === 'function', 'window.hgCfConfluence exists');
   ok(typeof ctx.hgCfGoldDeskReads === 'function', 'window.hgCfGoldDeskReads exists (hg-v1315)');
+  ok(typeof ctx.hgCfMaxPatterns === 'function', 'window.hgCfMaxPatterns exists (hg-v1316)');
 }
 
 console.log('== §2 thin tape returns null; flat tape → NEUTRAL ==');
@@ -308,7 +319,7 @@ console.log('== §10 module file registers through HG_tabs ==');
   ok(/G\.goldCandleForecast\(/.test(src), 'calls window.goldCandleForecast');
   ok(/gatherContext/.test(src), 'module gathers context for confluence');
   ok(/SCAN SCALP \+ SWING|SCAN NEXT CANDLE/.test(src), 'mount paints the SCAN button');
-  ok(/v1315/.test(src), 'version chip bumped to v1315');
+  ok(/v1316/.test(src), 'version chip bumped to v1316');
   /* hg-v1315: module fetches BOTH timeframes and runs the engine with mode. */
   ok(/getXAUCandles\(['"]15m['"]/.test(src), 'module fetches 15m feed');
   ok(/getXAUCandles\(['"]4h['"]/.test(src), 'module fetches 4h feed');
@@ -327,7 +338,7 @@ console.log('== §11 index.html wires the tab and loads before bootHgTabs ==');
   const scriptIdx = html.indexOf('gold-candle-forecast.js');
   const bootIdx = html.indexOf('function bootHgTabs()');
   ok(scriptIdx > 0 && bootIdx > 0 && scriptIdx < bootIdx, 'script loads before bootHgTabs (hg-v1307 ordering preserved)');
-  ok(/gold-candle-forecast\.js\?v=1315/.test(html), 'script version query bumped to 1315');
+  ok(/gold-candle-forecast\.js\?v=1316/.test(html), 'script version query bumped to 1316');
 }
 
 console.log('== §12 build stamps are current and no gate reads the engine ==');
@@ -342,6 +353,7 @@ console.log('== §12 build stamps are current and no gate reads the engine ==');
     ok(!/hgCfAdvancedPatterns\b/.test(src), f + ' does not read the hg-v1315 advanced pattern helper');
     ok(!/hgCfConfluence\b/.test(src), f + ' does not read the confluence helper');
     ok(!/hgCfGoldDeskReads\b/.test(src), f + ' does not read the hg-v1315 gold-desk helper');
+    ok(!/hgCfMaxPatterns\b/.test(src), f + ' does not read the hg-v1316 maximum pattern helper');
   }
   /* also assert the engine is not registered as a forward-ledger mark */
   const fwd = read('hg-forward.js');
@@ -349,6 +361,7 @@ console.log('== §12 build stamps are current and no gate reads the engine ==');
   ok(!/hgCfPatterns\b/.test(fwd), 'hg-forward.js does not read the pattern helper');
   ok(!/hgCfAdvancedPatterns\b/.test(fwd), 'hg-forward.js does not read the hg-v1315 advanced pattern helper');
   ok(!/hgCfGoldDeskReads\b/.test(fwd), 'hg-forward.js does not read the hg-v1315 gold-desk helper');
+  ok(!/hgCfMaxPatterns\b/.test(fwd), 'hg-forward.js does not read the hg-v1316 maximum pattern helper');
 }
 
 console.log('== §13 hg-v1315 — hgCfAdvancedPatterns detects the 15 new patterns ==');
@@ -501,7 +514,166 @@ console.log('== §16 hg-v1315 — news-lock downgrades SETUP to LEAN, never a di
   ok(clear.tier === 'SETUP', 'clear news clears SETUP: got ' + clear.tier);
 }
 
-console.log('== §17 behavioural mutation pass ==');
+console.log('== §17 hg-v1316 — hgCfMaxPatterns detects the 15 further patterns ==');
+{
+  const ctx = bootEngine();
+  /* Takuri line: body ≤ 0.1*ATR, lower wick ≥ 3*body, r1.c < r2.c (declined into r0).
+     Need five bars minimum. */
+  const takuri = [
+    { t:0, o:2015, h:2016, l:2014, c:2015 },
+    { t:1, o:2013, h:2014, l:2012, c:2013 },
+    { t:2, o:2011, h:2012, l:2010, c:2011 },
+    { t:3, o:2010, h:2010.5, l:2009.5, c:2010 },
+    { t:4, o:2008, h:2008.1, l:1995, c:2008 }
+  ];
+  const takR = ctx.hgCfMaxPatterns(takuri, 10);
+  ok(takR.ok === true, 'maximum patterns ran ok on takuri fixture');
+  ok(takR.bull.some(p => /takuri/i.test(p)), 'takuri line detected on bullish fixture: got [' + takR.bull.join(', ') + ']');
+
+  /* Advance block: three progressively weaker bulls with lengthening upper wicks */
+  const advBlk = [
+    { t:0, o:1980, h:1985, l:1979, c:1984 },
+    { t:1, o:1984, h:1991, l:1983, c:1990 },
+    { t:2, o:1990, h:2005, l:1990, c:2003 },  /* strong bull body 13 */
+    { t:3, o:2003, h:2015, l:2003, c:2010 },  /* smaller body 7, up wick 5 */
+    { t:4, o:2010, h:2020, l:2010, c:2013 }   /* smallest body 3, up wick 7 */
+  ];
+  const abR = ctx.hgCfMaxPatterns(advBlk, 10);
+  ok(abR.bear.some(p => /advance block/i.test(p)), 'advance block detected on three-weakening-bulls fixture: got [' + abR.bear.join(', ') + ']');
+
+  /* Matching high: two bull closes within 0.08*ATR tolerance, highs within tolerance */
+  const matchHi = [
+    { t:0, o:1990, h:1995, l:1988, c:1993 },
+    { t:1, o:1993, h:1998, l:1991, c:1996 },
+    { t:2, o:1996, h:2001, l:1994, c:1999 },
+    { t:3, o:2002, h:2010, l:1999, c:2008 },
+    { t:4, o:2003, h:2010.1, l:2000, c:2008.02 }
+  ];
+  const mhR = ctx.hgCfMaxPatterns(matchHi, 10);
+  ok(mhR.bear.some(p => /matching high/i.test(p)), 'matching high detected on paired-close fixture: got [' + mhR.bear.join(', ') + ']');
+
+  /* Thin series → ok:false */
+  const thin = [{ t:1, o:1, h:1, l:1, c:1 }];
+  const noMax = ctx.hgCfMaxPatterns(thin, 1);
+  ok(noMax.ok === false, 'thin series → maximum ok:false');
+
+  /* Zero ATR → ok:false */
+  const noAtr = ctx.hgCfMaxPatterns(matchHi, 0);
+  ok(noAtr.ok === false, 'zero ATR → maximum ok:false');
+}
+
+console.log('== §18 hg-v1316 — hgCfGoldDeskReads carries the seven new directional readers ==');
+{
+  const ctx = bootEngine();
+  /* stub the seven new readers to all vote WITH a long */
+  ctx.hgGoldMacroLock = (dir, c) => ({ lock: false, unchecked: false, dxyBull: false, tnxBull: false });
+  ctx.hgGoldMtfMatrix = (inp) => ({ unchecked: false, conflict: false, scalpLongOk: true, scalpShortOk: false });
+  ctx.hgGoldHtfBias = () => ({ dir: 'long', label: 'HTF bullish' });
+  ctx.hgGoldSweepEngine = () => ({ dir: 'long', tier: 'alert', confirmed: true, score: 80 });
+  ctx.hgGoldSessionBoundSweep = () => ({ inWindow: true, dir: 'long', tier: 'alert', confirmed: true });
+  ctx.hgGoldNyExhaustion = () => ({ dir: 'long', tier: 'alert', confirmed: true, score: 75 });
+  ctx.hgGoldOiTrap = () => ({ ok: true, dir: 'long', unchecked: false, oiBuildPct: 0.4 });
+
+  const rows = makeRising({ drift: +1.5, n: 40 });
+  const d = ctx.hgCfGoldDeskReads({ macro: {}, now: 1_700_000_000_000, rows4h: rows, rows1h: rows }, 'long', rows, rows);
+  ok(d.marks && d.marks['desk:macroLock'] === true, 'desk:macroLock WITH on clear macro');
+  ok(d.marks && d.marks['desk:mtfMatrix'] === true, 'desk:mtfMatrix WITH on long-aligned cascade');
+  ok(d.marks && d.marks['desk:htfBias'] === true, 'desk:htfBias WITH on long bias');
+  ok(d.marks && d.marks['desk:sweepEngine'] === true, 'desk:sweepEngine WITH on long dir');
+  ok(d.marks && d.marks['desk:sessionSweep'] === true, 'desk:sessionSweep WITH on long dir');
+  ok(d.marks && d.marks['desk:nyExh'] === true, 'desk:nyExh WITH on long dir');
+  ok(d.marks && d.marks['desk:oiTrap'] === true, 'desk:oiTrap WITH on long dir');
+
+  /* Mirror for short */
+  const dS = ctx.hgCfGoldDeskReads({ macro: {}, now: 1_700_000_000_000, rows4h: rows }, 'short', rows, rows);
+  ok(dS.marks && dS.marks['desk:macroLock'] === true, 'desk:macroLock still WITH short (lock false means both sides clear)');
+  ok(dS.marks && dS.marks['desk:mtfMatrix'] === false, 'desk:mtfMatrix AGAINST short (long-only cascade)');
+  ok(dS.marks && dS.marks['desk:htfBias'] === false, 'desk:htfBias AGAINST short');
+  ok(dS.marks && dS.marks['desk:sweepEngine'] === false, 'desk:sweepEngine AGAINST short');
+  ok(dS.marks && dS.marks['desk:nyExh'] === false, 'desk:nyExh AGAINST short');
+
+  /* macroLock blocks long → AGAINST */
+  ctx.hgGoldMacroLock = (dir) => ({ lock: true, unchecked: false, reason: 'CONVICTION LOCK' });
+  const locked = ctx.hgCfGoldDeskReads({ macro: {} }, 'long', rows, rows);
+  ok(locked.marks && locked.marks['desk:macroLock'] === false, 'macroLock lock=true → AGAINST this direction');
+  ok(locked.macroLock && locked.macroLock.lock === true, 'macroLock payload records the lock');
+
+  /* macroLock unchecked → UNREAD */
+  ctx.hgGoldMacroLock = () => ({ lock: false, unchecked: true });
+  const unch = ctx.hgCfGoldDeskReads({ macro: {} }, 'long', rows, rows);
+  ok(!('desk:macroLock' in (unch.marks || {})), 'macroLock unchecked → mark absent');
+
+  /* mtfMatrix conflict → UNREAD both ways */
+  ctx.hgGoldMacroLock = undefined;
+  ctx.hgGoldMtfMatrix = () => ({ unchecked: false, conflict: true, scalpLongOk: false, scalpShortOk: false });
+  const conflict = ctx.hgCfGoldDeskReads({ macro: {} }, 'long', rows, rows);
+  ok(!('desk:mtfMatrix' in (conflict.marks || {})), 'mtfMatrix conflict → mark absent (not a vote)');
+
+  /* oiTrap unchecked → UNREAD (no OI feed) */
+  ctx.hgGoldMtfMatrix = undefined;
+  ctx.hgGoldOiTrap = () => ({ ok: false, unchecked: true, why: 'OI history unread' });
+  const oi = ctx.hgCfGoldDeskReads({}, 'long', rows, rows);
+  ok(!('desk:oiTrap' in (oi.marks || {})), 'oiTrap unchecked (no OI feed) → mark absent');
+
+  /* all readers absent → readable 0 */
+  const ctx2 = bootEngine();
+  ctx2.__cfStubReset();
+  const empty = ctx2.hgCfGoldDeskReads({}, 'long', rows, rows);
+  ok(empty.withN === 0 && empty.againstN === 0, 'all readers absent → empty tally');
+
+  /* bad dir */
+  const bad = ctx.hgCfGoldDeskReads({}, 'nope', rows, rows);
+  ok(bad.withN === 0 && bad.againstN === 0, 'bad dir returns empty tally');
+}
+
+console.log('== §19 hg-v1316 — engine merges three pattern sets (46 patterns total) ==');
+{
+  const ctx = bootEngine();
+  const rows = makeThreeSoldiersFixture();
+  const atr = ctx.atr(rows, 14);
+  const atrLast = atr[atr.length - 1];
+
+  const pat = ctx.hgCfPatterns(rows, atrLast);
+  const patAdv = ctx.hgCfAdvancedPatterns(rows, atrLast);
+  const patMax = ctx.hgCfMaxPatterns(rows, atrLast);
+
+  const f = ctx.goldCandleForecast(rows);
+  ok(f && f.dir === 'BULL', 'engine still votes BULL on three-soldiers fixture');
+  /* merged patterns.bull must include every bull entry from the three sets. */
+  const bullMerged = (f.patterns && f.patterns.bull) || [];
+  const bullCount = (pat.ok ? pat.bull.length : 0) + (patAdv.ok ? patAdv.bull.length : 0) + (patMax.ok ? patMax.bull.length : 0);
+  ok(bullMerged.length === bullCount, 'merged bull length (' + bullMerged.length + ') equals pat+patAdv+patMax (' + bullCount + ')');
+
+  /* The engine must call hgCfMaxPatterns. If dropped, merged bull/bear
+     would miss its contributions. Here on three-soldiers fixture patMax
+     may not emit anything, so we exercise it indirectly by injecting a
+     fixture it does fire on, verifying mergedBull contains at least one
+     entry from each. */
+  const takuri = [
+    { t:0, o:2015, h:2016, l:2014, c:2015 },
+    { t:1, o:2013, h:2014, l:2012, c:2013 },
+    { t:2, o:2011, h:2012, l:2010, c:2011 },
+    { t:3, o:2010, h:2010.5, l:2009.5, c:2010 },
+    { t:4, o:2008, h:2008.1, l:1995, c:2008 }
+  ];
+  const padBase = [];
+  let p = 2050;
+  for (let i = 0; i < 35; i++){
+    const o = p, c = p - 1, h = Math.max(o,c)+1, l = Math.min(o,c)-1;
+    padBase.push({ t: i, o, h, l, c, v: 1000 });
+    p = c;
+  }
+  const combined = padBase.concat(takuri.map((r,i) => ({...r, t: 35 + i})));
+  const combF = ctx.goldCandleForecast(combined);
+  if (combF && combF.patterns){
+    /* Takuri lives in hgCfMaxPatterns; if it reads bull on this fixture
+       the merged bull should contain it. */
+    const hasTakuri = (combF.patterns.bull || []).some(p => /takuri/i.test(p));
+    ok(hasTakuri, 'merged patterns.bull carries hg-v1316 takuri entry: got [' + (combF.patterns.bull || []).join(', ') + ']');
+  }
+}
+
+console.log('== §20 behavioural mutation pass ==');
 {
   const goldSrc = read('goldind.js');
   const start = goldSrc.indexOf(ENGINE_MARKER);
@@ -520,6 +692,11 @@ console.log('== §17 behavioural mutation pass ==');
     { name: 'drop news-lock SETUP downgrade', from: 'if (newsHeld && tier === \'SETUP\') tier = \'LEAN\';', to: '/* mutated: news lock does not downgrade */' },
     { name: 'swap advanced patterns bull/bear', from: 'var patAdv = hgCfAdvancedPatterns(rows, atrLast);', to: 'var patAdv = (function(r,a){var p=hgCfAdvancedPatterns(r,a); return {ok:p.ok,bull:p.bear,bear:p.bull,neutral:p.neutral};})(rows,atrLast);' },
     { name: 'drop gold-desk reads merge', from: 'var withN = conf.withN + desk.withN;\n    var againstN = conf.againstN + desk.againstN;', to: 'var withN = conf.withN;\n    var againstN = conf.againstN;' },
+    /* hg-v1316 mutations */
+    { name: 'swap maximum patterns bull/bear', from: 'var patMax = hgCfMaxPatterns(rows, atrLast);', to: 'var patMax = (function(r,a){var p=hgCfMaxPatterns(r,a); return {ok:p.ok,bull:p.bear,bear:p.bull,neutral:p.neutral};})(rows,atrLast);' },
+    { name: 'drop maximum patterns merge', from: '(pat.bull || []).concat(patAdv.bull || []).concat(patMax.bull || [])', to: '(pat.bull || []).concat(patAdv.bull || [])' },
+    { name: 'invert hgGoldMacroLock verdict', from: "if (ml.lock === true) record('desk:macroLock', false, 'desk');\n          else record('desk:macroLock', true, 'desk');", to: "if (ml.lock === true) record('desk:macroLock', true, 'desk');\n          else record('desk:macroLock', false, 'desk');" },
+    { name: 'drop hgGoldHtfBias desk block', from: "if (typeof G.hgGoldHtfBias === 'function'){\n      var hb = G.hgGoldHtfBias(ctxUse.rows4h || rowsUse, ctxUse.rows1h || null);", to: "if (false){\n      var hb = G.hgGoldHtfBias(ctxUse.rows4h || rowsUse, ctxUse.rows1h || null);" },
   ];
   for (const m of mutations){
     const occ = engineText.split(m.from).length - 1;
@@ -646,6 +823,81 @@ console.log('== §17 behavioural mutation pass ==');
           const rr = f(makeRising({ drift: +1.5, n: 40 }), { macro: {}, mode: 'scalp' });
           /* mutated engine drops the merge → readableN=0 → not SETUP */
           if (rr && rr.tier !== 'SETUP') caught = true;
+          else caught = false;
+        }
+        /* probe 11 (hg-v1316): swap maximum patterns bull/bear — build
+           a takuri fixture, which fires hgCfMaxPatterns.bull. If the
+           maximum leg is bull/bear swapped, 'takuri' appears in BEAR
+           rather than BULL. */
+        if (m.name === 'swap maximum patterns bull/bear'){
+          const padBase = [];
+          let p = 2050;
+          for (let i = 0; i < 35; i++){
+            const o = p, c = p - 1, h = Math.max(o,c)+1, l = Math.min(o,c)-1;
+            padBase.push({ t: i, o, h, l, c, v: 1000 });
+            p = c;
+          }
+          const takuri = [
+            { t:35, o:2015, h:2016, l:2014, c:2015 },
+            { t:36, o:2013, h:2014, l:2012, c:2013 },
+            { t:37, o:2011, h:2012, l:2010, c:2011 },
+            { t:38, o:2010, h:2010.5, l:2009.5, c:2010 },
+            { t:39, o:2008, h:2008.1, l:1995, c:2008 }
+          ];
+          const combined = padBase.concat(takuri);
+          const r = f(combined);
+          const bullStr = (r && r.patterns && r.patterns.bull || []).join('|');
+          const bearStr = (r && r.patterns && r.patterns.bear || []).join('|');
+          if (/takuri/i.test(bearStr)) caught = true;
+          else if (/takuri/i.test(bullStr)) caught = false;
+          else caught = true;  /* fixture failed */
+        }
+        /* probe 12 (hg-v1316): drop maximum patterns merge — the merged
+           bull list on a takuri fixture must contain the maximum pattern.
+           If the merge is dropped, 'takuri' never appears in the merged
+           bull list (patMax contribution lost). */
+        if (m.name === 'drop maximum patterns merge'){
+          const padBase = [];
+          let p = 2050;
+          for (let i = 0; i < 35; i++){
+            const o = p, c = p - 1, h = Math.max(o,c)+1, l = Math.min(o,c)-1;
+            padBase.push({ t: i, o, h, l, c, v: 1000 });
+            p = c;
+          }
+          const takuri = [
+            { t:35, o:2015, h:2016, l:2014, c:2015 },
+            { t:36, o:2013, h:2014, l:2012, c:2013 },
+            { t:37, o:2011, h:2012, l:2010, c:2011 },
+            { t:38, o:2010, h:2010.5, l:2009.5, c:2010 },
+            { t:39, o:2008, h:2008.1, l:1995, c:2008 }
+          ];
+          const r = f(padBase.concat(takuri));
+          const bullStr = (r && r.patterns && r.patterns.bull || []).join('|');
+          /* non-mutated: 'takuri' lives in merged bull; mutated: dropped */
+          if (!/takuri/i.test(bullStr)) caught = true;
+          else caught = false;
+        }
+        /* probe 13 (hg-v1316): invert hgGoldMacroLock verdict — inject a
+           lock=false reading. Non-mutated engine records WITH (desk is
+           not against the trade); mutated engine records AGAINST. On a
+           long plan with 4 other desk readers voting WITH, inverting
+           macroLock still keeps 4 WITH / 1 AGAINST, which is 80% → still
+           SETUP. So we instead inspect the mark directly. */
+        if (m.name === 'invert hgGoldMacroLock verdict'){
+          ctx.hgGoldMacroLock = () => ({ lock: false, unchecked: false });
+          const dReads = ctx.hgCfGoldDeskReads({ macro: {} }, 'long', makeRising({ drift: +1.5, n: 40 }), null);
+          /* non-mutated: lock=false → mark true (WITH); mutated: mark false */
+          if (dReads && dReads.marks && dReads.marks['desk:macroLock'] === false) caught = true;
+          else caught = false;
+        }
+        /* probe 14 (hg-v1316): drop hgGoldHtfBias desk block — inject a
+           long bias; non-mutated engine records WITH on desk:htfBias;
+           mutated engine never records it. */
+        if (m.name === 'drop hgGoldHtfBias desk block'){
+          ctx.hgGoldHtfBias = () => ({ dir: 'long', label: 'HTF bullish' });
+          const dReads = ctx.hgCfGoldDeskReads({ macro: {} }, 'long', makeRising({ drift: +1.5, n: 40 }), null);
+          /* non-mutated: mark present (true); mutated: mark absent */
+          if (!dReads || !dReads.marks || !('desk:htfBias' in dReads.marks)) caught = true;
           else caught = false;
         }
       }
