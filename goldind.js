@@ -19533,6 +19533,37 @@ function hgCfDeskVotes(rows, opts, dir) {
       else if (lean === false) out.against++;
       else out.unread++;
     }
+    /* hg-v1329: the shared perfect bar, asked on a same-side candidate this desk
+       already formed. The badge is named. The lean is not changed. The candidate's
+       prices are not copied onto the candle stop. Absent home: no badge, no why. */
+    function stampDesk(list) {
+      var host = (typeof globalThis !== 'undefined') ? globalThis : null;
+      var fn = (typeof hgPerfectFormation === 'function') ? hgPerfectFormation
+        : ((host && typeof host.hgPerfectFormation === 'function') ? host.hgPerfectFormation : null);
+      if (typeof fn !== 'function' || !Array.isArray(list) || !list.length) return;
+      var last = out.desks[out.desks.length - 1];
+      if (!last) return;
+      var want = wantsUp ? 'long' : 'short';
+      var i, row, d, asked = null, firstWhy = '';
+      for (i = 0; i < list.length; i++) {
+        row = list[i];
+        if (!row || typeof row !== 'object') continue;
+        d = String((row.dir || row.direction) || '').toLowerCase();
+        if (d === 'bull' || d === 'bullish') d = 'long';
+        else if (d === 'bear' || d === 'bearish') d = 'short';
+        if (d !== want) continue;
+        try { asked = fn(row); } catch (eAsk) { asked = null; }
+        if (asked && asked.perfect) break;
+        if (!firstWhy && asked && asked.why && asked.why.length) firstWhy = String(asked.why[0]);
+        asked = null;
+      }
+      if (asked && asked.perfect) {
+        last.perfect = true;
+        last.perfectWhy = "PERFECT on this desk's own candidate";
+      } else if (firstWhy) {
+        last.perfectWhy = firstWhy;
+      }
+    }
     /* Resolve an engine, or report explicitly that the page has not loaded it —
        "not loaded" and "loaded and formed nothing" are different facts about the
        tape and a reader must be able to tell them apart. */
@@ -19552,6 +19583,7 @@ function hgCfDeskVotes(rows, opts, dir) {
         push(name, label, t, total
           ? (t.long + ' long / ' + t.short + ' short formed' + said)
           : ('formed nothing on this tape' + said));
+        stampDesk(r);
       } catch (e) {
         /* name the cause rather than a bare "threw" — a desk that could not read
            its feed is a different fact from one that read it and stood down, and
@@ -19618,6 +19650,7 @@ function hgCfDeskVotes(rows, opts, dir) {
         push(label, label, t, (t.long + t.short)
           ? (t.long + ' long / ' + t.short + ' short formed' + saidOnce)
           : ('formed nothing on this tape' + saidOnce));
+        stampDesk(Array.isArray(r) ? r : []);
       } catch (eOnce) {
         push(label, label, null, 'engine unavailable: ' + String((eOnce && eOnce.message) || eOnce).slice(0, 60));
       }
@@ -19773,7 +19806,11 @@ function hgCfBuildSetup(rows, opts, fc) {
           return { family: v.family, name: v.name, lean: v.lean, why: v.why || '' };
         }),
         desks: (f.confluence.desks || []).map(function (dsk) {
-          return { desk: dsk.desk, lean: dsk.lean, long: dsk.long, short: dsk.short, why: dsk.why || '' };
+          return {
+            desk: dsk.desk, lean: dsk.lean, long: dsk.long, short: dsk.short, why: dsk.why || '',
+            perfect: dsk.perfect === true ? true : undefined,
+            perfectWhy: dsk.perfectWhy || ''
+          };
         }),
         deskWhy: f.confluence.deskWhy || ''
       };
@@ -20749,6 +20786,272 @@ function hgCfUltimate(scalp, swing) {
   }
 }
 
+/* hg-v1329: the page object the shared homes are attached to. */
+function hgCfHost() {
+  if (typeof window !== 'undefined' && window) return window;
+  if (typeof globalThis !== 'undefined') return globalThis;
+  return null;
+}
+
+/* Real reads only. Grade and tally are not set here: this desk does not have
+   them, and inventing either would be an unmeasured claim. */
+function hgCfPerfectReads(side) {
+  var reads = {};
+  var host = hgCfHost();
+  try {
+    var newsFn = (typeof hgNewsMark === 'function') ? hgNewsMark : (host && host.hgNewsMark);
+    if (typeof newsFn === 'function') {
+      var mk = newsFn('XAUUSD');
+      if (mk && (mk.risk === 'blackout' || mk.risk === 'high' || mk.risk === 'med' || mk.risk === 'low')) reads.newsRisk = mk.risk;
+    }
+  } catch (eN) {}
+  try {
+    var fundFn = (typeof hgFundamentalRegime === 'function') ? hgFundamentalRegime : (host && host.hgFundamentalRegime);
+    if (typeof fundFn === 'function') {
+      var reg = fundFn('GOLD');
+      var regime = reg && reg.regime;
+      if (regime === 'bullish' || regime === 'bearish') {
+        var withDir = (side === 'long') ? (regime === 'bullish') : (regime === 'bearish');
+        reads.fundamentalVerdict = withDir ? 'with' : 'against';
+      }
+    }
+  } catch (eF) {}
+  try {
+    var feedFn = (typeof hgGoldFreeFeedVerdicts === 'function') ? hgGoldFreeFeedVerdicts : (host && host.hgGoldFreeFeedVerdicts);
+    var macroFn = (typeof getGoldMacroCached === 'function') ? getGoldMacroCached : (host && host.getGoldMacroCached);
+    if (typeof feedFn === 'function') {
+      var macro = null;
+      try { if (typeof macroFn === 'function') macro = macroFn(); } catch (eM) { macro = null; }
+      var map = feedFn({ macro: macro }, side) || {};
+      var keys = Object.keys(map), readable = 0, against = [], i, k, v;
+      for (i = 0; i < keys.length; i++) {
+        k = keys[i];
+        if (String(k).indexOf('free:') !== 0) continue;
+        v = map[k];
+        if (v !== true && v !== false) continue;
+        readable++;
+        if (v === false) against.push(String(k).slice(5));
+      }
+      if (readable > 0) reads._witness = { readable: true, against: against.length > 0, names: against.join(', ') };
+    }
+  } catch (eG) {}
+  return reads;
+}
+
+function hgCfPerfectAsk(setup, conf) {
+  /* The shared predicate (hg-perfect-setup.js). A filter, never a gate:
+     it cannot form a setup and it cannot move a stop. Grade and tally stay
+     unset on a candle bracket, so the bar names the leg it could not read. */
+  var out = { asked: false, perfect: false, plus: false, why: [], line: '' };
+  try {
+    var host = hgCfHost();
+    var fn = (typeof hgPerfectFormation === 'function') ? hgPerfectFormation
+      : (host && typeof host.hgPerfectFormation === 'function' ? host.hgPerfectFormation : null);
+    if (typeof fn !== 'function') {
+      out.line = 'The shared perfect bar is not loaded, so nothing is called perfect.';
+      return out;
+    }
+    if (!setup || setup.formed !== true || (setup.dir !== 'BULL' && setup.dir !== 'BEAR')) {
+      out.asked = true;
+      out.line = 'No formed setup, so the perfect bar was not asked to mint one.';
+      return out;
+    }
+    var side = setup.dir === 'BULL' ? 'long' : 'short';
+    var famAgainst = null;
+    if (conf && typeof conf.familiesAgainst === 'number') famAgainst = conf.familiesAgainst;
+    else if (setup.confluenceView && typeof setup.confluenceView.familiesAgainst === 'number') famAgainst = setup.confluenceView.familiesAgainst;
+    var cand = { dir: side, entry: setup.entry, stop: setup.stop, t1: setup.tp1 };
+    if (typeof famAgainst === 'number') cand.oppose = famAgainst;
+    var reads = hgCfPerfectReads(side);
+    if (reads && reads._witness) {
+      cand.goldFreeWitness = reads._witness;
+      delete reads._witness;
+    }
+    var r = fn(cand, reads);
+    out.asked = true;
+    out.perfect = !!(r && r.perfect);
+    out.plus = !!(r && r.plus);
+    out.why = (r && Array.isArray(r.why)) ? r.why.slice() : [];
+    out.line = out.perfect
+      ? ((out.plus ? 'PERFECT+ ' : 'PERFECT ') + 'on this candle bracket. The shared bar passed. It does not move the stop.')
+      : ('Not perfect. ' + (out.why.length ? out.why.join('; ') : 'the shared bar was not met') + '. The setup is unchanged.');
+    return out;
+  } catch (eAsk) {
+    out.line = 'The perfect bar could not be read. Nothing was called perfect.';
+    return out;
+  }
+}
+
+function hgCfWalk(rows, opts) {
+  /* In-sample only. The settler is hgFwdSettleOne — this function does not
+     re-walk a bar. Higher frames are not passed in. A tape whose times are
+     not strictly increasing can see the future, so it counts nothing. */
+  var label = 'in-sample on this tape only. Not a forward result and not a probability.';
+  var out = { ok: false, label: label, formed: 0, tp1: 0, stop: 0, expired: 0, open: 0, counted: 0, why: '' };
+  try {
+    if (!Array.isArray(rows) || rows.length < 43) {
+      out.why = 'The tape is too thin to walk. Nothing was counted as a win.';
+      return out;
+    }
+    var i, prev = -Infinity, t;
+    for (i = 0; i < rows.length; i++) {
+      t = +(rows[i] && rows[i].t);
+      if (!isFinite(t) || t <= prev) {
+        out.why = 'Bar times are not strictly increasing, so the walk stood aside. A walk that can see the future counts nothing. Nothing was counted as a win.';
+        return out;
+      }
+      prev = t;
+    }
+    if (typeof goldCandleForecast !== 'function' || typeof hgCfBuildSetup !== 'function') {
+      out.why = 'The candle reader is not loaded, so nothing was counted as a win.';
+      return out;
+    }
+    var host = hgCfHost();
+    var settle = (typeof hgFwdSettleOne === 'function') ? hgFwdSettleOne : (host && host.hgFwdSettleOne);
+    var n = rows.length;
+    var start = Math.max(40, n - 36);
+    var end = n - 2;
+    if (!(end > start)) {
+      out.why = 'Not enough closed bars after the window. Nothing was counted as a win.';
+      return out;
+    }
+    var tf = (opts && opts.tf) || '15m';
+    var horizon = (opts && isFinite(+opts.horizonBars)) ? +opts.horizonBars : (tf === '4h' ? 20 : 32);
+    for (i = start; i < end; i++) {
+      var slice = rows.slice(0, i + 1);
+      var fc = goldCandleForecast(slice, null, null);
+      if (!fc) continue;
+      var setup = hgCfBuildSetup(slice, { tf: tf }, fc);
+      if (!setup || setup.formed !== true) continue;
+      if (setup.dir !== 'BULL' && setup.dir !== 'BEAR') continue;
+      var entry = +setup.entry, stopPx = +setup.stop, t1 = +setup.tp1;
+      if (!isFinite(entry) || !isFinite(stopPx) || !isFinite(t1)) continue;
+      var dir = setup.dir === 'BULL' ? 'long' : 'short';
+      var risk = Math.abs(entry - stopPx);
+      if (!(risk > 0)) continue;
+      if (dir === 'long' ? !(t1 > entry) : !(t1 < entry)) continue;
+      if (typeof settle !== 'function') {
+        out.why = 'The settler is not loaded, so nothing was counted.';
+        return out;
+      }
+      var barT = +(slice[slice.length - 1] && slice[slice.length - 1].t);
+      var rec = {
+        state: 'open', sym: 'XAUUSD', tf: tf, dir: dir,
+        entry: entry, stop: stopPx, t1: t1, risk: risk,
+        rr: Math.abs(t1 - entry) / risk,
+        barT: barT, horizonBars: horizon
+      };
+      var settled = settle(rec, rows);
+      out.formed++;
+      out.counted++;
+      var st = settled && settled.state;
+      if (st === 't1') out.tp1++;
+      else if (st === 'stop') out.stop++;
+      else if (st === 'expired') out.expired++;
+      else out.open++;
+    }
+    out.ok = true;
+    out.why = out.formed
+      ? (out.formed + ' formed, ' + out.tp1 + ' reached TP1, ' + out.stop + ' stopped, ' + out.expired + ' expired, ' + out.open + ' still open. Higher frames were not fed into the walk. ' + label)
+      : ('No setup formed inside this window. Nothing was counted as a win. Higher frames were not fed into the walk. ' + label);
+    return out;
+  } catch (eWalk) {
+    return { ok: false, label: label, formed: 0, tp1: 0, stop: 0, expired: 0, open: 0, counted: 0,
+      why: 'The walk could not be read. Nothing was counted as a win.' };
+  }
+}
+
+function hgCfForwardMark(setup, rows, tf) {
+  /* Out of sample. Resolve older records first, then record a formed setup.
+     The ledger is the only settler. A missing ledger counts nothing. */
+  var out = { recorded: 0, resolved: 0, why: '' };
+  try {
+    var host = hgCfHost();
+    var resolve = (typeof hgFwdResolve === 'function') ? hgFwdResolve : (host && host.hgFwdResolve);
+    var record = (typeof hgFwdRecordScan === 'function') ? hgFwdRecordScan : (host && host.hgFwdRecordScan);
+    if (typeof resolve !== 'function' || typeof record !== 'function') {
+      out.why = 'The forward ledger is not loaded, so nothing was recorded.';
+      return out;
+    }
+    var frame = tf || (setup && setup.tf) || '15m';
+    if (Array.isArray(rows) && rows.length) {
+      try { out.resolved = +resolve('XAUUSD', frame, rows) || 0; } catch (eR) { out.resolved = 0; }
+    }
+    var formed = setup && setup.formed === true && (setup.dir === 'BULL' || setup.dir === 'BEAR');
+    if (!formed) {
+      out.why = 'No new setup was recorded. A setup that is not formed is not a forward test.'
+        + (out.resolved ? (' Settled ' + out.resolved + ' older record' + (out.resolved === 1 ? '' : 's') + '.') : '');
+      return out;
+    }
+    var dir = setup.dir === 'BULL' ? 'long' : 'short';
+    var entry = +setup.entry, stopPx = +setup.stop, t1 = +setup.tp1;
+    var risk = Math.abs(entry - stopPx);
+    var sideOk = isFinite(entry) && isFinite(stopPx) && isFinite(t1) && risk > 0 && (dir === 'long' ? t1 > entry : t1 < entry);
+    if (!sideOk) {
+      out.why = 'The formed setup has no settleable bracket, so it was not recorded.';
+      return out;
+    }
+    var bar = (Array.isArray(rows) && rows.length) ? rows[rows.length - 1] : null;
+    var signalT = (bar && isFinite(+bar.t)) ? +bar.t : undefined;
+    var horizon = frame === '15m' ? 96 : 20;
+    out.recorded = +record('CANDLE FORECAST', frame, [{
+      sym: 'XAUUSD',
+      dir: dir,
+      entry: entry,
+      stop: stopPx,
+      t1: t1,
+      mark: entry,
+      signalT: signalT,
+      mechanic: frame === '4h' ? 'SWING' : 'SCALP',
+      ticket: setup.ticket === true,
+      perfect: setup.perfect === true ? true : undefined,
+      perfectPlus: setup.perfectPlus === true ? true : undefined
+    }], { horizonBars: horizon }) || 0;
+    out.why = out.recorded
+      ? ('Recorded ' + out.recorded + ' new setup' + (out.recorded === 1 ? '' : 's') + ' on the forward ledger. Settled ' + out.resolved + ' older record' + (out.resolved === 1 ? '' : 's') + ' on bars that printed after they were logged.')
+      : 'No new setup was recorded. The same bar was already on the forward ledger, or the ledger declined it.';
+    return out;
+  } catch (eFwd) {
+    out.recorded = 0;
+    out.why = 'The forward ledger could not be written. Nothing was counted.';
+    return out;
+  }
+}
+
+function hgCfMeasure(scalp, swing, rows15, rows4) {
+  /* Asks the perfect bar, walks this tape, and marks the forward ledger.
+     None of the three changes a formed flag or a stop. */
+  var out = { scalpAsk: null, swingAsk: null, walk15: null, walk4: null, fwd15: null, fwd4: null, fwdHtml: '' };
+  try {
+    out.scalpAsk = hgCfPerfectAsk(scalp, scalp && scalp.confluenceView);
+    out.swingAsk = hgCfPerfectAsk(swing, swing && swing.confluenceView);
+    if (scalp && out.scalpAsk) {
+      if (out.scalpAsk.perfect === true) scalp.perfect = true;
+      if (out.scalpAsk.plus === true) scalp.perfectPlus = true;
+      scalp.perfectWhy = out.scalpAsk.line || '';
+    }
+    if (swing && out.swingAsk) {
+      if (out.swingAsk.perfect === true) swing.perfect = true;
+      if (out.swingAsk.plus === true) swing.perfectPlus = true;
+      swing.perfectWhy = out.swingAsk.line || '';
+    }
+    out.walk15 = hgCfWalk(rows15, { tf: '15m', horizonBars: 32 });
+    out.walk4 = hgCfWalk(rows4, { tf: '4h', horizonBars: 20 });
+    out.fwd15 = hgCfForwardMark(scalp, rows15, '15m');
+    out.fwd4 = hgCfForwardMark(swing, rows4, '4h');
+    var host = hgCfHost();
+    var panel = host && host.hgFwdPanelHTML;
+    if (typeof panel === 'function') {
+      try { out.fwdHtml = panel('CANDLE FORECAST', { title: 'FORWARD — candle forecast, out of sample' }) || ''; }
+      catch (eP) { out.fwdHtml = ''; }
+    }
+    return out;
+  } catch (eM) {
+    if (!out.scalpAsk) out.scalpAsk = { asked: false, perfect: false, plus: false, why: [], line: 'The perfect bar could not be read. Nothing was called perfect.' };
+    return out;
+  }
+}
+
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
   window.hgCfConfluence = hgCfConfluence;
@@ -20762,4 +21065,8 @@ if (typeof window !== "undefined") {
   window.hgCfHigherFrame = hgCfHigherFrame;
   window.hgCfUltimate = hgCfUltimate;
   window.hgCfFeedBoard = hgCfFeedBoard;
+  window.hgCfPerfectAsk = hgCfPerfectAsk;
+  window.hgCfWalk = hgCfWalk;
+  window.hgCfForwardMark = hgCfForwardMark;
+  window.hgCfMeasure = hgCfMeasure;
 }

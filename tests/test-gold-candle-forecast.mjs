@@ -10,14 +10,44 @@ let pass = 0;
 const ok = (c, m) => { if (!c) throw new Error('FAIL: ' + m); pass++; console.log('  ok —', m); };
 
 const src = fs.readFileSync(path.join(root, 'goldind.js'), 'utf8');
-const start = src.indexOf('function hgCfPack');
-const end = src.indexOf('if (typeof window', start);
-if (start < 0 || end < 0) throw new Error('engine not found');
+/* hg-v1330: LIFT BY NAMED FUNCTION, NOT BY SLICE RANGE.
+   This used to slice from `function hgCfPack` to the first `if (typeof window` after
+   it. That worked only while no `if (typeof window ...)` appeared between the helpers
+   and the engine — and a later pack added one, so the slice began cutting a function
+   in half and the sandbox died with "Unexpected end of input", which reads like the
+   ENGINE is broken rather than the harness.
+   Brace-counting each declaration is immune to what is added between them, and this
+   also lifts by NAME so a rename fails loudly here (hg-v956) instead of silently
+   producing a truncated unit. Comment- and string-aware, because a doc comment that
+   quotes code contains braces that a naive counter counts. */
+function liftFn(text, name) {
+  const start = text.indexOf('function ' + name + '(');
+  if (start < 0) throw new Error('could not lift ' + name + ' from goldind.js (renamed or deleted?)');
+  let depth = 0, i = text.indexOf('{', start);
+  for (; i < text.length; i++) {
+    const c = text[i];
+    if (c === '/' && text[i + 1] === '/') { while (i < text.length && text[i] !== '\n') i++; continue; }
+    if (c === '/' && text[i + 1] === '*') { i += 2; while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++; i += 2; continue; }
+    if (c === '{') { depth++; continue; }
+    if (c === '}') { depth--; if (depth === 0) return text.slice(start, i + 1); continue; }
+    if (c === '"' || c === "'" || c === '`') { const q = c; i++; while (i < text.length && text[i] !== q) { if (text[i] === '\\') i++; i++; } i++; continue; }
+  }
+  throw new Error('unbalanced braces lifting ' + name);
+}
+/* ONLY the helpers the engine actually calls — a longer list drags in their own
+   dependencies for nothing, and the engine's own catch turns a MISSING helper into
+   `return null`, so an incomplete list fails quietly instead of loudly. The last three
+   were added by the hg-v1329 pack (a shared higher-frame read, a located side, and the
+   setup-parts joiner) and their absence is what made a rising tape read as no call. */
+const NEEDED = ['hgCfPack', 'hgCfCandlePatterns', 'hgCfAdvancedPatterns', 'hgCfStructure', 'aAdvance',
+  'hgCfGoldDesk', 'hgCfHigherFrame', 'hgCfLocatedSide', 'hgCfSetupParts', 'goldCandleForecast'];
+const lifted = NEEDED.map(n => liftFn(src, n)).join('\n');
+ok(lifted.length > 20000, 'the engine and its helpers were lifted (' + lifted.length + ' chars)');
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(
   fs.readFileSync(path.join(root, 'indicators.js'), 'utf8')
-  + '\n' + src.slice(start, end)
+  + '\n' + lifted
   + '\nthis.goldCandleForecast = goldCandleForecast;\n',
   ctx
 );
