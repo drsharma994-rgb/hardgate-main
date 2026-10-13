@@ -18395,3 +18395,63 @@ W.hgGoldAuditOmniHtml = hgGoldAuditOmniHtml;          /* hg-v1298 */
 W.hgGoldAuditPineHtml = hgGoldAuditPineHtml;          /* hg-v1298 */
 W.hgGoldAuditGaneshHtml = hgGoldAuditGaneshHtml;      /* hg-v1298 */
 })();
+
+/* ========================================================================
+   hg-v1306: goldCandleForecast — next-candle projection used by the
+   CANDLE FORECAST tab. DELIBERATELY OUTSIDE the IIFE above so it reads
+   the plain-global `atr` / `ema` from indicators.js rather than the
+   IIFE's private helpers (the v14-2 original on origin/main at
+   commit 05585c03 referenced _atr/_ema/__last which only existed inside
+   this file's IIFE, so every call returned null silently through its
+   own try/catch — the hg-v955 shape). Bar-only pure math; no fetch, no
+   gate, no forward-ledger mark. The CANDLE FORECAST module calls this
+   on 50 × 15m rows from getXAUCandles and renders the output.
+   ======================================================================== */
+(function(G){
+'use strict';
+if (!G) return;
+function goldCandleForecast(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 20) return null;
+    var n = rows.length;
+    var current = rows[n-1];
+    if (!current || !isFinite(+current.c) || !isFinite(+current.h) || !isFinite(+current.l)) return null;
+    if (typeof G.atr !== 'function' || typeof G.ema !== 'function') return null;
+    var atrArr = G.atr(rows, 14);
+    var atrLast = (atrArr && atrArr.length) ? atrArr[atrArr.length - 1] : NaN;
+    if (!isFinite(atrLast) || atrLast <= 0){
+      /* fallback: last-bar range when ATR is unreadable */
+      atrLast = Math.max(0, (+current.h) - (+current.l));
+    }
+    if (!isFinite(atrLast) || atrLast <= 0) return null;
+    var closes = rows.map(function(r){ return +r.c; });
+    var e9 = G.ema(closes, 9);
+    if (!e9 || e9.length < 2) return null;
+    var e9_last = e9[n-1], e9_prev = e9[n-2];
+    if (!isFinite(e9_last) || !isFinite(e9_prev)) return null;
+    if (e9_last === e9_prev) return null;      /* flat EMA9 is no direction */
+    var dir = (e9_last > e9_prev) ? 'BULL' : 'BEAR';
+    var span = atrLast * 0.8;
+    var high = (+current.h) + (dir === 'BULL' ? span : -span);
+    var low  = (+current.l) - (dir === 'BULL' ? span : -span);
+    var cClose = +current.c;
+    var risk = Math.abs(cClose - low);
+    if (!isFinite(risk) || risk < 0.1) risk = atrLast * 0.5;
+    var sign = (dir === 'BULL') ? 1 : -1;
+    var tp1 = cClose + sign * risk;
+    var tp2 = cClose + sign * risk * 2;
+    var sl  = (dir === 'BULL') ? low : high;
+    var conf = (cClose > 0) ? Math.min(1, atrLast / cClose) : 0;
+    return {
+      dir: dir,
+      expectedHigh: +high.toFixed(2),
+      expectedLow: +low.toFixed(2),
+      tp1: +tp1.toFixed(2),
+      tp2: +tp2.toFixed(2),
+      sl: +sl.toFixed(2),
+      confidence: conf
+    };
+  }catch(e){ return null; }
+}
+G.goldCandleForecast = goldCandleForecast;
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null));
