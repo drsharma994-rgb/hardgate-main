@@ -245,6 +245,18 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
+function tmRsiDivChipHtml(r){
+  if (!r || !r.rsiDivLong && !r.rsiDivShort) return '';
+  var dir = r.rsiDivLong ? 'long' : 'short';
+  return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'RSI DIV' : 'RSI DIV') + '</span>';
+}
+
+function tmVolDivChipHtml(r){
+  if (!r || !r.volDivLong && !r.volDivShort) return '';
+  var dir = r.volDivLong ? 'long' : 'short';
+  return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'VOL DIV' : 'VOL DIV') + '</span>';
+}
+
 function tmBarOpenSec(row){
   var t = row && row.t;
   if (!isFinite(+t)) return NaN;
@@ -302,7 +314,26 @@ function trendmxSetupGrade(r, dir){
   }
   var value = tmValueState(r, dir);
   for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+  /* hg-v1331: AN UNREAD INPUT ABSTAINS — IT DOES NOT REFUSE.
+     This line graded SKIP on `reasons.length` alone, and tmValueState pushes
+     a reason for every input it could not read: 'hurst unread', 'anchored
+     VWAP unread', '1h cloud unread', 'pullback volume unread'. On any tape
+     where those readers return nothing — the normal case — EVERY row carried
+     at least one unread reason, so every row graded SKIP and the desk minted
+     NOTHING AT ALL. That is the three-state rule broken: a series nobody could
+     read is not evidence against a setup, it is the absence of evidence.
+     The unread reasons are still reported so a reader can see exactly what
+     could not be read; only a REAL refusal blocks TRADE. Every genuine gate
+     (extended from the EMA, ADX exhaustion or chop, RSI against, OBV
+     divergence, funding, BTC structure, below/inside the 1h cloud, no pullback
+     into the 1h EMA21, distribution volume) still refuses exactly as before. */
+  var blocking = [];
+  for (var ri = 0; ri < reasons.length; ri++){
+    if (/unread/i.test(reasons[ri])) continue;
+    blocking.push(reasons[ri]);
+  }
+  return { grade: blocking.length ? 'SKIP' : 'TRADE', reasons: reasons, blocking: blocking,
+           unread: reasons.length - blocking.length, volConf: volConf, value: value };
 }
 function tmValueState(row, dir){
   var out = { reasons: [], distAtr: null, adx4: null, touched: null };
@@ -3786,6 +3817,43 @@ function trendmxEmaTag(rows4h, dir){
   }
   return { state: 'waiting', ema: name };
 }
+function tmRsiDivergence(rows, dir) {
+  if (!rows || rows.length < 30) return false;
+  const rsi = rsi(rows, 14);
+  if (!rsi) return false;
+  const n = rows.length;
+  for (let i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(rsi[i])) continue;
+    const prevIdx = i - 5;
+    if (prevIdx < 5) continue;
+
+    if (dir === 'long') {
+      if (rows[i].l < rows[prevIdx].l && rsi[i] > rsi[prevIdx]) return true;
+    } else if (dir === 'short') {
+      if (rows[i].h > rows[prevIdx].h && rsi[i] < rsi[prevIdx]) return true;
+    }
+  }
+  return false;
+}
+
+function tmVolDivergence(rows, dir) {
+  if (!rows || rows.length < 30) return false;
+  const v = rows.map(r => r.v || r.volume);
+  const n = rows.length;
+  for (let i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(v[i])) continue;
+    const prevIdx = i - 5;
+    if (prevIdx < 5) continue;
+
+    if (dir === 'long') {
+      if (rows[i].l < rows[prevIdx].l && v[i] > v[prevIdx]) return true;
+    } else if (dir === 'short') {
+      if (rows[i].h > rows[prevIdx].h && v[i] < v[prevIdx]) return true;
+    }
+  }
+  return false;
+}
+
 function trendScore(rows1d, rows4h){
   var out = zeroResult();
   try{
@@ -3837,8 +3905,17 @@ function trendScore(rows1d, rows4h){
     if (ok1){
       var a = adx(rows1d, 14);
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
+
+      // Divergence Evidence (hg-v1021: RSI & Volume divergence on the 1D tape)
+      if (tmRsiDivergence(rows1d, 'long')) out.comps.rsiDivLong = 1;
+      else if (tmRsiDivergence(rows1d, 'short')) out.comps.rsiDivShort = 1;
+
+      if (tmVolDivergence(rows1d, 'long')) out.comps.volDivLong = 1;
+      else if (tmVolDivergence(rows1d, 'short')) out.comps.volDivShort = 1;
+
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
+
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -4531,6 +4608,7 @@ function trendmxCardStack(r, dir){
       style: 'swing', asset: 'crypto', ticker: ticker,
       clean: !!(gate && gate.clean7),
       nearClean: !!(gate && gate.nearClean),
+
       gatesPassed: gate ? gate.gatesPassed : undefined,
       gatesTotal: 7,
       tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
@@ -4634,22 +4712,25 @@ function trendmxConviction(row){
 /** Rows with fresh ⚡GOLDEN (EMA50/200 cross ≤10d) + bull cross + long plan + conviction. Pure. */
 function trendmxGoldenCrossSetups(rows){
   var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0,
+                noRow: 0, noCross: 0, noComps: 0, noPrice: 0, dir: 0, conv: 0, plan: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
-    if (!r || r.freshCross !== 'GOLDEN') continue;
-    if (!r.comps || r.comps.d1Cross <= 0) continue;
+    if (!r){ out.held.noRow++; continue; }
+    if (r.freshCross !== 'GOLDEN'){ out.held.noCross++; continue; }
+    if (!r.comps){ out.held.noComps++; continue; }
+    if (r.comps.d1Cross <= 0){ out.held.noComps++; continue; }
     /* hg-v1150: an unpriceable row is not a setup. hgBestLevels can price a
        plan straight off the tape, which is right for a THIN row — but a row
        whose own published price is unreadable is corrupt, and a corrupt row
        must not mint a ticket the board would show beside a price it cannot
        print. */
-    if (!isFinite(+r.price)) continue;
+    if (!isFinite(+r.price)){ out.held.noPrice++; continue; }
     var dir = tmDirOf(r);
-    if (dir !== 'long') continue;
+    if (dir !== 'long'){ out.held.dir++; continue; }
     var conv = trendmxConviction(r);
-    if (!conv) continue;
+    if (!conv){ out.held.conv++; continue; }
     if (tmCascadeDir(r.rows4h) !== 1){ out.held.cascade++; continue; }
     /* hg-v1150: THE ROW-CARRIED VETO IS RESPECTED. The closed-gate recompute
        below re-derives the 7-gate matrix off the tape, but it can never
@@ -4666,7 +4747,7 @@ function trendmxGoldenCrossSetups(rows){
     var tag = trendmxEmaTag(r.rows4h, dir);
     if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
     var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
     out.push({
       sym: r.sym, dir: 'long', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
@@ -4692,7 +4773,8 @@ function trendmxGoldenCrossSetups(rows){
    surface on the tab. Pure. */
 function trendmxDeathCrossSetups(rows){
   var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0,
+                noRow: 0, noCross: 0, noComps: 0, noPrice: 0, dir: 0, conv: 0, plan: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -4715,7 +4797,7 @@ function trendmxDeathCrossSetups(rows){
     var tag = trendmxEmaTag(r.rows4h, dir);
     if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
     var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
     out.push({
       sym: r.sym, dir: 'short', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
@@ -4805,7 +4887,7 @@ function tmSmcScanPass(rows, golden, death){
       r = cands[i];
       var dir = tmDirOf(r);
       var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!tmValidSetup(plan)) continue;
+      if (!tmValidSetup(plan)){ out.held.plan++; continue; }
       var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
       tmSmcMark(syn, r.rows4h);
       if (syn.smc) r.smc = syn.smc;
@@ -4917,6 +4999,7 @@ function trendmxFlowScan(rows){
       if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
     });
   }
+
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -5353,6 +5436,7 @@ function tmVolumeProfile(rows){
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
   var pivots = [];
+
   for (var i = 2; i < rows.length - 2; i++){
     if (dir === 'long'){
       if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
@@ -5894,6 +5978,7 @@ async function trendmxFormOne(ticket, row, ctx){
     var n = rows4.length - 1;
     if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
+
     var lastHigh = null, lastLow = null, si;
     for (si = 0; si < swings.length; si++){
       if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
@@ -6734,6 +6819,7 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     /* hg-v1012: the flow split, read off the stamps the scan left — the
        summary names the evidence the same way the cards do */
     if (r.flow && r.flow.verdict === 'with') flowW++;
+
     else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
@@ -7095,6 +7181,7 @@ function trendmxPerfectState(r){
    drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
 function trendmxAtrRegime(r){
   try{
+
     if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
     if (typeof hgAtrPercentile !== 'function') return null;
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
@@ -7451,6 +7538,7 @@ function trendmxFivePillars(r){
     if (r.flow.verdict === 'against') sentAgainst = true;
     if (r.flow.verdict === 'with') sentWith = true;
   }
+
   if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
     sentRead = true;
     try{
@@ -7826,6 +7914,7 @@ function trendmxTrendFormHTML(rows){
         var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
           + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
         /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
+
            minted tiers; anything below the NEAR floor (or a forming row with
            no majority, whose gate is null) is the house DRAFT ladder, never
            a fabricated 6/7 NEAR. */
@@ -8204,6 +8293,7 @@ async function trendmxPerfectEvidencePass(rows){
         }catch(eLc){ }
       }
       if (isFinite(+r.fundingPct)){
+
         reads.venueFundingPct = +r.fundingPct;
       /* hg-v1144: venue premium = venue funding minus the Binance twin */
       if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
@@ -8614,6 +8704,7 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
+
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -8840,6 +8931,34 @@ function mountTrendMatrix(el){
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
             state.death = trendmxDeathCrossSetups(state.rows);
+            /* hg-v1332: THE CROSS DESKS NOW SAY WHY THEY ARE EMPTY.
+               Both desks drop a row at six points, and four of those
+               dropped it SILENTLY — so a board with no golden and no
+               death setup reported nothing at all, which is exactly
+               how it was reported to me. The counters are surfaced
+               here as plain words a reader can act on. */
+            try {
+              var gH = state.golden.held || {}, dH = state.death.held || {};
+              var why = function(h, tag) {
+                var bits = [];
+                if (h.noCross) bits.push(h.noCross + ' without a fresh ' + tag + ' cross');
+                if (h.noComps) bits.push(h.noComps + ' with the daily EMAs not aligned');
+                if (h.noPrice) bits.push(h.noPrice + ' with an unreadable price');
+                if (h.dir) bits.push(h.dir + ' on the wrong side of the cross');
+                if (h.conv) bits.push(h.conv + ' with no conviction');
+                if (h.cascade) bits.push(h.cascade + ' with no 4h cascade');
+                if (h.gates) bits.push(h.gates + ' held by the 7-gate matrix');
+                if (h.grade) bits.push(h.grade + ' refused at the grade');
+                if (h.waiting) bits.push(h.waiting + ' waiting on an EMA tag');
+                if (h.plan) bits.push(h.plan + ' with an invalid plan');
+                return bits.length ? bits.join(' · ') : 'nothing was held';
+              };
+              state.crossWhy = {
+                rows: (state.rows || []).length,
+                golden: why(gH, 'GOLDEN'),
+                death: why(dH, 'DEATH')
+              };
+            } catch (eWhy) { state.crossWhy = null; }
           } catch (eB) {}
           renderAll();
           setProg(info.total ? info.done / info.total : 0);
@@ -8860,6 +8979,22 @@ function mountTrendMatrix(el){
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
       renderAll();
+      /* hg-v1333: THE BOARD NAMES ITS OWN NUMBERS.
+         A tab that paints nothing in ANY of its categories (CLEAN, NEAR,
+         GOLDEN, DEATH, CONVICTION, STRONG) has to say which link broke: did
+         the scan produce no rows at all, did the fetches fail, or did rows
+         arrive and get held? Every one of those is a different bug and the
+         board used to look identical for all three. This line prints the
+         counts, and the cross desks' held reasons, right under the scan. */
+      try {
+        var whyX = state.crossWhy || {};
+        setStatus('Scan done · ' + results.length + ' rows on the board · '
+          + (state.crypto || []).length + ' crypto setup(s) · '
+          + (state.golden || []).length + ' GOLDEN · ' + (state.death || []).length + ' DEATH'
+          + (failed ? (' · ' + failed + ' fetch failure(s)') : '')
+          + (whyX.golden ? (' · golden held: ' + whyX.golden) : '')
+          + (whyX.death ? (' · death held: ' + whyX.death) : ''));
+      } catch (eWhy2) {}
       /* hg-v1039: THE CROWN JOINS THE FORWARD BOOK — the desk has crowned
          CLEAN / PERFECT rows for its whole life and never recorded one, so
          'does the trend-matrix crown pay?' could never be asked. Each 7/7

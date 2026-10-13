@@ -314,7 +314,26 @@ function trendmxSetupGrade(r, dir){
   }
   var value = tmValueState(r, dir);
   for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+  /* hg-v1331: AN UNREAD INPUT ABSTAINS — IT DOES NOT REFUSE.
+     This line graded SKIP on `reasons.length` alone, and tmValueState pushes
+     a reason for every input it could not read: 'hurst unread', 'anchored
+     VWAP unread', '1h cloud unread', 'pullback volume unread'. On any tape
+     where those readers return nothing — the normal case — EVERY row carried
+     at least one unread reason, so every row graded SKIP and the desk minted
+     NOTHING AT ALL. That is the three-state rule broken: a series nobody could
+     read is not evidence against a setup, it is the absence of evidence.
+     The unread reasons are still reported so a reader can see exactly what
+     could not be read; only a REAL refusal blocks TRADE. Every genuine gate
+     (extended from the EMA, ADX exhaustion or chop, RSI against, OBV
+     divergence, funding, BTC structure, below/inside the 1h cloud, no pullback
+     into the 1h EMA21, distribution volume) still refuses exactly as before. */
+  var blocking = [];
+  for (var ri = 0; ri < reasons.length; ri++){
+    if (/unread/i.test(reasons[ri])) continue;
+    blocking.push(reasons[ri]);
+  }
+  return { grade: blocking.length ? 'SKIP' : 'TRADE', reasons: reasons, blocking: blocking,
+           unread: reasons.length - blocking.length, volConf: volConf, value: value };
 }
 function tmValueState(row, dir){
   var out = { reasons: [], distAtr: null, adx4: null, touched: null };
