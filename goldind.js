@@ -18397,15 +18397,42 @@ W.hgGoldAuditGaneshHtml = hgGoldAuditGaneshHtml;      /* hg-v1298 */
 })();
 
 /* ========================================================================
-   hg-v1316: CANDLE FORECAST — MAXIMUM patterns + every gold tab's
-   directional reader + SCALP (15m) AND SWING (4h) setups side by side.
+   hg-v1317: CANDLE FORECAST — "Ultimate AI Confluence" synthesis engine
+   on top of hg-v1316's 46 patterns + 8 structural reads + 10 directional
+   gold-tab readers + free feeds + indicator stack + Pine states + regime.
 
-   The user asked a THIRD time: "MAXIMUM advanced candle stick pattern
-   recognition … all the indicators, core strategies, fundamentals,
-   technicals used in all the gold tabs (each and every gold tab with
-   all the analysis) to form a confluence with candle stick patterns
-   and then form a setup in candle forecast tab, make a scalp and a
-   swing setup". This extends hg-v1315 with three concrete additions:
+   The user asked, verbatim: *"'Ultimate AI Confluence' engine in candle
+   forecast tab and do bump the version so that i will come to know whats
+   been updated"*. The honest shape: one more synthesis layer on the
+   candle forecast tab that READS what the existing engine already
+   produces and renders a single AI-style confidence TIER / SCORE across
+   the whole stack, so a trader sees ULTIMATE / STRONG / MODERATE / WEAK /
+   NO-GO at a glance instead of having to tally seven groups by eye.
+
+     (D) hgCfUltimateAiConfluence(forecast) — new. Takes the forecast
+                          object goldCandleForecast returns and computes
+                          a WEIGHTED SCORE across seven layers (patterns
+                          25, structure 15, desk readers 25, free feeds
+                          10, indicators 10, Pine states 10, regime 5),
+                          each layer scoring WITH / (WITH + AGAINST) on
+                          the pattern direction, with UNREAD layers
+                          excluding their own weight from the maximum
+                          (hg-v989: a layer that could not read does not
+                          get a fabricated score). The final score is
+                          `Σ(layerScore × weight) / Σ(weightReadable) × 100`,
+                          so a stack with half the layers unread is still
+                          judged on its own evidence. Tier thresholds:
+                          ULTIMATE ≥80 AND coverage ≥50%; STRONG ≥65 AND
+                          coverage ≥40%; MODERATE ≥50 AND coverage ≥25%;
+                          WEAK ≥35; NO-GO otherwise (or forecast tier
+                          CONFLICT / NEUTRAL). News-lock DOWNGRADES one
+                          tier (hg-v992 BOTH-ways: a tier-1 window is a
+                          wait, never a direction veto). The function is
+                          CALLED from inside goldCandleForecast so every
+                          forecast object carries .ultimateAi; renderers
+                          read that field.
+
+   Preserved from hg-v1316 and earlier:
 
      (A) hgCfMaxPatterns   — 15 further candlestick patterns BEYOND the
                           hg-v1314 16 and the hg-v1315 15, bringing the
@@ -19648,8 +19675,9 @@ function goldCandleForecast(rows, ctx){
     } else if (bearBias > bullBias && bearBias >= bullBias * 2){
       dir = 'BEAR'; dirSide = 'short';
     } else {
-      /* NEUTRAL — return a readable row with no setup */
-      return {
+      /* NEUTRAL — return a readable row with no setup. hg-v1317: carry
+         .ultimateAi too so the renderer always has a field to read. */
+      var neutralOut = {
         dir: 'NEUTRAL', side: null,
         tier: 'NEUTRAL',
         mode: mode, modeLabel: modeLabel,
@@ -19665,6 +19693,8 @@ function goldCandleForecast(rows, ctx){
         confidence: 0,
         note: 'Patterns and structure disagree or do not vote. The tape has no clear next-candle lean.'
       };
+      try{ neutralOut.ultimateAi = hgCfUltimateAiConfluence(neutralOut); }catch(_){ neutralOut.ultimateAi = null; }
+      return neutralOut;
     }
 
     /* -- leg (3a): confluence tally against the pattern direction (hg-v1314) */
@@ -19752,7 +19782,7 @@ function goldCandleForecast(rows, ctx){
       sl = null; tp1 = null; tp2 = null;
     }
 
-    return {
+    var fcastOut = {
       dir: dir,
       side: dirSide,
       tier: tier,
@@ -19778,7 +19808,159 @@ function goldCandleForecast(rows, ctx){
       confidence: confidence,
       note: note
     };
+    /* hg-v1317: synthesise the whole stack into a single AI confluence
+       tier / score. Called INSIDE the forecast so every renderer that
+       reads goldCandleForecast's output automatically gets .ultimateAi. */
+    try{ fcastOut.ultimateAi = hgCfUltimateAiConfluence(fcastOut); }catch(_){ fcastOut.ultimateAi = null; }
+    return fcastOut;
   }catch(e){ return null; }
+}
+
+/* ----- hgCfUltimateAiConfluence(forecast)  [hg-v1317]
+   The "Ultimate AI Confluence" synthesis engine. Takes a forecast object
+   from goldCandleForecast and computes a weighted score across seven
+   layers — patterns · structure · desk readers · free feeds · indicators ·
+   Pine states · regime — then calls a tier against score AND coverage.
+
+   Each layer's score is WITH / (WITH + AGAINST) on the pattern direction.
+   An UNREAD layer excludes its own weight from the max (hg-v989: a
+   layer that could not read does not get a fabricated score). The
+   normalised score is then Σ(layerScore × weight) / Σ(weightReadable) × 100
+   so a stack with half the layers dark is still judged on the half
+   it has, honestly rather than as if the dark half had agreed.
+
+   News lock DOWNGRADES one tier (hg-v992 BOTH-ways rule). CONFLICT
+   and NEUTRAL forecasts return NO-GO irrespective of the layer tally,
+   because a pattern/structure disagreement is itself the stack saying
+   no direction stood up on this bar.
+
+   Returns null for a nullish input. */
+function hgCfUltimateAiConfluence(forecast){
+  if (!forecast || typeof forecast !== 'object') return null;
+
+  var WEIGHTS = {
+    patterns:  25,
+    structure: 15,
+    desk:      25,
+    freeFeeds: 10,
+    indicator: 10,
+    pine:      10,
+    regime:     5
+  };
+
+  function sideCount(bag, side){
+    if (!bag) return { w: 0, a: 0 };
+    var bull = Array.isArray(bag.bull) ? bag.bull.length : 0;
+    var bear = Array.isArray(bag.bear) ? bag.bear.length : 0;
+    return (side === 'short') ? { w: bear, a: bull } : { w: bull, a: bear };
+  }
+
+  function layerScore(w, a){
+    var tot = w + a;
+    if (tot <= 0) return null;
+    return w / tot;
+  }
+
+  var side = forecast.side === 'long' ? 'long' : (forecast.side === 'short' ? 'short' : null);
+  var conf = forecast.confluence || null;
+  var desk = forecast.deskReads  || null;
+
+  var pat = sideCount(forecast.patterns,  side);
+  var str = sideCount(forecast.structure, side);
+  var deskW = desk ? (+desk.withN     || 0) : 0;
+  var deskA = desk ? (+desk.againstN  || 0) : 0;
+  var ffW   = conf ? (+conf.freeWith  || 0) : 0;
+  var ffA   = conf ? (+conf.freeAgainst || 0) : 0;
+  var indW  = conf ? (+conf.indWith   || 0) : 0;
+  var indA  = conf ? (+conf.indAgainst || 0) : 0;
+  var pnW   = conf ? (+conf.pineWith  || 0) : 0;
+  var pnA   = conf ? (+conf.pineAgainst || 0) : 0;
+  var regW  = 0, regA = 0;
+  if (conf && conf.regimeSays === true)  regW = 1;
+  else if (conf && conf.regimeSays === false) regA = 1;
+
+  var LAYERS = [
+    { name: 'patterns',  w: pat.w,  a: pat.a,  weight: WEIGHTS.patterns  },
+    { name: 'structure', w: str.w,  a: str.a,  weight: WEIGHTS.structure },
+    { name: 'desk',      w: deskW,  a: deskA,  weight: WEIGHTS.desk      },
+    { name: 'freeFeeds', w: ffW,    a: ffA,    weight: WEIGHTS.freeFeeds },
+    { name: 'indicator', w: indW,   a: indA,   weight: WEIGHTS.indicator },
+    { name: 'pine',      w: pnW,    a: pnA,    weight: WEIGHTS.pine      },
+    { name: 'regime',    w: regW,   a: regA,   weight: WEIGHTS.regime    }
+  ];
+
+  var totalScore = 0, readableWeight = 0, totalWeight = 0;
+  var contribs = {};
+  for (var i = 0; i < LAYERS.length; i++){
+    var L = LAYERS[i];
+    totalWeight += L.weight;
+    var sc = layerScore(L.w, L.a);
+    if (sc === null){
+      contribs[L.name] = { with: 0, against: 0, pct: null, weight: L.weight, contribution: 0, unread: true };
+    } else {
+      totalScore    += sc * L.weight;
+      readableWeight += L.weight;
+      contribs[L.name] = { with: L.w, against: L.a, pct: sc, weight: L.weight, contribution: sc * L.weight, unread: false };
+    }
+  }
+
+  var score    = readableWeight > 0 ? Math.round((totalScore / readableWeight) * 100) : 0;
+  var coverage = totalWeight    > 0 ? Math.round((readableWeight / totalWeight)  * 100) : 0;
+
+  /* tier decision — CONFLICT / NEUTRAL forecasts never promote */
+  var tier;
+  if (forecast.tier === 'NEUTRAL' || forecast.tier === 'CONFLICT' || side === null){
+    tier = 'NO-GO';
+  } else if (score >= 80 && coverage >= 50){
+    tier = 'ULTIMATE';
+  } else if (score >= 65 && coverage >= 40){
+    tier = 'STRONG';
+  } else if (score >= 50 && coverage >= 25){
+    tier = 'MODERATE';
+  } else if (score >= 35){
+    tier = 'WEAK';
+  } else {
+    tier = 'NO-GO';
+  }
+
+  /* news lock downgrades one tier (hg-v992 BOTH-ways). Never a direction
+     veto, never a promotion. */
+  var newsHeld = forecast.newsHeld === true;
+  if (newsHeld){
+    if      (tier === 'ULTIMATE') tier = 'STRONG';
+    else if (tier === 'STRONG')   tier = 'MODERATE';
+    else if (tier === 'MODERATE') tier = 'WEAK';
+  }
+
+  var sideLabel = side === 'long' ? 'LONG' : (side === 'short' ? 'SHORT' : null);
+  var note = '';
+  if (tier === 'ULTIMATE'){
+    note = 'ULTIMATE AI confluence — every major layer agrees on the ' + sideLabel + ' side. Score ' + score + '/100 across ' + coverage + '% of the stack.';
+  } else if (tier === 'STRONG'){
+    note = 'STRONG AI confluence — most of the stack agrees on the ' + sideLabel + ' side. Score ' + score + '/100 across ' + coverage + '% of the stack.';
+  } else if (tier === 'MODERATE'){
+    note = 'MODERATE AI confluence — the balance leans ' + sideLabel + ' but several layers disagree. Score ' + score + '/100 across ' + coverage + '% of the stack.';
+  } else if (tier === 'WEAK'){
+    note = 'WEAK AI confluence — too few layers agree, or coverage is thin. Score ' + score + '/100 across ' + coverage + '% of the stack.';
+  } else {
+    if (forecast.tier === 'CONFLICT') note = 'NO-GO — forecast is CONFLICT: patterns and the gold-tab stack disagree on this bar.';
+    else if (forecast.tier === 'NEUTRAL' || side === null) note = 'NO-GO — forecast is NEUTRAL: no clear next-candle direction.';
+    else note = 'NO-GO — AI confluence below the WEAK threshold. Score ' + score + '/100 across ' + coverage + '% of the stack.';
+  }
+
+  return {
+    tier: tier,
+    score: score,
+    coverage: coverage,
+    side: side,
+    sideLabel: sideLabel,
+    layers: contribs,
+    weights: WEIGHTS,
+    newsHeld: newsHeld,
+    totalWeight: totalWeight,
+    readableWeight: readableWeight,
+    note: note
+  };
 }
 
 G.hgCfPatterns = hgCfPatterns;
@@ -19787,5 +19969,6 @@ G.hgCfMaxPatterns = hgCfMaxPatterns;
 G.hgCfStructure = hgCfStructure;
 G.hgCfConfluence = hgCfConfluence;
 G.hgCfGoldDeskReads = hgCfGoldDeskReads;
+G.hgCfUltimateAiConfluence = hgCfUltimateAiConfluence;
 G.goldCandleForecast = goldCandleForecast;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null));

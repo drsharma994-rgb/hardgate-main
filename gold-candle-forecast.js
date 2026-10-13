@@ -1,8 +1,16 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (hg-v1316)
+HARDGATE — gold-candle-forecast.js (hg-v1317)
 CANDLE FORECAST tab for the GOLD group.
 
-hg-v1316 extends hg-v1315 with three concrete additions:
+hg-v1317 adds the "Ultimate AI Confluence" synthesis layer on top of
+hg-v1316's 46 patterns + 10 directional gold-tab readers + confluence.
+The engine (hgCfUltimateAiConfluence in goldind.js) is called inside
+goldCandleForecast so every forecast carries .ultimateAi, and this
+module renders a prominent ULTIMATE / STRONG / MODERATE / WEAK / NO-GO
+tier chip + score bar + per-layer weighted breakdown at the TOP of
+each card so a reader sees the AI synthesis before the pattern list.
+
+Preserved from hg-v1316:
   (A) MAXIMUM patterns — hgCfMaxPatterns adds 15 further candlestick
       patterns beyond the hg-v1314 16 and hg-v1315 15 (46 total): takuri
       line, rickshaw man, doji star bull/bear, island reversal, advance
@@ -54,10 +62,9 @@ function mount(container){
   __cfMounted = container;
   container.innerHTML = ''
     + '<div class="panel">'
-    +   '<h2>Candle Forecast <span id="cfVersion" class="verbadge">v1316</span></h2>'
+    +   '<h2>Candle Forecast <span id="cfVersion" class="verbadge">v1317</span></h2>'
     +   '<div class="hg-lead" style="margin-bottom:10px">'
-    +     'SCALP (15m) and SWING (4h) forecasts side by side. Each card runs 46 candlestick patterns + 8 structural reads + every gold-tab reader'
-    +     ' (free feeds, 18 indicators, Pine states, regime, Playbook 1-9 bias, sweep→OB, Pine confluence, macro lock, MTF matrix, HTF bias, sweep engine, session sweep, NY exhaustion, OI trap, news gate, inst filter, catalog, forming stack).'
+    +     'SCALP (15m) and SWING (4h) forecasts side by side. Each card now leads with an <b>Ultimate AI Confluence</b> tier — ULTIMATE / STRONG / MODERATE / WEAK / NO-GO — synthesising 46 candlestick patterns + 8 structural reads + 10 directional gold-tab readers + free feeds + indicator stack + Pine states + regime into a single weighted score.'
     +     ' DISPLAY only — nothing is gated on this.'
     +   '</div>'
     +   '<div class="row" style="margin-bottom:12px">'
@@ -227,6 +234,60 @@ function deskInfoLine(f){
   return '<div class="note" style="margin-top:6px"><b>Desk readers:</b> ' + bits.join(' ') + '</div>';
 }
 
+function ultimateAiBlock(f){
+  /* hg-v1317: render the Ultimate AI Confluence tier / score / per-layer
+     breakdown. Called at the top of every card so a reader sees the
+     synthesis before the pattern list. */
+  if (!f || !f.ultimateAi) return '';
+  var ai = f.ultimateAi;
+  var tierColor = ({
+    'ULTIMATE': '#0f766e',
+    'STRONG':   '#15803d',
+    'MODERATE': '#b45309',
+    'WEAK':     '#92400e',
+    'NO-GO':    '#64748b'
+  })[ai.tier] || '#64748b';
+  var scorePct = Math.max(0, Math.min(100, ai.score || 0));
+  var covPct   = Math.max(0, Math.min(100, ai.coverage || 0));
+  var LAYER_LABELS = {
+    patterns: '46 patterns',
+    structure: '8 structural',
+    desk: '10 desk readers',
+    freeFeeds: 'free feeds',
+    indicator: 'indicator stack',
+    pine: 'Pine states',
+    regime: 'regime'
+  };
+  var LAYER_ORDER = ['patterns','structure','desk','freeFeeds','indicator','pine','regime'];
+  var layerBits = LAYER_ORDER.map(function(k){
+    var L = ai.layers && ai.layers[k];
+    if (!L) return '';
+    var tag;
+    if (L.unread) tag = '<span class="chip" title="Unread — this layer could not read a verdict on this bar">UNREAD</span>';
+    else {
+      var pct = Math.round((L.pct || 0) * 100);
+      var cls = pct >= 60 ? 'chip ok' : (pct <= 40 ? 'chip no' : 'chip');
+      tag = '<span class="' + cls + '" title="' + L.with + ' WITH / ' + L.against + ' AGAINST · weight ' + L.weight + '">' + pct + '% WITH (w' + L.weight + ')</span>';
+    }
+    return '<span style="margin-right:8px;display:inline-block"><b>' + esc(LAYER_LABELS[k]) + ':</b> ' + tag + '</span>';
+  }).join('');
+  var newsTag = ai.newsHeld ? ' · <span class="chip warn">news-held (downgraded one tier, hg-v992)</span>' : '';
+  var bar = ''
+    + '<div style="background:var(--line);border-radius:4px;overflow:hidden;height:6px;margin-top:4px">'
+    +   '<div style="width:' + scorePct + '%;height:100%;background:' + tierColor + '"></div>'
+    + '</div>';
+  return ''
+    + '<div style="border:1px solid ' + tierColor + ';background:rgba(15,23,42,0.03);padding:8px 10px;border-radius:6px;margin-bottom:8px">'
+    +   '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    +     '<span style="font-weight:700;color:' + tierColor + ';font-size:14px">ULTIMATE AI CONFLUENCE · ' + esc(ai.tier) + '</span>'
+    +     '<span class="note">Score <b>' + ai.score + '/100</b> · coverage <b>' + ai.coverage + '%</b> of the stack' + newsTag + '</span>'
+    +   '</div>'
+    +   bar
+    +   '<div class="note" style="margin-top:6px;font-size:11px">' + layerBits + '</div>'
+    +   '<div class="note" style="margin-top:4px;font-size:11px">' + esc(ai.note || '') + '</div>'
+    + '</div>';
+}
+
 function renderCard(f, modeLabel, bars){
   if (!f){
     return ''
@@ -294,6 +355,7 @@ function renderCard(f, modeLabel, bars){
   return ''
     + '<div class="omni-side ' + dirClass + '" style="margin:0;border-left-width:4px;flex:1;min-width:300px">'
     +   '<div class="omni-side-call">' + esc(dirLabel) + '</div>'
+    +   ultimateAiBlock(f)
     +   '<ul class="lst">'
     +     '<li><b>Last close:</b> <span style="font-weight:700">' + fmtF(f.close) + '</span> · ATR ' + fmtF(f.atr) + '</li>'
     +     '<li><b>Next-bar band:</b> ' + fmtF(f.expectedLow) + ' – ' + fmtF(f.expectedHigh) + '</li>'

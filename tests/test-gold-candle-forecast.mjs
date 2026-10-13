@@ -1,25 +1,11 @@
-/* HARDGATE — hg-v1316 CANDLE FORECAST tab guard.
+/* HARDGATE — hg-v1317 CANDLE FORECAST tab guard.
 
-   The user asked a THIRD time for maximum pattern recognition and every
-   gold tab's analysis to form a confluence and a scalp+swing setup.
+   hg-v1317 adds the "Ultimate AI Confluence" synthesis engine on top of
+   hg-v1316's 46 patterns + 10 directional gold-tab readers. Everything
+   from hg-v1316 is preserved; this guard extends with §21.
 
-   hg-v1316 extends hg-v1315 with three concrete additions:
-     (A) hgCfMaxPatterns adds 15 further candlestick patterns BEYOND the
-         hg-v1314 16 and hg-v1315 15 (46 total): takuri line, rickshaw
-         man, doji star bull/bear, island reversal, advance block, three
-         stars in the south, matching high/low, upside/downside tasuki
-         gap, last engulfing top/bottom, closing marubozu, in-neck /
-         on-neck / thrusting line, hikkake, side-by-side white lines,
-         ladder bottom/top, concealing baby swallow;
-     (B) hgCfGoldDeskReads adds SEVEN more directional readers on top of
-         the hg-v1315 three (hgGoldMacroLock, hgGoldMtfMatrix,
-         hgGoldHtfBias, hgGoldSweepEngine, hgGoldSessionBoundSweep,
-         hgGoldNyExhaustion, hgGoldOiTrap) — ten directional readers in
-         total through the one home;
-     (C) mode-aware R:R preserved: scalp 1R/2R on 15m, swing 1.5R/3R on 4h.
-
-   Sections:
-     §1  engine + helpers are globals (new: hgCfMaxPatterns + the hg-v1315 set)
+   Sections (hg-v1317 adds §21):
+     §1  engine + helpers are globals (including hgCfUltimateAiConfluence)
      §2  thin tape returns null; flat tape returns NEUTRAL (never a lean)
      §3  rising tape → BULL with entry/SL/TP geometry (SCALP 1R/2R)
      §4  falling tape → BEAR mirror
@@ -30,7 +16,7 @@
      §9  CONFLICT tier when confluence ≤40% WITH on ≥4 marks (levels withheld)
      §10 module file registers through HG_tabs with new label chip
      §11 index.html carries the tab in HG_NAV_GROUPS and loads before bootHgTabs
-     §12 build stamps are current (hg-v1316) and no gate reads the engine
+     §12 build stamps are current (hg-v1317) and no gate reads the engine
      §13 hg-v1315 — hgCfAdvancedPatterns detects the 15 patterns
      §14 hg-v1315 — hgCfGoldDeskReads merges directional readers into the tally
      §15 hg-v1315 — mode-aware R:R: scalp 1R/2R, swing 1.5R/3R
@@ -38,7 +24,8 @@
      §17 hg-v1316 — hgCfMaxPatterns detects the 15 further patterns
      §18 hg-v1316 — hgCfGoldDeskReads carries the seven new directional readers
      §19 hg-v1316 — the engine merges three pattern sets (46 patterns total)
-     §20 behavioural mutation pass over the hg-v1314 + hg-v1315 + hg-v1316 block
+     §20 behavioural mutation pass over the hg-v1314/v1315/v1316/v1317 block
+     §21 hg-v1317 — hgCfUltimateAiConfluence weighted synthesis + tier rules
 
    DISPLAY tool: no setup leaves any board on this, no forward-ledger mark,
    no threshold moves (asserted). */
@@ -55,7 +42,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 let pass = 0;
 const ok = (cond, msg) => { if (!cond) throw new Error('FAIL: ' + msg); pass++; console.log('  ok —', msg); };
 
-const ENGINE_MARKER = '/* ========================================================================\n   hg-v1316: CANDLE FORECAST';
+const ENGINE_MARKER = '/* ========================================================================\n   hg-v1317: CANDLE FORECAST';
 
 function bootEngine(opts){
   const o = opts || {};
@@ -65,8 +52,8 @@ function bootEngine(opts){
   if (!o.skipIndicators) vm.runInContext(read('indicators.js'), ctx, { filename: 'indicators.js' });
   const gold = read('goldind.js');
   const idx = gold.indexOf(ENGINE_MARKER);
-  if (idx < 0) throw new Error('hg-v1316 engine block not found in goldind.js');
-  vm.runInContext(gold.slice(idx), ctx, { filename: 'goldind.js#hg-v1316' });
+  if (idx < 0) throw new Error('hg-v1317 engine block not found in goldind.js');
+  vm.runInContext(gold.slice(idx), ctx, { filename: 'goldind.js#hg-v1317' });
   /* seed stubs for the confluence readers, letting §7-9 inject marks. */
   ctx.__cfStubReset = function(){
     ctx.hgGoldFreeFeedVerdicts = undefined;
@@ -160,6 +147,7 @@ console.log('== §1 engine + helpers registered as globals ==');
   ok(typeof ctx.hgCfConfluence === 'function', 'window.hgCfConfluence exists');
   ok(typeof ctx.hgCfGoldDeskReads === 'function', 'window.hgCfGoldDeskReads exists (hg-v1315)');
   ok(typeof ctx.hgCfMaxPatterns === 'function', 'window.hgCfMaxPatterns exists (hg-v1316)');
+  ok(typeof ctx.hgCfUltimateAiConfluence === 'function', 'window.hgCfUltimateAiConfluence exists (hg-v1317)');
 }
 
 console.log('== §2 thin tape returns null; flat tape → NEUTRAL ==');
@@ -319,7 +307,7 @@ console.log('== §10 module file registers through HG_tabs ==');
   ok(/G\.goldCandleForecast\(/.test(src), 'calls window.goldCandleForecast');
   ok(/gatherContext/.test(src), 'module gathers context for confluence');
   ok(/SCAN SCALP \+ SWING|SCAN NEXT CANDLE/.test(src), 'mount paints the SCAN button');
-  ok(/v1316/.test(src), 'version chip bumped to v1316');
+  ok(/v1317/.test(src), 'version chip bumped to v1317');
   /* hg-v1315: module fetches BOTH timeframes and runs the engine with mode. */
   ok(/getXAUCandles\(['"]15m['"]/.test(src), 'module fetches 15m feed');
   ok(/getXAUCandles\(['"]4h['"]/.test(src), 'module fetches 4h feed');
@@ -338,7 +326,7 @@ console.log('== §11 index.html wires the tab and loads before bootHgTabs ==');
   const scriptIdx = html.indexOf('gold-candle-forecast.js');
   const bootIdx = html.indexOf('function bootHgTabs()');
   ok(scriptIdx > 0 && bootIdx > 0 && scriptIdx < bootIdx, 'script loads before bootHgTabs (hg-v1307 ordering preserved)');
-  ok(/gold-candle-forecast\.js\?v=1316/.test(html), 'script version query bumped to 1316');
+  ok(/gold-candle-forecast\.js\?v=1317/.test(html), 'script version query bumped to 1317');
 }
 
 console.log('== §12 build stamps are current and no gate reads the engine ==');
@@ -354,6 +342,8 @@ console.log('== §12 build stamps are current and no gate reads the engine ==');
     ok(!/hgCfConfluence\b/.test(src), f + ' does not read the confluence helper');
     ok(!/hgCfGoldDeskReads\b/.test(src), f + ' does not read the hg-v1315 gold-desk helper');
     ok(!/hgCfMaxPatterns\b/.test(src), f + ' does not read the hg-v1316 maximum pattern helper');
+    ok(!/hgCfUltimateAiConfluence\b/.test(src), f + ' does not read the hg-v1317 Ultimate AI synthesis');
+    ok(!/ultimateAi\b/.test(src), f + ' does not read the hg-v1317 .ultimateAi forecast field');
   }
   /* also assert the engine is not registered as a forward-ledger mark */
   const fwd = read('hg-forward.js');
@@ -362,6 +352,8 @@ console.log('== §12 build stamps are current and no gate reads the engine ==');
   ok(!/hgCfAdvancedPatterns\b/.test(fwd), 'hg-forward.js does not read the hg-v1315 advanced pattern helper');
   ok(!/hgCfGoldDeskReads\b/.test(fwd), 'hg-forward.js does not read the hg-v1315 gold-desk helper');
   ok(!/hgCfMaxPatterns\b/.test(fwd), 'hg-forward.js does not read the hg-v1316 maximum pattern helper');
+  ok(!/hgCfUltimateAiConfluence\b/.test(fwd), 'hg-forward.js does not read the hg-v1317 Ultimate AI synthesis');
+  ok(!/ultimateAi\b/.test(fwd), 'hg-forward.js does not read the hg-v1317 .ultimateAi forecast field');
 }
 
 console.log('== §13 hg-v1315 — hgCfAdvancedPatterns detects the 15 new patterns ==');
@@ -697,6 +689,14 @@ console.log('== §20 behavioural mutation pass ==');
     { name: 'drop maximum patterns merge', from: '(pat.bull || []).concat(patAdv.bull || []).concat(patMax.bull || [])', to: '(pat.bull || []).concat(patAdv.bull || [])' },
     { name: 'invert hgGoldMacroLock verdict', from: "if (ml.lock === true) record('desk:macroLock', false, 'desk');\n          else record('desk:macroLock', true, 'desk');", to: "if (ml.lock === true) record('desk:macroLock', true, 'desk');\n          else record('desk:macroLock', false, 'desk');" },
     { name: 'drop hgGoldHtfBias desk block', from: "if (typeof G.hgGoldHtfBias === 'function'){\n      var hb = G.hgGoldHtfBias(ctxUse.rows4h || rowsUse, ctxUse.rows1h || null);", to: "if (false){\n      var hb = G.hgGoldHtfBias(ctxUse.rows4h || rowsUse, ctxUse.rows1h || null);" },
+    /* hg-v1317 Ultimate AI Confluence mutations */
+    { name: 'ULTIMATE threshold loosened to 20', from: '} else if (score >= 80 && coverage >= 50){\n    tier = \'ULTIMATE\';', to: '} else if (score >= 20 && coverage >= 50){\n    tier = \'ULTIMATE\';' },
+    { name: 'ULTIMATE coverage floor removed', from: '} else if (score >= 80 && coverage >= 50){\n    tier = \'ULTIMATE\';', to: '} else if (score >= 80 && coverage >= 0){\n    tier = \'ULTIMATE\';' },
+    { name: 'drop news-lock ULTIMATE downgrade', from: "if      (tier === 'ULTIMATE') tier = 'STRONG';", to: "if      (tier === 'ULTIMATE') tier = 'ULTIMATE';" },
+    { name: 'swap patterns and desk weights', from: 'patterns:  25,\n    structure: 15,\n    desk:      25,', to: 'patterns:  15,\n    structure: 25,\n    desk:      25,' },
+    { name: 'unread layer still contributes', from: 'if (sc === null){\n      contribs[L.name] = { with: 0, against: 0, pct: null, weight: L.weight, contribution: 0, unread: true };\n    } else {', to: 'if (sc === null){\n      contribs[L.name] = { with: 0, against: 0, pct: null, weight: L.weight, contribution: L.weight, unread: true };\n      totalScore += L.weight; readableWeight += L.weight;\n    } else {' },
+    { name: 'drop CONFLICT NO-GO branch', from: "if (forecast.tier === 'NEUTRAL' || forecast.tier === 'CONFLICT' || side === null){\n    tier = 'NO-GO';", to: "if (forecast.tier === 'NEUTRAL' || side === null){\n    tier = 'NO-GO';" },
+    { name: 'drop .ultimateAi attachment on main return', from: 'try{ fcastOut.ultimateAi = hgCfUltimateAiConfluence(fcastOut); }catch(_){ fcastOut.ultimateAi = null; }', to: '/* mutated: no ultimateAi attachment */' }
   ];
   for (const m of mutations){
     const occ = engineText.split(m.from).length - 1;
@@ -900,11 +900,252 @@ console.log('== §20 behavioural mutation pass ==');
           if (!dReads || !dReads.marks || !('desk:htfBias' in dReads.marks)) caught = true;
           else caught = false;
         }
+        /* probe 15 (hg-v1317): ULTIMATE threshold loosened to 20 — build a
+           weak-score fixture (score ~50) and confirm the non-mutated engine
+           reads MODERATE/STRONG while the mutated reads ULTIMATE. */
+        if (m.name === 'ULTIMATE threshold loosened to 20'){
+          const ai = ctx.hgCfUltimateAiConfluence({
+            tier: 'LEAN', side: 'long', newsHeld: false,
+            patterns: { bull: ['x'], bear: ['y'] },  /* 50% */
+            structure: { bull: ['s'], bear: ['s2'] }, /* 50% */
+            deskReads: { withN: 2, againstN: 2 },     /* 50% */
+            confluence: { freeWith: 1, freeAgainst: 1, indWith: 1, indAgainst: 1, pineWith: 1, pineAgainst: 1, regimeSays: null }
+          });
+          /* non-mutated: score=50, tier=MODERATE; mutated: score=50 ≥ 20 → ULTIMATE */
+          if (ai && ai.tier === 'ULTIMATE') caught = true;
+          else caught = false;
+        }
+        /* probe 16 (hg-v1317): ULTIMATE coverage floor removed — build a
+           high-score low-coverage fixture (score=100, coverage=25%); the
+           non-mutated engine must not promote to ULTIMATE (coverage<50);
+           mutated promotes. */
+        if (m.name === 'ULTIMATE coverage floor removed'){
+          const ai = ctx.hgCfUltimateAiConfluence({
+            tier: 'SETUP', side: 'long', newsHeld: false,
+            patterns: { bull: ['x','y','z'], bear: [] },  /* 100%, w25 */
+            structure: { bull: [], bear: [] },
+            deskReads: { withN: 0, againstN: 0 },
+            confluence: null
+          });
+          /* non-mutated: coverage=25%, below 50% → MODERATE; mutated → ULTIMATE */
+          if (ai && ai.tier === 'ULTIMATE') caught = true;
+          else caught = false;
+        }
+        /* probe 17 (hg-v1317): drop news-lock ULTIMATE downgrade — inject
+           an ULTIMATE-strength forecast with newsHeld; non-mutated engine
+           downgrades to STRONG, mutated keeps ULTIMATE. */
+        if (m.name === 'drop news-lock ULTIMATE downgrade'){
+          const ai = ctx.hgCfUltimateAiConfluence({
+            tier: 'LEAN', side: 'long', newsHeld: true,  /* LEAN not SETUP, so goldCandleForecast tier doesn't downgrade through hg-v1315 — isolates the hg-v1317 downgrade */
+            patterns: { bull: ['a','b','c','d','e'], bear: [] },
+            structure: { bull: ['s1','s2','s3'], bear: [] },
+            deskReads: { withN: 10, againstN: 0 },
+            confluence: { freeWith: 10, freeAgainst: 0, indWith: 10, indAgainst: 0, pineWith: 10, pineAgainst: 0, regimeSays: true }
+          });
+          /* non-mutated: ULTIMATE → STRONG via news-lock; mutated: stays ULTIMATE */
+          if (ai && ai.tier === 'ULTIMATE') caught = true;
+          else caught = false;
+        }
+        /* probe 18 (hg-v1317): swap patterns and desk weights — a
+           patterns-heavy fixture reads differently with mutated weights.
+           Non-mutated: patterns weight 25, structure 15. Mutated: patterns
+           weight 15, structure 25. Inspect contribs: non-mutated reports
+           pattern weight 25, mutated reports 15. */
+        if (m.name === 'swap patterns and desk weights'){
+          const ai = ctx.hgCfUltimateAiConfluence({
+            tier: 'SETUP', side: 'long', newsHeld: false,
+            patterns: { bull: ['x'], bear: [] },
+            structure: { bull: ['s'], bear: [] },
+            deskReads: { withN: 1, againstN: 0 },
+            confluence: null
+          });
+          if (ai && ai.layers && ai.layers.patterns && ai.layers.patterns.weight === 15) caught = true;
+          else caught = false;
+        }
+        /* probe 19 (hg-v1317): unread layer still contributes — build a
+           fixture where only patterns reads; non-mutated engine excludes
+           the unread weight from the max and reports coverage ~25% + full
+           pattern score; mutated engine credits unread as full WITH,
+           inflating the score artificially. */
+        if (m.name === 'unread layer still contributes'){
+          const ai = ctx.hgCfUltimateAiConfluence({
+            tier: 'SETUP', side: 'long', newsHeld: false,
+            patterns: { bull: ['x','y'], bear: ['z'] },  /* 66.6% */
+            structure: { bull: [], bear: [] },           /* unread */
+            deskReads: { withN: 0, againstN: 0 },        /* unread */
+            confluence: null                              /* all unread */
+          });
+          /* non-mutated: unread layers contribute 0 to score numerator AND
+             are excluded from readableWeight denominator, so score is
+             exactly 67% (patterns alone, 2/3 WITH); mutated: unread
+             contributes full weight to BOTH numerator and denominator,
+             inflating the score (unread crediting 100% WITH). */
+          if (ai && ai.score > 70) caught = true;   /* mutated inflates > 70 */
+          else caught = false;
+        }
+        /* probe 20 (hg-v1317): drop CONFLICT NO-GO branch — build a
+           CONFLICT forecast with high score; non-mutated engine returns
+           NO-GO regardless; mutated engine promotes it to a positive tier. */
+        if (m.name === 'drop CONFLICT NO-GO branch'){
+          const ai = ctx.hgCfUltimateAiConfluence({
+            tier: 'CONFLICT', side: 'long', newsHeld: false,
+            patterns: { bull: ['x'], bear: [] },
+            structure: { bull: ['s'], bear: [] },
+            deskReads: { withN: 10, againstN: 0 },
+            confluence: { freeWith: 5, freeAgainst: 0, indWith: 5, indAgainst: 0, pineWith: 5, pineAgainst: 0, regimeSays: true }
+          });
+          /* non-mutated: tier CONFLICT → NO-GO irrespective of score;
+             mutated: NEUTRAL branch alone → ULTIMATE (very high score). */
+          if (ai && ai.tier !== 'NO-GO') caught = true;
+          else caught = false;
+        }
+        /* probe 21 (hg-v1317): drop .ultimateAi attachment on main return —
+           non-mutated forecast carries .ultimateAi on every return; mutated
+           main-branch return omits it. */
+        if (m.name === 'drop .ultimateAi attachment on main return'){
+          const r = f(makeThreeSoldiersFixture());
+          /* non-mutated: r.ultimateAi is a readable object; mutated: undefined */
+          if (!r || !r.ultimateAi) caught = true;
+          else caught = false;
+        }
       }
     } catch (e){ caught = true; }
     if (!caught) throw new Error('MUTATION SURVIVED: ' + m.name);
     pass++; console.log('  ok — mutation caught —', m.name);
   }
+}
+
+console.log('== §21 hg-v1317 — hgCfUltimateAiConfluence weighted synthesis + tier rules ==');
+{
+  const ctx = bootEngine();
+
+  /* §21.1 null / malformed input returns null */
+  ok(ctx.hgCfUltimateAiConfluence(null) === null, 'null forecast returns null');
+  ok(ctx.hgCfUltimateAiConfluence('nope') === null, 'string forecast returns null');
+  ok(ctx.hgCfUltimateAiConfluence(42) === null, 'number forecast returns null');
+
+  /* §21.2 NEUTRAL forecast returns NO-GO irrespective of score */
+  const neuAi = ctx.hgCfUltimateAiConfluence({ tier: 'NEUTRAL', side: null });
+  ok(neuAi && neuAi.tier === 'NO-GO', 'NEUTRAL forecast → NO-GO');
+  ok(neuAi.score === 0, 'NEUTRAL forecast score is 0');
+
+  /* §21.3 CONFLICT forecast returns NO-GO even with high internal score */
+  const conAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'CONFLICT', side: 'long', newsHeld: false,
+    patterns: { bull: ['a','b','c'], bear: [] },
+    structure: { bull: ['s1','s2'], bear: [] },
+    deskReads: { withN: 10, againstN: 0 },
+    confluence: { freeWith: 5, freeAgainst: 0, indWith: 5, indAgainst: 0, pineWith: 5, pineAgainst: 0, regimeSays: true }
+  });
+  ok(conAi && conAi.tier === 'NO-GO', 'CONFLICT forecast → NO-GO (score ' + conAi.score + ' / cov ' + conAi.coverage + '%)');
+
+  /* §21.4 ULTIMATE — all layers agree 100% on readable, full coverage */
+  const ultAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'SETUP', side: 'long', newsHeld: false,
+    patterns: { bull: ['a','b','c'], bear: [] },
+    structure: { bull: ['s1','s2','s3'], bear: [] },
+    deskReads: { withN: 10, againstN: 0 },
+    confluence: { freeWith: 10, freeAgainst: 0, indWith: 10, indAgainst: 0, pineWith: 10, pineAgainst: 0, regimeSays: true }
+  });
+  ok(ultAi.tier === 'ULTIMATE', 'all-agree, 100% coverage reads ULTIMATE');
+  ok(ultAi.score === 100, 'score is 100 on a perfect fixture');
+  ok(ultAi.coverage === 100, 'coverage is 100 when every layer reads');
+
+  /* §21.5 STRONG — mostly WITH, coverage ≥40% */
+  const strAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'SETUP', side: 'long', newsHeld: false,
+    patterns: { bull: ['a','b','c','d'], bear: ['e'] },  /* 80% */
+    structure: { bull: ['s','t'], bear: ['u'] },         /* 66% */
+    deskReads: { withN: 7, againstN: 3 },                /* 70% */
+    confluence: { freeWith: 7, freeAgainst: 3, indWith: 7, indAgainst: 3, pineWith: 7, pineAgainst: 3, regimeSays: true }
+  });
+  ok(strAi.tier === 'STRONG', 'mostly-WITH fixture reads STRONG (got ' + strAi.tier + ', score ' + strAi.score + ')');
+
+  /* §21.6 MODERATE — 50/50 agreement */
+  const modAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'LEAN', side: 'long', newsHeld: false,
+    patterns: { bull: ['a'], bear: ['b'] },               /* 50% */
+    structure: { bull: ['s'], bear: ['t'] },              /* 50% */
+    deskReads: { withN: 5, againstN: 5 },                 /* 50% */
+    confluence: { freeWith: 5, freeAgainst: 5, indWith: 5, indAgainst: 5, pineWith: 5, pineAgainst: 5, regimeSays: null }
+  });
+  ok(modAi.tier === 'MODERATE', '50/50 agreement reads MODERATE (got ' + modAi.tier + ')');
+  ok(modAi.score === 50, 'score is 50 on a 50/50 fixture');
+
+  /* §21.7 WEAK — mostly AGAINST */
+  const weakAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'LEAN', side: 'long', newsHeld: false,
+    patterns: { bull: ['x'], bear: ['a','b','c'] },       /* 25% */
+    structure: { bull: ['s'], bear: ['t','u'] },           /* 33% */
+    deskReads: { withN: 3, againstN: 7 },                 /* 30% */
+    confluence: { freeWith: 3, freeAgainst: 7, indWith: 3, indAgainst: 7, pineWith: 3, pineAgainst: 7, regimeSays: false }
+  });
+  ok(['WEAK','NO-GO'].includes(weakAi.tier), 'mostly-AGAINST reads WEAK or NO-GO (got ' + weakAi.tier + ')');
+
+  /* §21.8 UNREAD layers are excluded from the max — score reflects only
+     readable layers; coverage reports the fraction. */
+  const unAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'SETUP', side: 'long', newsHeld: false,
+    patterns: { bull: ['a','b'], bear: [] },  /* 100% WITH, weight 25 */
+    structure: { bull: [], bear: [] },        /* unread */
+    deskReads: { withN: 0, againstN: 0 },     /* unread */
+    confluence: null                           /* all unread */
+  });
+  ok(unAi.score === 100, 'score is 100 when the ONE readable layer is 100% WITH');
+  ok(unAi.coverage === 25, 'coverage is 25% (patterns weight 25 of 100 total) — got ' + unAi.coverage);
+  ok(unAi.layers.structure.unread === true, 'structure layer marked unread');
+  ok(unAi.layers.desk.unread === true, 'desk layer marked unread');
+  ok(unAi.tier !== 'ULTIMATE', 'coverage 25% below floor 50% — does not promote to ULTIMATE (got ' + unAi.tier + ')');
+
+  /* §21.9 News lock downgrades one tier (hg-v992 BOTH-ways, never a
+     direction veto). A perfect ULTIMATE fixture under news-held reads STRONG. */
+  const heldAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'LEAN', side: 'long', newsHeld: true,
+    patterns: { bull: ['a','b','c'], bear: [] },
+    structure: { bull: ['s1','s2','s3'], bear: [] },
+    deskReads: { withN: 10, againstN: 0 },
+    confluence: { freeWith: 10, freeAgainst: 0, indWith: 10, indAgainst: 0, pineWith: 10, pineAgainst: 0, regimeSays: true }
+  });
+  ok(heldAi.tier === 'STRONG', 'news-held ULTIMATE → STRONG downgrade (got ' + heldAi.tier + ')');
+  ok(heldAi.newsHeld === true, 'news-held flag reported on output');
+
+  /* §21.10 Short-side mirror — bull/bear roles reverse */
+  const shortAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'SETUP', side: 'short', newsHeld: false,
+    patterns: { bull: [], bear: ['a','b','c'] },  /* short → WITH */
+    structure: { bull: [], bear: ['s1','s2'] },
+    deskReads: { withN: 10, againstN: 0 },
+    confluence: { freeWith: 10, freeAgainst: 0, indWith: 10, indAgainst: 0, pineWith: 10, pineAgainst: 0, regimeSays: true }
+  });
+  ok(shortAi.tier === 'ULTIMATE', 'short-side mirror: bear patterns WITH a short → ULTIMATE');
+  ok(shortAi.layers.patterns.with === 3, 'short-side pattern WITH count = bear bag length');
+
+  /* §21.11 forecast carries .ultimateAi through goldCandleForecast on both
+     a BULL and NEUTRAL branch */
+  const bFc = ctx.goldCandleForecast(makeThreeSoldiersFixture());
+  ok(bFc && bFc.ultimateAi && typeof bFc.ultimateAi.tier === 'string', 'bull forecast carries .ultimateAi');
+  ok(['ULTIMATE','STRONG','MODERATE','WEAK','NO-GO'].includes(bFc.ultimateAi.tier), 'ultimateAi.tier is one of the five tiers');
+  const flat2 = [];
+  for (let i = 0; i < 40; i++) flat2.push({ t: i, o: 2300, h: 2300.1, l: 2299.9, c: 2300, v: 100 });
+  const nFc = ctx.goldCandleForecast(flat2);
+  ok(nFc && nFc.tier === 'NEUTRAL' && nFc.ultimateAi && nFc.ultimateAi.tier === 'NO-GO', 'neutral forecast carries .ultimateAi with NO-GO');
+
+  /* §21.12 the module file carries the Ultimate AI block in renderCard */
+  const modSrc = read('gold-candle-forecast.js');
+  ok(/ultimateAiBlock\s*\(/.test(modSrc), 'module calls ultimateAiBlock in renderCard');
+  ok(/f\.ultimateAi/.test(modSrc), 'module reads forecast.ultimateAi');
+  ok(/v1317/.test(modSrc), 'module version chip bumped to v1317');
+
+  /* §21.13 weight contract: seven layers, documented weights */
+  const dAi = ctx.hgCfUltimateAiConfluence({
+    tier: 'SETUP', side: 'long',
+    patterns: { bull: ['a'], bear: [] }, structure: { bull: [], bear: [] },
+    deskReads: { withN: 0, againstN: 0 }, confluence: null
+  });
+  const w = dAi.weights;
+  ok(w.patterns === 25 && w.structure === 15 && w.desk === 25 && w.freeFeeds === 10 && w.indicator === 10 && w.pine === 10 && w.regime === 5, 'documented weights intact');
+  const sumW = w.patterns + w.structure + w.desk + w.freeFeeds + w.indicator + w.pine + w.regime;
+  ok(sumW === 100, 'weights sum to 100 (' + sumW + ')');
 }
 
 console.log('\n' + pass + ' assertions passed, 0 failed.');
