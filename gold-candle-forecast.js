@@ -125,7 +125,15 @@ on every page load since v14-2:
   };
 
   /**
-   * Renders the measured read. No target and no stop are printed.
+   * Renders the measured read WITH an actionable bracket.
+   *
+   * The band is the measured part (one ATR around the last close). From it
+   * the card derives entry / TP1 / TP2 / SL, and every level is labelled as
+   * BAND-DERIVED so it is never mistaken for a measured edge: the run of
+   * this desk is that the band is a range estimate, and a bracket built on
+   * it inherits exactly that uncertainty. When the reads agree the bracket
+   * is printed for the agreed side; when they do not, BOTH brackets print
+   * rather than the card inventing a direction.
    */
   mod.renderResult = function(container, statusEl, forecast) {
     var lean = forecast.lean || (forecast.dir ? forecast.dir : 'unread');
@@ -138,6 +146,25 @@ on every page load since v14-2:
     var band = (isFinite(+forecast.expectedLow) && isFinite(+forecast.expectedHigh))
       ? (this.fmt(forecast.expectedLow) + ' – ' + this.fmt(forecast.expectedHigh))
       : 'unread';
+    /* ---- the bracket, derived from the measured band ---- */
+    var lo = +forecast.expectedLow, hi = +forecast.expectedHigh, cl = +forecast.close;
+    var haveBand = isFinite(lo) && isFinite(hi) && isFinite(cl) && hi > lo;
+    var w = haveBand ? (hi - lo) : NaN;
+    var self = this;
+    var bracket = function(side) {
+      if (!haveBand) return '';
+      /* risk = the far band edge; the targets step out in band widths so the
+         geometry is explicit rather than implied */
+      var sl = (side === 'long') ? lo : hi;
+      var tp1 = (side === 'long') ? cl + w * 0.5 : cl - w * 0.5;
+      var tp2 = (side === 'long') ? cl + w : cl - w;
+      return '<li><b>' + (side === 'long' ? 'LONG' : 'SHORT') + ' bracket:</b> '
+        + 'entry <b>' + self.fmt(cl) + '</b> · SL <b>' + self.fmt(sl) + '</b> · TP1 <b>'
+        + self.fmt(tp1) + '</b> · TP2 <b>' + self.fmt(tp2) + '</b></li>';
+    };
+    var levels = '';
+    if (called) levels = bracket(lean === 'BULL' ? 'long' : 'short');
+    else levels = bracket('long') + bracket('short');
 
     container.className = '';
     container.innerHTML = `
@@ -150,9 +177,13 @@ on every page load since v14-2:
           <li><b>Reads:</b> ${called ? (forecast.agrees + ' agree, none against, of ' + forecast.checked) : ('no two reads agree — ' + (forecast.checked || 0) + ' checked')}</li>
           ${forecast.source ? '<li><b>Tape:</b> ' + String(forecast.source).replace(/</g, '') + '</li>' : ''}
         </ul>
+        <ul class="lst">${levels}</ul>
         <ul class="lst">${reasons}</ul>
         <div class="note" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">
-          ${forecast.note || 'A range, not a target and not a stop.'}
+          ${called
+            ? 'Bracket derived from the measured band (one ATR around the last close): SL at the far edge, TP1 half a band, TP2 one band. Band-derived, not a measured edge.'
+            : 'No directional call - the reads did not agree, so BOTH brackets are shown instead of inventing a side. Levels are band-derived (one ATR), not a measured edge.'}
+          ${forecast.note ? (' ' + forecast.note) : ''}
         </div>
       </div>
     `;
