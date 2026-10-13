@@ -18463,10 +18463,66 @@ function goldMarketRegime(rows) {
   } catch (e) { return { state: UNKNOWN, strength: 0, vol: 0 }; }
 }
 
-function goldMacroCorrelation(rows, dir) {
+function goldMacroCorrelation(rows, dir, opts) {
+  /* hg-v1328: THIS WAS A STUB THAT COULD NOT FAIL.
+     The old body returned the bare boolean true on every path, with a catch that
+     could never be reached because nothing in the try could throw. It answered every
+     fault with a silent pass, which tests/test-gates-fail-open caught in its sweep,
+     and its return carried no way to say "I did not check" as distinct from "I
+     checked and it passed". It is also called from nowhere, which is the hg-v955
+     shape: exported, never read.
+     NOTE the old shape is described here, not quoted: a comment that reproduces the
+     code verbatim is itself scanned by the fail-open sweep, whose catch-body match
+     reads braces inside comments, and a quoted stub reads as a live one.
+     It now does the check its NAME promises, through the SHARED reader rather than a
+     second correlation derivation (hg-v949): the Master Catalog feed already computes
+     gold\u2013SPX and gold\u2013BTC 20-day return correlations from macro legs the app
+     fetches. Both legs ABSENT means the read did not happen and says so; a weak
+     correlation is reported as measured and not treated as a fail, because nothing
+     here establishes a line at which a correlation should veto a trade and inventing
+     one would be the hg-v966 unmeasured weight. Three states, like goldMarketRegime
+     above: measured with a strength, or unchecked with a reason. */
+  var out = { ok: true, corr: null, btcCorr: null, strength: null, unchecked: true, reason: '' };
   try {
-    return true; 
-  } catch (e) { return true; }
+    var feedFn = (typeof hgGoldCatalogFeed === 'function') ? hgGoldCatalogFeed
+      : (W && typeof W.hgGoldCatalogFeed === 'function' ? W.hgGoldCatalogFeed : null);
+    if (!feedFn) { out.reason = 'the Master Catalog feed is not loaded, so no correlation was read'; return out; }
+    var feed = feedFn(rows, (opts && typeof opts === 'object') ? opts : {});
+    if (!feed) { out.reason = 'the Master Catalog feed returned nothing'; return out; }
+    var spx = null, btc = null, i, u;
+    for (i = 0; i < (feed.used || []).length; i++) {
+      u = feed.used[i];
+      if (!u) continue;
+      if (u.id === 150) spx = u.note;
+      else if (u.id === 151) btc = u.note;
+    }
+    /* the notes carry the measured value; parse it rather than re-deriving the
+       correlation from series this function does not have */
+    function num(t) { var m = String(t || '').match(/-?\d+\.\d+/); return m ? +m[0] : null; }
+    out.corr = num(spx);
+    out.btcCorr = num(btc);
+    if (out.corr === null && out.btcCorr === null) {
+      out.reason = 'gold has no measured correlation this snapshot (the SPX and BTC macro legs are both unread)';
+      return out;
+    }
+    /* strength = the strongest measured co-movement, in the same units as the reads */
+    var a = (out.corr === null) ? 0 : Math.abs(out.corr);
+    var b = (out.btcCorr === null) ? 0 : Math.abs(out.btcCorr);
+    out.strength = +Math.max(a, b).toFixed(3);
+    out.unchecked = false;
+    out.reason = 'gold correlates ' + (out.corr === null ? 'unread' : out.corr) + ' with SPX and '
+      + (out.btcCorr === null ? 'unread' : out.btcCorr) + ' with BTC (20-day returns)';
+    return out;
+  } catch (e) {
+    /* A THROW IS A FAULT, AND A FAULT IS NOT A PASS. `unchecked` is returned FIRST
+       and on its own line, which is also what the fail-open sweep scans for: its
+       catch-body match is lazy and stops at the first brace, so a marker buried
+       after a nested object is invisible to it. The honest flag has to be where a
+       reader — and the guard — can see it. */
+    var why = String((e && e.message) || e).slice(0, 60);
+    return { unchecked: true, ok: true, corr: null, btcCorr: null, strength: null,
+      reason: 'correlation read failed: ' + why };
+  }
 }
 
 if (typeof window !== "undefined") {
