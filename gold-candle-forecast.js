@@ -234,6 +234,13 @@ on every page load since v14-2:
       try {
         var conf = (typeof window.hgUltimateConfluence === 'function')
           ? window.hgUltimateConfluence(candles) : null;
+        /* The first call is the 15m tally. When the 4h tape was read, ask
+           again with that tape so the wide tally can name a swing beside
+           the scalp. The house stop is still not this tally's stop. */
+        if (conf && Array.isArray(c4) && c4.length >= 30 && typeof window.hgUltimateConfluence === 'function') {
+          var withSwing = window.hgUltimateConfluence(candles, { swingRows: c4 });
+          if (withSwing) conf = withSwing;
+        }
         if (conf) this.renderConfluence(resultArea, statusEl, conf);
       } catch (eConf) { /* optional read; the card stands on its own */ }
 
@@ -497,8 +504,10 @@ on every page load since v14-2:
       + ' <span class="note">(' + String(c.grade).replace(/</g, '') + ')</span></h3>'
       + '<ul class="lst">'
       + '<li class="note">This tally does not name the ultimate setup. That line is above, and only when the scalp and the swing agree.</li>'
-      + '<li><b>Net:</b> <b>' + c.score + '</b> — long votes minus short votes, a count, not a probability. '
+      + '<li><b>Net:</b> <b>' + c.score + '</b> — the sum of the votes, a count, not a probability. '
       + c.agree + ' long, ' + c.oppose + ' short, ' + c.abstain + ' abstained, of ' + c.checked + '</li>'
+      + (c.swing ? ('<li class="note">4h wide tally: ' + String(c.swing.dir) + ' (' + String(c.swing.grade || '').replace(/</g, '') + '). That read stays on the 4h tape. It is not the swing stop.</li>') : '')
+      + ((c.patterns && c.patterns.length) ? ('<li class="note">Candle shapes on this tally: ' + c.patterns.map(function (p) { return String(p.label || p.id || '').replace(/</g, ''); }).slice(0, 8).join(', ') + '.</li>') : '')
       + '<li><b>Last close:</b> ' + self.fmt(c.close) + ' · <b>ATR band:</b> '
       + (c.bandLow != null ? (self.fmt(c.bandLow) + ' – ' + self.fmt(c.bandHigh)) : 'unread') + '</li>'
       + levels + '</ul>'

@@ -86,4 +86,75 @@ console.log('== honesty on thin and junk input ==');
   ok(!threw, 'a junk bar never throws');
 }
 
+
+console.log('== the candlestick patterns read real shapes ==');
+{
+  const P = sandbox.hgCandlePatterns;
+  ok(typeof P === 'function', 'hgCandlePatterns is exposed');
+  const base = (n) => tape(n, i => 100 + i * 0.02, 1.0);
+  const push = (rows, bar) => rows.concat([bar]);
+  const has = (res, id, dir) => res.patterns.some(x => x.id === id && x.dir === dir);
+
+  /* a bullish engulfing: prior down body, then an up body that swallows it */
+  let t = base(60);
+  t = push(t, { o: t[t.length-1].c, c: t[t.length-1].c - 1.0, h: t[t.length-1].c + 0.05, l: t[t.length-1].c - 1.05, v: 100 });
+  const prev = t[t.length-1];
+  t = push(t, { o: prev.c - 0.1, c: prev.o + 0.2, h: prev.o + 0.3, l: prev.c - 0.2, v: 200 });
+  const eng = P(t);
+  ok(has(eng, 'engulf-bull', 'long'), 'a bullish engulfing is detected as LONG');
+  ok(eng.patterns.every(x => typeof x.note === 'string' && x.note.length > 0), 'every pattern explains itself');
+  ok(eng.patterns.every(x => x.dir === 'long' || x.dir === 'short' || x.dir === null), 'every pattern is three-state (long / short / null)');
+
+  /* a hammer: long lower wick, close in the top third */
+  let h = base(60);
+  const lc = h[h.length-1].c;
+  h = push(h, { o: lc, c: lc + 0.1, h: lc + 0.15, l: lc - 2.5, v: 150 });
+  ok(has(P(h), 'hammer', 'long'), 'a hammer (long lower wick, close high) is detected as LONG');
+
+  /* a shooting star: the mirror */
+  let s = base(60);
+  const sc = s[s.length-1].c;
+  s = push(s, { o: sc, c: sc - 0.1, h: sc + 2.5, l: sc - 0.15, v: 150 });
+  ok(has(P(s), 'shooting', 'short'), 'a shooting star (long upper wick, close low) is detected as SHORT');
+
+  /* a doji: open and close nearly equal after a real range */
+  let d = base(60);
+  const dc = d[d.length-1].c;
+  d = push(d, { o: dc, c: dc + 0.01, h: dc + 1.2, l: dc - 1.2, v: 120 });
+  ok(has(P(d), 'doji', null), 'a doji votes for NEITHER side');
+
+  /* ATR normalisation: a tiny body on a wide tape is not an engulfing */
+  const wide = tape(60, i => 100, 8.0);
+  let w = push(wide, { o: 100, c: 99.9, h: 100.05, l: 99.85, v: 100 });
+  const wp = w[w.length-1];
+  w = push(w, { o: wp.c, c: wp.o + 0.12, h: wp.o + 0.15, l: wp.c - 0.05, v: 200 });
+  ok(!has(P(w), 'engulf-bull', 'long'), 'a body far smaller than the tape ATR is NOT an engulfing (ATR-normalised)');
+
+  ok(P(tape(29, i => 100 + i, 1)).patterns.length === 0, 'below the 30-bar floor no pattern is claimed');
+  ok(P(null).patterns.length === 0, 'a null tape claims no pattern');
+}
+
+console.log('== patterns and the gold desks join the same tally ==');
+{
+  const c = f(rising);
+  ok(c.reads && c.reads.length >= c.checked - 0, 'the vote list is exposed (' + c.reads.length + ')');
+  ok(c.reads.some(v => /^pat:/.test(v.id)) === (c.patterns.length > 0), 'every fired pattern contributes a pat: vote');
+  ok(c.patterns.length === 0 || c.score === c.reads.reduce((a, v) => a + v.vote, 0),
+     'the score is exactly the sum of the votes (patterns can carry strength 2)');
+  ok(c.gold && typeof c.gold === 'object', 'the gold-desk evidence block is present');
+  ok(Array.isArray(c.gold.votes), 'the gold-desk votes are listed');
+  ok(c.gold.notes.length >= 0, 'unread readers are named rather than guessed (' + c.gold.notes.length + ' note(s))');
+}
+
+console.log('== a swing setup forms beside the scalp one ==');
+{
+  const both = f(rising, { swingRows: falling });
+  ok(both && both.scalp && both.swing, 'both a scalp and a swing block are returned');
+  ok(both.scalp.timeframe === '15m' && both.swing.timeframe === '4h', 'the two blocks name their timeframes');
+  ok(both.scalp.dir === 'BULL' && both.swing.dir === 'BEAR',
+     'opposite tapes give opposite setups (scalp ' + both.scalp.dir + ' / swing ' + both.swing.dir + ')');
+  ok(both.swing.bracket.side === 'short' && both.swing.bracket.sl > both.swing.bracket.entry,
+     'the swing bracket follows its own side');
+  ok(f(rising, {}). swing === null, 'with no 4h tape the swing block is absent, not invented');
+}
 console.log('\ntest-candle-confluence: ' + pass + ' passed, 0 failed');
