@@ -18459,8 +18459,8 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
-/* hg-v1309: Advanced AI Candle Forecast Engine. 
-   Integrates Pattern Recognition (Doji, Tweezer, Harami, Stars), 
+/* hg-v1310: Advanced AI Candle Forecast Engine. 
+   Integrates Pattern Recognition (Doji, Tweezer, Harami, Stars, Piercing, Dark Cloud, Soldiers/Crows), 
    Structural Confluence (Order Blocks, Liquidity Sweeps), and MTF Trend Alignment. */
 function goldCandleForecast(rows) {
   try {
@@ -18495,6 +18495,10 @@ function goldCandleForecast(rows) {
       pattern = 'HARAMI';
     }
 
+    // Piercing Line / Dark Cloud Cover
+    if (c > o && prev.c < prev.o && c > (Math.min(prev.o, prev.c) + (prevBodySize * 0.5))) pattern = 'PIERCING_LINE';
+    else if (c < o && prev.c > prev.o && c < (Math.max(prev.o, prev.c) - (prevBodySize * 0.5))) pattern = 'DARK_CLOUD_COVER';
+
     // Morning/Evening Star
     if (n >= 4) {
         const p2 = rows[n-3];
@@ -18504,16 +18508,27 @@ function goldCandleForecast(rows) {
         else if (isStarBody && c < o && p1.c > p1.o && p2.l < p1.l) pattern = 'EVENING_STAR';
     }
 
+    // Three White Soldiers / Three Black Crows (Simplified check for 3 consecutive strong candles)
+    if (n >= 4) {
+        const c1 = rows[n-3].c, o1 = rows[n-3].o;
+        const c2 = rows[n-2].c, o2 = rows[n-2].o;
+        const c3 = rows[n-1].c, o3 = rows[n-1].o;
+        if (c3 > o3 && c2 > o2 && c1 > o1 && c3 > c2 && c2 > c1) pattern = 'THREE_WHITE_SOLDIERS';
+        else if (c3 < o3 && c2 < o2 && c1 < o1 && c3 < c2 && c2 < c1) pattern = 'THREE_BLACK_CROWS';
+    }
+
     // 3. Structural Confluence (Order Blocks & Liquidity)
     let structureScore = 0;
     const ob = window.CoreEngine?.math?.findOrderBlock(rows, c > o ? 'bullish' : 'bearish');
     const lp = window.CoreEngine?.math?.findLiquidityPools(rows);
 
     if (ob) {
-        if ((c > ob.bottom && c < ob.top)) structureScore += 3;
+        // Setup formation: Pattern occurring at/near Order Block
+        if ((c > ob.bottom && c < ob.top)) structureScore += 4;
+        else if (Math.abs(c - ob.top) / range < 0.2 || Math.abs(c - ob.bottom) / range < 0.2) structureScore += 2;
     }
-    if (lp.buySide && c >= lp.buySide.level * 0.998) structureScore += 2;
-    if (lp.sellSide && c <= lp.sellSide.level * 1.002) structureScore -= 2;
+    if (lp.buySide && c >= lp.buySide.level * 0.998) structureScore += 3;
+    if (lp.sellSide && c <= lp.sellSide.level * 1.002) structureScore -= 3;
 
     // 4. Trend & Momentum Alignment
     const ema9 = window.CoreEngine?.math?.ema(rows.map(r => r.c), 9);
@@ -18524,10 +18539,10 @@ function goldCandleForecast(rows) {
     let score = 0;
     const reasons = [];
 
-    if (pattern !== 'NONE') { score += 3; reasons.push(`Pattern: ${pattern}`); }
+    if (pattern !== 'NONE') { score += 4; reasons.push(`Pattern: ${pattern}`); }
     score += structureScore;
     if ((trendDir === 'long' && c > ema9[n-1]) || (trendDir === 'short' && c < ema21[n-1])) {
-        score += 2; reasons.push('Trend Alignment');
+        score += 3; reasons.push('Trend Alignment');
     }
 
     // Volatility Check
@@ -18536,10 +18551,10 @@ function goldCandleForecast(rows) {
 
     // Final Verdict
     let dir = null;
-    if (score >= 4) dir = trendDir === 'long' ? 'BULL' : 'BEAR';
-    else if (score <= -4) dir = trendDir === 'long' ? 'BEAR' : 'BULL';
+    if (score >= 6) dir = trendDir === 'long' ? 'BULL' : 'BEAR'; // Higher threshold for high-confluence setups
+    else if (score <= -6) dir = trendDir === 'long' ? 'BEAR' : 'BULL';
 
-    const confidence = Math.min(Math.abs(score) * 15, 98);
+    const confidence = Math.min(Math.abs(score) * 12, 98);
 
     // 6. Risk Management (ATR-based TP/SL)
     let sl = dir === 'BULL' ? c - (atrLast * 2) : c + (atrLast * 2);
@@ -18562,7 +18577,15 @@ function goldCandleForecast(rows) {
       note: dir ? `High Confidence ${dir} setup detected via AI confluence.` : 'Scanning for high-probability setups...'
     };
 
-  } catch (e) { console.error('[CandleForecast v1309 Error]', e); return null; }
+  } catch (e) { console.error('[CandleForecast v1310 Error]', e); return null; }
+}
+
+if (typeof window !== "undefined") {
+  window.goldCandleForecast = goldCandleForecast;
+}
+
+if (typeof window !== "undefined") {
+  window.goldCandleForecast = goldCandleForecast;
 }
 
 if (typeof window !== "undefined") {
