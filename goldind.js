@@ -19268,6 +19268,85 @@ function hgCfDeskVotes(rows, opts, dir) {
   }
 }
 
+function hgCfBuildSetup(rows, opts, fc) {
+  /* hg-v1318: A SCALP SETUP AND A SWING SETUP, from the candle read.
+     WHY TWO. CANDLE FORECAST printed ONE bracket. A 15m read and a 4h read are
+     different trades: the scalp lives or dies inside a session, the swing rides a
+     move for days, and a reader deciding whether to take either was shown a single
+     set of levels with no statement of which horizon they belonged to. The tab now
+     prints BOTH, each labelled and each carrying its OWN ATR, because risk has to be
+     measured on the timeframe the trade is taken on.
+     ONE HOME, TWO INSTANCES (hg-v949). This function is the only place a bracket is
+     built, and the tab calls it twice with a different tape. That is deliberately
+     NOT two copies of the maths — a second copy would drift, and the whole point of
+     showing two horizons is that they are comparable.
+     PURE AND TAPE-DRIVEN. It takes the rows it is handed and fetches nothing: the
+     TAB owns the fetching (it already reads the house gold loader and the 4h tape),
+     so this stays testable in a sandbox with no network and no DOM.
+     THE RULES ARE THE ENGINE'S OWN — a named pattern, plus structure or a desk read
+     in the same direction, and no opposing structure or desk. Nothing new is
+     thresholded here; the builder only turns a verdict the engine already reached
+     into entry, stop and two targets. */
+  var out = { ok: false, tf: (opts && opts.tf) || '15m', dir: null, formed: false, why: '', entry: null, stop: null, tp1: null, tp2: null, risk: null, rr: null, riskAtr: null, stopSource: null, parts: '', barsPerDay: null };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) { out.why = 'tape too thin for a ' + out.tf + ' setup'; return out; }
+    var f = fc;
+    if (!f && typeof goldCandleForecast === 'function') f = goldCandleForecast(rows);
+    if (!f || !f.dir) { out.why = 'no candle read on the ' + out.tf + ' tape'; return out; }
+    out.ok = true;
+    out.dir = f.dir;
+    out.atr = isFinite(+f.atr) ? +f.atr : null;
+    out.entry = isFinite(+f.close) ? +f.close : null;
+    out.stop = (f.sl === undefined) ? null : f.sl;
+    out.tp1 = (f.tp1 === undefined) ? null : f.tp1;
+    out.tp2 = (f.tp2 === undefined) ? null : f.tp2;
+    out.stopSource = f.stopSource || null;
+    out.patterns = (f.patterns || []).slice();
+    out.advancedPatterns = (f.advancedPatterns || []).slice();
+    out.patternWhere = f.patternWhere || null;
+    out.patternDrift = f.patternDrift || null;
+    out.structure = f.structure || null;
+    out.desk = f.desk || null;
+    out.strength = f.strength;
+    /* the horizon, stated in BARS rather than in prose, so a reader can see that the
+       scalp's stop lives inside one session and the swing's spans several */
+    var tf = String(out.tf).toLowerCase();
+    out.barsPerDay = /^15m$/.test(tf) ? 96 : (/^1h$/.test(tf) ? 24 : (/^4h$/.test(tf) ? 6 : (/^1d$/.test(tf) ? 1 : null)));
+    /* FORMATION — the engine's own rule, read off the result rather than re-run */
+    if (f.setup) {
+      out.formed = true;
+      out.parts = f.setupParts || '';
+      out.label = f.setup;                       /* 'LONG SETUP' / 'SHORT SETUP' */
+      out.why = f.setup + ' on ' + out.tf + (out.parts ? ' — ' + out.parts : '');
+    } else {
+      out.label = (f.dir === 'BULL' ? 'LONG' : (f.dir === 'BEAR' ? 'SHORT' : 'NEUTRAL')) + ' READ';
+      out.why = 'no ' + out.tf + ' setup: ' + (f.dir === 'NEUTRAL'
+        ? 'the tape is NEUTRAL'
+        : 'a named pattern plus structure or a desk read must agree — ' + (f.reasons || []).filter(function (r) {
+            return /no structure|no candlestick pattern|desk:/i.test(String(r));
+          }).join(' · '));
+    }
+    if (out.formed && isFinite(out.entry) && isFinite(out.stop)) {
+      var sign = (out.dir === 'BULL') ? 1 : -1;
+      out.risk = +(Math.abs(out.entry - out.stop)).toFixed(2);
+      out.rr = (out.risk > 0 && isFinite(out.tp2)) ? +(((out.tp2 - out.entry) * sign) / out.risk).toFixed(2) : null;
+      out.riskAtr = (out.atr > 0 && isFinite(out.risk)) ? +(out.risk / out.atr).toFixed(2) : null;
+    } else if (isFinite(out.entry) && isFinite(out.stop) && out.atr > 0) {
+      /* NOT FORMED still reports the risk the reader would be taking — the bracket
+         above is real even when the desk declines to call it a setup, and the ATR
+         multiple is what makes a scalp stop and a swing stop comparable. Reported,
+         never labelled a setup. */
+      out.risk = +(Math.abs(out.entry - out.stop)).toFixed(2);
+      out.riskAtr = +(out.risk / out.atr).toFixed(2);
+    }
+    return out;
+  } catch (e) {
+    out.ok = false;
+    out.why = 'setup build error';
+    return out;
+  }
+}
+
 function hgCfConfluence(rows, opts, fc) {
   /* hg-v1314: THE CONFLUENCE READ — what the OTHER gold desks know, put beside the
      candle read, on this tab.
@@ -19801,4 +19880,8 @@ if (typeof window !== "undefined") {
   /* hg-v1317: the per-desk vote, exported so a guard can drive it directly and the
      tab can show which OTHER gold desks formed a side on the same tape. */
   window.hgCfDeskVotes = hgCfDeskVotes;
+  /* hg-v1318: the one bracket builder. The tab calls it twice — once on the 15m tape
+     for the scalp and once on the 4h tape for the swing — so the two horizons are
+     built by the SAME code path and stay comparable (hg-v949). */
+  window.hgCfBuildSetup = hgCfBuildSetup;
 }

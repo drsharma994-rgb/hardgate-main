@@ -133,6 +133,37 @@ on every page load since v14-2:
           }, forecast);
         }
       } catch (eCf) { forecast.confluence = null; }
+
+      /* hg-v1318: THE SCALP AND THE SWING.
+         The tab printed ONE bracket with no statement of which horizon it belonged
+         to. A 15m read and a 4h read are different trades — the scalp lives inside a
+         session, the swing rides a move for days — so both are built now, by the SAME
+         builder in goldind.js (one home), each on its own tape and each carrying its
+         OWN ATR, because risk has to be measured on the timeframe the trade is taken
+         on. The 4h tape is fetched through the same loader chain as the 15m one; if it
+         cannot be read the swing simply reports why, and the scalp is unaffected. */
+      forecast.scalp = (function () {
+        try {
+          return (typeof window.hgCfBuildSetup === 'function')
+            ? window.hgCfBuildSetup(candles, { tf: '15m' }, forecast) : null;
+        } catch (eSc) { return null; }
+      })();
+      forecast.swing = null;
+      try {
+        var load4 = this.loadGold('4h', 120);
+        var loaded4 = await load4;
+        var c4 = loaded4 && loaded4.rows;
+        if (Array.isArray(c4) && c4.length >= 30) {
+          var fc4 = window.goldCandleForecast(c4);
+          forecast.swing = (typeof window.hgCfBuildSetup === 'function')
+            ? window.hgCfBuildSetup(c4, { tf: '4h' }, fc4) : null;
+          if (forecast.swing) forecast.swing.source = loaded4.source || '';
+        } else {
+          forecast.swing = { ok: false, tf: '4h', formed: false, why: 'the 4h gold tape could not be read, so no swing bracket is shown' };
+        }
+      } catch (eSw) {
+        forecast.swing = { ok: false, tf: '4h', formed: false, why: 'the 4h tape failed: ' + String((eSw && eSw.message) || eSw) };
+      }
       this.renderResult(resultArea, statusEl, forecast);
 
     } catch (error) {
@@ -142,20 +173,28 @@ on every page load since v14-2:
     }
   };
 
-  mod.loadGold15m = async function() {
+  /* hg-v1318: ONE loader for every horizon. This was hard-wired to 15m, so the tab
+     could only ever describe a scalp; the swing bracket needs the SAME chain on the
+     4h tape (house loader -> XAU -> IUX-anchored PAXG). Parameterising it rather than
+     adding a second loader keeps one home for the feed order and the PAXG anchor
+     (hg-v949) — a copied chain would drift and the two horizons would disagree about
+     which feed they came from. */
+  mod.loadGold = async function(tf, count) {
+    tf = tf || '15m';
+    count = count || 80;
     var pack = null;
     if (typeof window.getGoldCandles === 'function') {
-      try { pack = await window.getGoldCandles('15m', 80); } catch (e) { pack = null; }
+      try { pack = await window.getGoldCandles(tf, count); } catch (e) { pack = null; }
     }
     var rows = pack && pack.rows;
-    if (rows && rows.length >= 20) return { rows: rows, source: pack.source || 'gold tape' };
+    if (rows && rows.length >= 20) return { rows: rows, source: pack.source || ('gold tape ' + tf) };
     if (typeof window.binanceKlines === 'function') {
       try {
-        var xau = await window.binanceKlines('XAUUSDT', '15m', 80);
-        if (xau && xau.length >= 20) return { rows: xau, source: 'BINANCE XAUUSDT' };
+        var xau = await window.binanceKlines('XAUUSDT', tf, count);
+        if (xau && xau.length >= 20) return { rows: xau, source: 'BINANCE XAUUSDT ' + tf };
       } catch (e2) {}
       try {
-        var paxg = await window.binanceKlines('PAXGUSDT', '15m', 80);
+        var paxg = await window.binanceKlines('PAXGUSDT', tf, count);
         if (paxg && paxg.length >= 20) {
           /* hg-v1310: a DIRECT PAXG fallback leaves the shared macro chain, so it
              is anchored here through the one home (gold-iux.js), exactly as
@@ -167,15 +206,17 @@ on every page load since v14-2:
             var iuxFn = (typeof window.hgGoldIuxApplyRows === 'function') ? window.hgGoldIuxApplyRows : null;
             if (iuxFn) {
               var anchored = await iuxFn(paxg, 'binance-paxg');
-              if (anchored && anchored.length) return { rows: anchored, source: 'BINANCE PAXGUSDT · IUX anchored' };
+              if (anchored && anchored.length) return { rows: anchored, source: 'BINANCE PAXGUSDT ' + tf + ' · IUX anchored' };
             }
           } catch (eIx) {}
-          return { rows: paxg, source: 'BINANCE PAXGUSDT' };
+          return { rows: paxg, source: 'BINANCE PAXGUSDT ' + tf };
         }
       } catch (e3) {}
     }
     return { rows: [], source: '' };
   };
+
+  mod.loadGold15m = function () { return mod.loadGold('15m', 80); };
 
   mod.loadMacro = async function() {
     var cached = null;
@@ -244,6 +285,43 @@ on every page load since v14-2:
         + '</b> · ' + cfl.with_ + ' read' + (cfl.with_ === 1 ? '' : 's') + ' with, '
         + cfl.against + ' against, ' + cfl.unread + ' unread</div>'
         + '<ul class="lst">' + rowsHtml + '</ul>'
+        /* hg-v1318: THE TWO HORIZONS, side by side. One builder produced both, so they
+       are comparable; each carries its own ATR and its own R multiple, because a
+       scalp stop and a swing stop in dollars are not the same risk. */
+    var horizonsHtml = '';
+    (function () {
+      var wants = [['scalp', 'SCALP', forecast.scalp], ['swing', 'SWING', forecast.swing]];
+      var have = wants.filter(function (w) { return w[2]; });
+      if (!have.length) return;
+      var cells = wants.map(function (w) {
+        var s = w[2], tag = w[1];
+        if (!s) return '<td style="vertical-align:top;padding:8px;"><b>' + tag + '</b><div class="note">not read</div></td>';
+        if (!s.ok) return '<td style="vertical-align:top;padding:8px;"><b>' + tag + '</b><div class="note">' + String(s.why).replace(/</g, '') + '</div></td>';
+        var formed = s.formed
+          ? '<span class="pos" style="font-weight:700;">' + String(s.label) + '</span>'
+          : '<span class="note">' + String(s.label || 'READ') + ' · NOT A SETUP</span>';
+        var lv = s.formed
+          ? '<div style="margin-top:4px;">Entry <b>' + mod.fmt(s.entry) + '</b><br>'
+            + 'Stop <span class="neg" style="font-weight:700;">' + mod.fmt(s.stop) + '</span>'
+            + ' <span class="note">(' + String(s.stopSource || '') + ' · ' + (s.riskAtr == null ? '—' : s.riskAtr + 'x ATR') + ')</span><br>'
+            + 'TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp1) + '</span><br>'
+            + 'TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp2) + '</span>'
+            + (s.rr == null ? '' : ' <span class="note">(' + s.rr + 'R to TP2)</span>') + '</div>'
+          : '<div class="note" style="margin-top:4px;">' + String(s.why || '').replace(/</g, '') + '</div>';
+        var pat = (s.patterns && s.patterns.length) ? s.patterns.join(', ') : 'no named pattern';
+        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);">'
+          + '<b>' + tag + '</b> <span class="note">' + String(s.tf || '') + '</span><br>'
+          + formed
+          + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + '</div>'
+          + lv + '</td>';
+      }).join('');
+      horizonsHtml = '<div class="note" data-cf-horizons="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
+        + '<b>SCALP AND SWING</b> <span class="note">— both built by one builder, each on its own tape</span>'
+        + '<table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>' + cells + '</tr></table>'
+        + '<div class="note">A scalp stop and a swing stop in dollars are not the same risk: read each against its own ATR above.</div>'
+        + '</div>';
+    })();
+
         /* hg-v1317: WHAT EACH GOLD DESK FORMED ON THIS SAME TAPE. A desk that minted
            nothing reads "formed nothing", never agreement — most desks form nothing
            on any given tape by design, and counting silence as a quorum would be the
@@ -286,6 +364,7 @@ on every page load since v14-2:
           ${forecast.source ? '<li><b>Tape:</b> ' + String(forecast.source).replace(/</g, '') + '</li>' : ''}
         </ul>
         <ul class="lst">${reasons}</ul>
+        ${horizonsHtml}
         ${conflHtml}
         <div class="note" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">
           ${forecast.note || ''}
