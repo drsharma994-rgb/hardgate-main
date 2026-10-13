@@ -98,7 +98,7 @@ console.log('\n== 3) it builds BOTH horizons, each with its own ATR ==');
      silently makes the engine look like it refused the tape, which is exactly how
      this guard first failed. hgCfStructure and hgCfGoldDesk are upstream's additions
      and the engine calls both. */
-  const NEEDED = ['hgCfPack', 'hgCfCandlePatterns', 'hgCfAdvancedPatterns', 'hgCfStructure', 'aAdvance', 'hgCfGoldDesk'];
+  const NEEDED = ['hgCfPack', 'hgCfCandlePatterns', 'hgCfAdvancedPatterns', 'hgCfStructure', 'aAdvance', 'hgCfGoldDesk', 'hgCfHigherFrame', 'hgCfLocatedSide'];
   const helpers = NEEDED.map(n => lift(block, n)).join('\n');
   ok(helpers.length > 20000, 'every helper the engine calls was lifted (' + helpers.length + ' chars)');
   /* the engine references W for the structure and desk readers */

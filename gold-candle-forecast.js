@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A setup prints when a named candlestick pattern has two independent families with it and none against. The families are the candle, the shared indicators, the core strategies, the gold fundamentals, and every gold tab: scalp, swing, pine, ganesh, pro, spot, direction, ultra, omnigold, omnigold desk, opti, new gold, super gold, milli and coint. A tab that has not been scanned stays unread. Nothing is filled in. The stop is still the pattern extreme, or one ATR. Tab prices are not the stop.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Each one prints a setup only when a named candlestick pattern is confirmed by structure, a gold-desk read, or a higher timeframe, and no higher timeframe is against it. The confluence beside that setup counts the candle, the shared indicators, the catalog frame, the gold fundamentals, higher-timeframe structure, and every gold tab. A family leans only when its reads net one way. Unread is not agreement. The stop is still the pattern extreme, or one ATR. Tab prices are not the stop.
           </div>
         </div>
       `;
@@ -72,6 +72,36 @@ on every page load since v14-2:
     refresh: async function() {
       await this.runForecast();
     }
+  };
+
+  mod.stampTicket = function(forecast) {
+    if (!forecast) return;
+    var cflNow = forecast.confluence;
+    if (cflNow && cflNow.desks && cflNow.desks.length) {
+      forecast.tabs = cflNow.desks.map(function (d) {
+        var side = d.lean === true ? 'with' : (d.lean === false ? 'against' : 'unread');
+        return String(d.desk) + ' ' + side;
+      }).join(', ');
+    }
+    if (!(cflNow && cflNow.ticket && (forecast.dir === 'BULL' || forecast.dir === 'BEAR') && !forecast.setup)) return;
+    var patNames = (forecast.patterns && forecast.patterns.length) ? forecast.patterns.slice() : [];
+    var wantLean = forecast.dir === 'BULL' ? 1 : -1;
+    var leans = forecast.patternLeans || [];
+    var ai, oneLean;
+    for (ai = 0; ai < leans.length; ai++) {
+      oneLean = leans[ai];
+      if (oneLean && oneLean.lean === wantLean && oneLean.name) patNames.push(oneLean.name);
+    }
+    if (!patNames.length && forecast.advancedPatterns && forecast.advancedPatterns.length) patNames = forecast.advancedPatterns.slice();
+    if (!patNames.length) return;
+    var fams = [];
+    (cflNow.voters || []).forEach(function (v) {
+      if (v && v.lean === true && v.family && v.family !== 'candles' && fams.indexOf(v.family) < 0) fams.push(v.family);
+    });
+    forecast.setup = forecast.dir === 'BULL' ? 'LONG SETUP' : 'SHORT SETUP';
+    forecast.setupParts = patNames.join(', ') + (fams.length ? ' · ' + fams.join(', ') : '');
+    var note = String(forecast.note || '').replace(/^No setup formed — the call is the vote only\. /, '');
+    forecast.note = forecast.setup + ': ' + forecast.setupParts + '. ' + note;
   };
 
   /**
@@ -145,36 +175,7 @@ on every page load since v14-2:
          stop: pattern extreme when it sits 0.25 to 2.5 ATR away, otherwise one
          ATR. No tab price is copied onto that stop. Done before the scalp
          bracket is built, so that bracket sees the setup the ticket earned. */
-      var cflNow = forecast.confluence;
-      if (cflNow && cflNow.desks && cflNow.desks.length) {
-        forecast.tabs = cflNow.desks.map(function (d) {
-          var side = d.lean === true ? 'with' : (d.lean === false ? 'against' : 'unread');
-          return String(d.desk) + ' ' + side;
-        }).join(', ');
-      }
-      if (cflNow && cflNow.ticket && (forecast.dir === 'BULL' || forecast.dir === 'BEAR') && !forecast.setup) {
-        var patNames = (forecast.patterns && forecast.patterns.length) ? forecast.patterns.slice() : [];
-        var wantLean = forecast.dir === 'BULL' ? 1 : -1;
-        var leans = forecast.patternLeans || [];
-        var ai, oneLean;
-        for (ai = 0; ai < leans.length; ai++) {
-          oneLean = leans[ai];
-          if (oneLean && oneLean.lean === wantLean && oneLean.name) patNames.push(oneLean.name);
-        }
-        if (!patNames.length && forecast.advancedPatterns && forecast.advancedPatterns.length) {
-          patNames = forecast.advancedPatterns.slice();
-        }
-        if (patNames.length) {
-          var fams = [];
-          (cflNow.voters || []).forEach(function (v) {
-            if (v && v.lean === true && v.family && v.family !== 'candles' && fams.indexOf(v.family) < 0) fams.push(v.family);
-          });
-          forecast.setup = forecast.dir === 'BULL' ? 'LONG SETUP' : 'SHORT SETUP';
-          forecast.setupParts = patNames.join(', ') + (fams.length ? ' · ' + fams.join(', ') : '');
-          var note = String(forecast.note || '').replace(/^No setup formed — the call is the vote only\. /, '');
-          forecast.note = forecast.setup + ': ' + forecast.setupParts + '. ' + note;
-        }
-      }
+      this.stampTicket(forecast);
 
       /* hg-v1318: THE SCALP AND THE SWING.
          The tab printed ONE bracket with no statement of which horizon it belonged
@@ -196,7 +197,23 @@ on every page load since v14-2:
         var loaded4 = await load4;
         var c4 = loaded4 && loaded4.rows;
         if (Array.isArray(c4) && c4.length >= 30) {
-          var fc4 = window.goldCandleForecast(c4);
+          var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d });
+          try {
+            if (fc4 && typeof window.hgCfConfluence === 'function') {
+              fc4.confluence = window.hgCfConfluence(c4, {
+                horizon: 'swing', tf: '4h',
+                fundExtra: macroSnap || macroLive || {},
+                rows15m: candles,
+                rows1h: tapes && tapes.rows1h,
+                rows1d: tapes && tapes.rows1d,
+                htf1h: false, htf4h: false,
+                spot: tapes && tapes.spot, perp: tapes && tapes.perp,
+                macro: macroSnap || macroLive || null,
+                ctx: (macroSnap || macroLive) ? { macro: macroSnap || macroLive } : null
+              }, fc4);
+            }
+          } catch (eSwC) { if (fc4) fc4.confluence = null; }
+          if (fc4) this.stampTicket(fc4);
           forecast.swing = (typeof window.hgCfBuildSetup === 'function')
             ? window.hgCfBuildSetup(c4, { tf: '4h' }, fc4) : null;
           if (forecast.swing) forecast.swing.source = loaded4.source || '';
@@ -312,6 +329,7 @@ on every page load since v14-2:
       + '<li><b>Gold desk:</b> ' + String(forecast.desk || 'unread').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
       + '<li><b>Gold tabs:</b> ' + String(forecast.tabs || 'unread').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
       + '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
+      + '<li><b>Higher timeframes:</b> ' + String(forecast.higher || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
       + (called
         ? '<li><b>Stop:</b> <span class="neg" style="font-weight:700;">' + this.fmt(forecast.sl) + '</span> <span class="note">(' + (forecast.stopSource === 'pattern' ? 'pattern extreme' : 'one ATR') + ')</span></li>'
           + '<li><b>TP1:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp1) + '</span></li>'
@@ -324,93 +342,53 @@ on every page load since v14-2:
        from the desks it is reading. */
     var cfl = forecast.confluence;
     var conflHtml = '';
-    if (cfl && cfl.ok) {
-      var rowsHtml = (cfl.voters || []).map(function(v) {
-        var mark = v.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>'
-          : (v.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>'
-            : '<span class="note">unread</span>');
-        var w = v.why ? ' <span class="note">— ' + String(v.why).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>' : '';
-        return '<li>' + mark + ' <b>' + String(v.name).replace(/</g, '') + '</b>'
-          + ' <span class="note">(' + String(v.family) + ')</span>' + w + '</li>';
-      }).join('');
-      var verdict = cfl.ticket
-        ? '<b class="pos">CONFLUENCE SETUP</b>'
-        : '<b>CONFLUENCE READ</b> <span class="note">· NOT A TICKET</span>';
-      conflHtml = '<div class="note" data-cf-confluence="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
-        + '<div style="margin-bottom:4px;">' + verdict
-        + ' <span class="note">— ' + String(cfl.why).replace(/</g, '') + '</span></div>'
-        + '<div class="note" style="margin-bottom:4px;"><b>'
-        + cfl.familiesWith + ' famil' + (cfl.familiesWith === 1 ? 'y' : 'ies') + ' with the call'
-        + (cfl.familiesAgainst ? ', ' + cfl.familiesAgainst + ' AGAINST' : ', none against')
-        + '</b> · ' + cfl.with_ + ' read' + (cfl.with_ === 1 ? '' : 's') + ' with, '
-        + cfl.against + ' against, ' + cfl.unread + ' unread</div>'
-        + '<ul class="lst">' + rowsHtml + '</ul>'
-        /* hg-v1318: THE TWO HORIZONS, side by side. One builder produced both, so they
-       are comparable; each carries its own ATR and its own R multiple, because a
-       scalp stop and a swing stop in dollars are not the same risk. */
     var horizonsHtml = '';
     (function () {
       var wants = [['scalp', 'SCALP', forecast.scalp], ['swing', 'SWING', forecast.swing]];
-      var have = wants.filter(function (w) { return w[2]; });
-      if (!have.length) return;
+      if (!wants.some(function (w) { return w[2]; })) return;
       var cells = wants.map(function (w) {
-        var s = w[2], tag = w[1];
-        if (!s) return '<td style="vertical-align:top;padding:8px;"><b>' + tag + '</b><div class="note">not read</div></td>';
-        if (!s.ok) return '<td style="vertical-align:top;padding:8px;"><b>' + tag + '</b><div class="note">' + String(s.why).replace(/</g, '') + '</div></td>';
-        var formed = s.formed
-          ? '<span class="pos" style="font-weight:700;">' + String(s.label) + '</span>'
-          : '<span class="note">' + String(s.label || 'READ') + ' · NOT A SETUP</span>';
-        var lv = s.formed
-          ? '<div style="margin-top:4px;">Entry <b>' + mod.fmt(s.entry) + '</b><br>'
-            + 'Stop <span class="neg" style="font-weight:700;">' + mod.fmt(s.stop) + '</span>'
-            + ' <span class="note">(' + String(s.stopSource || '') + ' · ' + (s.riskAtr == null ? '—' : s.riskAtr + 'x ATR') + ')</span><br>'
-            + 'TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp1) + '</span><br>'
-            + 'TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp2) + '</span>'
-            + (s.rr == null ? '' : ' <span class="note">(' + s.rr + 'R to TP2)</span>') + '</div>'
-          : '<div class="note" style="margin-top:4px;">' + String(s.why || '').replace(/</g, '') + '</div>';
-        var pat = (s.patterns && s.patterns.length) ? s.patterns.join(', ') : 'no named pattern';
-        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);">'
-          + '<b>' + tag + '</b> <span class="note">' + String(s.tf || '') + '</span><br>'
-          + formed
-          + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + '</div>'
-          + lv + '</td>';
+        var bracket = w[2], tag = w[1];
+        if (!bracket) return '<td style="vertical-align:top;padding:8px;"><b>' + tag + '</b><div class="note">not read</div></td>';
+        if (!bracket.ok) return '<td style="vertical-align:top;padding:8px;"><b>' + tag + '</b><div class="note">' + String(bracket.why).replace(/</g, '') + '</div></td>';
+        var formed = bracket.formed
+          ? '<span class="pos" style="font-weight:700;">' + String(bracket.label) + '</span>'
+          : '<span class="note">' + String(bracket.label || 'READ') + ' · NOT A SETUP</span>';
+        var lv = bracket.formed
+          ? '<div style="margin-top:4px;">Entry <b>' + mod.fmt(bracket.entry) + '</b><br>Stop <span class="neg" style="font-weight:700;">' + mod.fmt(bracket.stop) + '</span> <span class="note">(' + String(bracket.stopSource || '') + ' · ' + (bracket.riskAtr == null ? '—' : bracket.riskAtr + 'x ATR') + ')</span><br>TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(bracket.tp1) + '</span><br>TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(bracket.tp2) + '</span>' + (bracket.rr == null ? '' : ' <span class="note">(' + bracket.rr + 'R to TP2)</span>') + '</div>'
+          : '<div class="note" style="margin-top:4px;">' + String(bracket.why || '').replace(/</g, '') + '</div>';
+        var pat = (bracket.patterns && bracket.patterns.length) ? bracket.patterns.join(', ') : 'no named pattern';
+        var adv = (bracket.advancedPatterns && bracket.advancedPatterns.length) ? (' · ' + bracket.advancedPatterns.join(', ')) : '';
+        var conf = bracket.confluenceWhy ? ('<div class="note">' + String(bracket.confluenceWhy).replace(/</g, '') + (bracket.ticket ? ' · confluence setup' : '') + '</div>') : '';
+        var hi = bracket.higher ? ('<div class="note">Higher: ' + String(bracket.higher).replace(/</g, '') + '</div>') : '';
+        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + '</td>';
       }).join('');
-      horizonsHtml = '<div class="note" data-cf-horizons="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
-        + '<b>SCALP AND SWING</b> <span class="note">— both built by one builder, each on its own tape</span>'
-        + '<table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>' + cells + '</tr></table>'
-        + '<div class="note">A scalp stop and a swing stop in dollars are not the same risk: read each against its own ATR above.</div>'
-        + '</div>';
+      horizonsHtml = '<div class="note" data-cf-horizons="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>SCALP AND SWING</b> <span class="note">— both built by one builder, each on its own tape</span><table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>' + cells + '</tr></table><div class="note">A scalp stop and a swing stop in dollars are not the same risk: read each against its own ATR above.</div></div>';
     })();
-
-        /* hg-v1317: WHAT EACH GOLD DESK FORMED ON THIS SAME TAPE. A desk that minted
-           nothing reads "formed nothing", never agreement — most desks form nothing
-           on any given tape by design, and counting silence as a quorum would be the
-           whole failure this row exists to prevent. */
-        + (function () {
-          var ds = cfl.desks || [];
-          if (!ds.length) return '';
-          var rows2 = ds.map(function (d) {
-            var mark = d.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>'
-              : (d.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>'
-                : '<span class="note">formed nothing</span>');
-            return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b>'
-              + ' <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short'
-              + (d.why ? ' · ' + String(d.why).replace(/&/g, '&amp;').replace(/</g, '&lt;') : '') + '</span></li>';
-          }).join('');
-          return '<div class="note" style="margin-top:6px;"><b>GOLD DESKS ON THIS TAPE</b>'
-            + ' — <span class="note">' + String(cfl.deskWhy || '').replace(/</g, '') + '</span>'
-            + '<ul class="lst">' + rows2 + '</ul></div>';
-        })()
-        + '<div class="note">Macro snapshot: ' + (forecast.macroRead
-          ? 'read — the fundamental family can vote'
-          : 'not cached this scan, so the fundamental family reads UNREAD (never counted as agreement)') + '</div>'
-        + (cfl.missing && cfl.missing.length
-          ? '<div class="note warn">Not read this scan: ' + cfl.missing.join(' · ') + '</div>' : '')
-        + '<div class="note">A ticket needs two independent families with the call, none against, and a named candle pattern. '
-        + 'Unread is never counted as agreement.</div></div>';
+    if (cfl && cfl.ok) {
+      var rowsHtml = (cfl.voters || []).map(function(v) {
+        var mark = v.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>' : (v.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>' : '<span class="note">unread</span>');
+        var why = v.why ? (' <span class="note">— ' + String(v.why).replace(/&/g, '&').replace(/</g, '<') + '</span>') : '';
+        return '<li>' + mark + ' <b>' + String(v.name).replace(/</g, '') + '</b> <span class="note">(' + String(v.family) + ')</span>' + why + '</li>';
+      }).join('');
+      var verdict = cfl.ticket ? '<b class="pos">CONFLUENCE SETUP</b>' : '<b>CONFLUENCE READ</b> <span class="note">· NOT A TICKET</span>';
+      var deskHtml = (function () {
+        var ds = cfl.desks || [];
+        if (!ds.length) return '';
+        var rows2 = ds.map(function (d) {
+          var mark = d.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>' : (d.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>' : '<span class="note">formed nothing</span>');
+          return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/&/g, '&').replace(/</g, '<')) : '') + '</span></li>';
+        }).join('');
+        return '<div class="note" style="margin-top:6px;"><b>GOLD DESKS ON THIS TAPE</b> — <span class="note">' + String(cfl.deskWhy || '').replace(/</g, '') + '</span><ul class="lst">' + rows2 + '</ul></div>';
+      })();
+      conflHtml = '<div class="note" data-cf-confluence="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
+        + '<div style="margin-bottom:4px;">' + verdict + ' <span class="note">— ' + String(cfl.why).replace(/</g, '') + '</span></div>'
+        + '<div class="note" style="margin-bottom:4px;"><b>' + cfl.familiesWith + ' famil' + (cfl.familiesWith === 1 ? 'y' : 'ies') + ' net with the call' + (cfl.familiesAgainst ? (', ' + cfl.familiesAgainst + ' net AGAINST') : ', no family net against') + '</b> · ' + cfl.with_ + ' read' + (cfl.with_ === 1 ? '' : 's') + ' with, ' + cfl.against + ' against, ' + cfl.unread + ' unread</div>'
+        + '<ul class="lst">' + rowsHtml + '</ul>' + deskHtml
+        + '<div class="note">Macro snapshot: ' + (forecast.macroRead ? 'read — the fundamental family can vote' : 'not cached this scan, so the fundamental family reads UNREAD (never counted as agreement)') + '</div>'
+        + (cfl.missing && cfl.missing.length ? ('<div class="note warn">Not read this scan: ' + cfl.missing.join(' · ') + '</div>') : '')
+        + '<div class="note">A confluence setup needs two families net with the call, no family net against, and a named candle pattern. Unread is never counted as agreement. The scalp and the swing each carry their own tape.</div></div>';
     } else if (cfl) {
-      conflHtml = '<div class="note" data-cf-confluence="unread" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
-        + '<b>CONFLUENCE</b> — not read: ' + String(cfl.why || 'unavailable').replace(/</g, '') + '</div>';
+      conflHtml = '<div class="note" data-cf-confluence="unread" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>CONFLUENCE</b> — not read: ' + String(cfl.why || 'unavailable').replace(/</g, '') + '</div>';
     }
 
     container.className = '';

@@ -18904,6 +18904,62 @@ function hgCfAdvancedPatterns(rows, atrLast) {
   if (b.bull && mid(b) && c.bear && d.bear && c.l > b.h && d.o > c.c && d.o < c.o && d.c < c.c && d.c > b.c)
     record('upside gap two crows', tag(-1, 'upside gap two crows'));
 
+  /* hg-v1320: shapes the three-bar and four-bar voters still cannot see.
+     A tower needs a stall between two long opposite bars, so it is not an engulfing.
+     On-neck and in-neck close at or just inside the prior low, below its midpoint,
+     so they are not a piercing line. Three stars in the south is a shrinking bear
+     run with rising lows. A mat hold pulls back but holds the long bar's midpoint,
+     which three methods does not allow. A hook pokes the prior extreme by less than
+     0.35 ATR and closes back through that bar. Named here, not added to the vote. */
+  if (n >= 6) {
+    var twA = p[n - 4], twB = p[n - 3], twC = p[n - 2];
+    if (big(twA) && mid(twA) && big(d) && mid(d) && twB.body < twA.body * 0.55 && twC.body < twA.body * 0.55) {
+      var twMid = (twA.o + twA.c) / 2;
+      if (twA.bear && d.bull && d.c > twMid && d.body >= twA.body * 0.6)
+        record('tower bottom', tag(1, 'tower bottom'));
+      if (twA.bull && d.bear && d.c < twMid && d.body >= twA.body * 0.6)
+        record('tower top', tag(-1, 'tower top'));
+    }
+  }
+  if (big(c) && mid(c) && c.bear && d.bull && d.o < c.l) {
+    var neck = c.l;
+    var bearBodyLo = Math.min(c.o, c.c);
+    var bearMid = (c.o + c.c) / 2;
+    if (Math.abs(d.c - neck) <= atrLast * 0.08)
+      record('on-neck line', tag(-1, 'on-neck line'));
+    else if (d.c > neck && d.c < bearMid && d.c <= bearBodyLo + (bearMid - bearBodyLo) * 0.95)
+      record('in-neck line', tag(-1, 'in-neck line'));
+  }
+  if (b.bear && c.bear && d.bear && mid(b) && c.range < b.range && d.range < c.range
+      && c.l >= b.l && d.l >= c.l && b.lower >= b.body && d.body <= c.body)
+    record('three stars in the south', tag(1, 'three stars in the south'));
+  if (n >= 6) {
+    var mh = p[n - 5];
+    var pull = [p[n - 4], p[n - 3], p[n - 2]];
+    if (big(mh) && mid(mh) && mh.bull && big(d) && d.bull && d.c > mh.h) {
+      var mhMid = (mh.o + mh.c) / 2;
+      var held = true, pi2;
+      for (pi2 = 0; pi2 < pull.length; pi2++) {
+        if (!(pull[pi2].body < mh.body * 0.6 && pull[pi2].l >= mhMid)) held = false;
+      }
+      if (held) record('mat hold', tag(1, 'mat hold'));
+    }
+    if (big(mh) && mid(mh) && mh.bear && big(d) && d.bear && d.c < mh.l) {
+      var mhMidS = (mh.o + mh.c) / 2;
+      var heldS = true, pi3;
+      for (pi3 = 0; pi3 < pull.length; pi3++) {
+        if (!(pull[pi3].body < mh.body * 0.6 && pull[pi3].h <= mhMidS)) heldS = false;
+      }
+      if (heldS) record('falling mat hold', tag(-1, 'falling mat hold'));
+    }
+  }
+  if (big(c) && d.l < c.l && (c.l - d.l) <= atrLast * 0.35 && d.bull && d.c > Math.max(c.o, c.c))
+    record('bullish hook reversal', tag(1, 'bullish hook reversal'));
+  if (big(c) && d.h > c.h && (d.h - c.h) <= atrLast * 0.35 && d.bear && d.c < Math.min(c.o, c.c))
+    record('bearish hook reversal', tag(-1, 'bearish hook reversal'));
+  if (big(d) && d.body > 0 && d.body <= d.range * 0.34 && d.upper >= d.body && d.lower >= d.body)
+    record('spinning top — indecision, no lean', null);
+
   /* ---- EXHAUSTION / STRUCTURE ---- */
   /* THREE-BAR CLIMAX: three consecutive expanding ranges with shrinking bodies —
      participation rising into a stall. Location decides what it means, which is
@@ -19250,22 +19306,39 @@ function hgCfDeskVotes(rows, opts, dir) {
       }
     }
 
-    /* GOLD SCALP — the scalp desk's own mint */
+    /* GOLD SCALP — the scalp desk's own mint.
+       On a swing horizon the rows in hand are 4h bars. Driving the 15m mint on
+       them would invent a scalp the desk did not form, so those engines stay
+       unread and say why. */
+    var swingHorizon = !!(opts && (opts.horizon === 'swing' || opts.tf === '4h'));
     var base = { rows15m: rows, rows1h: (opts && opts.rows1h) || null, rows4h: (opts && opts.rows4h) || null, now: nowMs };
-    drive('GOLD SCALP', 'gold scalp mint', (function () {
-      var f = engine('goldScalpSetups', 'GOLD SCALP');
-      return f ? function () { return f(base); } : null;
-    })());
-    /* GOLD SWING — same tape, swing desk */
-    drive('GOLD SWING', 'gold swing mint', (function () {
-      var f = engine('goldSwingSetups', 'GOLD SWING');
-      return f ? function () { return f(base); } : null;
-    })());
-    /* GOLD PINE — the pine lane scanner, when it can read this tape */
-    drive('GOLD PINE', 'pine lane scan', (function () {
-      var f = engine('goldPineScan', 'GOLD PINE');
-      return f ? function () { return f({ rows: rows, rows15m: rows, rows4h: base.rows4h, now: nowMs }); } : null;
-    })());
+    if (swingHorizon) {
+      push('GOLD SCALP', 'gold scalp mint', null, '15m scalp desk — not re-run on the 4h swing tape');
+      push('GOLD PINE', 'pine lane scan', null, 'pine lane is a 15m read — not re-run on the 4h tape');
+      var swingBase = {
+        rows15m: (opts && opts.rows15m) || null,
+        rows1h: (opts && opts.rows1h) || null,
+        rows4h: rows,
+        now: nowMs
+      };
+      drive('GOLD SWING', 'gold swing mint', (function () {
+        var f = engine('goldSwingSetups', 'GOLD SWING');
+        return f ? function () { return f(swingBase); } : null;
+      })());
+    } else {
+      drive('GOLD SCALP', 'gold scalp mint', (function () {
+        var f = engine('goldScalpSetups', 'GOLD SCALP');
+        return f ? function () { return f(base); } : null;
+      })());
+      drive('GOLD SWING', 'gold swing mint', (function () {
+        var f = engine('goldSwingSetups', 'GOLD SWING');
+        return f ? function () { return f(base); } : null;
+      })());
+      drive('GOLD PINE', 'pine lane scan', (function () {
+        var f = engine('goldPineScan', 'GOLD PINE');
+        return f ? function () { return f({ rows: rows, rows15m: rows, rows4h: base.rows4h, now: nowMs }); } : null;
+      })());
+    }
     /* GANESH GOLD — the 17-step framework's own state, when it reports one */
     drive('GANESH GOLD', '17-step framework', (function () {
       var f = engine('ganeshGoldState', 'GANESH GOLD');
@@ -19427,6 +19500,9 @@ function hgCfBuildSetup(rows, opts, fc) {
     out.patternDrift = f.patternDrift || null;
     out.structure = f.structure || null;
     out.desk = f.desk || null;
+    out.higher = f.higher || null;
+    out.confluenceWhy = (f.confluence && f.confluence.why) || '';
+    out.ticket = !!(f.confluence && f.confluence.ticket);
     out.strength = f.strength;
     /* the horizon, stated in BARS rather than in prose, so a reader can see that the
        scalp's stop lives inside one session and the swing's spans several */
@@ -19465,6 +19541,65 @@ function hgCfBuildSetup(rows, opts, fc) {
     out.why = 'setup build error';
     return out;
   }
+}
+
+function hgCfHigherFrame(tapes) {
+  /* Higher-timeframe structure, using the same structure reader as the candle.
+     A missing frame is unread. A split across frames confirms nothing and blocks
+     nothing. This does not set the stop. */
+  var empty = { bullNames: [], bearNames: [], notes: ['higher timeframes unread'], line: 'higher timeframes unread' };
+  try {
+    if (!tapes || typeof tapes !== 'object') return empty;
+    var bulls = [], bears = [], notes = [], legs = [['1h', tapes.rows1h], ['4h', tapes.rows4h], ['1d', tapes.rows1d]];
+    var i, label, rows, atrArr, a, st, names;
+    for (i = 0; i < legs.length; i++) {
+      label = legs[i][0];
+      rows = legs[i][1];
+      if (!Array.isArray(rows) || rows.length < 30) { notes.push(label + ' unread'); continue; }
+      if (typeof atr !== 'function') { notes.push(label + ' unread'); continue; }
+      atrArr = atr(rows, 14);
+      a = (atrArr && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
+      if (!(a > 0)) { notes.push(label + ' ATR unread'); continue; }
+      st = hgCfStructure(rows, a);
+      names = (st.bullNames || []).concat(st.bearNames || []);
+      if (st.bullVotes && !st.bearVotes) bulls.push(label + ' ' + st.bullNames.join(', '));
+      else if (st.bearVotes && !st.bullVotes) bears.push(label + ' ' + st.bearNames.join(', '));
+      else notes.push(label + ' ' + (names.join(', ') || 'no structure'));
+    }
+    if (bulls.length && bears.length) {
+      notes.push(bulls.concat(bears).join(' · ') + ' — higher frames split');
+      bulls = [];
+      bears = [];
+    }
+    var line = bulls.concat(bears).concat(notes).join(' · ');
+    return { bullNames: bulls, bearNames: bears, notes: notes, line: line || empty.line };
+  } catch (eHf) { return empty; }
+}
+
+function hgCfLocatedSide(adv) {
+  /* A disclosed advanced lean counts as a named shape only when its own note
+     says the location is where that pattern means something, or when a
+     continuation agrees with the 20-bar drift. A shape on both sides is a
+     clash and names nothing. This does not add a vote. */
+  var out = { bull: [], bear: [], clash: false };
+  if (!adv || !Array.isArray(adv.leans)) return out;
+  var cont = /tasuki|side-by-side|mat hold|on-neck|in-neck|separating/;
+  var i, L, notes, n, sits, agrees;
+  for (i = 0; i < adv.leans.length; i++) {
+    L = adv.leans[i];
+    if (!L || (L.lean !== 1 && L.lean !== -1) || !L.name) continue;
+    sits = false;
+    notes = adv.notes || [];
+    for (n = 0; n < notes.length; n++) {
+      if (String(notes[n]).indexOf(L.name) === 0 && String(notes[n]).indexOf('where this pattern means something') >= 0) sits = true;
+    }
+    agrees = cont.test(L.name) && ((L.lean === 1 && adv.aligned === 'up') || (L.lean === -1 && adv.aligned === 'down'));
+    if (!sits && !agrees) continue;
+    if (L.lean === 1) out.bull.push(L.name);
+    else out.bear.push(L.name);
+  }
+  if (out.bull.length && out.bear.length) { out.clash = true; out.bull = []; out.bear = []; }
+  return out;
 }
 
 function hgCfConfluence(rows, opts, fc) {
@@ -19646,8 +19781,13 @@ function hgCfConfluence(rows, opts, fc) {
         usedN: cat.usedN, uncheckedN: cat.uncheckedN, core: cat.core, optional: cat.optional,
         live: (cat.live || []).slice(0, 6), why: cat.why
       };
-      voter('strategies', 'Master Catalog frame', null,
-        cat.usedN + ' reads USED · ' + cat.uncheckedN + ' UNCHECKED — a frame, not a side');
+      var stratWhy = cat.usedN + ' reads USED · ' + cat.uncheckedN + ' UNCHECKED — a frame, not a side';
+      if (cat.linreg && cat.linreg.ok && isFinite(+cat.linreg.slope))
+        stratWhy += ' · linreg slope ' + (+cat.linreg.slope).toFixed(4);
+      if (cat.crsi && cat.crsi.ok && isFinite(+cat.crsi.crsi))
+        stratWhy += ' · Connors RSI ' + (+cat.crsi.crsi).toFixed(1);
+      if (cat.live && cat.live.length) stratWhy += ' · live ' + cat.live.slice(0, 6).join(', ');
+      voter('strategies', 'Master Catalog frame', null, stratWhy);
     } else {
       voter('strategies', 'Master Catalog frame', null, 'catalog engine unavailable');
       out.missing.push('the Master Catalog (hgGoldCatalogEngine)');
@@ -19673,6 +19813,27 @@ function hgCfConfluence(rows, opts, fc) {
       out.missing.push('the fundamental stack (hgFundamentalRegime)');
     }
 
+    /* ---- HIGHER TIMEFRAMES (hg-v1320) ----
+       The 15m tape is not the swing. Structure on 1h, 4h and 1d is the same
+       reader, called on those tapes. A caller that is itself the 4h tape passes
+       htf1h/htf4h false so a lower frame cannot veto a swing. */
+    if (opts && ((opts.htf1h !== false && opts.rows1h) || (opts.htf4h !== false && opts.rows4h) || opts.rows1d)) {
+      var htfBag = {
+        rows1h: (opts.htf1h === false) ? null : opts.rows1h,
+        rows4h: (opts.htf4h === false) ? null : opts.rows4h,
+        rows1d: opts.rows1d
+      };
+      var htfRead = hgCfHigherFrame(htfBag);
+      var hLean = null;
+      if (htfRead.bullNames.length && !htfRead.bearNames.length) hLean = wantsUp;
+      else if (htfRead.bearNames.length && !htfRead.bullNames.length) hLean = !wantsUp;
+      out.families.higher = { line: htfRead.line, bullNames: htfRead.bullNames, bearNames: htfRead.bearNames };
+      voter('higher', 'higher-timeframe structure', hLean, htfRead.line);
+    } else {
+      voter('higher', 'higher-timeframe structure', null, 'no higher tape was handed in');
+      out.missing.push('a higher-timeframe tape');
+    }
+
     /* ---- DESKS (hg-v1317): each gold tab's OWN engine, driven on this tape ----
        A family in its own right, and deliberately the LAST one added: the four above
        read shared series, while this asks what the other gold desks actually FORMED
@@ -19688,26 +19849,28 @@ function hgCfConfluence(rows, opts, fc) {
 
     /* ---- THE VERDICT: a count of families, never a score ---- */
     var famWith = 0, famAgainst = 0;
-    ['candles', 'technicals', 'strategies', 'fundamentals', 'desks'].forEach(function (k) {
-      var anyWith = false, anyAgainst = false;
+    ['candles', 'technicals', 'strategies', 'fundamentals', 'desks', 'higher'].forEach(function (k) {
+      var w = 0, a = 0;
       out.voters.forEach(function (v) {
         if (v.family !== k) return;
-        if (v.lean === true) anyWith = true;
-        else if (v.lean === false) anyAgainst = true;
+        if (v.lean === true) w++;
+        else if (v.lean === false) a++;
       });
-      if (anyAgainst) famAgainst++;
-      else if (anyWith) famWith++;
+      /* a family leans only when one side outnumbers the other. A tie is unread.
+         One dissenting read no longer makes the whole family a veto. */
+      if (a > w) famAgainst++;
+      else if (w > a) famWith++;
     });
     out.checked = out.with_ + out.against;
     out.familiesWith = famWith;
     out.familiesAgainst = famAgainst;
     out.ticket = !!(nPat > 0 && famWith >= 2 && famAgainst === 0);
     out.why = out.ticket
-      ? (famWith + ' independent families with the ' + (wantsUp ? 'long' : 'short')
-         + ' and none against, on a named candle pattern')
+      ? (famWith + ' independent families net with the ' + (wantsUp ? 'long' : 'short')
+         + ' and no family net against, on a named candle pattern')
       : (nPat === 0 ? 'no named candle pattern — the doctrine needs a shape, not just a drift'
-        : (famAgainst > 0 ? (famAgainst + ' famil' + (famAgainst === 1 ? 'y' : 'ies') + ' AGAINST the call')
-          : ('only ' + famWith + ' famil' + (famWith === 1 ? 'y' : 'ies') + ' with the call — two are required')));
+        : (famAgainst > 0 ? (famAgainst + ' famil' + (famAgainst === 1 ? 'y' : 'ies') + ' net AGAINST the call')
+          : ('only ' + famWith + ' famil' + (famWith === 1 ? 'y' : 'ies') + ' net with the call — two are required')));
     return out;
   } catch (e) {
     out.ok = false;
@@ -19938,25 +20101,41 @@ function goldCandleForecast(rows) {
       tp1 = +(c + sign * risk).toFixed(2);
       tp2 = +(c + sign * risk * 2).toFixed(2);
     }
+    var htf = hgCfHigherFrame(tapes);
+    reasons.push('higher timeframes: ' + htf.line);
+    var located = hgCfLocatedSide(adv);
+    if (located.clash) reasons.push('advanced patterns lean both ways — neither names the setup');
     var setup = null, setupParts = '';
     function hgCfSetupParts(patNames, extras) {
       var parts = patNames.slice(), i;
       for (i = 0; i < extras.length; i++) if (extras[i] && extras[i].length) parts = parts.concat(extras[i]);
       return parts.join(', ');
     }
-    if (!neutral && dir === 'BULL' && pat.bullVotes > 0 && (struct.bullVotes > 0 || desk.bullVotes > 0 || tabs.bullVotes > 0)) {
+    var bullShape = pat.bullNames.slice();
+    var bearShape = pat.bearNames.slice();
+    if (!bullShape.length && located.bull.length && !located.bear.length) bullShape = located.bull.slice();
+    if (!bearShape.length && located.bear.length && !located.bull.length) bearShape = located.bear.slice();
+    var htfBlocksBull = htf.bearNames.length > 0 && !htf.bullNames.length;
+    var htfBlocksBear = htf.bullNames.length > 0 && !htf.bearNames.length;
+    var bullConfirm = struct.bullVotes > 0 || desk.bullVotes > 0 || tabs.bullVotes > 0 || htf.bullNames.length > 0;
+    var bearConfirm = struct.bearVotes > 0 || desk.bearVotes > 0 || tabs.bearVotes > 0 || htf.bearNames.length > 0;
+    if (htfBlocksBull && dir === 'BULL') reasons.push('higher timeframe is against the long — no setup');
+    if (htfBlocksBear && dir === 'BEAR') reasons.push('higher timeframe is against the short — no setup');
+    if (!neutral && dir === 'BULL' && bullShape.length && bullConfirm && !htfBlocksBull) {
       setup = 'LONG SETUP';
-      setupParts = hgCfSetupParts(pat.bullNames, [
+      setupParts = hgCfSetupParts(bullShape, [
         struct.bullVotes ? struct.bullNames : null,
         desk.bullVotes ? desk.bullNames : null,
-        tabs.bullVotes ? tabs.bullNames : null
+        tabs.bullVotes ? tabs.bullNames : null,
+        htf.bullNames.length ? htf.bullNames : null
       ]);
-    } else if (!neutral && dir === 'BEAR' && pat.bearVotes > 0 && (struct.bearVotes > 0 || desk.bearVotes > 0 || tabs.bearVotes > 0)) {
+    } else if (!neutral && dir === 'BEAR' && bearShape.length && bearConfirm && !htfBlocksBear) {
       setup = 'SHORT SETUP';
-      setupParts = hgCfSetupParts(pat.bearNames, [
+      setupParts = hgCfSetupParts(bearShape, [
         struct.bearVotes ? struct.bearNames : null,
         desk.bearVotes ? desk.bearNames : null,
-        tabs.bearVotes ? tabs.bearNames : null
+        tabs.bearVotes ? tabs.bearNames : null,
+        htf.bearNames.length ? htf.bearNames : null
       ]);
     }
     return {
@@ -19977,6 +20156,7 @@ function goldCandleForecast(rows) {
       structure: structNames,
       desk: deskNames.length ? deskNames.join(', ') : (desk.notes[0] || 'unread'),
       tabs: tabs.line || 'unread',
+      higher: htf.line,
       setup: setup,
       setupParts: setupParts,
       stopSource: stopSource,
@@ -20013,4 +20193,5 @@ if (typeof window !== "undefined") {
      for the scalp and once on the 4h tape for the swing — so the two horizons are
      built by the SAME code path and stay comparable (hg-v949). */
   window.hgCfBuildSetup = hgCfBuildSetup;
+  window.hgCfHigherFrame = hgCfHigherFrame;
 }
