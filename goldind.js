@@ -19244,6 +19244,65 @@ function hgCfConfluence(rows, opts, fc) {
       var pctB = +ind.bbPctB;
       if (isFinite(pctB) && pctB !== 0.5) tech('Bollinger %B vs mid', ((pctB > 0.5) === wantsUp));
       else tech('Bollinger %B vs mid', null);
+      /* hg-v1316: FOUR MORE DISTINCT READS FROM THE SAME BAG.
+         The bag returns 35 keys and this composer voted SIX, so most of what the
+         indicator desk derives never reached the confluence. Each of these four
+         answers a question the six above CANNOT:
+           SQUEEZE   is the range compressed, and which way did it release? The six
+                     are level and slope reads; a squeeze is a STATE CHANGE. 'ON'
+                     means energy stored and no side yet, so it abstains rather than
+                     guessing, and no direction is claimed unless the desk actually
+                     published one — the bag carries `squeeze` (state) only, so the
+                     direction is taken from goldVolSqueeze's own `dir`.
+           DMI SPREAD  who is winning the directional fight? +DI against -DI is a
+                     different construction from a moving-average stack or a slope:
+                     directional movement measured bar by bar.
+           HURST      is this tape TRENDING or MEAN-REVERTING? A trend read only
+                     means something if the tape has a trend to read. Distinct from
+                     Kaufman efficiency (path straightness) and from the drift t
+                     (statistical significance).
+           ACF        does the last return predict the next? The lag-1
+                     autocorrelation measures persistence directly on returns, where
+                     Hurst is a scaled-range estimate — related estimators, not the
+                     same one, and each carries its own regime label.
+         All four are three-state: absent feed abstains, so a dark bag can vote
+         neither WITH nor AGAINST. */
+      var sqState = (typeof ind.squeeze === 'string') ? ind.squeeze : null;
+      var sqDir = null;
+      if (sqState === 'FIRED' && typeof W.goldVolSqueeze === 'function') {
+        try { var sqRead = W.goldVolSqueeze(rows); if (sqRead && (sqRead.dir === 'UP' || sqRead.dir === 'DOWN')) sqDir = sqRead.dir; } catch (eSq) { sqDir = null; }
+      }
+      if (sqState === 'FIRED' && sqDir) tech('squeeze release', ((sqDir === 'UP') === wantsUp));
+      else {
+        if (sqState === 'ON') cfam.squeeze = 'ON — compressed, energy stored, no side yet';
+        tech('squeeze release', null);
+      }
+      var pdi = +ind.plusDI, mdi = +ind.minusDI;
+      if (isFinite(pdi) && isFinite(mdi) && pdi !== mdi) tech('DMI spread (+DI vs -DI)', ((pdi > mdi) === wantsUp));
+      else tech('DMI spread (+DI vs -DI)', null);
+      /* REGIME reads. The house labels are read when present; a bare number falls
+         back to the conventional 0.55 / 0.45 band, and anything inside the band is
+         unread rather than a coin toss. Persistence argues WITH the call, mean
+         reversion AGAINST a continuation entry — the regime is the evidence. */
+      var hh = +ind.hurst;
+      var hr = (typeof ind.hurstRegime === 'string') ? ind.hurstRegime.toLowerCase() : '';
+      var hurstLean = null;
+      if (/trend|persist/.test(hr)) hurstLean = isFinite(hh) ? ((hh >= 0.5) === wantsUp) : null;
+      else if (/revert|mean/.test(hr)) hurstLean = !wantsUp;
+      else if (isFinite(hh)) {
+        if (hh >= 0.55) hurstLean = wantsUp;
+        else if (hh <= 0.45) hurstLean = !wantsUp;
+      }
+      if (isFinite(hh)) cfam.hurst = +hh.toFixed(3);
+      tech('Hurst regime', hurstLean);
+      var ac = +ind.ac1;
+      var ar = (typeof ind.acRegime === 'string') ? ind.acRegime.toLowerCase() : '';
+      var acLean = null;
+      if (/trend|persist/.test(ar)) acLean = isFinite(ac) ? ((ac >= 0) === wantsUp) : null;
+      else if (/revert|anti/.test(ar)) acLean = !wantsUp;
+      else if (isFinite(ac) && ac !== 0) acLean = ((ac > 0) === wantsUp);
+      if (isFinite(ac)) cfam.ac1 = +ac.toFixed(3);
+      tech('return autocorrelation', acLean);
       /* volatility regime and volume are CONTEXT, not direction — a quiet tape is
          not bullish, so they are disclosed and never voted */
       var hv = +ind.hv20, hvm = +ind.hv20Med;

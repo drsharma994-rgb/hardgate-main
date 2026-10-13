@@ -124,6 +124,26 @@ console.log('\n== 4) all readers present: a real confluence, honestly tallied ==
   const tech = cf.voters.filter(v => v.family === 'technicals');
   ok(tech.some(v => v.lean === true) || tech.some(v => v.lean === false),
     'the indicator bag produced at least one real directional read');
+  /* hg-v1316: the bag carries 35 keys and this composer used to vote SIX. These four
+     were added because each answers a question the six cannot — a state change, a
+     bar-by-bar directional fight, and two persistence regimes. */
+  const TECH_NAMES = tech.map(v => v.name);
+  for (const n of ['squeeze release', 'DMI spread (+DI vs -DI)', 'Hurst regime', 'return autocorrelation']) {
+    ok(TECH_NAMES.indexOf(n) >= 0, 'the bag now votes ' + JSON.stringify(n));
+  }
+  ok(tech.length >= 10, 'so the technical family carries at least ten reads (' + tech.length + ')');
+  /* every one of them is three-state — an unread feed must never read as agreement */
+  ok(tech.every(v => v.lean === true || v.lean === false || v.lean === null),
+    'every technical voter is three-state (with / against / unread)');
+  ok(cf.with_ === cf.voters.filter(v => v.lean === true).length,
+    'and the with count still equals the voters actually reading WITH');
+  /* the raw regime values, when the desk publishes them, ride beside the votes as
+     disclosure rather than being folded into the tally */
+  const cfl = cf.families.candles;
+  ok(cfl && typeof cfl === 'object', 'the candle family bag is carried for context');
+  const disclosedKeys = ['hurst', 'ac1', 'squeeze', 'volRegime', 'volumeRatio', 'atrRegime'].filter(k => k in cfl);
+  ok(disclosedKeys.every(k => cfl[k] === null || cfl[k] === undefined || typeof cfl[k] === 'string' || typeof cfl[k] === 'number'),
+    'any disclosed regime value is a plain scalar, never a nested vote (' + disclosedKeys.join(', ') + ')');
   ok(cf.why.length > 0, 'the verdict carries a stated reason (' + cf.why + ')');
   /* the catalog frame is disclosed, never turned into a side */
   const s = cf.voters.find(v => v.family === 'strategies');
