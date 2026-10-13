@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. News, headlines, fear and greed, COT and the cached macro feeds are listed on each tape and do not cast a second vote. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, what that shape means, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR. A formed setup is asked against the shared perfect bar. That bar does not invent a grade. An in-sample walk counts what formed on this tape only. The forward ledger records a formed setup and settles it on later bars. The card publishes confirmed swing setups only, and two are enough for the day.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. News, headlines, fear and greed, COT and the cached macro feeds are listed on each tape and do not cast a second vote. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, what that shape means, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR. A formed setup is asked against the shared perfect bar. That bar does not invent a grade. An in-sample walk counts what formed on this tape only. The forward ledger records a formed setup and settles it on later bars. The 4h swing is shown on every scan. A formed swing stays up even when a family nets against. A neutral tape prints no stop. Confirmed swings for the day are still capped at two.
           </div>
         </div>
       `;
@@ -342,20 +342,38 @@ on every page load since v14-2:
   };
 
   /**
-   * One unopposed read is the call. Stop and targets are one and two ATR
-   * from the last close. A fight between reads prints no side.
+   * hg-v1333: the live 4h swing is on the card every scan. The day's confirmed
+   * list does not hide it. A neutral tape still prints no stop.
    */
   mod.renderResult = function(container, statusEl, forecast) {
-    var pub = (forecast.daySwings && Array.isArray(forecast.daySwings.setups)) ? forecast.daySwings.setups : [];
-    var lastPub = pub.length ? pub[pub.length - 1] : null;
-    var dirClass = lastPub ? (lastPub.dir === 'BULL' ? 'long' : 'short') : '';
-    var dirLabel = lastPub ? (String(lastPub.label) + ' · SWING') : 'NO CONFIRMED SWING';
+    var sw = forecast.swing || null;
+    var swDir = (sw && (sw.dir === 'BULL' || sw.dir === 'BEAR')) ? sw.dir : '';
+    function swingHasLevels(b) {
+      if (!b) return false;
+      var dir = b.dir;
+      if (dir !== 'BULL' && dir !== 'BEAR') return false;
+      var entry = +b.entry, stopPx = +b.stop, t1 = +b.tp1;
+      if (!isFinite(entry) || !isFinite(stopPx) || !isFinite(t1)) return false;
+      if (!(Math.abs(entry - stopPx) > 0)) return false;
+      return dir === 'BULL' ? (t1 > entry) : (t1 < entry);
+    }
+    function swingLevelsHtml(b) {
+      var t2 = isFinite(+b.tp2)
+        ? ('<br>TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(b.tp2) + '</span>' + (b.rr == null ? '' : ' <span class="note">(' + b.rr + 'R to TP2)</span>'))
+        : '';
+      return 'Entry <b>' + mod.fmt(b.entry) + '</b><br><b>Stop:</b> <span class="neg" style="font-weight:700;">' + mod.fmt(b.stop) + '</span> <span class="note">(' + String(b.stopSource || '') + ' &middot; ' + (b.riskAtr == null ? '&mdash;' : (b.riskAtr + 'x ATR')) + ')</span><br>TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(b.tp1) + '</span>' + t2;
+    }
+    var swHas = swingHasLevels(sw);
+    var dirClass = swDir === 'BULL' ? 'long' : (swDir === 'BEAR' ? 'short' : '');
+    var dirLabel = swHas
+      ? (String((sw.formed === true && sw.label) ? sw.label : (sw.label || (swDir === 'BULL' ? 'LONG READ' : 'SHORT READ'))) + ' · SWING')
+      : 'NO SWING SETUP';
     var reasons = (forecast.reasons || []).map(function(r) {
       return '<li>' + String(r).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
     }).join('');
     var namedPats = (forecast.patterns || []).concat(forecast.advancedPatterns || []);
     var patLine = namedPats.length ? namedPats.join(', ') : 'none';
-    var levels = '<li><b>Published:</b> confirmed 4h swings only. Two are enough for the day. A 15m scalp is not a published setup.</li>'
+    var levels = '<li><b>Published:</b> the 4h swing is shown on every scan. Confirmed swings for the day are still capped at two. A 15m scalp is not a published setup.</li>'
       + '<li><b>Gold desk:</b> ' + String(forecast.desk || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
       + '<li><b>Gold tabs:</b> ' + String(forecast.tabs || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
       + '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&').replace(/</g, '<') + '</li>'
@@ -375,22 +393,17 @@ on every page load since v14-2:
         var bracket = w[2], tag = w[1];
         if (!bracket) return '<td style="vertical-align:top;padding:8px;"><b>' + tag + '</b><div class="note">not read</div></td>';
         if (!bracket.ok) return '<td style="vertical-align:top;padding:8px;"><b>' + tag + '</b><div class="note">' + String(bracket.why).replace(/</g, '') + '</div></td>';
-        var onCard = false;
-        if (tag === 'SWING' && bracket.formed) {
-          for (var pi = 0; pi < pub.length; pi++) {
-            if (pub[pi].dir === bracket.dir && pub[pi].entry === +bracket.entry && pub[pi].stop === +bracket.stop) onCard = true;
-          }
-        }
+        var showSwing = (tag === 'SWING') && swingHasLevels(bracket);
         var formed = (tag === 'SCALP')
           ? '<span class="note">not published</span>'
-          : (onCard
-            ? '<span class="pos" style="font-weight:700;">' + String(bracket.label) + '</span>'
-            : '<span class="note">not confirmed</span>');
+          : (showSwing
+            ? '<span class="' + (bracket.formed === true ? 'pos' : 'note') + '" style="font-weight:700;">' + String(bracket.label || 'SWING') + '</span>'
+            : '<span class="note">no swing setup</span>');
         var lv = (tag === 'SCALP')
-          ? '<div class="note" style="margin-top:4px;">Not published. Confirmed swing setups only, and two are enough for the day.</div>'
-          : (onCard
-            ? '<div style="margin-top:4px;">Entry <b>' + mod.fmt(bracket.entry) + '</b><br><b>Stop:</b> <span class="neg" style="font-weight:700;">' + mod.fmt(bracket.stop) + '</span> <span class="note">(' + String(bracket.stopSource || '') + ' · ' + (bracket.riskAtr == null ? '—' : bracket.riskAtr + 'x ATR') + ')</span><br>TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(bracket.tp1) + '</span><br>TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(bracket.tp2) + '</span>' + (bracket.rr == null ? '' : ' <span class="note">(' + bracket.rr + 'R to TP2)</span>') + '</div>'
-            : '<div class="note" style="margin-top:4px;">Not a confirmed swing, so it is not shown.</div>');
+          ? '<div class="note" style="margin-top:4px;">Not published. The 4h swing is shown on every scan.</div>'
+          : (showSwing
+            ? ('<div style="margin-top:4px;">' + swingLevelsHtml(bracket) + (bracket.formed === true ? '' : '<div class="note">Shown on every scan. Not a formed setup. These are the 4h call\'s own levels. Nothing new was priced.</div>') + '</div>')
+            : ('<div class="note" style="margin-top:4px;">' + String((bracket && bracket.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</div>'));
         var pat = (bracket.patterns && bracket.patterns.length) ? bracket.patterns.join(', ') : 'no named pattern';
         var adv = (bracket.advancedPatterns && bracket.advancedPatterns.length) ? (' · ' + bracket.advancedPatterns.join(', ')) : '';
         var cv = bracket.confluenceView;
@@ -494,10 +507,23 @@ on every page load since v14-2:
       }).join('');
       return '<div class="note" data-cf-day-swings="1" style="margin:8px 0; border:1px solid var(--line); padding:8px;"><b>CONFIRMED SWING SETUPS</b> <span class="note">— two are enough for the day</span><div class="note">' + String(d.why || '').replace(/</g, '') + '</div>' + (items ? ('<ul class="lst">' + items + '</ul>') : '<div class="note">None shown.</div>') + '</div>';
     })();
+    var alwaysHtml = (function () {
+      var body;
+      if (swHas) {
+        body = '<b class="' + dirClass + '">' + dirLabel + '</b><div style="margin-top:4px;">' + swingLevelsHtml(sw) + '</div>'
+          + (sw.formed === true
+            ? '<div class="note">Shown on every scan. The day list does not hide this swing.</div>'
+            : '<div class="note">Shown on every scan. Not a formed setup. These are the 4h call\'s own levels. Nothing new was priced.</div>');
+      } else {
+        body = '<span class="note">' + String((sw && sw.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</span>';
+      }
+      return '<div class="note" data-cf-swing-always="1" style="margin:8px 0; border:1px solid var(--line); padding:8px;"><b>SWING</b> <span class="note">— shown on every scan</span><div style="margin-top:4px;">' + body + '</div></div>';
+    })();
     container.className = '';
     container.innerHTML = `
       <div class="omni-side ${dirClass}" style="margin: 0; border-left-width: 4px;">
         <div class="omni-side-call">${dirLabel}</div>
+        ${alwaysHtml}
         ${dayHtml}
         <ul class="lst">
           <li><b>Last close:</b> <span style="font-weight:700;">${this.fmt(forecast.close)}</span></li>
@@ -516,7 +542,7 @@ on every page load since v14-2:
         </div>
       </div>
     `;
-    statusEl.textContent = pub.length ? dirLabel : 'No confirmed swing';
+    statusEl.textContent = swHas ? dirLabel : 'No swing setup';
   };
 
   /**

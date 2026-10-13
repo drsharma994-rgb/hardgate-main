@@ -1,4 +1,4 @@
-/* hg-v1332: the candle card publishes confirmed swing setups only, two for the day. */
+/* hg-v1333: the live 4h swing stays on the card. Confirmed swings for the day stay capped at two. */
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -91,6 +91,10 @@ console.log('\n== the card ==');
   const tab = fs.readFileSync(path.join(root, 'gold-candle-forecast.js'), 'utf8');
   ok(/data-cf-day-swings="1"/.test(tab), 'the card has a confirmed-swing block');
   ok(/two are enough for the day/.test(tab), 'the card says two are enough');
+  ok(/data-cf-swing-always="1"/.test(tab), 'the live swing is on the card every scan');
+  ok(/shown on every scan/.test(tab), 'the card says the swing is shown on every scan');
+  ok(!/it is not shown/.test(tab), 'a swing is not hidden for missing the day list');
+  ok(!/NO CONFIRMED SWING/.test(tab), 'the headline is the live swing, not the empty confirmed list');
   ok(/Not published/.test(tab), 'the scalp is not published');
   ok(/hgCfDaySwings\([\s\S]{0,120}forecast\.swing/.test(tab), 'the list is the swing, not the scalp');
   ok(/SCALP AND SWING/.test(tab), 'the horizon heading remains');

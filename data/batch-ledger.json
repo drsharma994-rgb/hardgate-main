@@ -170,6 +170,11 @@
       "version": "hg-v1332",
       "built": "2026-10-14T04:30:00Z",
       "note": "CANDLE FORECAST publishes confirmed swing setups only. A swing is confirmed when a named shape is already confirmed by structure, a gold desk, or a higher timeframe, and no family nets against. The 15m scalp is not a published setup. Two are enough for the day. An earlier confirmed swing past that cap is stood down. Nothing is invented. Origin had already published hg-v1331, so this display takes the next id."
+    },
+    {
+      "version": "hg-v1333",
+      "built": "2026-10-14T05:15:00Z",
+      "note": "CANDLE FORECAST shows the 4h swing on every scan. A formed swing stays on the card even when a family nets against. A directional 4h call that is not a formed setup still prints that call's own stop and targets, and says so. A neutral tape prints no stop. Confirmed swings for the day are still capped at two. The 15m scalp is not a published setup. Nothing new is priced."
     }
   ]
 }
