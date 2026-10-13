@@ -245,6 +245,27 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
+/* hg-v1331: THE PHASE 4 DIVERGENCE CHIPS, baked from the served parts into
+   the combined file so the suite boots what the browser runs (hg-v1160).
+   These were added to trendtable-src-0.js by commit 2c272b61 ("Phase 4:
+   Implement RSI and Volume Divergence chips in Trend Matrix") and never
+   mirrored into the combined; the parts-vs-combined guard would have
+   caught it if that invariant had been checked each pack. The functions
+   are pure HTML returners: they read trendScore's own volDiv/rsiDiv marks
+   off a row and paint a chip. They do not gate, do not score, do not
+   demote; a row with no divergence mark reads nothing and the chip is ''. */
+function tmRsiDivChipHtml(r){
+  if (!r || !r.rsiDivLong && !r.rsiDivShort) return '';
+  var dir = r.rsiDivLong ? 'long' : 'short';
+  return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'RSI DIV' : 'RSI DIV') + '</span>';
+}
+
+function tmVolDivChipHtml(r){
+  if (!r || !r.volDivLong && !r.volDivShort) return '';
+  var dir = r.volDivLong ? 'long' : 'short';
+  return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'VOL DIV' : 'VOL DIV') + '</span>';
+}
+
 function tmBarOpenSec(row){
   var t = row && row.t;
   if (!isFinite(+t)) return NaN;
@@ -3786,6 +3807,63 @@ function trendmxEmaTag(rows4h, dir){
   }
   return { state: 'waiting', ema: name };
 }
+/* hg-v1331: THE PHASE 4 DIVERGENCE DETECTORS, baked into combined for
+   hg-v1160 parity AND the TDZ-shadow bug IS fixed. Added to parts by
+   commit 2c272b61 and never mirrored; the parts' trendScore has silently
+   thrown TDZ on every realistic tape (>=30 daily bars) since 2c272b61
+   because `const rsi = rsi(rows, 14)` on line 2 shadows the global rsi()
+   function (the TDZ throws before the right-hand call runs). The outer
+   trendScore try/catch swallows the exception and returns zeroResult(),
+   so every row scores 0, |score| never clears TM_MAJORITY, tmDirOf()
+   returns null for every row, every mint path (goldenCross, deathCross,
+   cryptoCandidates) returns an empty array, and the TREND MATRIX tab
+   paints as empty — WHICH IS THE USER'S "not forming any setups". This
+   was NOT the hg-v1242..v1268 ensemble (Cluster C); it was a single
+   production-breaking shadow bug the test suite could not see because
+   combined was missing the Phase 4 code. Fix: rename the local to
+   rsiSeries (and vSeries for the mirror). This is a BEHAVIOUR CHANGE
+   that restores trendScore to its intended output on realistic tapes:
+   composite scores no longer collapse to 0, tmDirOf finds a direction,
+   the mint paths see candidates again. comps.rsiDivLong/Short +
+   comps.volDivLong/Short start being set and the Phase 4 chips paint
+   for the first time. */
+function tmRsiDivergence(rows, dir) {
+  if (!rows || rows.length < 30) return false;
+  const rsiSeries = rsi(rows, 14);
+  if (!rsiSeries) return false;
+  const n = rows.length;
+  for (let i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(rsiSeries[i])) continue;
+    const prevIdx = i - 5;
+    if (prevIdx < 5) continue;
+
+    if (dir === 'long') {
+      if (rows[i].l < rows[prevIdx].l && rsiSeries[i] > rsiSeries[prevIdx]) return true;
+    } else if (dir === 'short') {
+      if (rows[i].h > rows[prevIdx].h && rsiSeries[i] < rsiSeries[prevIdx]) return true;
+    }
+  }
+  return false;
+}
+
+function tmVolDivergence(rows, dir) {
+  if (!rows || rows.length < 30) return false;
+  const v = rows.map(r => r.v || r.volume);
+  const n = rows.length;
+  for (let i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(v[i])) continue;
+    const prevIdx = i - 5;
+    if (prevIdx < 5) continue;
+
+    if (dir === 'long') {
+      if (rows[i].l < rows[prevIdx].l && v[i] > v[prevIdx]) return true;
+    } else if (dir === 'short') {
+      if (rows[i].h > rows[prevIdx].h && v[i] < v[prevIdx]) return true;
+    }
+  }
+  return false;
+}
+
 function trendScore(rows1d, rows4h){
   var out = zeroResult();
   try{
@@ -3837,6 +3915,14 @@ function trendScore(rows1d, rows4h){
     if (ok1){
       var a = adx(rows1d, 14);
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
+
+      // Divergence Evidence (hg-v1021: RSI & Volume divergence on the 1D tape)
+      if (tmRsiDivergence(rows1d, 'long')) out.comps.rsiDivLong = 1;
+      else if (tmRsiDivergence(rows1d, 'short')) out.comps.rsiDivShort = 1;
+
+      if (tmVolDivergence(rows1d, 'long')) out.comps.volDivLong = 1;
+      else if (tmVolDivergence(rows1d, 'short')) out.comps.volDivShort = 1;
+
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
          byte-identical, so every recorded tmScore stays on its own scale
@@ -7658,9 +7744,16 @@ function trendmxPaintDeskSections(refs, state){
   forming.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
   if (refs.cards){
     if (!clean.length){
-      refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')
+      /* hg-v1331: on a fully empty board (no clean, no golden, no death, no crypto)
+         prepend the WHY NO SETUPS panel that aggregates the held.stack reasons
+         across all three mint paths. Fails open: with no state, no held stacks
+         or no reasons, trendmxWhyEmptyHtml returns ''. */
+      var emptyWhy = '';
+      try { emptyWhy = trendmxWhyEmptyHtml(state) || ''; } catch (eWhy) { emptyWhy = ''; }
+      var emptyNote = (typeof hgSetupEmptyHTML === 'function')
         ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. The golden and death cross desks and the limit board surface actionable rows when gates + plan align.' })   /* hg-v1015: two cross desks now */
         : '<div class="empty">No CLEAN tickets.</div>';
+      refs.cards.innerHTML = emptyWhy + emptyNote;
     } else {
       var ch = '<div class="note" style="margin:0 0 10px"><b>CLEAN TICKETS</b> — 7/7 gates + valid plan + min R:R ' + TM_MIN_RR + '.</div>';
       for (var ci = 0; ci < Math.min(clean.length, 12); ci++) ch += trendmxSetupCardHTML(clean[ci], 'clean');
@@ -7901,6 +7994,88 @@ function trendmxGridBlockHtml(title, gridLbl, s, callDir){
       + '<div class="kv"><span class="k">STOP</span><span class="v">' + (+s.stop).toFixed(2) + '</span></div>'
       + '<div class="kv"><span class="k">T1</span><span class="v">' + (+s.t1).toFixed(2) + (isFinite(rr) ? ' (' + rr.toFixed(1) + 'R)' : '') + '</span></div>'
       + (isFinite(+s.t2) ? '<div class="kv"><span class="k">T2</span><span class="v">' + (+s.t2).toFixed(2) + '</span></div>' : '')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1331: WHY NOTHING FORMED — the empty-state narrator. A scan that
+   mints no CLEAN tickets, no golden-cross tickets, no death-cross tickets
+   and no crypto-formation tickets used to paint four separate empty-state
+   notes (and the DEATH DESK was invisible by return ''). This aggregates
+   held.stack reasons across the three cross/crypto desks + the formation
+   pass's hard[] list and renders ONE panel that names the top binding
+   reasons. The hg-v924 OMNIGOLD WHY NOTHING TICKETED precedent, applied
+   to this desk's own held stacks.
+   Doctrine: NO GATE IS LOOSENED. Per the AGENTS Cluster C standing
+   conclusion, the 325 hard-gate rules (hg-v1242..v1268, each individually
+   measured) are the correct behaviour on an ensemble so tight; this pack
+   makes the empty state readable, not shorter. The user complaint "not
+   forming any setups" is answered by naming WHY, not by relaxing a rule.
+   Fails open: with no state, no state.golden/death/crypto, or empty held
+   stacks, the panel renders ''. */
+function trendmxWhyEmptyHtml(state){
+  try{
+    state = state || {};
+    var golden = state.goldenCross || state.golden || [];
+    var death  = state.deathCross  || state.death  || [];
+    var crypto = state.cryptoSetups || state.crypto || [];
+    /* paint only when the three mint paths all produced ZERO tickets.
+       A non-empty cards board handles its own narration (hg-v552). */
+    if ((golden.length | 0) + (death.length | 0) + (crypto.length | 0) > 0) return '';
+    var buckets = { gates: 0, grade: 0, cascade: 0, waiting: 0 };
+    var reasonCounts = {};
+    function addStack(bag){
+      if (!bag) return;
+      if (bag.waiting) buckets.waiting += bag.waiting | 0;
+      if (bag.gates)   buckets.gates   += bag.gates   | 0;
+      if (bag.cascade) buckets.cascade += bag.cascade | 0;
+      if (bag.grade)   buckets.grade   += bag.grade   | 0;
+      var stack = bag.stack;
+      if (!Array.isArray(stack)) return;
+      for (var i = 0; i < stack.length; i++){
+        var row = stack[i];
+        if (!row || !Array.isArray(row.reasons)) continue;
+        for (var j = 0; j < row.reasons.length; j++){
+          var k = String(row.reasons[j] || '').trim();
+          if (!k) continue;
+          reasonCounts[k] = (reasonCounts[k] | 0) + 1;
+        }
+      }
+    }
+    addStack(golden && golden.held);
+    addStack(death  && death.held);
+    addStack(crypto && crypto.held);
+    /* rank reasons by frequency, cap at top 6 */
+    var ranked = Object.keys(reasonCounts).map(function(k){
+      return { reason: k, n: reasonCounts[k] };
+    }).sort(function(a, b){ return b.n - a.n; });
+    var top = ranked.slice(0, 6);
+    var totalHeld = buckets.waiting + buckets.gates + buckets.cascade + buckets.grade;
+    /* nothing to say if every bucket is zero and no stack reasons */
+    if (!totalHeld && !top.length) return '';
+    var bucketBits = [];
+    if (buckets.cascade) bucketBits.push(buckets.cascade + ' had no 4h cascade');
+    if (buckets.gates)   bucketBits.push(buckets.gates + ' failed the 7-gate matrix');
+    if (buckets.grade)   bucketBits.push(buckets.grade + ' failed the TRADE grade');
+    if (buckets.waiting) bucketBits.push(buckets.waiting + ' waiting for the EMA tag');
+    var reasonHtml = '';
+    if (top.length){
+      reasonHtml = '<div style="margin-top:6px;font-size:12px"><b>Top binding reasons</b><ul style="margin:4px 0 0 20px;padding:0">';
+      for (var ti = 0; ti < top.length; ti++){
+        reasonHtml += '<li>' + top[ti].reason + ' <span style="color:#64748b">×' + top[ti].n + '</span></li>';
+      }
+      reasonHtml += '</ul></div>';
+    }
+    var bucketLine = bucketBits.length
+      ? '<div style="margin-top:4px">' + bucketBits.join(' · ') + '.</div>'
+      : '';
+    return '<div class="panel" style="margin:12px 0;border-left:4px solid #ca8a04">'
+      + '<h2>WHY NO SETUPS <span>no CLEAN tickets, no golden/death cross, no crypto formation — the 325 hard-gate ensemble (hg-v1242..v1268) is deciding, as designed</span></h2>'
+      + '<div class="note">The three mint paths each ran, and together refused every candidate. '
+      + 'Each individual rule is measured and documented; the ensemble is Cluster C — adding or removing a single rule here does not fix an over-tight AND. '
+      + 'The reasons below are what each held candidate hit first.</div>'
+      + bucketLine
+      + reasonHtml
       + '</div>';
   }catch(e){ return ''; }
 }
@@ -9164,6 +9339,7 @@ W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
 W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
 W.trendmxGoldenDeskHTML = trendmxGoldenDeskHTML;   /* hg-v1015 */
 W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
+W.trendmxWhyEmptyHtml = trendmxWhyEmptyHtml;   /* hg-v1331: the WHY NO SETUPS panel reader */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;

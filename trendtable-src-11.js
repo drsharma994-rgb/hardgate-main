@@ -531,6 +531,7 @@ W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
 W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
 W.trendmxGoldenDeskHTML = trendmxGoldenDeskHTML;   /* hg-v1015 */
 W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
+W.trendmxWhyEmptyHtml = trendmxWhyEmptyHtml;   /* hg-v1331: the WHY NO SETUPS panel reader */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;

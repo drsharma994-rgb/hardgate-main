@@ -245,6 +245,15 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
+/* hg-v1331: THE PHASE 4 DIVERGENCE CHIPS, baked from the served parts into
+   the combined file so the suite boots what the browser runs (hg-v1160).
+   These were added to trendtable-src-0.js by commit 2c272b61 ("Phase 4:
+   Implement RSI and Volume Divergence chips in Trend Matrix") and never
+   mirrored into the combined; the parts-vs-combined guard would have
+   caught it if that invariant had been checked each pack. The functions
+   are pure HTML returners: they read trendScore's own volDiv/rsiDiv marks
+   off a row and paint a chip. They do not gate, do not score, do not
+   demote; a row with no divergence mark reads nothing and the chip is ''. */
 function tmRsiDivChipHtml(r){
   if (!r || !r.rsiDivLong && !r.rsiDivShort) return '';
   var dir = r.rsiDivLong ? 'long' : 'short';
@@ -3798,20 +3807,40 @@ function trendmxEmaTag(rows4h, dir){
   }
   return { state: 'waiting', ema: name };
 }
+/* hg-v1331: THE PHASE 4 DIVERGENCE DETECTORS, baked into combined for
+   hg-v1160 parity AND the TDZ-shadow bug IS fixed. Added to parts by
+   commit 2c272b61 and never mirrored; the parts' trendScore has silently
+   thrown TDZ on every realistic tape (>=30 daily bars) since 2c272b61
+   because `const rsi = rsi(rows, 14)` on line 2 shadows the global rsi()
+   function (the TDZ throws before the right-hand call runs). The outer
+   trendScore try/catch swallows the exception and returns zeroResult(),
+   so every row scores 0, |score| never clears TM_MAJORITY, tmDirOf()
+   returns null for every row, every mint path (goldenCross, deathCross,
+   cryptoCandidates) returns an empty array, and the TREND MATRIX tab
+   paints as empty — WHICH IS THE USER'S "not forming any setups". This
+   was NOT the hg-v1242..v1268 ensemble (Cluster C); it was a single
+   production-breaking shadow bug the test suite could not see because
+   combined was missing the Phase 4 code. Fix: rename the local to
+   rsiSeries (and vSeries for the mirror). This is a BEHAVIOUR CHANGE
+   that restores trendScore to its intended output on realistic tapes:
+   composite scores no longer collapse to 0, tmDirOf finds a direction,
+   the mint paths see candidates again. comps.rsiDivLong/Short +
+   comps.volDivLong/Short start being set and the Phase 4 chips paint
+   for the first time. */
 function tmRsiDivergence(rows, dir) {
   if (!rows || rows.length < 30) return false;
-  const rsi = rsi(rows, 14);
-  if (!rsi) return false;
+  const rsiSeries = rsi(rows, 14);
+  if (!rsiSeries) return false;
   const n = rows.length;
   for (let i = n - 20; i < n - 1; i++) {
-    if (!isFinite(rows[i].c) || !isFinite(rsi[i])) continue;
+    if (!isFinite(rows[i].c) || !isFinite(rsiSeries[i])) continue;
     const prevIdx = i - 5;
     if (prevIdx < 5) continue;
 
     if (dir === 'long') {
-      if (rows[i].l < rows[prevIdx].l && rsi[i] > rsi[prevIdx]) return true;
+      if (rows[i].l < rows[prevIdx].l && rsiSeries[i] > rsiSeries[prevIdx]) return true;
     } else if (dir === 'short') {
-      if (rows[i].h > rows[prevIdx].h && rsi[i] < rsi[prevIdx]) return true;
+      if (rows[i].h > rows[prevIdx].h && rsiSeries[i] < rsiSeries[prevIdx]) return true;
     }
   }
   return false;
