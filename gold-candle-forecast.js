@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Each one prints its own confluence: the candle shapes, the shared indicator stack, the catalog frame (core strategies disclosed, not turned into a side), the gold fundamental legs, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed by structure, a gold-desk read, or a higher timeframe, and no higher timeframe is against it. A family leans only when its reads net one way. Unread is not agreement. The stop is still the pattern extreme, or one ATR. Tab prices are not the stop.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Each one prints its own confluence: every named candle shape, including a shape that finished one bar ago, the shared indicator values, every catalog read (core strategies disclosed, not turned into a side), every fundamental leg, higher-timeframe structure, and every gold tab with that tab's own strategy and stamps. A setup prints only when a named candlestick pattern is confirmed by structure, a gold-desk read, or a higher timeframe, and no higher timeframe is against it. A family leans only when its reads net one way. Unread is not agreement. The stop is still the pattern extreme, or one ATR. Tab prices are not the stop.
           </div>
         </div>
       `;
