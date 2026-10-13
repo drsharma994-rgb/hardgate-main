@@ -18460,33 +18460,104 @@ if (typeof window !== "undefined") {
 }
 })();
 function goldCandleForecast(rows) {
+  /* The v14-2 body read a ONE-BAR EMA9 tick for direction, projected an
+     arbitrary `atr * 0.8` for the next bar's range, and printed
+     `Math.min(1, atr / current.c)` as a "Confidence Score" -- which is the
+     volatility RATIO (about 0.002 on gold), so the card read 0% on every bar
+     and the number meant nothing. It also ALWAYS returned BULL or BEAR: a
+     tape whose drift is indistinguishable from zero still got a guessed side.
+     Rebuilt on four standard estimators:
+       1. VOLATILITY -- ATR(14) blended with the PARKINSON high-low estimator
+          (sqrt(mean(ln(h/l)^2) / (4 ln 2))), which reads each bar's own range
+          and is far less noisy than a close-to-close series.
+       2. CLUSTERING -- an EWMA of squared log returns (lambda .94, the
+          RiskMetrics decay): volatility persists, so a hot tape projects a
+          wider bar. The scale is bounded 0.6x..1.6x so one spike cannot run
+          away with the projection.
+       3. RANGE -- the expected next-bar range is the EMPIRICAL 60th
+          percentile of the last 100 true ranges, not an arbitrary multiple.
+       4. DIRECTION -- a SHRUNK drift: the mean log return over 40 bars, kept
+          only when its own t-statistic clears |t| >= 1, else NEUTRAL. A tape
+          that cannot distinguish its drift from zero says so (three-state).
+     `confidence` is gone: it was never a probability. `strength` replaces it
+     and is |t| of the drift, which the card labels as a heuristic. */
   try {
-    if (!rows || rows.length < 20) return null;
-    var n = rows.length;
+    if (!rows || rows.length < 30) return null;
+    var n = rows.length, i;
     var current = rows[n-1];
     var atr_vals = _atr(rows, 14);
     var atr = __last(atr_vals) || (current.h - current.l);
     if (!isFinite(atr) || atr <= 0) return null;
 
-    var closes = rows.map(function(r){ return r.c; });
-    var ema9 = _ema(closes, 9);
-    var dir = (ema9[n-1] > ema9[n-2]) ? 'BULL' : 'BEAR';
+    /* 1. Parkinson high-low volatility, blended with ATR */
+    var pkSum = 0, pkN = 0;
+    for (i = Math.max(0, n - 60); i < n; i++){
+      var pb = rows[i];
+      if (!(pb.h > pb.l) || !(pb.c > 0)) continue;
+      var hl = Math.log(pb.h / pb.l);
+      pkSum += hl * hl; pkN++;
+    }
+    var parkinson = pkN ? Math.sqrt(pkSum / pkN / (4 * Math.LN2)) * current.c : NaN;
+    var vol = (isFinite(parkinson) && parkinson > 0) ? (atr + parkinson) / 2 : atr;
 
-    var expectedRange = atr * 0.8;
-    var high = current.h + (dir === 'BULL' ? expectedRange : -expectedRange);
-    var low = current.l - (dir === 'BULL' ? expectedRange : -expectedRange);
+    /* 2. EWMA of squared log returns -> a bounded volatility scale */
+    var lam = 0.94, ew = NaN;
+    for (i = 1; i < n; i++){
+      var lr0 = Math.log(rows[i].c / rows[i-1].c);
+      if (!isFinite(lr0)) continue;
+      ew = isFinite(ew) ? (lam * ew + (1 - lam) * lr0 * lr0) : lr0 * lr0;
+    }
+    var ewVol = Math.sqrt(ew) * current.c;
+    var volScale = (isFinite(ewVol) && vol > 0) ? Math.max(0.6, Math.min(1.6, ewVol / vol)) : 1;
 
-    var risk = Math.abs(current.c - low);
-    if (risk < 0.1) risk = atr * 0.5;
+    /* 3. the next bar's range = empirical 60th percentile of true ranges */
+    var trs = [];
+    for (i = Math.max(1, n - 100); i < n; i++){
+      var tb = rows[i], tprev = rows[i-1];
+      trs.push(Math.max(tb.h - tb.l, Math.abs(tb.h - tprev.c), Math.abs(tb.l - tprev.c)));
+    }
+    trs.sort(function(a, b){ return a - b; });
+    var q60 = trs.length ? trs[Math.min(trs.length - 1, Math.floor(trs.length * 0.60))] : vol;
+    var expectedRange = (isFinite(q60) && q60 > 0 ? q60 : vol) * volScale;
 
+    /* 4. the shrunk drift -> three-state direction */
+    var rets = [], mu = 0, m;
+    for (i = Math.max(1, n - 40); i < n; i++){
+      var lr = Math.log(rows[i].c / rows[i-1].c);
+      if (isFinite(lr)) rets.push(lr);
+    }
+    m = rets.length;
+    if (m < 10) return null;
+    for (i = 0; i < m; i++) mu += rets[i];
+    mu /= m;
+    var ss = 0;
+    for (i = 0; i < m; i++) ss += (rets[i] - mu) * (rets[i] - mu);
+    var sd = Math.sqrt(ss / Math.max(1, m - 1));
+    var tstat = sd > 0 ? mu / (sd / Math.sqrt(m)) : 0;
+    var dir = 'NEUTRAL';
+    if (Math.abs(tstat) >= 1 && mu > 0) dir = 'BULL';
+    else if (Math.abs(tstat) >= 1 && mu < 0) dir = 'BEAR';
+
+    /* the projection leans WITH the drift instead of widening both sides */
+    var high, low;
+    if (dir === 'BULL'){ high = current.c + expectedRange * 0.6; low = current.c - expectedRange * 0.4; }
+    else if (dir === 'BEAR'){ high = current.c + expectedRange * 0.4; low = current.c - expectedRange * 0.6; }
+    else { high = current.c + expectedRange * 0.5; low = current.c - expectedRange * 0.5; }
+
+    /* a NEUTRAL bar carries NO directional levels -- the honest third state */
+    var risk = expectedRange * 0.5;
+    var neutral = (dir === 'NEUTRAL');
     return {
       dir: dir,
       expectedHigh: +high.toFixed(2),
       expectedLow: +low.toFixed(2),
-      tp1: +(current.c + (dir === 'BULL' ? risk * 1 : -risk)).toFixed(2),
-      tp2: +(current.c + (dir === 'BULL' ? risk * 2 : -risk * 2)).toFixed(2),
-      sl: dir === 'BULL' ? low : high,
-      confidence: Math.min(1, atr / current.c)
+      tp1: neutral ? null : +(current.c + (dir === 'BEAR' ? -risk : risk)).toFixed(2),
+      tp2: neutral ? null : +(current.c + (dir === 'BEAR' ? -risk * 2 : risk * 2)).toFixed(2),
+      sl: neutral ? null : (dir === 'BEAR' ? +high.toFixed(2) : +low.toFixed(2)),
+      /* NOT a probability: |t| of the drift, labelled as such on the card */
+      strength: +Math.min(4, Math.abs(tstat)).toFixed(2),
+      vol: +vol.toFixed(2),
+      expectedRange: +expectedRange.toFixed(2)
     };
   } catch (e) { return null; }
 }
