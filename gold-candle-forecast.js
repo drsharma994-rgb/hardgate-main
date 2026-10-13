@@ -1,21 +1,28 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (hg-v1314)
+HARDGATE — gold-candle-forecast.js (hg-v1315)
 CANDLE FORECAST tab for the GOLD group.
 
-hg-v1314 extends the hg-v1306 engine from an EMA9-slope read into three
-legs: (1) advanced candlestick pattern recognition (16 patterns), (2)
-structural reads (BOS/CHoCH, FVG, OB, equal highs/lows, trend direction),
-(3) full gold-tab confluence — hgGoldFreeFeedVerdicts (free feeds),
-hgGoldIndicatorReads + hgGoldIndicatorMarks (18 indicators),
-pineGoldLayerStates + pineGoldPineMarks (Pine states), hgGoldFormingRegime
-(ER / vol / DXY / yield). A SETUP forms when patterns + structure +
-confluence agree. A LEAN forms on patterns + structure alone. CONFLICT
-when confluence opposes. NEUTRAL otherwise.
+hg-v1315 extends hg-v1314 with three concrete additions:
+  (A) FURTHER patterns — hgCfAdvancedPatterns adds 15 more candlestick
+      patterns beyond the hg-v1314 16 (abandoned baby, three inside/outside
+      up/down, belt hold, harami cross, spinning top, high wave,
+      rising/falling three methods, mat hold, separating lines, three line
+      strike, tri-star, stick sandwich, deliberation, breakaway), each ATR
+      gated the same way.
+  (B) EVERY gold tab as confluence — hgCfGoldDeskReads adds three more
+      directional readers (hgGoldSevenStep, hgGoldSweepOb, pineGoldConfluence)
+      on top of the hg-v1314 four. Plus a BOTH-ways news-lock read and four
+      informational desks for the card (forming stack, inst filter, catalog
+      USED count, VP targets).
+  (C) SCALP + SWING setups — the engine takes ctx.mode ('scalp' | 'swing').
+      This module fetches BOTH the 15m feed (scalp) and the 4h feed
+      (swing), runs the engine on each, and renders two cards side by
+      side.
 
 DOCTRINE (hg-v966 / hg-v955): DISPLAY tool, not a gate. No setup leaves
 any board on it. No forward-ledger mark. No threshold moves. Confluence
-counts marks that the gold readers *already* produce on every scan — it
-adds no new weight to any desk.
+counts marks that the gold readers *already* produce on every scan — no
+new weight is added to any desk.
 ========================================================================= */
 (function(){
 'use strict';
@@ -41,13 +48,18 @@ function mount(container){
   __cfMounted = container;
   container.innerHTML = ''
     + '<div class="panel">'
-    +   '<h2>Candle Forecast <span id="cfVersion" class="verbadge">v1314</span></h2>'
+    +   '<h2>Candle Forecast <span id="cfVersion" class="verbadge">v1315</span></h2>'
+    +   '<div class="hg-lead" style="margin-bottom:10px">'
+    +     'SCALP (15m) and SWING (4h) forecasts side by side. Each card runs 31 candlestick patterns + 8 structural reads + every gold-tab reader'
+    +     ' (free feeds, 18 indicators, Pine states, regime, Playbook 1-9 bias, sweep→OB, Pine confluence, news gate, inst filter, catalog, forming stack).'
+    +     ' DISPLAY only — nothing is gated on this.'
+    +   '</div>'
     +   '<div class="row" style="margin-bottom:12px">'
-    +     '<button class="btn" id="cfRunBtn">SCAN NEXT CANDLE</button>'
+    +     '<button class="btn" id="cfRunBtn">SCAN SCALP + SWING</button>'
     +     '<span class="note" id="cfStatus" style="margin-left:8px;font-weight:700">Ready</span>'
     +   '</div>'
     +   '<div id="cfResultArea" class="empty">'
-    +     'No forecast yet. Click <b>SCAN NEXT CANDLE</b> to run 16 candlestick patterns, structural reads (BOS/FVG/OB), and the full gold-tab confluence (free feeds, 18 indicators, Pine states, regime) on the next 15m gold candle. This is a display tool — nothing is gated on it.'
+    +     'No forecast yet. Click <b>SCAN SCALP + SWING</b> to run both engines on the latest gold candles.'
     +   '</div>'
     + '</div>';
   var btn = container.querySelector('#cfRunBtn');
@@ -60,11 +72,11 @@ function refresh(){
   return runForecast(host);
 }
 
-async function gatherContext(rows){
+async function gatherContext(opts){
   /* collect ctx fields that the gold confluence readers consume. Every
      call is a soft read: a failure or missing helper reads NEITHER on
      that leg (hg-v989 third state), never a guessed value. */
-  var ctx = { macro: null, rows1d: null, spot: null, fundingRate: null, fng: null };
+  var ctx = { macro: null, rows1d: null, spot: null, fng: null, news: null, now: null };
   try{
     if (typeof G.getGoldMacro === 'function'){
       var p = G.getGoldMacro();
@@ -85,6 +97,22 @@ async function gatherContext(rows){
   try{
     if (G.S && G.S.goldSpot) ctx.spot = G.S.goldSpot;
   }catch(e){}
+  try{
+    /* news snapshot for the hg-v1315 news-lock read; the gate itself fails
+       open with a null snapshot (hg-v992 'unchecked' state). */
+    if (G.S && G.S.news) ctx.news = G.S.news;
+    else if (G.hgNewsState) ctx.news = G.hgNewsState;
+  }catch(e){}
+  try{
+    /* a scan clock keeps every reader on the same instant — the hg-v952
+       drift fix in a smaller form. Default to the last 15m bar when
+       available, falling back to the wall clock. */
+    if (opts && Array.isArray(opts.rows15m) && opts.rows15m.length){
+      var last = opts.rows15m[opts.rows15m.length - 1];
+      if (last && isFinite(+last.t)) ctx.now = (+last.t) * (last.t < 1e12 ? 1000 : 1);
+    }
+    if (!isFinite(ctx.now)) ctx.now = Date.now();
+  }catch(e){ ctx.now = null; }
   return ctx;
 }
 
@@ -94,14 +122,22 @@ async function runForecast(container){
   if (!statusEl || !resultArea) return 'no-ui';
   statusEl.textContent = 'Analyzing...';
   resultArea.className = 'empty';
-  resultArea.innerHTML = 'Fetching gold feed and running the forecast...';
+  resultArea.innerHTML = 'Fetching gold feed (15m + 4h) and running both engines...';
   try{
-    var rows = null;
-    if (typeof G.getXAUCandles === 'function'){
-      rows = await G.getXAUCandles('15m', 60);
+    if (typeof G.getXAUCandles !== 'function'){
+      resultArea.innerHTML = '<span class="note warn">Gold feed chain not loaded.</span>';
+      statusEl.textContent = 'Failed';
+      return 'no-feed';
     }
-    if (!Array.isArray(rows) || rows.length < 20){
-      resultArea.innerHTML = '<span class="note warn">Gold feed is thin or unavailable — need ≥20 closed 15m bars; got ' + ((rows && rows.length) || 0) + '.</span>';
+    /* fetch both feeds in parallel. A failed leg returns null and that
+       card prints a 'Waiting' state. */
+    var p15 = G.getXAUCandles('15m', 60).catch(function(){ return null; });
+    var p4h = G.getXAUCandles('4h', 90).catch(function(){ return null; });
+    var pair = await Promise.all([p15, p4h]);
+    var rows15m = pair[0];
+    var rows4h = pair[1];
+    if ((!Array.isArray(rows15m) || rows15m.length < 20) && (!Array.isArray(rows4h) || rows4h.length < 20)){
+      resultArea.innerHTML = '<span class="note warn">Gold feed is thin or unavailable on both timeframes — need ≥20 closed bars.</span>';
       statusEl.textContent = 'Waiting';
       return 'thin-feed';
     }
@@ -110,14 +146,24 @@ async function runForecast(container){
       statusEl.textContent = 'Failed';
       return 'no-engine';
     }
-    var ctx = await gatherContext(rows);
-    var f = G.goldCandleForecast(rows, ctx);
-    if (!f){
-      resultArea.innerHTML = 'No forecast available — engine returned null (thin tape, missing indicators, or an unreadable last bar).';
+    var ctx = await gatherContext({ rows15m: rows15m });
+    /* run both engines. A thin single-feed scenario still renders the
+       other side (never both-or-nothing). */
+    var fScalp = (Array.isArray(rows15m) && rows15m.length >= 20)
+      ? G.goldCandleForecast(rows15m, Object.assign({}, ctx, { mode: 'scalp' }))
+      : null;
+    var fSwing = (Array.isArray(rows4h) && rows4h.length >= 20)
+      ? G.goldCandleForecast(rows4h, Object.assign({}, ctx, { mode: 'swing' }))
+      : null;
+    if (!fScalp && !fSwing){
+      resultArea.innerHTML = 'No forecast available — engine returned null on both feeds (thin tapes, missing indicators, or unreadable last bars).';
       statusEl.textContent = 'Ready';
       return 'no-signal';
     }
-    renderResult(resultArea, statusEl, f);
+    renderDual(resultArea, statusEl, fScalp, fSwing, {
+      scalpBars: Array.isArray(rows15m) ? rows15m.length : 0,
+      swingBars: Array.isArray(rows4h) ? rows4h.length : 0
+    });
     return 'ok';
   }catch(e){
     try{ console.error('[CandleForecast]', e); }catch(_){}
@@ -140,44 +186,83 @@ function marksBlock(marks, group){
     var v = marks[k];
     var cls = v === true ? 'chip ok' : (v === false ? 'chip no' : 'chip');
     var tag = v === true ? 'WITH' : (v === false ? 'AGAINST' : 'UNREAD');
-    return '<span class="' + cls + '" style="margin-right:4px;margin-bottom:2px" title="' + esc(k) + '"><b>' + esc(k.replace(/^(free:|ind:|pine:)/, '')) + '</b> ' + tag + '</span>';
+    return '<span class="' + cls + '" style="margin-right:4px;margin-bottom:2px" title="' + esc(k) + '"><b>' + esc(k.replace(/^(free:|ind:|pine:|desk:)/, '')) + '</b> ' + tag + '</span>';
   }).join('');
   return '<div style="margin-top:6px"><b>' + esc(group) + ':</b> ' + cells + '</div>';
 }
 
-function renderResult(container, statusEl, f){
+function deskInfoLine(f){
+  /* informational desks that don't vote on direction. Printed on the card
+     so a reader sees that the forming stack, inst filter and catalog ran. */
+  if (!f || !f.deskReads) return '';
+  var d = f.deskReads;
+  var bits = [];
+  if (d.newsLock){
+    if (d.newsLock.lock) bits.push('<span class="chip warn">NEWS LOCK · ' + esc(d.newsLock.title || 'tier-1 window') + '</span>');
+    else if (d.newsLock.unchecked) bits.push('<span class="chip">news: UNCHECKED</span>');
+    else bits.push('<span class="chip ok">news: clear</span>');
+  }
+  if (d.instFilter){
+    bits.push('<span class="chip ' + (d.instFilter.ok ? 'ok' : 'no') + '">inst filter: ' + (d.instFilter.ok ? 'PASS' : 'reject') + (d.instFilter.reason ? ' · ' + esc(String(d.instFilter.reason).slice(0, 60)) : '') + '</span>');
+  }
+  if (d.sweepOb && d.sweepOb.tier){
+    bits.push('<span class="chip">sweep→OB: ' + esc(d.sweepOb.dir || 'none') + ' · ' + esc(d.sweepOb.tier) + '</span>');
+  }
+  if (d.sevenStep && d.sevenStep.bias){
+    bits.push('<span class="chip">Playbook bias: ' + esc(d.sevenStep.bias) + '</span>');
+  }
+  if (d.pineConf){
+    bits.push('<span class="chip">Pine confluence: L' + (d.pineConf.longPass ? '✓' : '·') + ' S' + (d.pineConf.shortPass ? '✓' : '·') + '</span>');
+  }
+  if (d.catalogUsed){
+    bits.push('<span class="chip">catalog: ' + d.catalogUsed.usedN + ' USED · ' + d.catalogUsed.uncheckedN + ' UNCHECKED</span>');
+  }
+  if (!bits.length) return '';
+  return '<div class="note" style="margin-top:6px"><b>Desk readers:</b> ' + bits.join(' ') + '</div>';
+}
+
+function renderCard(f, modeLabel, bars){
+  if (!f){
+    return ''
+      + '<div class="omni-side" style="margin:0;border-left-width:4px;flex:1;min-width:300px">'
+      +   '<div class="omni-side-call">' + esc(modeLabel) + ' · WAITING</div>'
+      +   '<ul class="lst"><li><span class="note">Feed thin or unavailable — need ≥20 closed bars. Got ' + (bars || 0) + '.</span></li></ul>'
+      + '</div>';
+  }
   var isSetup = f.tier === 'SETUP';
   var isLean = f.tier === 'LEAN';
   var isConflict = f.tier === 'CONFLICT';
   var neutral = f.tier === 'NEUTRAL';
   var dirClass = (f.dir === 'BULL') ? 'long' : (f.dir === 'BEAR' ? 'short' : '');
-  var dirLabel = neutral ? 'NEUTRAL — NO CLEAR LEAN'
-               : isSetup ? ((f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' SETUP')
-               : isLean  ? ((f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' LEAN')
-               : /* conflict */ ((f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' — CONFLUENCE AGAINST');
+  var dirLabel = neutral ? (modeLabel + ' · NEUTRAL — NO CLEAR LEAN')
+               : isSetup ? (modeLabel + ' · ' + (f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' SETUP')
+               : isLean  ? (modeLabel + ' · ' + (f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' LEAN')
+               : /* conflict */ (modeLabel + ' · ' + (f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' — CONFLUENCE AGAINST');
   var color = (f.dir === 'BULL') ? '#15803d' : '#dc262c';
 
-  /* confluence summary */
+  /* confluence summary (hg-v1314 four + hg-v1315 three) */
   var conf = f.confluence || null;
+  var desk = f.deskReads || null;
   var confSummary = '';
-  if (conf && conf.readableN > 0){
-    var pct = conf.readableN > 0 ? Math.round(100 * conf.withN / conf.readableN) : 0;
-    confSummary = '<li><b>Confluence:</b> <span style="color:' + color + ';font-weight:700">' + conf.withN + ' WITH / ' + conf.againstN + ' AGAINST</span> of ' + conf.readableN + ' readable marks (' + pct + '% WITH)'
-      + (conf.regime ? ' · regime: <b>' + esc(conf.regime.style) + '</b>' + (isFinite(conf.regime.er) ? ' (ER ' + conf.regime.er.toFixed(2) + ')' : '') : '')
+  if (f.readableN > 0){
+    var pct = Math.round(100 * f.withN / f.readableN);
+    confSummary = '<li><b>Confluence:</b> <span style="color:' + color + ';font-weight:700">' + f.withN + ' WITH / ' + f.againstN + ' AGAINST</span> of ' + f.readableN + ' readable marks (' + pct + '% WITH)'
+      + (conf && conf.regime ? ' · regime: <b>' + esc(conf.regime.style) + '</b>' + (isFinite(conf.regime.er) ? ' (ER ' + conf.regime.er.toFixed(2) + ')' : '') : '')
       + '</li>';
-  } else if (conf) {
+  } else {
     confSummary = '<li><b>Confluence:</b> <span class="note">no gold readers responded on this bar</span></li>';
   }
 
-  /* setup levels block — only on SETUP and LEAN; CONFLICT and NEUTRAL
-     omit the levels so a reader does not treat the tape as tradeable */
+  /* setup levels block */
   var levelsBlock = '';
   if ((isSetup || isLean) && f.entry != null && f.sl != null){
+    var t1Label = 'Target 1 (TP1 · ' + (f.tp1R || 1) + 'R)';
+    var t2Label = 'Target 2 (TP2 · ' + (f.tp2R || 2) + 'R)';
     levelsBlock = ''
       + '<li><b>Entry:</b> <span style="font-weight:700">' + fmtF(f.entry) + '</span></li>'
       + '<li><b>Stop:</b> <span style="color:#dc262c;font-weight:700">' + fmtF(f.sl) + '</span> <span class="note">(' + esc(f.slSource) + ', ' + fmtF(f.slDistance) + ' from entry)</span></li>'
-      + '<li><b>Target 1 (TP1 · 1R):</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.tp1) + '</span></li>'
-      + '<li><b>Target 2 (TP2 · 2R):</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.tp2) + '</span></li>';
+      + '<li><b>' + t1Label + ':</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.tp1) + '</span></li>'
+      + '<li><b>' + t2Label + ':</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.tp2) + '</span></li>';
   } else if (isConflict && f.entry != null){
     levelsBlock = '<li><b>Entry (confluence against):</b> <span class="note">' + fmtF(f.entry) + ' — levels withheld, tape is not confirming</span></li>';
   }
@@ -195,11 +280,14 @@ function renderResult(container, statusEl, f){
     marksHtml += marksBlock(conf.indMarks, 'INDICATOR STACK (' + conf.indWith + 'W / ' + conf.indAgainst + 'A)');
     marksHtml += marksBlock(conf.pineMarks, 'PINE STATES (' + conf.pineWith + 'W / ' + conf.pineAgainst + 'A)');
   }
+  if (desk){
+    marksHtml += marksBlock(desk.marks, 'GOLD DESKS (' + desk.withN + 'W / ' + desk.againstN + 'A)');
+  }
+  var deskInfo = deskInfoLine(f);
 
-  container.className = '';
-  container.innerHTML = ''
-    + '<div class="omni-side ' + dirClass + '" style="margin:0;border-left-width:4px">'
-    +   '<div class="omni-side-call">' + esc(dirLabel) + ' · CANDLE FORECAST</div>'
+  return ''
+    + '<div class="omni-side ' + dirClass + '" style="margin:0;border-left-width:4px;flex:1;min-width:300px">'
+    +   '<div class="omni-side-call">' + esc(dirLabel) + '</div>'
     +   '<ul class="lst">'
     +     '<li><b>Last close:</b> <span style="font-weight:700">' + fmtF(f.close) + '</span> · ATR ' + fmtF(f.atr) + '</li>'
     +     '<li><b>Next-bar band:</b> ' + fmtF(f.expectedLow) + ' – ' + fmtF(f.expectedHigh) + '</li>'
@@ -208,13 +296,36 @@ function renderResult(container, statusEl, f){
     +     levelsBlock
     +     patternsBlock
     +   '</ul>'
+    +   deskInfo
     +   (marksHtml ? '<div class="note" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;font-size:11px">' + marksHtml + '</div>' : '')
     +   '<div class="note" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">'
     +     esc(f.note || '')
     +     ' · Vol. normalisation: ' + Math.round((f.confidence || 0) * 100) + '% (ATR/price ratio, not a hit-rate claim) · DISPLAY ONLY — no setup is gated on this.'
     +   '</div>'
     + '</div>';
-  statusEl.textContent = neutral ? 'Neutral' : (isSetup ? 'Setup' : (isLean ? 'Lean' : 'Conflict'));
+}
+
+function renderDual(container, statusEl, fScalp, fSwing, meta){
+  var cardScalp = renderCard(fScalp, 'SCALP · 15m', meta.scalpBars);
+  var cardSwing = renderCard(fSwing, 'SWING · 4h', meta.swingBars);
+  container.className = '';
+  container.innerHTML = ''
+    + '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+    +   cardScalp
+    +   cardSwing
+    + '</div>';
+  /* status reflects whichever side carries the strongest signal */
+  var pri = pickStatus(fScalp, fSwing);
+  statusEl.textContent = pri;
+}
+
+function pickStatus(fScalp, fSwing){
+  var tiers = [fScalp && fScalp.tier, fSwing && fSwing.tier];
+  if (tiers.indexOf('SETUP') >= 0) return 'Setup';
+  if (tiers.indexOf('LEAN') >= 0) return 'Lean';
+  if (tiers.indexOf('CONFLICT') >= 0) return 'Conflict';
+  if (tiers.indexOf('NEUTRAL') >= 0) return 'Neutral';
+  return 'Ready';
 }
 
 /* Register through HG_tabs so bootHgTabs picks it up, mirroring every

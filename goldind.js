@@ -18397,42 +18397,53 @@ W.hgGoldAuditGaneshHtml = hgGoldAuditGaneshHtml;      /* hg-v1298 */
 })();
 
 /* ========================================================================
-   hg-v1314: CANDLE FORECAST — advanced pattern recognition + full gold-tab
-   confluence + explicit setup levels.
+   hg-v1315: CANDLE FORECAST — further advanced patterns + every gold tab
+   as confluence + SCALP (15m) AND SWING (4h) setups side by side.
 
-   The hg-v1306 engine was a two-line EMA9 slope read. The user asked for
-   "more advanced candle stick pattern recognition … all the indicators,
-   core strategies, fundamentals, technicals used in all the gold tabs
-   to form a confluence with candle stick patterns and then form a setup".
-   This replaces the slope engine with three legs:
+   The user asked for "FURTHER more advanced candle stick pattern
+   recognition … all the indicators, core strategies, fundamentals,
+   technicals used in all the gold tabs (each and every gold tab with
+   all the analysis) to form a confluence with candle stick patterns
+   and then form a setup in candle forecast tab, make a scalp and a
+   swing setup". This extends hg-v1314 with three concrete additions:
 
-     (1) hgCfPatterns   — 16 candlestick patterns on the last three bars,
-                          each sized against the ATR so a dust bar can
-                          never be a hammer and a monster bar can never
-                          be a doji.
-     (2) hgCfStructure  — eight structural reads (BOS/CHoCH, FVG, OB,
-                          equal highs/lows, pivot sweep, swing trend,
-                          EMA9/21 cross) on the series as a whole.
-     (3) hgCfConfluence — calls hgGoldFreeFeedVerdicts (free feeds),
-                          hgGoldIndicatorReads + hgGoldIndicatorMarks
-                          (18 indicators), pineGoldLayerStates +
-                          pineGoldPineMarks (Pine states) and
-                          hgGoldFormingRegime (ER / vol / DXY / yield).
-                          Each is marked WITH / AGAINST / UNREAD against
-                          the pattern direction. No read scores if the
-                          pattern leg abstains.
+     (A) hgCfAdvancedPatterns — 15 more candlestick patterns BEYOND the
+                          hg-v1314 16: abandoned baby (gap-doji-gap),
+                          three inside up/down (harami + confirmation),
+                          three outside up/down (engulfing + confirmation),
+                          belt hold, harami cross, spinning top, high
+                          wave, rising/falling three methods, mat hold,
+                          separating lines, three line strike, tri-star,
+                          stick sandwich, deliberation, breakaway. Each
+                          ATR-gated the same way the hg-v1314 16 are.
+     (B) hgCfGoldDeskReads — three more directional readers added to the
+                          hg-v1314 four (free feeds / indicators / pine
+                          states / regime): hgGoldSevenStep (Playbook 1-9
+                          STEP 4 bias), hgGoldSweepOb (SMC sweep→OB), and
+                          pineGoldConfluence (ten Pine ports' long/short
+                          evaluation). Plus a NEWS LOCK read (hgGoldNewsGate)
+                          that is a BOTH-ways restriction (hg-v992's third
+                          state), never a direction. Four more informational
+                          desks on the card for display only (forming stack,
+                          inst filter, catalog USED count, VP targets).
+     (C) MODE-AWARE R:R   — goldCandleForecast(rows, {mode}) returns a scalp
+                          leg at 1R/2R (same as hg-v1314) or a swing leg at
+                          1.5R/3R (wider stop band 0.5-3.5×ATR, longer
+                          targets). The module calls the engine twice —
+                          once on the 15m feed in scalp mode, once on the
+                          4h feed in swing mode — and renders two cards.
 
-   Setup formation: patterns say LONG or SHORT, structure agrees, and
-   confluence hits a WITH-majority threshold on readable marks. Entry is
-   the last close. SL is the pattern extreme when that sits between
-   0.5×ATR and 2.5×ATR of entry; otherwise 1×ATR. TP1 = 1R, TP2 = 2R.
+   Setup formation unchanged in shape: patterns + structure agree, confluence
+   hits ≥60% WITH on ≥4 readable marks → SETUP. Patterns + structure alone
+   → LEAN. Confluence ≤40% WITH → CONFLICT (levels withheld). Otherwise
+   NEUTRAL.
 
-   DOCTRINE preserved: this is a DISPLAY tool. No gate reads any field.
-   No forward-ledger mark. No threshold moves. No setup leaves any board.
-   OUTSIDE the IIFE above so it binds plain-global atr / ema / sma from
-   indicators.js, not the IIFE's private helpers (hg-v1306 lesson).
-   Everything FAILS OPEN: a missing ctx reader yields no mark, a null
-   feed is NEITHER (hg-v989), a thrown call returns null for its leg.
+   DOCTRINE preserved (hg-v966 / hg-v955): DISPLAY tool, not a gate. No gate
+   reads any field. No forward-ledger mark. No threshold moves. No setup
+   leaves any board. OUTSIDE the IIFE above so it binds plain-global atr /
+   ema / sma from indicators.js, not the IIFE's private helpers (hg-v1306
+   lesson). Everything FAILS OPEN: a missing ctx reader yields no mark, a
+   null feed is NEITHER (hg-v989), a thrown call returns null for its leg.
    ======================================================================== */
 (function(G){
 'use strict';
@@ -18610,6 +18621,229 @@ function hgCfPatterns(rows, atrLast){
   }catch(e){ return out; }
 }
 
+/* ----- hgCfAdvancedPatterns: 15 further candlestick patterns BEYOND the
+   hg-v1314 16, each ATR-gated the same way. Returns bull / bear / neutral
+   arrays like hgCfPatterns, so the engine merges them transparently. A
+   pattern that needs more bars than the tape carries silently abstains
+   (no throw, no fabrication). */
+function hgCfAdvancedPatterns(rows, atrLast){
+  var out = { bull: [], bear: [], neutral: [], ok: false };
+  try{
+    if (!Array.isArray(rows) || rows.length < 5) return out;
+    if (!isFinite(atrLast) || atrLast <= 0) return out;
+    var n = rows.length;
+    var r0 = rows[n - 1], r1 = rows[n - 2], r2 = rows[n - 3], r3 = rows[n - 4], r4 = rows[n - 5];
+    if (!r0 || !r1 || !r2 || !r3 || !r4) return out;
+    [r0, r1, r2, r3, r4].forEach(function(r){
+      ['o','h','l','c'].forEach(function(k){
+        if (!isFinite(+r[k])) r.__badAdv = true;
+      });
+    });
+    if (r0.__badAdv || r1.__badAdv || r2.__badAdv || r3.__badAdv || r4.__badAdv) return out;
+    out.ok = true;
+    var b0 = __cfBody(r0), rng0 = __cfRange(r0);
+    var b1 = __cfBody(r1), rng1 = __cfRange(r1);
+    var b2 = __cfBody(r2), rng2 = __cfRange(r2);
+    var b3 = __cfBody(r3), rng3 = __cfRange(r3);
+    var b4 = __cfBody(r4), rng4 = __cfRange(r4);
+    var up0 = __cfUpperWick(r0), lo0 = __cfLowerWick(r0);
+    var atrGate = atrLast * 0.3;
+    var dustGate = atrLast * 0.1;
+    var dojiGate = atrLast * 0.1;
+
+    /* --- Abandoned Baby (ultra reversal): r2 strong trending bar, r1 a
+       doji that gaps AWAY from r2 (fully above or below), r0 strong body
+       gapping back the other way. Three-bar island at an extreme. */
+    if (b2 >= atrGate && b1 <= dojiGate && b0 >= atrGate){
+      /* bullish abandoned baby — r2 bear, r1 doji below r2 low, r0 bull above r1 high */
+      if (__cfBearBody(r2) && (+r1.h) < (+r2.l) && __cfBullBody(r0) && (+r0.l) > (+r1.h)){
+        out.bull.push('bullish abandoned baby');
+      }
+      if (__cfBullBody(r2) && (+r1.l) > (+r2.h) && __cfBearBody(r0) && (+r0.h) < (+r1.l)){
+        out.bear.push('bearish abandoned baby');
+      }
+    }
+
+    /* --- Three Inside Up / Down (harami + confirmation on r0). The
+       harami is between r2 and r1; r0 confirms by closing beyond the
+       prior swing body. */
+    if (b2 >= atrGate && b1 <= b2 * 0.6 && b0 >= dustGate){
+      var r2Hi = Math.max(+r2.o, +r2.c), r2Lo = Math.min(+r2.o, +r2.c);
+      var r1Hi = Math.max(+r1.o, +r1.c), r1Lo = Math.min(+r1.o, +r1.c);
+      if (r1Hi <= r2Hi && r1Lo >= r2Lo){
+        if (__cfBearBody(r2) && __cfBullBody(r1) && __cfBullBody(r0) && (+r0.c) > r2Hi){
+          out.bull.push('three inside up');
+        }
+        if (__cfBullBody(r2) && __cfBearBody(r1) && __cfBearBody(r0) && (+r0.c) < r2Lo){
+          out.bear.push('three inside down');
+        }
+      }
+    }
+
+    /* --- Three Outside Up / Down (engulfing + confirmation on r0). */
+    if (b2 >= dustGate && b1 >= atrGate && b0 >= dustGate){
+      var r2OpenU = +r2.o, r2CloseU = +r2.c, r1OpenU = +r1.o, r1CloseU = +r1.c;
+      /* bull outside up — r2 bear, r1 bull engulfs r2, r0 closes above r1 close */
+      if (__cfBearBody(r2) && __cfBullBody(r1) && r1OpenU <= r2CloseU && r1CloseU >= r2OpenU && __cfBullBody(r0) && (+r0.c) > r1CloseU){
+        out.bull.push('three outside up');
+      }
+      if (__cfBullBody(r2) && __cfBearBody(r1) && r1OpenU >= r2CloseU && r1CloseU <= r2OpenU && __cfBearBody(r0) && (+r0.c) < r1CloseU){
+        out.bear.push('three outside down');
+      }
+    }
+
+    /* --- Belt Hold (long strong body opening at session low/high). The
+       body is ≥70% of the range AND the wick on the open side is ≤10% of
+       the range AND the whole bar is ATR-sized. */
+    if (rng0 >= atrGate && b0 >= rng0 * 0.7){
+      if (__cfBullBody(r0) && lo0 <= rng0 * 0.1){
+        out.bull.push('bullish belt hold');
+      }
+      if (__cfBearBody(r0) && up0 <= rng0 * 0.1){
+        out.bear.push('bearish belt hold');
+      }
+    }
+
+    /* --- Harami Cross (two-bar: r1 strong body, r0 doji inside r1 body).
+       Stronger reversal signal than a plain harami because the doji says
+       the trend has run out of conviction. */
+    if (b1 >= atrGate && b0 <= dojiGate && rng0 >= atrGate * 0.5){
+      var r1HiHC = Math.max(+r1.o, +r1.c), r1LoHC = Math.min(+r1.o, +r1.c);
+      if ((+r0.h) <= r1HiHC + atrLast * 0.05 && (+r0.l) >= r1LoHC - atrLast * 0.05){
+        if (__cfBearBody(r1)) out.bull.push('bullish harami cross');
+        else if (__cfBullBody(r1)) out.bear.push('bearish harami cross');
+      }
+    }
+
+    /* --- Spinning Top (small body ≤30% of range, both wicks ≥ body,
+       range ≥ atrGate). Pure indecision, three-state neutral. */
+    if (rng0 >= atrGate && b0 <= rng0 * 0.3 && up0 >= b0 && lo0 >= b0 && b0 > 0){
+      out.neutral.push('spinning top');
+    }
+
+    /* --- High Wave (very long wicks relative to body, range ≥ 1.5×atrGate).
+       Stronger indecision than a spinning top. */
+    if (rng0 >= atrGate * 1.5 && b0 <= rng0 * 0.15 && up0 >= rng0 * 0.35 && lo0 >= rng0 * 0.35){
+      out.neutral.push('high wave');
+    }
+
+    /* --- Rising / Falling Three Methods (continuation). r4 strong body,
+       r3-r2-r1 three small bars contained within r4's range (counter-trend),
+       r0 strong body in r4's direction closing beyond r4's close. */
+    var inRange = function(a, lo, hi){ return (+a.h) <= hi + atrLast * 0.05 && (+a.l) >= lo - atrLast * 0.05; };
+    if (b4 >= atrGate && b0 >= atrGate){
+      var r4Hi = Math.max(+r4.o, +r4.c), r4Lo = Math.min(+r4.o, +r4.c);
+      var smallInRange = inRange(r3, r4Lo, r4Hi) && inRange(r2, r4Lo, r4Hi) && inRange(r1, r4Lo, r4Hi) &&
+                          b3 <= b4 * 0.5 && b2 <= b4 * 0.5 && b1 <= b4 * 0.5;
+      if (smallInRange && __cfBullBody(r4) && __cfBullBody(r0) && (+r0.c) > (+r4.c)){
+        out.bull.push('rising three methods');
+      }
+      if (smallInRange && __cfBearBody(r4) && __cfBearBody(r0) && (+r0.c) < (+r4.c)){
+        out.bear.push('falling three methods');
+      }
+    }
+
+    /* --- Mat Hold (continuation with gap). Same shape as three methods
+       but r4 and r3 carry a gap, confirming the strength of the breakout. */
+    if (b4 >= atrGate && b0 >= atrGate && b3 <= b4 * 0.6){
+      if (__cfBullBody(r4) && (+r3.l) > (+r4.c) && (+r2.l) > (+r4.c) * 0.995 &&
+          __cfBullBody(r0) && (+r0.c) > (+r4.c)){
+        out.bull.push('mat hold (bullish)');
+      }
+      if (__cfBearBody(r4) && (+r3.h) < (+r4.c) && (+r2.h) < (+r4.c) * 1.005 &&
+          __cfBearBody(r0) && (+r0.c) < (+r4.c)){
+        out.bear.push('mat hold (bearish)');
+      }
+    }
+
+    /* --- Separating Lines (continuation: gap-open same direction as prior
+       opposite body). r1 is a strong bear, r0 is a bull that opens at
+       or above r1's open — treated as a resumed uptrend. Mirror. */
+    if (b1 >= atrGate && b0 >= atrGate){
+      if (__cfBearBody(r1) && __cfBullBody(r0) && (+r0.o) >= (+r1.o) - atrLast * 0.05 && (+r0.o) <= (+r1.o) + atrLast * 0.1){
+        out.bull.push('separating lines (bullish)');
+      }
+      if (__cfBullBody(r1) && __cfBearBody(r0) && (+r0.o) <= (+r1.o) + atrLast * 0.05 && (+r0.o) >= (+r1.o) - atrLast * 0.1){
+        out.bear.push('separating lines (bearish)');
+      }
+    }
+
+    /* --- Three Line Strike (reversal: three trending bars + a fourth that
+       engulfs them all). r3-r2-r1 all one colour with ascending/descending
+       closes, r0 the opposite colour that opens beyond r1 close and closes
+       beyond r3 open. */
+    if (b3 >= atrGate * 0.7 && b2 >= atrGate * 0.7 && b1 >= atrGate * 0.7 && b0 >= atrGate){
+      /* bullish three line strike — three bears, r0 bull engulfs */
+      if (__cfBearBody(r3) && __cfBearBody(r2) && __cfBearBody(r1) &&
+          (+r3.c) > (+r2.c) && (+r2.c) > (+r1.c) &&
+          __cfBullBody(r0) && (+r0.o) <= (+r1.c) && (+r0.c) >= (+r3.o)){
+        out.bull.push('bullish three line strike');
+      }
+      if (__cfBullBody(r3) && __cfBullBody(r2) && __cfBullBody(r1) &&
+          (+r3.c) < (+r2.c) && (+r2.c) < (+r1.c) &&
+          __cfBearBody(r0) && (+r0.o) >= (+r1.c) && (+r0.c) <= (+r3.o)){
+        out.bear.push('bearish three line strike');
+      }
+    }
+
+    /* --- Tri-Star (three doji in a row, rare reversal). All three bodies
+       below dojiGate, with gaps or near-gaps between them. */
+    if (b0 <= dojiGate && b1 <= dojiGate && b2 <= dojiGate && rng0 >= atrGate * 0.5 && rng1 >= atrGate * 0.5 && rng2 >= atrGate * 0.5){
+      /* bullish tri-star — r1 gaps below r2, r0 gaps above r1 */
+      if ((+r1.h) < (+r2.l) + atrLast * 0.1 && (+r0.l) > (+r1.h) - atrLast * 0.1){
+        out.bull.push('bullish tri-star');
+      }
+      if ((+r1.l) > (+r2.h) - atrLast * 0.1 && (+r0.h) < (+r1.l) + atrLast * 0.1){
+        out.bear.push('bearish tri-star');
+      }
+    }
+
+    /* --- Stick Sandwich (two bear bars sandwiching a bull, or mirror,
+       with matching closes). Three-bar reversal. */
+    if (b2 >= atrGate && b1 >= atrGate && b0 >= atrGate){
+      var closeTol = atrLast * 0.1;
+      /* bullish stick sandwich — r2 bear, r1 bull, r0 bear, r0.c near r2.c */
+      if (__cfBearBody(r2) && __cfBullBody(r1) && __cfBearBody(r0) && Math.abs((+r0.c) - (+r2.c)) <= closeTol){
+        out.bull.push('bullish stick sandwich');
+      }
+      if (__cfBullBody(r2) && __cfBearBody(r1) && __cfBullBody(r0) && Math.abs((+r0.c) - (+r2.c)) <= closeTol){
+        out.bear.push('bearish stick sandwich');
+      }
+    }
+
+    /* --- Deliberation (three bars: two strong continuation + a small
+       conviction-waning bar). Warning of a losing trend. */
+    if (b2 >= atrGate && b1 >= atrGate && b0 <= b1 * 0.4 && b0 >= dustGate){
+      /* bullish deliberation at a top — two strong bulls then a small bar near r1 high */
+      if (__cfBullBody(r2) && __cfBullBody(r1) && (+r1.c) > (+r2.c) && (+r0.o) >= (+r1.c) - atrLast * 0.2){
+        out.bear.push('deliberation at top');
+      }
+      if (__cfBearBody(r2) && __cfBearBody(r1) && (+r1.c) < (+r2.c) && (+r0.o) <= (+r1.c) + atrLast * 0.2){
+        out.bull.push('deliberation at bottom');
+      }
+    }
+
+    /* --- Breakaway (five-bar reversal: trending with exhaustion). r4
+       strong trending, r3 extends with a gap, r2 and r1 same direction
+       but smaller, r0 strong opposite that closes inside r4's body. */
+    if (b4 >= atrGate && b0 >= atrGate){
+      /* bullish breakaway — r4 bear, r3-r2-r1 lower lows but shrinking, r0 bull closes inside r4 */
+      if (__cfBearBody(r4) && __cfBearBody(r3) &&
+          (+r3.c) < (+r4.c) && (+r2.c) < (+r3.c) + atrLast * 0.5 && (+r1.c) < (+r2.c) + atrLast * 0.3 &&
+          __cfBullBody(r0) && (+r0.c) >= (+r4.l) && (+r0.c) <= (+r4.h)){
+        out.bull.push('bullish breakaway');
+      }
+      if (__cfBullBody(r4) && __cfBullBody(r3) &&
+          (+r3.c) > (+r4.c) && (+r2.c) > (+r3.c) - atrLast * 0.5 && (+r1.c) > (+r2.c) - atrLast * 0.3 &&
+          __cfBearBody(r0) && (+r0.c) >= (+r4.l) && (+r0.c) <= (+r4.h)){
+        out.bear.push('bearish breakaway');
+      }
+    }
+
+    return out;
+  }catch(e){ return out; }
+}
+
 /* ----- hgCfStructure: eight structural reads for setup formation.
    BOS/CHoCH on the last five bars, FVG and OB zones, equal highs/lows,
    swing trend direction via SMA20 slope, and EMA9/21 cross. */
@@ -18770,13 +19004,170 @@ function hgCfConfluence(ctx, dir, rows, rows1d){
   return out;
 }
 
+/* ----- hgCfGoldDeskReads: THREE more directional readers on top of the
+   hg-v1314 four — hgGoldSevenStep (Playbook 1-9 STEP 4 bias), hgGoldSweepOb
+   (SMC sweep→OB), pineGoldConfluence (ten Pine ports). Plus a BOTH-ways
+   news lock read (hgGoldNewsGate). Plus four informational desks for the
+   card (forming stack, inst filter, catalog USED count, VP targets).
+   Each returns three-state marks against the plan direction. A reader
+   absent, throwing or returning no verdict leaves the slot UNREAD. */
+function hgCfGoldDeskReads(ctx, dir, rows, rows1d){
+  var out = {
+    sevenStep: null, sweepOb: null, pineConf: null,
+    newsLock: null, formingStack: null, instFilter: null, catalogUsed: null,
+    withN: 0, againstN: 0, readableN: 0,
+    marks: {}, sources: []
+  };
+  if (dir !== 'long' && dir !== 'short') return out;
+  var ctxUse = (ctx && typeof ctx === 'object') ? ctx : {};
+  var rowsUse = Array.isArray(rows) ? rows : null;
+  if (!rowsUse) return out;
+
+  function record(key, verdict, group){
+    if (verdict === true){
+      out.withN++; out.marks[key] = true;
+      out.sources.push({ key: key, with: true, group: group || 'desk' });
+    } else if (verdict === false){
+      out.againstN++; out.marks[key] = false;
+      out.sources.push({ key: key, with: false, group: group || 'desk' });
+    }
+  }
+
+  /* desk (A): hgGoldSevenStep — STEP 4 bias is 'LONG' / 'SHORT' / 'BOTH' / 'NO TRADE'.
+     Matches dir → WITH. Opposes → AGAINST. BOTH / NO TRADE → UNREAD. */
+  try{
+    if (typeof G.hgGoldSevenStep === 'function'){
+      var ss = G.hgGoldSevenStep({ rows: rowsUse, rows1d: rows1d, now: ctxUse.now || null });
+      if (ss && ss.step4 && typeof ss.step4.bias === 'string'){
+        var b = ss.step4.bias.toUpperCase();
+        out.sevenStep = { bias: b, note: ss.step4.note || '' };
+        if (b === 'LONG') record('desk:sevenStep', dir === 'long', 'desk');
+        else if (b === 'SHORT') record('desk:sevenStep', dir === 'short', 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* desk (B): hgGoldSweepOb — SMC sweep → OB. verdict.dir says which side the
+     sweep reclaimed, tier filters out 'ignore'. */
+  try{
+    if (typeof G.hgGoldSweepOb === 'function'){
+      var so = G.hgGoldSweepOb(rowsUse, { news: ctxUse.news || null });
+      if (so && typeof so.dir === 'string' && so.tier && so.tier !== 'ignore'){
+        out.sweepOb = { dir: so.dir, tier: so.tier, score: so.score };
+        if (so.dir === 'long') record('desk:sweepOb', dir === 'long', 'desk');
+        else if (so.dir === 'short') record('desk:sweepOb', dir === 'short', 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* desk (C): pineGoldConfluence — ten Pine ports evaluated for long/short
+     passage. If both long.pass and short.pass are true, call it unread
+     (both sides agree is noise). If one passes, it votes that direction. */
+  try{
+    if (typeof G.pineGoldConfluence === 'function'){
+      var pc = G.pineGoldConfluence(rowsUse, {});
+      if (pc){
+        var lp = pc.long && pc.long.pass === true;
+        var sp = pc.short && pc.short.pass === true;
+        out.pineConf = {
+          longPass: !!lp, shortPass: !!sp,
+          longScore: pc.long && pc.long.score,
+          shortScore: pc.short && pc.short.score
+        };
+        if (lp && !sp) record('desk:pineConf', dir === 'long', 'desk');
+        else if (sp && !lp) record('desk:pineConf', dir === 'short', 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* restriction: hgGoldNewsGate — a tier-1 lock is a BOTH-ways 'wait'
+     (hg-v992's three-state rule: a lock is not a direction). Record it
+     as a flag the card prints, never as a WITH / AGAINST vote. */
+  try{
+    if (typeof G.hgGoldNewsGate === 'function'){
+      var ng = G.hgGoldNewsGate(ctxUse.news || null, ctxUse.now || null);
+      if (ng){
+        out.newsLock = {
+          lock: ng.lock === true,
+          unchecked: ng.unchecked === true,
+          title: ng.title || null,
+          reason: ng.reason || null
+        };
+      }
+    }
+  }catch(e){}
+
+  /* informational: hgGoldFormingStack. The stack doesn't give a direction
+     by itself, but its presence tells the reader a layered read ran. */
+  try{
+    if (typeof G.hgGoldFormingStack === 'function'){
+      var fs = G.hgGoldFormingStack({ rows: rowsUse, macro: ctxUse.macro || null });
+      if (fs){ out.formingStack = { layers: fs.layers || null, stamps: fs.stamps || null }; }
+    }
+  }catch(e){}
+
+  /* informational: hgGoldInstFilter — the institutional veto applies on a
+     candidate shape, so we probe with a hypothetical long/short at the
+     last close. If it rejects BOTH, UNREAD. If it rejects ONE, AGAINST
+     the rejected side (which is this reader's direction interest).
+     This is probing a desk whose job is to STAND ASIDE, so a rejection
+     is not a direction CALL, it is a direction REFUSAL — recorded under
+     a separate key so a reader can distinguish the two in the card. */
+  try{
+    if (typeof G.hgGoldInstFilter === 'function' && rowsUse.length){
+      var last = rowsUse[rowsUse.length - 1];
+      var instCand = {
+        dir: dir, entry: +last.c, stop: dir === 'long' ? (+last.c) - 1 : (+last.c) + 1,
+        t1: dir === 'long' ? (+last.c) + 1 : (+last.c) - 1
+      };
+      var inst = G.hgGoldInstFilter(instCand, { rows: rowsUse, news: ctxUse.news || null, macro: ctxUse.macro || null });
+      if (inst){
+        out.instFilter = {
+          ok: inst.ok === true,
+          reason: inst.reason || inst.why || null
+        };
+        /* a filter PASS is WITH; a filter REJECT is AGAINST the plan. */
+        if (inst.ok === true) record('desk:instFilter', true, 'desk');
+        else if (inst.ok === false) record('desk:instFilter', false, 'desk');
+      }
+    }
+  }catch(e){}
+
+  /* informational: hgGoldCatalogFeed — reports USED / UNCHECKED counts. */
+  try{
+    if (typeof G.hgGoldCatalogFeed === 'function'){
+      var cf = G.hgGoldCatalogFeed(rowsUse, { ctx: ctxUse });
+      if (cf){
+        var usedN = 0, uncheckedN = 0;
+        try{
+          var items = Array.isArray(cf.items) ? cf.items : (Array.isArray(cf) ? cf : []);
+          for (var i = 0; i < items.length; i++){
+            var it = items[i] || {};
+            if (it.status === 'USED') usedN++;
+            else if (it.status === 'UNCHECKED') uncheckedN++;
+          }
+        }catch(_){}
+        out.catalogUsed = { usedN: usedN, uncheckedN: uncheckedN };
+      }
+    }
+  }catch(e){}
+
+  out.readableN = out.withN + out.againstN;
+  return out;
+}
+
 /* ----- goldCandleForecast: synthesise patterns + structure + confluence.
    Patterns say the direction (bull / bear / neutral). Structure
    agrees (counts as a vote). Confluence tallies but does not override
    a pattern-and-structure agreement. A SETUP forms only when
    patterns + structure agree AND confluence hits ≥60% WITH on readable
    marks. A LEAN forms when patterns agree with no structural conflict
-   but confluence is thin or neutral. NEUTRAL otherwise. */
+   but confluence is thin or neutral. NEUTRAL otherwise.
+
+   hg-v1315: ctx.mode is 'scalp' (default) or 'swing'. Scalp uses 1R/2R
+   with pattern-SL band 0.25-2.5×ATR; swing uses 1.5R/3R with pattern-SL
+   band 0.5-3.5×ATR. The mode is reported on the output and the module
+   calls the engine twice to render two cards side by side. */
 function goldCandleForecast(rows, ctx){
   try{
     if (!Array.isArray(rows) || rows.length < 20) return null;
@@ -18784,6 +19175,19 @@ function goldCandleForecast(rows, ctx){
     var current = rows[n - 1];
     if (!current || !isFinite(+current.c) || !isFinite(+current.h) || !isFinite(+current.l)) return null;
     if (typeof G.atr !== 'function' || typeof G.ema !== 'function') return null;
+
+    var ctxUse = (ctx && typeof ctx === 'object') ? ctx : {};
+    var mode = (ctxUse.mode === 'swing') ? 'swing' : 'scalp';
+    var modeLabel = (mode === 'swing') ? 'SWING' : 'SCALP';
+
+    /* mode-aware ratios. Swing uses wider pattern-SL band and longer
+       targets because a 4h bar's noise floor is wider and the target
+       needs more room to pay. Scalp keeps the hg-v1314 1R/2R geometry. */
+    var slBandLo = (mode === 'swing') ? 0.5 : 0.25;
+    var slBandHi = (mode === 'swing') ? 3.5 : 2.5;
+    var slDefault = (mode === 'swing') ? 1.5 : 1.0;
+    var tp1R = (mode === 'swing') ? 1.5 : 1.0;
+    var tp2R = (mode === 'swing') ? 3.0 : 2.0;
 
     var atrArr = G.atr(rows, 14);
     var atrLast = (atrArr && atrArr.length) ? atrArr[atrArr.length - 1] : NaN;
@@ -18798,10 +19202,17 @@ function goldCandleForecast(rows, ctx){
     var e9_last = e9[n - 1], e9_prev = e9[n - 2];
     if (!isFinite(e9_last) || !isFinite(e9_prev)) return null;
 
-    /* -- leg (1): patterns */
+    /* -- leg (1a): hg-v1314 patterns + hg-v1315 advanced patterns, merged */
     var pat = hgCfPatterns(rows, atrLast);
-    var patBull = pat.ok ? pat.bull.length : 0;
-    var patBear = pat.ok ? pat.bear.length : 0;
+    var patAdv = hgCfAdvancedPatterns(rows, atrLast);
+    var patMerged = {
+      ok: !!(pat.ok || patAdv.ok),
+      bull: (pat.bull || []).concat(patAdv.bull || []),
+      bear: (pat.bear || []).concat(patAdv.bear || []),
+      neutral: (pat.neutral || []).concat(patAdv.neutral || [])
+    };
+    var patBull = patMerged.ok ? patMerged.bull.length : 0;
+    var patBear = patMerged.ok ? patMerged.bear.length : 0;
 
     /* -- leg (2): structure */
     var struct = hgCfStructure(rows, atrLast);
@@ -18834,9 +19245,10 @@ function goldCandleForecast(rows, ctx){
       return {
         dir: 'NEUTRAL', side: null,
         tier: 'NEUTRAL',
-        patterns: { bull: pat.bull || [], bear: pat.bear || [], neutral: pat.neutral || [] },
+        mode: mode, modeLabel: modeLabel,
+        patterns: { bull: patMerged.bull || [], bear: patMerged.bear || [], neutral: patMerged.neutral || [] },
         structure: { bull: struct.bull || [], bear: struct.bear || [] },
-        confluence: null,
+        confluence: null, deskReads: null,
         close: +(+current.c).toFixed(2),
         atr: +atrLast.toFixed(2),
         bullBias: bullBias, bearBias: bearBias, totalBias: totalBias,
@@ -18848,28 +19260,41 @@ function goldCandleForecast(rows, ctx){
       };
     }
 
-    /* -- leg (3): confluence tally against the pattern direction */
-    var ctxUse = (ctx && typeof ctx === 'object') ? ctx : {};
+    /* -- leg (3a): confluence tally against the pattern direction (hg-v1314) */
     var rows1d = ctxUse.rows1d || null;
     var conf = hgCfConfluence(ctxUse, dirSide, rows, rows1d);
-    var confWithPct = conf.readableN > 0 ? conf.withN / conf.readableN : NaN;
+
+    /* -- leg (3b): hg-v1315 — three more directional readers from every
+       gold tab, plus informational desks and the news-lock state. Merged
+       into the confluence tally so the SETUP / CONFLICT thresholds see
+       both. */
+    var desk = hgCfGoldDeskReads(ctxUse, dirSide, rows, rows1d);
+
+    var withN = conf.withN + desk.withN;
+    var againstN = conf.againstN + desk.againstN;
+    var readableN = withN + againstN;
+    var confWithPct = readableN > 0 ? withN / readableN : NaN;
 
     /* -- tier: SETUP needs confluence WITH-majority (≥60%) on ≥4 readable
        marks; LEAN is the pattern+structure agreement without a confluence
-       majority. */
+       majority. News lock downgrades a SETUP to LEAN — a tier-1 window is
+       a BOTH-ways 'wait', not a direction veto (hg-v992). */
     var tier = 'LEAN';
-    if (conf.readableN >= 4 && isFinite(confWithPct) && confWithPct >= 0.6){
+    if (readableN >= 4 && isFinite(confWithPct) && confWithPct >= 0.6){
       tier = 'SETUP';
-    } else if (conf.readableN >= 4 && isFinite(confWithPct) && confWithPct <= 0.4){
+    } else if (readableN >= 4 && isFinite(confWithPct) && confWithPct <= 0.4){
       /* confluence opposes the pattern — tier is CONFLICT, no setup levels */
       tier = 'CONFLICT';
     }
+    var newsHeld = !!(desk.newsLock && desk.newsLock.lock === true);
+    if (newsHeld && tier === 'SETUP') tier = 'LEAN';
 
     /* -- levels. SL distance: pattern extreme when it sits in a sane band
-       (0.5×ATR to 2.5×ATR); otherwise 1×ATR. */
+       (mode-aware); otherwise mode-aware default of 1×ATR (scalp) or
+       1.5×ATR (swing). */
     var entryPx = +current.c;
-    var slDist = atrLast;
-    var slSource = 'one ATR';
+    var slDist = atrLast * slDefault;
+    var slSource = (mode === 'swing') ? '1.5× ATR' : 'one ATR';
     var patternLow = +current.l, patternHigh = +current.h;
     /* Expand pattern extreme to include r1 for two-bar patterns */
     var r1 = rows[n - 2];
@@ -18879,23 +19304,23 @@ function goldCandleForecast(rows, ctx){
     }
     if (dir === 'BULL'){
       var patDist = entryPx - patternLow;
-      if (isFinite(patDist) && patDist >= atrLast * 0.25 && patDist <= atrLast * 2.5){
+      if (isFinite(patDist) && patDist >= atrLast * slBandLo && patDist <= atrLast * slBandHi){
         slDist = patDist;
         slSource = 'pattern low';
       }
     } else {
       var patDistS = patternHigh - entryPx;
-      if (isFinite(patDistS) && patDistS >= atrLast * 0.25 && patDistS <= atrLast * 2.5){
+      if (isFinite(patDistS) && patDistS >= atrLast * slBandLo && patDistS <= atrLast * slBandHi){
         slDist = patDistS;
         slSource = 'pattern high';
       }
     }
-    if (!isFinite(slDist) || slDist <= 0) slDist = atrLast;
+    if (!isFinite(slDist) || slDist <= 0) slDist = atrLast * slDefault;
 
     var sign = (dir === 'BULL') ? 1 : -1;
     var sl  = entryPx - sign * slDist;
-    var tp1 = entryPx + sign * slDist;         /* 1R, 1:1 */
-    var tp2 = entryPx + sign * slDist * 2;     /* 2R, 1:2 */
+    var tp1 = entryPx + sign * slDist * tp1R;
+    var tp2 = entryPx + sign * slDist * tp2R;
 
     /* vol-normalisation 'confidence' — ATR/price ratio clamped to (0,1].
        Explicitly NOT a hit-rate claim, named so on the card. */
@@ -18905,14 +19330,17 @@ function goldCandleForecast(rows, ctx){
     var expHigh = (+current.h) + atrLast * 0.5;
     var expLow  = (+current.l) - atrLast * 0.5;
 
-    /* -- note: name the strongest input */
+    /* -- note: name the strongest input + mode */
     var note = '';
+    var sideLabel = (dir === 'BULL' ? 'LONG' : 'SHORT');
+    var modeSuffix = ' · ' + modeLabel + ' (' + (mode === 'swing' ? '4h · 1.5R/3R' : '15m · 1R/2R') + ')';
     if (tier === 'SETUP'){
-      note = 'Patterns, structure and confluence agree on the ' + (dir === 'BULL' ? 'LONG' : 'SHORT') + ' side.';
+      note = 'Patterns, structure and gold-tab confluence agree on the ' + sideLabel + ' side.' + modeSuffix;
     } else if (tier === 'LEAN'){
-      note = 'Patterns and structure lean ' + (dir === 'BULL' ? 'LONG' : 'SHORT') + '. Confluence is thin or neutral — this is a lean, not a setup.';
+      note = 'Patterns and structure lean ' + sideLabel + '. ' +
+             (newsHeld ? 'Tier-1 news window — new entries wait until it clears.' : 'Confluence is thin or neutral — this is a lean, not a setup.') + modeSuffix;
     } else if (tier === 'CONFLICT'){
-      note = 'Patterns say ' + (dir === 'BULL' ? 'LONG' : 'SHORT') + ' but the gold indicator / feed stack reads AGAINST on this bar. Levels are shown but the tape is not confirming.';
+      note = 'Patterns say ' + sideLabel + ' but the gold indicator / feed stack reads AGAINST on this bar. Levels are shown but the tape is not confirming.' + modeSuffix;
       /* on CONFLICT, strip the setup levels so a reader does not trade it */
       sl = null; tp1 = null; tp2 = null;
     }
@@ -18921,9 +19349,13 @@ function goldCandleForecast(rows, ctx){
       dir: dir,
       side: dirSide,
       tier: tier,
-      patterns: { bull: pat.bull, bear: pat.bear, neutral: pat.neutral },
+      mode: mode, modeLabel: modeLabel,
+      patterns: { bull: patMerged.bull, bear: patMerged.bear, neutral: patMerged.neutral },
       structure: { bull: struct.bull, bear: struct.bear },
       confluence: conf,
+      deskReads: desk,
+      newsHeld: newsHeld,
+      withN: withN, againstN: againstN, readableN: readableN,
       close: +entryPx.toFixed(2),
       atr: +atrLast.toFixed(2),
       bullBias: bullBias, bearBias: bearBias, totalBias: totalBias,
@@ -18933,6 +19365,7 @@ function goldCandleForecast(rows, ctx){
       tp2: tp2 !== null ? +tp2.toFixed(2) : null,
       slSource: slSource,
       slDistance: +slDist.toFixed(2),
+      tp1R: tp1R, tp2R: tp2R,
       expectedHigh: +expHigh.toFixed(2),
       expectedLow: +expLow.toFixed(2),
       confidence: confidence,
@@ -18942,7 +19375,9 @@ function goldCandleForecast(rows, ctx){
 }
 
 G.hgCfPatterns = hgCfPatterns;
+G.hgCfAdvancedPatterns = hgCfAdvancedPatterns;
 G.hgCfStructure = hgCfStructure;
 G.hgCfConfluence = hgCfConfluence;
+G.hgCfGoldDeskReads = hgCfGoldDeskReads;
 G.goldCandleForecast = goldCandleForecast;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null));

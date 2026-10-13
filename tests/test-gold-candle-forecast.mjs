@@ -1,24 +1,28 @@
-/* HARDGATE — hg-v1314 CANDLE FORECAST tab guard.
+/* HARDGATE — hg-v1315 CANDLE FORECAST tab guard.
 
-   The user asked for "more advanced candle stick pattern recognition in
-   candle forecast tab for further accurate analysis of gold candles
-   and setups with all the indicators, core strategies, fundamentals,
-   technicals used in all the gold tabs to form a confluence with
-   candle stick patterns and then form a setup".
+   The user asked for "further more advanced candle stick pattern
+   recognition … all the indicators, core strategies, fundamentals,
+   technicals used in all the gold tabs (each and every gold tab with
+   all the analysis) to form a confluence with candle stick patterns
+   and then form a setup in candle forecast tab, make a scalp and a
+   swing setup".
 
-   The hg-v1306 engine was a two-line EMA9-slope read; this upgrades it
-   to three legs: hgCfPatterns (16 candlestick patterns), hgCfStructure
-   (eight structural reads), hgCfConfluence (calls hgGoldFreeFeedVerdicts,
-   hgGoldIndicatorReads + hgGoldIndicatorMarks, pineGoldLayerStates +
-   pineGoldPineMarks, hgGoldFormingRegime). A SETUP forms on
-   patterns + structure + confluence agreement; a LEAN on patterns +
-   structure alone; a CONFLICT when confluence runs AGAINST the pattern;
-   NEUTRAL otherwise.
+   hg-v1315 extends hg-v1314 with three concrete additions:
+     (A) hgCfAdvancedPatterns adds 15 more candlestick patterns (abandoned
+         baby, three inside/outside up/down, belt hold, harami cross,
+         spinning top, high wave, rising/falling three methods, mat hold,
+         separating lines, three line strike, tri-star, stick sandwich,
+         deliberation, breakaway);
+     (B) hgCfGoldDeskReads adds three more directional readers
+         (hgGoldSevenStep, hgGoldSweepOb, pineGoldConfluence) plus a
+         BOTH-ways news-lock read and four informational desks;
+     (C) goldCandleForecast accepts ctx.mode = 'scalp' | 'swing' with
+         mode-aware R:R: scalp 1R/2R on 15m, swing 1.5R/3R on 4h.
 
    Sections:
-     §1  engine + helpers are globals
+     §1  engine + helpers are globals (new: hgCfAdvancedPatterns, hgCfGoldDeskReads)
      §2  thin tape returns null; flat tape returns NEUTRAL (never a lean)
-     §3  rising tape → BULL with entry/SL/TP geometry (1R, 1:1, 1:2)
+     §3  rising tape → BULL with entry/SL/TP geometry (SCALP 1R/2R)
      §4  falling tape → BEAR mirror
      §5  hgCfPatterns names 16 patterns and refuses dust bars as hammers
      §6  hgCfStructure names 8 structural reads
@@ -27,8 +31,12 @@
      §9  CONFLICT tier when confluence ≤40% WITH on ≥4 marks (levels withheld)
      §10 module file registers through HG_tabs with new label chip
      §11 index.html carries the tab in HG_NAV_GROUPS and loads before bootHgTabs
-     §12 build stamps are current (hg-v1314) and no gate reads the engine
-     §13 behavioural mutation pass over the hg-v1314 block
+     §12 build stamps are current (hg-v1315) and no gate reads the engine
+     §13 hg-v1315 — hgCfAdvancedPatterns detects the 15 new patterns
+     §14 hg-v1315 — hgCfGoldDeskReads merges directional readers into the tally
+     §15 hg-v1315 — mode-aware R:R: scalp 1R/2R, swing 1.5R/3R
+     §16 hg-v1315 — a news-lock downgrades SETUP to LEAN but is not a direction veto
+     §17 behavioural mutation pass over the hg-v1315 block
 
    DISPLAY tool: no setup leaves any board on this, no forward-ledger mark,
    no threshold moves (asserted). */
@@ -45,7 +53,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 let pass = 0;
 const ok = (cond, msg) => { if (!cond) throw new Error('FAIL: ' + msg); pass++; console.log('  ok —', msg); };
 
-const ENGINE_MARKER = '/* ========================================================================\n   hg-v1314: CANDLE FORECAST';
+const ENGINE_MARKER = '/* ========================================================================\n   hg-v1315: CANDLE FORECAST';
 
 function bootEngine(opts){
   const o = opts || {};
@@ -56,7 +64,7 @@ function bootEngine(opts){
   const gold = read('goldind.js');
   const idx = gold.indexOf(ENGINE_MARKER);
   if (idx < 0) throw new Error('hg-v1314 engine block not found in goldind.js');
-  vm.runInContext(gold.slice(idx), ctx, { filename: 'goldind.js#hg-v1314' });
+  vm.runInContext(gold.slice(idx), ctx, { filename: 'goldind.js#hg-v1315' });
   /* seed stubs for the confluence readers, letting §7-9 inject marks. */
   ctx.__cfStubReset = function(){
     ctx.hgGoldFreeFeedVerdicts = undefined;
@@ -65,6 +73,13 @@ function bootEngine(opts){
     ctx.pineGoldLayerStates = undefined;
     ctx.pineGoldPineMarks = undefined;
     ctx.hgGoldFormingRegime = undefined;
+    ctx.hgGoldSevenStep = undefined;
+    ctx.hgGoldSweepOb = undefined;
+    ctx.pineGoldConfluence = undefined;
+    ctx.hgGoldNewsGate = undefined;
+    ctx.hgGoldInstFilter = undefined;
+    ctx.hgGoldFormingStack = undefined;
+    ctx.hgGoldCatalogFeed = undefined;
   };
   return ctx;
 }
@@ -130,8 +145,10 @@ console.log('== §1 engine + helpers registered as globals ==');
   const ctx = bootEngine();
   ok(typeof ctx.goldCandleForecast === 'function', 'window.goldCandleForecast exists');
   ok(typeof ctx.hgCfPatterns === 'function', 'window.hgCfPatterns exists');
+  ok(typeof ctx.hgCfAdvancedPatterns === 'function', 'window.hgCfAdvancedPatterns exists (hg-v1315)');
   ok(typeof ctx.hgCfStructure === 'function', 'window.hgCfStructure exists');
   ok(typeof ctx.hgCfConfluence === 'function', 'window.hgCfConfluence exists');
+  ok(typeof ctx.hgCfGoldDeskReads === 'function', 'window.hgCfGoldDeskReads exists (hg-v1315)');
 }
 
 console.log('== §2 thin tape returns null; flat tape → NEUTRAL ==');
@@ -288,10 +305,16 @@ console.log('== §10 module file registers through HG_tabs ==');
   ok(/refresh:\s*refresh/.test(src), 'carries a refresh function');
   ok(/getXAUCandles\(/.test(src), 'uses the shell gold feed chain');
   ok(!/api\.binance\.com/i.test(src), 'does not fetch Binance directly from the browser');
-  ok(/goldCandleForecast\(rows,\s*ctx\)/.test(src) || /goldCandleForecast\(rows,/.test(src), 'calls window.goldCandleForecast with (rows, ctx)');
+  ok(/G\.goldCandleForecast\(/.test(src), 'calls window.goldCandleForecast');
   ok(/gatherContext/.test(src), 'module gathers context for confluence');
-  ok(/SCAN NEXT CANDLE/.test(src), 'mount paints the SCAN button');
-  ok(/v1314/.test(src), 'version chip bumped to v1314');
+  ok(/SCAN SCALP \+ SWING|SCAN NEXT CANDLE/.test(src), 'mount paints the SCAN button');
+  ok(/v1315/.test(src), 'version chip bumped to v1315');
+  /* hg-v1315: module fetches BOTH timeframes and runs the engine with mode. */
+  ok(/getXAUCandles\(['"]15m['"]/.test(src), 'module fetches 15m feed');
+  ok(/getXAUCandles\(['"]4h['"]/.test(src), 'module fetches 4h feed');
+  ok(/mode:\s*['"]scalp['"]/.test(src), 'calls engine with mode: scalp');
+  ok(/mode:\s*['"]swing['"]/.test(src), 'calls engine with mode: swing');
+  ok(/renderDual|renderCard/.test(src), 'module renders two cards (scalp + swing)');
 }
 
 console.log('== §11 index.html wires the tab and loads before bootHgTabs ==');
@@ -304,7 +327,7 @@ console.log('== §11 index.html wires the tab and loads before bootHgTabs ==');
   const scriptIdx = html.indexOf('gold-candle-forecast.js');
   const bootIdx = html.indexOf('function bootHgTabs()');
   ok(scriptIdx > 0 && bootIdx > 0 && scriptIdx < bootIdx, 'script loads before bootHgTabs (hg-v1307 ordering preserved)');
-  ok(/gold-candle-forecast\.js\?v=1314/.test(html), 'script version query bumped to 1314');
+  ok(/gold-candle-forecast\.js\?v=1315/.test(html), 'script version query bumped to 1315');
 }
 
 console.log('== §12 build stamps are current and no gate reads the engine ==');
@@ -316,15 +339,169 @@ console.log('== §12 build stamps are current and no gate reads the engine ==');
     const src = read(f);
     ok(!/goldCandleForecast\b/.test(src), f + ' does not read the forecast engine');
     ok(!/hgCfPatterns\b/.test(src), f + ' does not read the pattern helper');
+    ok(!/hgCfAdvancedPatterns\b/.test(src), f + ' does not read the hg-v1315 advanced pattern helper');
     ok(!/hgCfConfluence\b/.test(src), f + ' does not read the confluence helper');
+    ok(!/hgCfGoldDeskReads\b/.test(src), f + ' does not read the hg-v1315 gold-desk helper');
   }
   /* also assert the engine is not registered as a forward-ledger mark */
   const fwd = read('hg-forward.js');
   ok(!/goldCandleForecast\b/.test(fwd), 'hg-forward.js does not read the engine (display-only)');
   ok(!/hgCfPatterns\b/.test(fwd), 'hg-forward.js does not read the pattern helper');
+  ok(!/hgCfAdvancedPatterns\b/.test(fwd), 'hg-forward.js does not read the hg-v1315 advanced pattern helper');
+  ok(!/hgCfGoldDeskReads\b/.test(fwd), 'hg-forward.js does not read the hg-v1315 gold-desk helper');
 }
 
-console.log('== §13 behavioural mutation pass ==');
+console.log('== §13 hg-v1315 — hgCfAdvancedPatterns detects the 15 new patterns ==');
+{
+  const ctx = bootEngine();
+  /* Build a three-outside-up fixture: declining tape, strong bear r2, bull
+     engulfing r1, bull continuation r0 closing above r1 close. */
+  const rows = [];
+  let p = 2400;
+  for (let i = 0; i < 36; i++){
+    const o = p, c = p - 0.5, h = Math.max(o,c) + 1, l = Math.min(o,c) - 1;
+    rows.push({ t: 1_700_000_000 + i*900, o, h, l, c, v: 1000 });
+    p = c;
+  }
+  /* r2 strong bear */
+  rows.push({ t: 1_700_000_000 + 36*900, o: p, c: p - 3, h: p + 0.1, l: p - 3.5, v: 1500 });
+  p = p - 3;
+  /* r1 bull engulfs r2 */
+  rows.push({ t: 1_700_000_000 + 37*900, o: p - 1, c: p + 5, h: p + 5.5, l: p - 1.5, v: 1800 });
+  p = p + 5;
+  /* r0 bull continuation closing above r1 close */
+  rows.push({ t: 1_700_000_000 + 38*900, o: p, c: p + 2, h: p + 2.3, l: p - 0.3, v: 1600 });
+
+  const atr = ctx.atr(rows, 14);
+  const atrLast = atr[atr.length - 1];
+  const adv = ctx.hgCfAdvancedPatterns(rows, atrLast);
+  ok(adv.ok === true, 'advanced patterns ran ok');
+  ok(Array.isArray(adv.bull) && Array.isArray(adv.bear) && Array.isArray(adv.neutral), 'advanced returns bull/bear/neutral arrays');
+  ok(adv.bull.some(p => /three outside up/i.test(p)), 'three outside up detected on the fixture: got [' + adv.bull.join(', ') + ']');
+
+  /* thin series → ok:false */
+  const thin = [{t:1,o:1,h:1,l:1,c:1}];
+  const noAdv = ctx.hgCfAdvancedPatterns(thin, 1);
+  ok(noAdv.ok === false, 'thin series → advanced ok:false');
+
+  /* zero ATR → ok:false */
+  const noAtr = ctx.hgCfAdvancedPatterns(rows, 0);
+  ok(noAtr.ok === false, 'zero ATR → advanced ok:false');
+
+  /* belt-hold fixture: strong bull body opening at session low */
+  const beltRows = [];
+  p = 2300;
+  for (let i = 0; i < 38; i++){
+    const o = p, c = p + 0.3, h = Math.max(o,c) + 0.2, l = Math.min(o,c) - 0.2;
+    beltRows.push({ t: 1_700_000_000 + i*900, o, h, l, c, v: 1000 });
+    p = c;
+  }
+  /* belt hold: open ≈ low, strong bull body */
+  beltRows.push({ t: 1_700_000_000 + 38*900, o: p, c: p + 5, h: p + 5.1, l: p - 0.05, v: 1500 });
+  const atrB = ctx.atr(beltRows, 14);
+  const bl = ctx.hgCfAdvancedPatterns(beltRows, atrB[atrB.length - 1]);
+  ok(bl.bull.some(p => /belt hold/i.test(p)), 'bullish belt hold detected: got [' + bl.bull.join(', ') + ']');
+}
+
+console.log('== §14 hg-v1315 — hgCfGoldDeskReads merges directional readers into the tally ==');
+{
+  const ctx = bootEngine();
+  /* stub three directional desk readers to all vote WITH a long */
+  ctx.hgGoldSevenStep = () => ({ step4: { bias: 'LONG', note: 'test' } });
+  ctx.hgGoldSweepOb = () => ({ dir: 'long', tier: 'alert', score: 80 });
+  ctx.pineGoldConfluence = () => ({ long: { pass: true, score: 7 }, short: { pass: false, score: 2 } });
+  /* news-lock reader — not firing (clear) */
+  ctx.hgGoldNewsGate = () => ({ lock: false, unchecked: false });
+  /* inst filter — passing */
+  ctx.hgGoldInstFilter = () => ({ ok: true });
+
+  const rows = makeRising({ drift: +1.5, n: 40 });
+  const d = ctx.hgCfGoldDeskReads({ macro: {}, now: 1_700_000_000_000 }, 'long', rows, null);
+  ok(d.withN >= 4, 'at least 4 WITH (sevenStep, sweepOb, pineConf, instFilter): got ' + d.withN);
+  ok(d.againstN === 0, 'no AGAINST on all-long context');
+  ok(d.marks && d.marks['desk:sevenStep'] === true, 'desk:sevenStep marked WITH');
+  ok(d.marks && d.marks['desk:sweepOb'] === true, 'desk:sweepOb marked WITH');
+  ok(d.marks && d.marks['desk:pineConf'] === true, 'desk:pineConf marked WITH');
+
+  /* mirror: short reads the readers against */
+  const dS = ctx.hgCfGoldDeskReads({ macro: {}, now: 1_700_000_000_000 }, 'short', rows, null);
+  ok(dS.againstN >= 3, 'three desk readers vote AGAINST a short: got ' + dS.againstN);
+  ok(dS.marks && dS.marks['desk:sevenStep'] === false, 'desk:sevenStep AGAINST short');
+  ok(dS.marks && dS.marks['desk:sweepOb'] === false, 'desk:sweepOb AGAINST short');
+
+  /* bad dir */
+  const bad = ctx.hgCfGoldDeskReads({}, 'nope', rows, null);
+  ok(bad.withN === 0 && bad.againstN === 0, 'bad dir returns empty tally');
+
+  /* fails open with no readers loaded */
+  const ctx2 = bootEngine();
+  ctx2.__cfStubReset();
+  const empty = ctx2.hgCfGoldDeskReads({}, 'long', rows, null);
+  ok(empty.readableN === 0, 'all readers absent → readable 0');
+  /* a NEWS LOCK is not a direction vote */
+  ctx2.hgGoldNewsGate = () => ({ lock: true, title: 'CPI', reason: 'lockout' });
+  const locked = ctx2.hgCfGoldDeskReads({}, 'long', rows, null);
+  ok(locked.newsLock && locked.newsLock.lock === true, 'news lock recorded as flag');
+  ok(locked.withN === 0 && locked.againstN === 0, 'news lock does NOT cast a direction vote');
+}
+
+console.log('== §15 hg-v1315 — mode-aware R:R: scalp 1R/2R, swing 1.5R/3R ==');
+{
+  const ctx = bootEngine();
+  const rows = makeRising({ drift: +1.5, n: 40 });
+  const scalp = ctx.goldCandleForecast(rows, { mode: 'scalp' });
+  const swing = ctx.goldCandleForecast(rows, { mode: 'swing' });
+  ok(scalp && scalp.mode === 'scalp', 'scalp mode reported');
+  ok(swing && swing.mode === 'swing', 'swing mode reported');
+  ok(scalp.tp1R === 1 && scalp.tp2R === 2, 'scalp uses 1R/2R');
+  ok(swing.tp1R === 1.5 && swing.tp2R === 3, 'swing uses 1.5R/3R');
+  /* geometry: scalp TP1 distance == SL distance (1R); swing TP1 == 1.5× SL */
+  const sScalp = Math.abs(scalp.sl - scalp.entry);
+  const tScalp = Math.abs(scalp.tp1 - scalp.entry);
+  ok(Math.abs(tScalp - sScalp) < 0.01, 'scalp TP1 is exactly 1R from entry');
+  const sSwing = Math.abs(swing.sl - swing.entry);
+  const tSwing = Math.abs(swing.tp1 - swing.entry);
+  ok(Math.abs(tSwing - sSwing * 1.5) < 0.01, 'swing TP1 is 1.5R from entry');
+  const t2Swing = Math.abs(swing.tp2 - swing.entry);
+  ok(Math.abs(t2Swing - sSwing * 3) < 0.01, 'swing TP2 is 3R from entry');
+
+  /* default mode is scalp */
+  const def = ctx.goldCandleForecast(rows);
+  ok(def && def.mode === 'scalp', 'default mode is scalp');
+
+  /* unknown mode falls back to scalp */
+  const unk = ctx.goldCandleForecast(rows, { mode: 'nonsense' });
+  ok(unk && unk.mode === 'scalp', 'unknown mode falls back to scalp');
+}
+
+console.log('== §16 hg-v1315 — news-lock downgrades SETUP to LEAN, never a direction veto ==');
+{
+  const ctx = bootEngine();
+  /* strong WITH confluence that would read SETUP */
+  ctx.hgGoldFreeFeedVerdicts = function(c, dir){
+    const L = (dir === 'long');
+    return { 'free:macroTilt': L, 'free:silver': L, 'free:paxgBasis': L, 'free:vix': L, 'free:usdjpy': L };
+  };
+  /* now add a tier-1 news lock */
+  ctx.hgGoldNewsGate = () => ({ lock: true, title: 'CPI', reason: 'lockout' });
+
+  const rows = makeRising({ drift: +1.5, n: 40 });
+  const held = ctx.goldCandleForecast(rows, { macro: {}, mode: 'scalp' });
+  ok(held, 'engine runs under a news lock');
+  ok(held.dir === 'BULL', 'direction unchanged — the lock is not a direction veto');
+  ok(held.tier === 'LEAN', 'SETUP is downgraded to LEAN under a tier-1 lock: got ' + held.tier);
+  ok(held.newsHeld === true, 'newsHeld flag reported');
+  ok(held.entry !== null && held.sl !== null, 'LEAN still carries levels');
+  /* note mentions the news window */
+  ok(/news/i.test(held.note || ''), 'note mentions the news window: ' + held.note);
+
+  /* without the lock, same confluence promotes to SETUP */
+  ctx.hgGoldNewsGate = () => ({ lock: false, unchecked: false });
+  const clear = ctx.goldCandleForecast(rows, { macro: {}, mode: 'scalp' });
+  ok(clear.tier === 'SETUP', 'clear news clears SETUP: got ' + clear.tier);
+}
+
+console.log('== §17 behavioural mutation pass ==');
 {
   const goldSrc = read('goldind.js');
   const start = goldSrc.indexOf(ENGINE_MARKER);
@@ -335,9 +512,14 @@ console.log('== §13 behavioural mutation pass ==');
     { name: 'invert tp sign', from: 'var sign = (dir === \'BULL\') ? 1 : -1;', to: 'var sign = (dir === \'BULL\') ? -1 : 1;' },
     { name: 'swap BULL/BEAR dir on fallback branch', from: "} else if (bullBias > bearBias && bullBias >= bearBias * 2){\n      /* fallback: EMA + patterns agree strongly even if structure is quiet */\n      dir = 'BULL'; dirSide = 'long';", to: "} else if (bullBias > bearBias && bullBias >= bearBias * 2){\n      /* fallback: EMA + patterns agree strongly even if structure is quiet */\n      dir = 'BEAR'; dirSide = 'short';" },
     { name: 'remove export', from: 'G.goldCandleForecast = goldCandleForecast;', to: '/* mutated: no export */' },
-    { name: 'swap pattern bull/bear tally', from: 'var patBull = pat.ok ? pat.bull.length : 0;\n    var patBear = pat.ok ? pat.bear.length : 0;', to: 'var patBull = pat.ok ? pat.bear.length : 0;\n    var patBear = pat.ok ? pat.bull.length : 0;' },
-    { name: 'loosen SETUP confluence threshold', from: 'conf.readableN >= 4 && isFinite(confWithPct) && confWithPct >= 0.6', to: 'conf.readableN >= 0 || (isFinite(confWithPct) && confWithPct >= 0.0)' },
+    { name: 'swap pattern bull/bear tally', from: 'var patBull = patMerged.ok ? patMerged.bull.length : 0;\n    var patBear = patMerged.ok ? patMerged.bear.length : 0;', to: 'var patBull = patMerged.ok ? patMerged.bear.length : 0;\n    var patBear = patMerged.ok ? patMerged.bull.length : 0;' },
+    { name: 'loosen SETUP confluence threshold', from: 'readableN >= 4 && isFinite(confWithPct) && confWithPct >= 0.6', to: 'readableN >= 0 || (isFinite(confWithPct) && confWithPct >= 0.0)' },
     { name: 'drop CONFLICT levels withholding', from: 'sl = null; tp1 = null; tp2 = null;', to: '/* mutated: keep CONFLICT levels */' },
+    /* hg-v1315 mutations */
+    { name: 'swing R:R mutated to 1R/2R', from: "var tp1R = (mode === 'swing') ? 1.5 : 1.0;\n    var tp2R = (mode === 'swing') ? 3.0 : 2.0;", to: "var tp1R = 1.0;\n    var tp2R = 2.0;" },
+    { name: 'drop news-lock SETUP downgrade', from: 'if (newsHeld && tier === \'SETUP\') tier = \'LEAN\';', to: '/* mutated: news lock does not downgrade */' },
+    { name: 'swap advanced patterns bull/bear', from: 'var patAdv = hgCfAdvancedPatterns(rows, atrLast);', to: 'var patAdv = (function(r,a){var p=hgCfAdvancedPatterns(r,a); return {ok:p.ok,bull:p.bear,bear:p.bull,neutral:p.neutral};})(rows,atrLast);' },
+    { name: 'drop gold-desk reads merge', from: 'var withN = conf.withN + desk.withN;\n    var againstN = conf.againstN + desk.againstN;', to: 'var withN = conf.withN;\n    var againstN = conf.againstN;' },
   ];
   for (const m of mutations){
     const occ = engineText.split(m.from).length - 1;
@@ -398,6 +580,73 @@ console.log('== §13 behavioural mutation pass ==');
         if (m.name === 'loosen SETUP confluence threshold'){
           const sol2 = f(makeThreeSoldiersFixture());  /* no ctx */
           if (sol2 && sol2.tier === 'SETUP') caught = true;
+        }
+        /* probe 7: swing R:R — swing mode must emit tp1R=1.5; mutation
+           reverts to tp1R=1 and the probe catches it. */
+        if (m.name === 'swing R:R mutated to 1R/2R'){
+          const sw = f(makeRising({ drift: +1.5, n: 40 }), { mode: 'swing' });
+          if (sw && sw.tp1R === 1.5 && sw.tp2R === 3) caught = false;
+          else caught = true;
+        }
+        /* probe 8: news-lock downgrade — inject SETUP-strength confluence
+           and a tier-1 lock; non-mutated engine downgrades to LEAN, mutant
+           keeps SETUP. */
+        if (m.name === 'drop news-lock SETUP downgrade'){
+          ctx.hgGoldFreeFeedVerdicts = function(c, dir){
+            const L = (dir === 'long');
+            return { 'free:macroTilt': L, 'free:silver': L, 'free:paxgBasis': L, 'free:vix': L, 'free:usdjpy': L };
+          };
+          ctx.hgGoldNewsGate = () => ({ lock: true, title: 'CPI' });
+          const lock = f(makeRising({ drift: +1.5, n: 40 }), { macro: {}, mode: 'scalp' });
+          /* non-mutated engine would return tier LEAN; mutant keeps SETUP */
+          if (lock && lock.tier === 'SETUP') caught = true;
+        }
+        /* probe 9: swap advanced patterns bull/bear — build the §13
+           three-outside-up fixture; on it hg-v1314 patterns fire bull and
+           hg-v1315's three-outside-up fires bull too. The engine votes
+           BULL on either side. With advanced bull/bear SWAPPED, the
+           advanced leg votes bear instead; the merged tally still votes
+           bull because hg-v1314's bull outweighs it — but the swap pulls
+           bear up, so bullBias falls and dir may flip to NEUTRAL. We
+           probe both bull patterns and bear patterns on the merged
+           output: if 'three outside up' now shows in the BEAR list, the
+           swap took effect. */
+        if (m.name === 'swap advanced patterns bull/bear'){
+          const rr = [];
+          let p = 2400;
+          for (let i = 0; i < 36; i++){
+            const o = p, c = p - 0.5, h = Math.max(o,c) + 1, l = Math.min(o,c) - 1;
+            rr.push({ t: 1_700_000_000 + i*900, o, h, l, c, v: 1000 });
+            p = c;
+          }
+          rr.push({ t: 1_700_000_000 + 36*900, o: p, c: p - 3, h: p + 0.1, l: p - 3.5, v: 1500 });
+          p = p - 3;
+          rr.push({ t: 1_700_000_000 + 37*900, o: p - 1, c: p + 5, h: p + 5.5, l: p - 1.5, v: 1800 });
+          p = p + 5;
+          rr.push({ t: 1_700_000_000 + 38*900, o: p, c: p + 2, h: p + 2.3, l: p - 0.3, v: 1600 });
+          const r = f(rr);
+          /* non-mutated: 'three outside up' lives in patterns.bull.
+             mutated: 'three outside up' lives in patterns.bear. */
+          const bullStr = (r && r.patterns && r.patterns.bull || []).join('|');
+          const bearStr = (r && r.patterns && r.patterns.bear || []).join('|');
+          if (/three outside up/i.test(bearStr)) caught = true;
+          else if (/three outside up/i.test(bullStr)) caught = false;
+          else caught = true;  /* fixture failed to fire — guard caught by fixture breakage */
+        }
+        /* probe 10: drop gold-desk merge — inject desk readers that all
+           vote WITH long; non-mutated engine merges them and reaches
+           SETUP (readableN=4, 100% WITH); mutant drops the merge so
+           readableN=0 and the engine reads LEAN. caught=true when the
+           mutation is DETECTED (tier not SETUP). */
+        if (m.name === 'drop gold-desk reads merge'){
+          ctx.hgGoldSevenStep = () => ({ step4: { bias: 'LONG' } });
+          ctx.hgGoldSweepOb = () => ({ dir: 'long', tier: 'alert', score: 80 });
+          ctx.pineGoldConfluence = () => ({ long: { pass: true }, short: { pass: false } });
+          ctx.hgGoldInstFilter = () => ({ ok: true });
+          const rr = f(makeRising({ drift: +1.5, n: 40 }), { macro: {}, mode: 'scalp' });
+          /* mutated engine drops the merge → readableN=0 → not SETUP */
+          if (rr && rr.tier !== 'SETUP') caught = true;
+          else caught = false;
         }
       }
     } catch (e){ caught = true; }
