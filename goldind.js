@@ -19153,6 +19153,121 @@ function hgCfGoldDesk(rows, macro) {
   } catch (e) { return empty; }
 }
 
+function hgCfDeskVotes(rows, opts, dir) {
+  /* hg-v1317: EVERY GOLD DESK VOTES, DRIVEN ON THIS TAPE.
+     The confluence above reads four SHARED families. This layer asks a different and
+     more direct question: what did each gold TAB's OWN desk engine actually FORM on
+     this same tape? Those engines are the desks — GOLD SCALP and GOLD SWING mint
+     candidates, the ranker decides which may lead — and until now CANDLE FORECAST
+     never asked them, so it could print a long while GOLD SCALP was forming shorts
+     on the identical bars.
+     HOW A DESK VOTES. Each engine is called with the same rows and the side it FORMED
+     is its vote: a desk carrying more long candidates than short reads WITH a long
+     call, one carrying more shorts reads AGAINST, and a desk that formed nothing
+     reads UNREAD — never agreement, never disagreement. That last rule matters more
+     here than anywhere: most desks will form nothing on any given tape (they are
+     selective by design), and counting an empty desk as agreement would manufacture
+     a quorum out of silence.
+     NO NEW WEIGHT. A desk's candidate count is reported, never scored; the family
+     counts one desk once regardless of how many candidates it minted, so a chatty
+     engine cannot outvote a quiet one (hg-v966). Every call is individually guarded
+     and fails open to unread.
+     Runs on the tape it is given. It fetches nothing. */
+  var out = { desks: [], with_: 0, against: 0, unread: 0, checked: 0, why: '' };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) { out.why = 'tape too thin to drive the desks'; return out; }
+    var wants = String(dir || '').toUpperCase();
+    if (wants !== 'BULL' && wants !== 'BEAR') { out.why = 'no directional candle read to compare the desks against'; return out; }
+    var wantsUp = (wants === 'BULL');
+    var nowMs = Date.now();
+
+    /* count the sides a candidate list carries — the desk's own formed bias */
+    function tally(list) {
+      var lng = 0, sht = 0, i, d;
+      if (!Array.isArray(list)) return { long: 0, short: 0 };
+      for (i = 0; i < list.length; i++) {
+        d = String((list[i] && (list[i].dir || list[i].direction)) || '').toLowerCase();
+        if (d === 'long' || d === 'bull' || d === 'bullish') lng++;
+        else if (d === 'short' || d === 'bear' || d === 'bearish') sht++;
+      }
+      return { long: lng, short: sht };
+    }
+    function push(name, label, formed, why) {
+      var lean = null;
+      if (formed) {
+        if (formed.long > formed.short) lean = wantsUp;
+        else if (formed.short > formed.long) lean = !wantsUp;
+        /* an exactly split desk is genuinely undecided — unread, not a coin toss */
+      }
+      out.desks.push({ desk: name, label: label, long: formed ? formed.long : 0, short: formed ? formed.short : 0, lean: lean, why: why || '' });
+      if (lean === true) out.with_++;
+      else if (lean === false) out.against++;
+      else out.unread++;
+    }
+    /* Resolve an engine, or report explicitly that the page has not loaded it —
+       "not loaded" and "loaded and formed nothing" are different facts about the
+       tape and a reader must be able to tell them apart. */
+    function engine(globalName, label) {
+      var f = (typeof W !== 'undefined' && W && typeof W[globalName] === 'function') ? W[globalName]
+        : ((typeof globalThis !== 'undefined' && globalThis && typeof globalThis[globalName] === 'function') ? globalThis[globalName] : null);
+      if (!f) { push(label, label, null, 'engine not loaded on this page'); return null; }
+      return f;
+    }
+    function drive(name, label, fn) {
+      if (typeof fn !== 'function') { push(name, label, null, 'engine not loaded on this page'); return; }
+      try {
+        var r = fn();
+        var t = tally(r);
+        var total = t.long + t.short;
+        push(name, label, t, total
+          ? (t.long + ' long / ' + t.short + ' short formed')
+          : 'formed nothing on this tape');
+      } catch (e) {
+        /* name the cause rather than a bare "threw" — a desk that could not read
+           its feed is a different fact from one that read it and stood down, and
+           the card has to be able to tell a reader which happened */
+        push(name, label, null, 'engine unavailable: ' + String((e && e.message) || e).slice(0, 60));
+      }
+    }
+
+    /* GOLD SCALP — the scalp desk's own mint */
+    var base = { rows15m: rows, rows1h: (opts && opts.rows1h) || null, rows4h: (opts && opts.rows4h) || null, now: nowMs };
+    drive('GOLD SCALP', 'gold scalp mint', (function () {
+      var f = engine('goldScalpSetups', 'GOLD SCALP');
+      return f ? function () { return f(base); } : null;
+    })());
+    /* GOLD SWING — same tape, swing desk */
+    drive('GOLD SWING', 'gold swing mint', (function () {
+      var f = engine('goldSwingSetups', 'GOLD SWING');
+      return f ? function () { return f(base); } : null;
+    })());
+    /* GOLD PINE — the pine lane scanner, when it can read this tape */
+    drive('GOLD PINE', 'pine lane scan', (function () {
+      var f = engine('goldPineScan', 'GOLD PINE');
+      return f ? function () { return f({ rows: rows, rows15m: rows, rows4h: base.rows4h, now: nowMs }); } : null;
+    })());
+    /* GANESH GOLD — the 17-step framework's own state, when it reports one */
+    drive('GANESH GOLD', '17-step framework', (function () {
+      var f = engine('ganeshGoldState', 'GANESH GOLD');
+      return f ? function () {
+        var st = f();
+        if (!st || typeof st !== 'object') return null;
+        var d = String(st.dir || st.direction || st.bias || '').toLowerCase();
+        return (d === 'long' || d === 'short') ? [{ dir: d }] : [];
+      } : null;
+    })());
+
+    out.checked = out.desks.length;
+    out.why = out.with_ || out.against
+      ? (out.with_ + ' desk' + (out.with_ === 1 ? '' : 's') + ' with the call, ' + out.against + ' against, ' + out.unread + ' formed nothing')
+      : ('no desk formed a side on this tape (' + out.unread + ' unread)');
+    return out;
+  } catch (e) {
+    out.why = 'desk vote error';
+    return out;
+  }
+}
+
 function hgCfConfluence(rows, opts, fc) {
   /* hg-v1314: THE CONFLUENCE READ — what the OTHER gold desks know, put beside the
      candle read, on this tab.
@@ -19359,9 +19474,22 @@ function hgCfConfluence(rows, opts, fc) {
       out.missing.push('the fundamental stack (hgFundamentalRegime)');
     }
 
+    /* ---- DESKS (hg-v1317): each gold tab's OWN engine, driven on this tape ----
+       A family in its own right, and deliberately the LAST one added: the four above
+       read shared series, while this asks what the other gold desks actually FORMED
+       on the identical bars. One desk counts once however many candidates it minted,
+       so a chatty engine cannot outvote a quiet one. */
+    var dv = hgCfDeskVotes(rows, opts, f.dir);
+    out.desks = dv.desks;
+    out.deskWhy = dv.why;
+    dv.desks.forEach(function (d) {
+      voter('desks', d.desk, d.lean, d.why);
+    });
+    out.families.desks = { with_: dv.with_, against: dv.against, unread: dv.unread, why: dv.why };
+
     /* ---- THE VERDICT: a count of families, never a score ---- */
     var famWith = 0, famAgainst = 0;
-    ['candles', 'technicals', 'strategies', 'fundamentals'].forEach(function (k) {
+    ['candles', 'technicals', 'strategies', 'fundamentals', 'desks'].forEach(function (k) {
       var anyWith = false, anyAgainst = false;
       out.voters.forEach(function (v) {
         if (v.family !== k) return;
@@ -19670,4 +19798,7 @@ function goldCandleForecast(rows) {
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
   window.hgCfConfluence = hgCfConfluence;
+  /* hg-v1317: the per-desk vote, exported so a guard can drive it directly and the
+     tab can show which OTHER gold desks formed a side on the same tape. */
+  window.hgCfDeskVotes = hgCfDeskVotes;
 }

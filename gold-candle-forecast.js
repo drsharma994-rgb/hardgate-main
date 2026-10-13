@@ -244,6 +244,25 @@ on every page load since v14-2:
         + '</b> · ' + cfl.with_ + ' read' + (cfl.with_ === 1 ? '' : 's') + ' with, '
         + cfl.against + ' against, ' + cfl.unread + ' unread</div>'
         + '<ul class="lst">' + rowsHtml + '</ul>'
+        /* hg-v1317: WHAT EACH GOLD DESK FORMED ON THIS SAME TAPE. A desk that minted
+           nothing reads "formed nothing", never agreement — most desks form nothing
+           on any given tape by design, and counting silence as a quorum would be the
+           whole failure this row exists to prevent. */
+        + (function () {
+          var ds = cfl.desks || [];
+          if (!ds.length) return '';
+          var rows2 = ds.map(function (d) {
+            var mark = d.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>'
+              : (d.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>'
+                : '<span class="note">formed nothing</span>');
+            return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b>'
+              + ' <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short'
+              + (d.why ? ' · ' + String(d.why).replace(/&/g, '&amp;').replace(/</g, '&lt;') : '') + '</span></li>';
+          }).join('');
+          return '<div class="note" style="margin-top:6px;"><b>GOLD DESKS ON THIS TAPE</b>'
+            + ' — <span class="note">' + String(cfl.deskWhy || '').replace(/</g, '') + '</span>'
+            + '<ul class="lst">' + rows2 + '</ul></div>';
+        })()
         + '<div class="note">Macro snapshot: ' + (forecast.macroRead
           ? 'read — the fundamental family can vote'
           : 'not cached this scan, so the fundamental family reads UNREAD (never counted as agreement)') + '</div>'
