@@ -30,6 +30,10 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const src = read('goldind.js');
 const mm = src.match(/function goldCandleForecast\(rows\) \{[\s\S]*?\n\}/);
 ok(!!mm, 'goldCandleForecast body is readable in source (hg-v1022 lift)');
+const helperStart = src.indexOf('function hgCfPack');
+const helperEnd = src.indexOf('function goldCandleForecast');
+ok(helperStart >= 0 && helperEnd > helperStart, 'the candlestick pattern readers sit above the engine');
+const helpers = src.slice(helperStart, helperEnd);
 const sandbox = {
   console, Math, isFinite,
   __last: a => (a && a.length) ? a[a.length - 1] : NaN,
@@ -71,7 +75,7 @@ const sandbox = {
 sandbox.atr = sandbox._atr;
 sandbox.ema = sandbox._ema;
 vm.createContext(sandbox);
-vm.runInContext(mm[0] + '\nthis.goldCandleForecast = goldCandleForecast;', sandbox, { filename: 'lifted-goldCandleForecast' });
+vm.runInContext(helpers + '\n' + mm[0] + '\nthis.goldCandleForecast = goldCandleForecast;', sandbox, { filename: 'lifted-goldCandleForecast' });
 const f = sandbox.goldCandleForecast;
 ok(typeof f === 'function', 'the lifted engine runs in the sandbox');
 
