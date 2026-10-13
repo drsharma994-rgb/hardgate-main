@@ -18458,11 +18458,9 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
-/* hg-v1300: the next candle is not a trade. Direction prints only when two
-   measured reads agree and none oppose (close location, one-sided wick,
-   EMA9 slope past the noise band, three-close run). The band is one ATR
-   around the last close. It is a range, not a target and not a stop.
-   A flat or mixed tape stays unread. A missing ATR or EMA stays null. */
+/* hg-v1305: one unopposed read is a directional call. Stop is one ATR
+   against the last close. TP1 is one ATR with it. TP2 is two ATR.
+   Reads that fight each other stay unread, and so does a tape with no vote. */
 function goldCandleForecast(rows) {
   try {
     if (!Array.isArray(rows) || rows.length < 20) return null;
@@ -18526,14 +18524,15 @@ function goldCandleForecast(rows) {
     } else reasons.push('closes are not a run — no vote');
 
     var dir = null;
-    if (bulls >= 2 && bears === 0) dir = 'BULL';
-    else if (bears >= 2 && bulls === 0) dir = 'BEAR';
+    if (bulls >= 1 && bears === 0) dir = 'BULL';
+    else if (bears >= 1 && bulls === 0) dir = 'BEAR';
 
+    var sign = dir === 'BULL' ? 1 : (dir === 'BEAR' ? -1 : 0);
     return {
       dir: dir,
       lean: dir || 'unread',
-      agrees: dir === 'BULL' ? bulls : (dir === 'BEAR' ? bears : Math.max(bulls, bears)),
-      against: dir === 'BULL' ? bears : (dir === 'BEAR' ? bulls : Math.min(bulls, bears)),
+      agrees: dir ? (dir === 'BULL' ? bulls : bears) : 0,
+      against: dir ? 0 : Math.min(bulls, bears),
       checked: checked,
       reasons: reasons,
       expectedHigh: +(c + atrLast).toFixed(2),
@@ -18541,7 +18540,12 @@ function goldCandleForecast(rows) {
       atr: +atrLast.toFixed(2),
       atrSource: atrSource,
       close: +c.toFixed(2),
-      note: 'The band is one ATR around the last close. It is a range, not a target and not a stop.'
+      sl: sign ? +(c - sign * atrLast).toFixed(2) : null,
+      tp1: sign ? +(c + sign * atrLast).toFixed(2) : null,
+      tp2: sign ? +(c + sign * atrLast * 2).toFixed(2) : null,
+      note: dir
+        ? 'SL is one ATR against the last close. TP1 is one ATR with it. TP2 is two ATR. Levels come from the measured band, not a second price.'
+        : 'Reads disagree or none voted, so there is no direction and no stop.'
     };
   } catch (e) { return null; }
 }

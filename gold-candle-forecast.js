@@ -48,7 +48,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. The scan reads the last closed 15m gold candle. Two agreeing reads and none against make a lean. Otherwise the direction stays unread. The band is one ATR around the last close — a range, not a target and not a stop.
+            No forecast yet. One unopposed read of the last closed 15m gold candle is a directional call. Stop is one ATR against the close. TP1 is one ATR with it. TP2 is two ATR. If the reads fight, or none vote, there is no call.
           </div>
         </div>
       `;
@@ -125,46 +125,22 @@ on every page load since v14-2:
   };
 
   /**
-   * Renders the measured read WITH an actionable bracket.
-   *
-   * The band is the measured part (one ATR around the last close). From it
-   * the card derives entry / TP1 / TP2 / SL, and every level is labelled as
-   * BAND-DERIVED so it is never mistaken for a measured edge: the run of
-   * this desk is that the band is a range estimate, and a bracket built on
-   * it inherits exactly that uncertainty. When the reads agree the bracket
-   * is printed for the agreed side; when they do not, BOTH brackets print
-   * rather than the card inventing a direction.
+   * One unopposed read is the call. Stop and targets are one and two ATR
+   * from the last close. A fight between reads prints no side.
    */
   mod.renderResult = function(container, statusEl, forecast) {
     var lean = forecast.lean || (forecast.dir ? forecast.dir : 'unread');
     var called = lean === 'BULL' || lean === 'BEAR';
     var dirClass = lean === 'BULL' ? 'long' : (lean === 'BEAR' ? 'short' : '');
-    var dirLabel = lean === 'BULL' ? 'LEAN LONG' : (lean === 'BEAR' ? 'LEAN SHORT' : 'NO DIRECTIONAL CALL');
+    var dirLabel = lean === 'BULL' ? 'LONG' : (lean === 'BEAR' ? 'SHORT' : 'NO DIRECTIONAL CALL');
     var reasons = (forecast.reasons || []).map(function(r) {
       return '<li>' + String(r).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
     }).join('');
-    var band = (isFinite(+forecast.expectedLow) && isFinite(+forecast.expectedHigh))
-      ? (this.fmt(forecast.expectedLow) + ' – ' + this.fmt(forecast.expectedHigh))
-      : 'unread';
-    /* ---- the bracket, derived from the measured band ---- */
-    var lo = +forecast.expectedLow, hi = +forecast.expectedHigh, cl = +forecast.close;
-    var haveBand = isFinite(lo) && isFinite(hi) && isFinite(cl) && hi > lo;
-    var w = haveBand ? (hi - lo) : NaN;
-    var self = this;
-    var bracket = function(side) {
-      if (!haveBand) return '';
-      /* risk = the far band edge; the targets step out in band widths so the
-         geometry is explicit rather than implied */
-      var sl = (side === 'long') ? lo : hi;
-      var tp1 = (side === 'long') ? cl + w * 0.5 : cl - w * 0.5;
-      var tp2 = (side === 'long') ? cl + w : cl - w;
-      return '<li><b>' + (side === 'long' ? 'LONG' : 'SHORT') + ' bracket:</b> '
-        + 'entry <b>' + self.fmt(cl) + '</b> · SL <b>' + self.fmt(sl) + '</b> · TP1 <b>'
-        + self.fmt(tp1) + '</b> · TP2 <b>' + self.fmt(tp2) + '</b></li>';
-    };
-    var levels = '';
-    if (called) levels = bracket(lean === 'BULL' ? 'long' : 'short');
-    else levels = bracket('long') + bracket('short');
+    var levels = called
+      ? '<li><b>Stop:</b> <span class="neg" style="font-weight:700;">' + this.fmt(forecast.sl) + '</span></li>'
+        + '<li><b>TP1:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp1) + '</span></li>'
+        + '<li><b>TP2:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp2) + '</span></li>'
+      : '';
 
     container.className = '';
     container.innerHTML = `
@@ -172,22 +148,17 @@ on every page load since v14-2:
         <div class="omni-side-call">${dirLabel}</div>
         <ul class="lst">
           <li><b>Last close:</b> <span style="font-weight:700;">${this.fmt(forecast.close)}</span></li>
-          <li><b>Next-bar band:</b> <span style="font-weight:700;">${band}</span></li>
-          <li><b>Band width:</b> ${this.fmt(forecast.atr)} (${forecast.atrSource || 'ATR'})</li>
-          <li><b>Reads:</b> ${called ? (forecast.agrees + ' agree, none against, of ' + forecast.checked) : ('no two reads agree — ' + (forecast.checked || 0) + ' checked')}</li>
+          ${levels}
+          <li><b>Reads:</b> ${called ? (forecast.agrees + ' agree, none against, of ' + forecast.checked) : ('reads conflict or none voted — ' + (forecast.checked || 0) + ' checked')}</li>
           ${forecast.source ? '<li><b>Tape:</b> ' + String(forecast.source).replace(/</g, '') + '</li>' : ''}
         </ul>
-        <ul class="lst">${levels}</ul>
         <ul class="lst">${reasons}</ul>
         <div class="note" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">
-          ${called
-            ? 'Bracket derived from the measured band (one ATR around the last close): SL at the far edge, TP1 half a band, TP2 one band. Band-derived, not a measured edge.'
-            : 'No directional call - the reads did not agree, so BOTH brackets are shown instead of inventing a side. Levels are band-derived (one ATR), not a measured edge.'}
-          ${forecast.note ? (' ' + forecast.note) : ''}
+          ${forecast.note || ''}
         </div>
       </div>
     `;
-    statusEl.textContent = called ? 'Lean' : 'Unread';
+    statusEl.textContent = called ? dirLabel : 'Unread';
   };
 
   mod.fmt = function(n) { return Number(n).toFixed(2); };

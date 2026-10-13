@@ -1,5 +1,5 @@
-/* The candle forecast names a lean only when two reads agree and none oppose.
-   The band is one ATR around the last close. It does not mint a target or a stop. */
+/* One unopposed read is a directional call. Stop is one ATR against the
+   last close. TP1 is one ATR with it. TP2 is two. Fighting reads stay unread. */
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -48,11 +48,19 @@ console.log('== candle forecast leans only when reads agree ==');
   ok(bull.against === 0 && bull.agrees >= 2, 'the long has two agreeing reads and none against');
   ok(bull.expectedHigh > bull.close && bull.expectedLow < bull.close, 'the band sits around the last close');
   ok(bull.expectedHigh > bull.expectedLow, 'the band is not inverted');
-  ok(bull.tp1 == null && bull.sl == null && bull.confidence == null, 'no target, stop, or fake confidence is minted');
+  ok(bull.sl === bull.expectedLow && bull.tp1 === bull.expectedHigh, 'long stop is one ATR under the close and TP1 is one ATR over');
+  ok(Math.abs(bull.tp2 - (bull.close + bull.atr * 2)) < 0.02, 'TP2 is two ATR with the long');
+  ok(bull.confidence == null, 'no fake confidence percent');
 
   const quiet = forecast(chop(40));
-  ok(quiet && quiet.dir == null && quiet.lean === 'unread', 'a mixed tape stays unread (' + (quiet && quiet.reasons || []).join(' | ') + ')');
-  ok(quiet.expectedHigh > quiet.expectedLow, 'an unread tape still has a measured band');
+  ok(quiet && quiet.dir === 'BEAR' && quiet.sl != null && quiet.tp1 != null,
+    'one unopposed read is a call with a stop and a target (' + (quiet && quiet.reasons || []).join(' | ') + ')');
+
+  const fight = up(40);
+  fight[fight.length - 1] = { t: 39, o: fight[38].c + 2, h: fight[38].c + 2.2, l: fight[38].c - 4, c: fight[38].c - 3.5, v: 10 };
+  const opposed = forecast(fight);
+  ok(opposed && opposed.dir == null && opposed.sl == null,
+    'bull and bear reads together stay unread and mint no stop (' + (opposed && opposed.reasons || []).join(' | ') + ')');
 
   const flat = [];
   for (let i = 0; i < 25; i++) flat.push({ t: i, o: 100, h: 100, l: 100, c: 100, v: 1 });
@@ -64,7 +72,7 @@ console.log('== candle forecast leans only when reads agree ==');
 console.log('== the tab does not invent a trade ==');
 {
   const tab = fs.readFileSync(path.join(root, 'gold-candle-forecast.js'), 'utf8');
-  ok(tab.indexOf('tp1') < 0 && tab.indexOf('Stop Loss') < 0, 'the card no longer prints a target or a stop');
+  ok(tab.indexOf('TP1') >= 0 && tab.indexOf('Stop:') >= 0, 'the card prints the stop and the targets');
   ok(tab.indexOf('getGoldCandles') >= 0 && tab.indexOf('api.binance.com/api/v3/klines') < 0,
     'the tape comes from the house gold loader, not a raw spot URL');
   ok(tab.indexOf('NO DIRECTIONAL CALL') >= 0, 'an unread lean is labeled as no call');
