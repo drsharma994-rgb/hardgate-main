@@ -41,7 +41,9 @@ function agentRr(entry, stop, t1){
 }
 
 function hasSetupLevels(f){
-  return f && fin(+f.entry) && fin(+f.stop) && fin(+f.t1) && +f.entry !== +f.stop;
+  // A setup is valid for the agent if it has an entry and a stop that are not equal.
+  // We allow missing t1/t2 to prevent silent skipping of incomplete setups during scans.
+  return f && fin(+f.entry) && fin(+f.stop) && +f.entry !== +f.stop;
 }
 
 function setupLevelsTag(f){
