@@ -48,7 +48,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. One unopposed read of the last closed 15m gold candle is a directional call. Stop is one ATR against the close. TP1 is one ATR with it. TP2 is two ATR. If the reads fight, or none vote, there is no call.
+            No forecast yet. The scan takes the side with more reads of the last closed 15m gold candle. A tie uses the last close. Stop is one ATR against that close. TP1 is one ATR with it. TP2 is two ATR.
           </div>
         </div>
       `;
@@ -149,7 +149,7 @@ on every page load since v14-2:
         <ul class="lst">
           <li><b>Last close:</b> <span style="font-weight:700;">${this.fmt(forecast.close)}</span></li>
           ${levels}
-          <li><b>Reads:</b> ${called ? (forecast.agrees + ' agree, none against, of ' + forecast.checked) : ('reads conflict or none voted — ' + (forecast.checked || 0) + ' checked')}</li>
+          <li><b>Reads:</b> ${forecast.agrees} for the call, ${forecast.against} against, of ${forecast.checked}</li>
           ${forecast.source ? '<li><b>Tape:</b> ' + String(forecast.source).replace(/</g, '') + '</li>' : ''}
         </ul>
         <ul class="lst">${reasons}</ul>

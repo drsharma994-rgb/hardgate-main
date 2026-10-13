@@ -18458,9 +18458,9 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
-/* hg-v1305: one unopposed read is a directional call. Stop is one ATR
-   against the last close. TP1 is one ATR with it. TP2 is two ATR.
-   Reads that fight each other stay unread, and so does a tape with no vote. */
+/* hg-v1307: the side with more reads is the call, even when the other side
+   also voted. A tie is broken by the last close versus the one before it.
+   Stop is one ATR against that close. TP1 is one ATR with it. TP2 is two. */
 function goldCandleForecast(rows) {
   try {
     if (!Array.isArray(rows) || rows.length < 20) return null;
@@ -18524,15 +18524,24 @@ function goldCandleForecast(rows) {
     } else reasons.push('closes are not a run — no vote');
 
     var dir = null;
-    if (bulls >= 1 && bears === 0) dir = 'BULL';
-    else if (bears >= 1 && bulls === 0) dir = 'BEAR';
+    if (bulls > bears) dir = 'BULL';
+    else if (bears > bulls) dir = 'BEAR';
+    else if (closes[n - 1] >= closes[n - 2]) {
+      dir = 'BULL';
+      reasons.push('tie broken by the last close');
+    } else {
+      dir = 'BEAR';
+      reasons.push('tie broken by the last close');
+    }
 
-    var sign = dir === 'BULL' ? 1 : (dir === 'BEAR' ? -1 : 0);
+    var sign = dir === 'BULL' ? 1 : -1;
+    var agrees = dir === 'BULL' ? bulls : bears;
+    var against = dir === 'BULL' ? bears : bulls;
     return {
       dir: dir,
-      lean: dir || 'unread',
-      agrees: dir ? (dir === 'BULL' ? bulls : bears) : 0,
-      against: dir ? 0 : Math.min(bulls, bears),
+      lean: dir,
+      agrees: agrees,
+      against: against,
       checked: checked,
       reasons: reasons,
       expectedHigh: +(c + atrLast).toFixed(2),
@@ -18540,12 +18549,13 @@ function goldCandleForecast(rows) {
       atr: +atrLast.toFixed(2),
       atrSource: atrSource,
       close: +c.toFixed(2),
-      sl: sign ? +(c - sign * atrLast).toFixed(2) : null,
-      tp1: sign ? +(c + sign * atrLast).toFixed(2) : null,
-      tp2: sign ? +(c + sign * atrLast * 2).toFixed(2) : null,
-      note: dir
-        ? 'SL is one ATR against the last close. TP1 is one ATR with it. TP2 is two ATR. Levels come from the measured band, not a second price.'
-        : 'Reads disagree or none voted, so there is no direction and no stop.'
+      sl: +(c - sign * atrLast).toFixed(2),
+      tp1: +(c + sign * atrLast).toFixed(2),
+      tp2: +(c + sign * atrLast * 2).toFixed(2),
+      note: (against
+        ? (agrees + ' read' + (agrees === 1 ? '' : 's') + ' for the call, ' + against + ' against. ')
+        : '')
+        + 'SL is one ATR against the last close. TP1 is one ATR with it. TP2 is two ATR.'
     };
   } catch (e) { return null; }
 }

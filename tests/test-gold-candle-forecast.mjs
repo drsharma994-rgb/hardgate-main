@@ -59,8 +59,8 @@ console.log('== candle forecast leans only when reads agree ==');
   const fight = up(40);
   fight[fight.length - 1] = { t: 39, o: fight[38].c + 2, h: fight[38].c + 2.2, l: fight[38].c - 4, c: fight[38].c - 3.5, v: 10 };
   const opposed = forecast(fight);
-  ok(opposed && opposed.dir == null && opposed.sl == null,
-    'bull and bear reads together stay unread and mint no stop (' + (opposed && opposed.reasons || []).join(' | ') + ')');
+  ok(opposed && opposed.dir === 'BEAR' && opposed.sl != null && opposed.tp1 != null && opposed.tp2 != null,
+    'a split tape still calls the majority side with a stop and targets (' + (opposed && opposed.reasons || []).join(' | ') + ')');
 
   const flat = [];
   for (let i = 0; i < 25; i++) flat.push({ t: i, o: 100, h: 100, l: 100, c: 100, v: 1 });
