@@ -106,6 +106,16 @@ on every page load since v14-2:
         return;
       }
       forecast.source = loaded.source || '';
+      /* hg-v1314: the confluence read, beside the candle read. Composed from the
+         SHARED gold readers (indicator bag, Master Catalog, fundamental stack), so
+         this tab finally knows what the other gold desks know. It never throws: a
+         missing reader is reported as unread, not as agreement, and a failure here
+         leaves the candle read intact rather than blanking the tab. */
+      try {
+        if (typeof window.hgCfConfluence === 'function') {
+          forecast.confluence = window.hgCfConfluence(candles, {}, forecast);
+        }
+      } catch (eCf) { forecast.confluence = null; }
       this.renderResult(resultArea, statusEl, forecast);
 
     } catch (error) {
@@ -174,6 +184,42 @@ on every page load since v14-2:
           + '<li><b>TP2:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp2) + '</span></li>'
         : '<li><b>Stop:</b> none — no side</li>');
 
+    /* hg-v1314: THE CONFLUENCE BLOCK. What the other gold desks know, beside the
+       candle read. Rendered straight from the shared readers' own output — nothing
+       here is computed, scored or thresholded on this side, so the tab cannot drift
+       from the desks it is reading. */
+    var cfl = forecast.confluence;
+    var conflHtml = '';
+    if (cfl && cfl.ok) {
+      var rowsHtml = (cfl.voters || []).map(function(v) {
+        var mark = v.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>'
+          : (v.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>'
+            : '<span class="note">unread</span>');
+        var w = v.why ? ' <span class="note">— ' + String(v.why).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>' : '';
+        return '<li>' + mark + ' <b>' + String(v.name).replace(/</g, '') + '</b>'
+          + ' <span class="note">(' + String(v.family) + ')</span>' + w + '</li>';
+      }).join('');
+      var verdict = cfl.ticket
+        ? '<b class="pos">CONFLUENCE SETUP</b>'
+        : '<b>CONFLUENCE READ</b> <span class="note">· NOT A TICKET</span>';
+      conflHtml = '<div class="note" data-cf-confluence="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
+        + '<div style="margin-bottom:4px;">' + verdict
+        + ' <span class="note">— ' + String(cfl.why).replace(/</g, '') + '</span></div>'
+        + '<div class="note" style="margin-bottom:4px;"><b>'
+        + cfl.familiesWith + ' famil' + (cfl.familiesWith === 1 ? 'y' : 'ies') + ' with the call'
+        + (cfl.familiesAgainst ? ', ' + cfl.familiesAgainst + ' AGAINST' : ', none against')
+        + '</b> · ' + cfl.with_ + ' read' + (cfl.with_ === 1 ? '' : 's') + ' with, '
+        + cfl.against + ' against, ' + cfl.unread + ' unread</div>'
+        + '<ul class="lst">' + rowsHtml + '</ul>'
+        + (cfl.missing && cfl.missing.length
+          ? '<div class="note warn">Not read this scan: ' + cfl.missing.join(' · ') + '</div>' : '')
+        + '<div class="note">A ticket needs two independent families with the call, none against, and a named candle pattern. '
+        + 'Unread is never counted as agreement.</div></div>';
+    } else if (cfl) {
+      conflHtml = '<div class="note" data-cf-confluence="unread" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
+        + '<b>CONFLUENCE</b> — not read: ' + String(cfl.why || 'unavailable').replace(/</g, '') + '</div>';
+    }
+
     container.className = '';
     container.innerHTML = `
       <div class="omni-side ${dirClass}" style="margin: 0; border-left-width: 4px;">
@@ -185,6 +231,7 @@ on every page load since v14-2:
           ${forecast.source ? '<li><b>Tape:</b> ' + String(forecast.source).replace(/</g, '') + '</li>' : ''}
         </ul>
         <ul class="lst">${reasons}</ul>
+        ${conflHtml}
         <div class="note" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">
           ${forecast.note || ''}
         </div>

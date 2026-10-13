@@ -18989,6 +18989,183 @@ function aAdvance(rows, atrLast) {
   return c.h >= swingHi - atrLast * 0.08;
 }
 
+function hgCfConfluence(rows, opts, fc) {
+  /* hg-v1314: THE CONFLUENCE READ — what the OTHER gold desks know, put beside the
+     candle read, on this tab.
+     WHY THIS EXISTS. CANDLE FORECAST could name a pattern, a side, a stop and two
+     targets, and it read NOTHING else: no indicators, no core strategies, no
+     fundamentals. So it could call a long on a hammer while the entire gold stack —
+     the same reads every other gold tab runs on — pointed the other way, and it had
+     no way to know. This composes the SHARED readers rather than re-deriving
+     anything (hg-v949: one home per derivation). No new maths, no new weights: every
+     line below is an existing read, put next to the candle read.
+       CANDLES      the forecast's own pattern layer
+       TECHNICALS   hgGoldIndicatorReads — the same indicator bag the desks read
+       STRATEGIES   hgGoldCatalogEngine — how many core families are live
+       FUNDAMENTALS hgFundamentalRegime('GOLD') — the shared fundamental stack
+     THE VOTE IS A COUNT, NOT A WEIGHT. Each voter reports with / against / unread
+     against the forecast's direction and the setup reports "N of M read with the
+     call, K against". Nothing is scored and nothing is thresholded by a number I
+     invented, and an unread voter is reported as unread rather than counted as
+     agreement — so a dark feed can neither make a ticket easier nor harder. That is
+     the hg-v966 discipline: no weight that cannot be measured.
+     A ticket needs TWO independent families with the call and NONE against, plus an
+     actual candle pattern; anything short is an honest READ, not a ticket. */
+  var out = {
+    ok: false, dir: null, ticket: false, with_: 0, against: 0, unread: 0, checked: 0,
+    familiesWith: 0, familiesAgainst: 0,
+    voters: [], families: { candles: null, technicals: null, strategies: null, fundamentals: null },
+    why: '', missing: []
+  };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) { out.why = 'tape too thin to confluence'; return out; }
+    var f = fc;
+    if (!f && typeof goldCandleForecast === 'function') f = goldCandleForecast(rows);
+    if (!f || !f.dir) { out.why = 'no candle read to confluence'; return out; }
+    out.dir = f.dir;
+    out.ok = true;
+    if (f.dir === 'NEUTRAL') { out.why = 'the candle read is NEUTRAL — nothing to confluence'; return out; }
+
+    var wantsUp = (f.dir === 'BULL');
+    function voter(family, name, lean, why) {
+      /* lean: true = with the call, false = against, null = unread */
+      var v = { family: family, name: name, lean: lean, why: why || '' };
+      out.voters.push(v);
+      if (lean === true) out.with_++;
+      else if (lean === false) out.against++;
+      else out.unread++;
+      return v;
+    }
+
+    /* ---- CANDLES ---- */
+    var patNames = (f.patterns || []).slice();
+    var advNames = (f.advancedPatterns || []).slice();
+    var nPat = patNames.length + advNames.length;
+    var cfam = { patterns: nPat, names: patNames.concat(advNames), where: f.patternWhere || null, drift: f.patternDrift || null };
+    out.families.candles = cfam;
+    if (nPat > 0) voter('candles', nPat + ' pattern' + (nPat === 1 ? '' : 's'), true, patNames.concat(advNames).join(', '));
+    else voter('candles', 'no candle pattern', null, 'the side came from the drift and the bar reads, not a named pattern');
+
+    /* ---- TECHNICALS (the shared indicator bag) ---- */
+    var ind = null;
+    try {
+      var irFn = (typeof hgGoldIndicatorReads === 'function') ? hgGoldIndicatorReads
+        : (W && typeof W.hgGoldIndicatorReads === 'function' ? W.hgGoldIndicatorReads : null);
+      if (irFn) ind = irFn(rows, { rows1d: opts && opts.rows1d });
+    } catch (eInd) { ind = null; }
+    var techW = 0, techA = 0, techNames = [];
+    function tech(name, lean) {
+      if (lean === null || lean === undefined) { voter('technicals', name, null, 'unread'); return; }
+      techNames.push(name + (lean === true ? ' with' : ' against'));
+      if (lean === true) techW++; else techA++;
+      voter('technicals', name, lean, '');
+    }
+    if (ind && ind.ok === true) {
+      var px = +ind.close, s20 = +ind.sma20, s50 = +ind.sma50;
+      if (isFinite(px) && isFinite(s20) && isFinite(s50) && s20 !== s50) {
+        tech('SMA 20-50 stack', ((s20 > s50) === wantsUp));
+      } else tech('SMA 20-50 stack', null);
+      var rsi = +ind.rsi14;
+      if (isFinite(rsi) && rsi !== 50) tech('RSI(14) vs 50', ((rsi > 50) === wantsUp));
+      else tech('RSI(14) vs 50', null);
+      var ts = +ind.tsmom96;
+      if (isFinite(ts) && ts !== 0) tech('time-series momentum', ((ts > 0) === wantsUp));
+      else tech('time-series momentum', null);
+      var ls = +ind.linregSlope;
+      if (isFinite(ls) && ls !== 0) tech('linreg slope', ((ls > 0) === wantsUp));
+      else tech('linreg slope', null);
+      var ker = +ind.ker20;
+      if (isFinite(ker) && ker >= 0.3 && isFinite(ls) && ls !== 0) tech('Kaufman efficiency', ((ls > 0) === wantsUp));
+      else tech('Kaufman efficiency', null);
+      var pctB = +ind.bbPctB;
+      if (isFinite(pctB) && pctB !== 0.5) tech('Bollinger %B vs mid', ((pctB > 0.5) === wantsUp));
+      else tech('Bollinger %B vs mid', null);
+      /* volatility regime and volume are CONTEXT, not direction — a quiet tape is
+         not bullish, so they are disclosed and never voted */
+      var hv = +ind.hv20, hvm = +ind.hv20Med;
+      cfam.volRegime = (isFinite(hv) && isFinite(hvm) && hvm > 0)
+        ? (hv > hvm * 1.25 ? 'expanding' : (hv < hvm * 0.75 ? 'contracting' : 'normal')) : null;
+      cfam.volumeRatio = isFinite(+ind.volRatio) ? +(+ind.volRatio).toFixed(2) : null;
+      cfam.atrRegime = isFinite(+ind.atrRegime) ? +ind.atrRegime : null;
+    } else {
+      voter('technicals', 'indicator bag', null, 'hgGoldIndicatorReads unavailable');
+      out.missing.push('the indicator bag (hgGoldIndicatorReads)');
+    }
+    cfam.with_ = techW; cfam.against = techA; cfam.names = techNames;
+
+    /* ---- STRATEGIES (the Master Catalog) ---- */
+    var cat = null;
+    try {
+      var catFn = (typeof hgGoldCatalogEngine === 'function') ? hgGoldCatalogEngine
+        : (W && typeof W.hgGoldCatalogEngine === 'function' ? W.hgGoldCatalogEngine : null);
+      if (catFn) cat = catFn(rows, { ctx: (opts && opts.ctx) || null });
+    } catch (eCat) { cat = null; }
+    if (cat && cat.ok === true) {
+      /* the catalog does not call a side here — it reports how many CORE families
+         are live and how many are UNCHECKED. Disclosed, never voted: inventing a
+         direction from "92 indicators are USED" is exactly the unmeasured weight
+         this desk refuses. */
+      out.families.strategies = {
+        usedN: cat.usedN, uncheckedN: cat.uncheckedN, core: cat.core, optional: cat.optional,
+        live: (cat.live || []).slice(0, 6), why: cat.why
+      };
+      voter('strategies', 'Master Catalog frame', null,
+        cat.usedN + ' reads USED · ' + cat.uncheckedN + ' UNCHECKED — a frame, not a side');
+    } else {
+      voter('strategies', 'Master Catalog frame', null, 'catalog engine unavailable');
+      out.missing.push('the Master Catalog (hgGoldCatalogEngine)');
+    }
+
+    /* ---- FUNDAMENTALS (the shared stack, GOLD) ---- */
+    var fund = null;
+    try {
+      var fuFn = (typeof hgFundamentalRegime === 'function') ? hgFundamentalRegime
+        : (W && typeof W.hgFundamentalRegime === 'function' ? W.hgFundamentalRegime : null);
+      if (fuFn) fund = fuFn('GOLD', (opts && opts.fundExtra) || {});
+    } catch (eFu) { fund = null; }
+    if (fund && fund.regime && fund.regime !== 'unknown') {
+      var fLean = null;
+      var fWhy = 'regime ' + fund.regime + ' · ' + fund.bulls + ' bull / ' + fund.bears + ' bear of ' + fund.checked + ' checked';
+      if (fund.regime === 'bullish') fLean = wantsUp;
+      else if (fund.regime === 'bearish') fLean = !wantsUp;
+      /* mixed and quiet are genuinely neither — unread, not agreement */
+      out.families.fundamentals = { regime: fund.regime, bulls: fund.bulls, bears: fund.bears, checked: fund.checked, blackout: !!fund.blackout };
+      voter('fundamentals', 'GOLD fundamental regime', fLean, fWhy);
+    } else {
+      voter('fundamentals', 'GOLD fundamental regime', null, fund ? 'regime unread' : 'fundamental stack unavailable');
+      out.missing.push('the fundamental stack (hgFundamentalRegime)');
+    }
+
+    /* ---- THE VERDICT: a count of families, never a score ---- */
+    var famWith = 0, famAgainst = 0;
+    ['candles', 'technicals', 'strategies', 'fundamentals'].forEach(function (k) {
+      var anyWith = false, anyAgainst = false;
+      out.voters.forEach(function (v) {
+        if (v.family !== k) return;
+        if (v.lean === true) anyWith = true;
+        else if (v.lean === false) anyAgainst = true;
+      });
+      if (anyAgainst) famAgainst++;
+      else if (anyWith) famWith++;
+    });
+    out.checked = out.with_ + out.against;
+    out.familiesWith = famWith;
+    out.familiesAgainst = famAgainst;
+    out.ticket = !!(nPat > 0 && famWith >= 2 && famAgainst === 0);
+    out.why = out.ticket
+      ? (famWith + ' independent families with the ' + (wantsUp ? 'long' : 'short')
+         + ' and none against, on a named candle pattern')
+      : (nPat === 0 ? 'no named candle pattern — the doctrine needs a shape, not just a drift'
+        : (famAgainst > 0 ? (famAgainst + ' famil' + (famAgainst === 1 ? 'y' : 'ies') + ' AGAINST the call')
+          : ('only ' + famWith + ' famil' + (famWith === 1 ? 'y' : 'ies') + ' with the call — two are required')));
+    return out;
+  } catch (e) {
+    out.ok = false;
+    out.why = 'confluence error';
+    return out;
+  }
+}
+
 function goldCandleForecast(rows) {
   try {
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
@@ -19257,4 +19434,10 @@ function goldCandleForecast(rows) {
 
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
+  /* hg-v1314: the confluence composer, beside the forecast it confluences. Both
+     sit OUTSIDE the file's IIFE, so neither can see the IIFE-privates — that is
+     why this composer reaches for hgGoldIndicatorReads, hgGoldCatalogEngine and
+     hgFundamentalRegime through W with a typeof guard, and fails open to unread
+     when one is absent rather than throwing. */
+  window.hgCfConfluence = hgCfConfluence;
 }
