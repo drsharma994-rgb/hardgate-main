@@ -245,6 +245,18 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
+function tmRsiDivChipHtml(r){
+  if (!r || !r.rsiDivLong && !r.rsiDivShort) return '';
+  var dir = r.rsiDivLong ? 'long' : 'short';
+  return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'RSI DIV' : 'RSI DIV') + '</span>';
+}
+
+function tmVolDivChipHtml(r){
+  if (!r || !r.volDivLong && !r.volDivShort) return '';
+  var dir = r.volDivLong ? 'long' : 'short';
+  return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'VOL DIV' : 'VOL DIV') + '</span>';
+}
+
 function tmBarOpenSec(row){
   var t = row && row.t;
   if (!isFinite(+t)) return NaN;
@@ -3786,6 +3798,43 @@ function trendmxEmaTag(rows4h, dir){
   }
   return { state: 'waiting', ema: name };
 }
+function tmRsiDivergence(rows, dir) {
+  if (!rows || rows.length < 30) return false;
+  const rsi = rsi(rows, 14);
+  if (!rsi) return false;
+  const n = rows.length;
+  for (let i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(rsi[i])) continue;
+    const prevIdx = i - 5;
+    if (prevIdx < 5) continue;
+
+    if (dir === 'long') {
+      if (rows[i].l < rows[prevIdx].l && rsi[i] > rsi[prevIdx]) return true;
+    } else if (dir === 'short') {
+      if (rows[i].h > rows[prevIdx].h && rsi[i] < rsi[prevIdx]) return true;
+    }
+  }
+  return false;
+}
+
+function tmVolDivergence(rows, dir) {
+  if (!rows || rows.length < 30) return false;
+  const v = rows.map(r => r.v || r.volume);
+  const n = rows.length;
+  for (let i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(v[i])) continue;
+    const prevIdx = i - 5;
+    if (prevIdx < 5) continue;
+
+    if (dir === 'long') {
+      if (rows[i].l < rows[prevIdx].l && v[i] > v[prevIdx]) return true;
+    } else if (dir === 'short') {
+      if (rows[i].h > rows[prevIdx].h && v[i] < v[prevIdx]) return true;
+    }
+  }
+  return false;
+}
+
 function trendScore(rows1d, rows4h){
   var out = zeroResult();
   try{
@@ -3837,5 +3886,13 @@ function trendScore(rows1d, rows4h){
     if (ok1){
       var a = adx(rows1d, 14);
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
+
+      // Divergence Evidence (hg-v1021: RSI & Volume divergence on the 1D tape)
+      if (tmRsiDivergence(rows1d, 'long')) out.comps.rsiDivLong = 1;
+      else if (tmRsiDivergence(rows1d, 'short')) out.comps.rsiDivShort = 1;
+
+      if (tmVolDivergence(rows1d, 'long')) out.comps.volDivLong = 1;
+      else if (tmVolDivergence(rows1d, 'short')) out.comps.volDivShort = 1;
+
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is

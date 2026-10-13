@@ -50,7 +50,7 @@
       var macroL = this.core.evaluateMacroAlignment('BULL', view);
       if (!macroL.pass) return { active: false, veto: true, reason: macroL.reasons };
       if (smt.tripleSmtBearish) return { active: false, veto: true, reason: 'Silver confirmed the high: bearish SMT' };
-      var stopL = +(Math.min(current.low, prev.low) - Math.max(atr * 0.40, 3.00)).toFixed(2);
+      var stopL = +(Math.min(current.low, prev.low) - Math.max(atr * 0.50, 3.00)).toFixed(2);
       var riskL = current.close - stopL;
       if (stopL < current.close && riskL > 0){
         setup = Object.assign({
@@ -72,18 +72,9 @@
       var macroS = this.core.evaluateMacroAlignment('BEAR', view);
       if (!macroS.pass) return { active: false, veto: true, reason: macroS.reasons };
       if (smt.tripleSmtBullish) return { active: false, veto: true, reason: 'Silver refused the low: bullish SMT' };
-      var stopS = +(Math.max(current.high, prev.high) + Math.max(atr * 0.40, 3.00)).toFixed(2);
+      var stopS = +(Math.max(current.high, prev.high) + Math.max(atr * 0.50, 3.00)).toFixed(2);
       var riskS = stopS - current.close;
-      if (stopS > current.close && riskS > 0){
-        setup = Object.assign({
-          symbol: 'XAUUSD', direction: 'BEAR', type: 'IB_SWEEP_FOOTPRINT_ABSORPTION',
-          model: 'IB_SWEEP_FOOTPRINT_ABSORPTION', session: sess.sessionName,
-          entryPrice: +current.close.toFixed(2), stopLoss: stopS,
-          dealingRangeZone: dealing.zone, absorptionRatio: Math.round(bearAbs.absorptionRatio * 100) + '%',
-          asianRegime: asia.regime, tripleSmtConfirmed: !!smt.tripleSmtBearish,
-          breakerConfirmed: !!(breaker && breaker.type === 'BEARISH_BREAKER'), macroPass: true,
-          evidence: 'Swept $' + levelHigh.toFixed(2) + ' with a ' + Math.round(bearAbs.absorptionRatio * 100) + '% rejection wick. ' + dealing.zone + ' ' + Math.round(dealing.percentile * 100) + '%.'
-        }, bracket(current.close, riskS, 'BEAR'));
+if (stopS > current.close && riskS > 0){ setup = Object.assign({ symbol: "XAUUSD", direction: "BEAR", type: "IB_SWEEP_FOOTPRINT_ABSORPTION", model: "IB_SWEEP_FOOTPRINT_ABSORPTION", session: sess.sessionName, entryPrice: +current.close.toFixed(2), stopLoss: stopS, dealingRangeZone: dealing.zone, absorptionRatio: Math.round(bearAbs.absorptionRatio * 100) + "%", asianRegime: asia.regime, tripleSmtConfirmed: !!smt.tripleSmtBullish, breakerConfirmed: !!(breaker && breaker.type === "BEARISH_BREAKER"), macroPass: true, evidence: "Swept $" + levelHigh.toFixed(2) + " with a " + Math.round(bearAbs.absorptionRatio * 100) + "% rejection wick. " + dealing.zone + " " + Math.round(dealing.percentile * 100) + "%." }, bracket(current.close, riskS, "BEAR")); if (typeof adr !== "undefined" && adr && !adr.exhausted) { var cap = Math.max(setup.entryPrice + (atr * 5), setup.entryPrice - (atr * 5)); if (setup.direction === "long") setup.tp1_1_5R = Math.min(setup.tp1_1_5R, cap); else setup.tp2_2_6R = Math.max(setup.tp2_2_6R, cap); } }
       }
     }
     if (!setup){

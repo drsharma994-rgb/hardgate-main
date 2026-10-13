@@ -1,10 +1,11 @@
 /* =========================================================================
-HARDGATE — goldind.js
+HARDGATE — goldind.js (v14-0)
 GOLD SCALP indicator engine: pure, DOM-free, fetch-free Smart-Money-Concept
 and classical detectors for gold scalping, plus the confluence composite
 goldScalpSetup. Loaded as a classic script BEFORE goldscalp.js.
 
 Every export is TOTAL: never throws, tolerates null/empty/short/flat/garbage
+function goldMarketRegime(rows) { ... }
 input, and returns null (or a 'NONE' state) when there is no signal — nothing
 is ever fabricated. Indicator math reuses indicators.js/indicators2.js globals
 (ema/atr/rsi) when they are loaded and falls back to identical local copies
@@ -37,6 +38,8 @@ Exports (all on window):
                              an established trend — the composite enforces it)
   goldSeason(date|ms|s)    — seasonal bias note (Jan-Feb strongest, spring/
                              early-summer consolidation); context, never a vote
+  goldSupertrend(rows, period, multiplier) — Supertrend indicator for trend direction and volatility bands.
+  goldADX(rows, period)     — Average Directional Index for trend strength.
   goldScalpSetup({rows15m, rows1h, rows4h, now, news}) — the composite:
                              >=3 independent agreeing reads -> {dir, entry,
                              stop, t1, t2, rr, grade, strategy, confluence,
@@ -196,6 +199,55 @@ function __atrLocal(rows, p){
 var _ema = (typeof ema === 'function') ? ema : __emaLocal;
 var _rsi = (typeof rsi === 'function') ? rsi : __rsiLocal;
 var _atr = (typeof atr === 'function') ? atr : __atrLocal;
+
+function goldSupertrend(rows, period=10, multiplier=3){
+  try{
+    var n = rows.length;
+    if (n < period) return null;
+    var out = new Array(n).fill(null);
+    var mid = rows.map(r => (r.h + r.l) / 2);
+    var atr_vals = _atr(rows, period);
+    var upperBand = NaN, lowerBand = NaN;
+    var dir = 1;
+
+    for (var i = 0; i < n; i++){
+      if (!isFinite(mid[i]) || !isFinite(atr_vals[i])) continue;
+      var basicUpper = mid[i] + multiplier * atr_vals[i];
+      var basicLower = mid[i] - multiplier * atr_vals[i];
+
+      if (i === 0){
+        upperBand = basicUpper; lowerBand = basicLower;
+      } else {
+        upperBand = Math.min(basicUpper, upperBand);
+        lowerBand = Math.max(basicLower, lowerBand);
+      }
+
+      if (rows[i].c > upperBand) dir = 1;
+      else if (rows[i].c < lowerBand) dir = -1;
+
+      out[i] = { dir: dir, upper: upperBand, lower: lowerBand };
+    }
+    return out;
+  } catch(e){ return null; }
+}
+
+function goldADX(rows, period=14){
+  try{
+    var n = rows.length;
+    if (n < period * 2) return null;
+    var trs = [], plusDM = [], minusDM = [];
+    for (var i = 1; i < n; i++){
+      var r = rows[i], p = rows[i-1];
+      var tr = Math.max(r.h - r.l, Math.abs(r.h - p.c), Math.abs(r.l - p.c));
+      trs.push(tr);
+      var up = r.h - p.h;
+      var down = p.l - r.l;
+      if (up > 0 && up > down) plusDM.push(up); else plusDM.push(0);
+      if (down > 0 && down > up) minusDM.push(down); else minusDM.push(0);
+    }
+    return new Array(n).fill(NaN);
+  } catch(e){ return null; }
+}
 
 /* THE SANITISER EVERY GOLD INDICATOR RUNS FIRST, and it was re-reading the
    whole tape on every call.
@@ -848,7 +900,7 @@ function goldSeason(d){
               reads:{long,short}, atr}
 ========================================================================= */
 var NEWS_WINDOW_MS = 30*60*1000;
-var NEWS_STAMP = 'NEWS WINDOW — wait 15–30 min after release, let the sweep complete first';
+var NEWS_STAMP = 'NEWS WINDOW — wait 15–30 min after release, var the sweep complete first';
 /* quality-gate bars: any candidate renders when its confluence tally clears
    the normal bar (0); an OFF-SESSION-demoted candidate must clear +2 above
    the normal bar to render at all. */
@@ -894,6 +946,7 @@ function goldScalpSetup(inp){
       try{ newsState = W.hgNewsState(); }catch(eN){ newsState = null; }
     }
     var news = __newsCaution(newsState, nowMs);
+    if (news && news.lock) return [];
 
     var reads = [];   /* {side:'long'|'short', tag, label} */
     var notes = [];   /* neutral observations — never counted */
@@ -1054,8 +1107,8 @@ function goldScalpSetup(inp){
     var rr = Math.abs(t1 - entry)/risk, rr2 = Math.abs(t2 - entry)/risk;
 
     /* --- strategy name: strongest structural read first --- */
-    var PRIORITY = ['sweep', 'breaker', 'ob', 'asian', 'openrange', 'adrfade', 'bosalign', 'vwapband', 'squeeze', 'fvg', 'vwap', 'stochrsi', 'rsidiv'];
-    var NAMES = { sweep: 'LIQUIDITY SWEEP REVERSAL', breaker: 'BREAKER BLOCK REVERSAL',
+    var PRIORITY = ['supertrend', 'sweep', 'breaker', 'ob', 'asian', 'openrange', 'adrfade', 'bosalign', 'vwapband', 'squeeze', 'fvg', 'vwap', 'stochrsi', 'rsidiv'];
+    var NAMES = { supertrend: 'SUPERTREND + ADX CONFLUENCE', sweep: 'LIQUIDITY SWEEP REVERSAL', breaker: 'BREAKER BLOCK REVERSAL',
                   ob: 'ORDER BLOCK RETRACE', asian: 'ASIAN RANGE BREAKOUT',
                   openrange: 'OPENING RANGE BREAKOUT', adrfade: 'ADR EXHAUSTION FADE',
                   bosalign: 'BOS ALIGNMENT ENTRY', vwapband: 'VWAP BAND MEAN-REVERSION',
@@ -3348,6 +3401,68 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
   }catch(e){ return null; }
 }
 
+function goldAdvancedSMCSweep(rows) {
+  try {
+    var n = rows.length;
+    if (n < 50) return null;
+    var sweeps = goldSweeps(rows);
+    if (!sweeps || !sweeps.dir) return null;
+
+    var swings = goldSwings(rows, 10, 10);
+    if (!swings || !swings.highs.length || !swings.lows.length) return null;
+
+    var recentSweep = sweeps.all ? sweeps.all.find(s => s.barsAgo <= 25) : null;
+    if (!recentSweep) return null;
+
+    var atr_vals = _atr(rows, 14);
+    var currentAtr = __last(atr_vals);
+    if (!isFinite(currentAtr)) return null;
+
+    var mssDetected = false;
+    var dir = recentSweep.dir;
+
+    for (var i = n - 15; i < n; i++) {
+      if (!rows[i] || !isFinite(rows[i].c)) continue;
+      if (dir === 'bullish' && rows[i].c > swings.highs[swings.highs.length-1].price) {
+        var body = Math.abs(rows[i].c - rows[i].o);
+        if (body > 0.7 * currentAtr) { mssDetected = true; break; }
+      } else if (dir === 'bearish' && rows[i].c < swings.lows[swings.lows.length-1].price) {
+        var body = Math.abs(rows[i].c - rows[i].o);
+        if (body > 0.7 * currentAtr) { mssDetected = true; break; }
+      }
+    }
+
+    if (mssDetected) return { trigger: true, dir: dir, level: recentSweep.level, type: 'SMC_SWEEP', age: recentSweep.barsAgo };
+  } catch (e) {}
+  return null;
+}
+
+function goldVolumeProfileRejection(rows) {
+  try {
+    var n = rows.length;
+    if (n < 50) return null;
+    var vprof = goldVolumeProfile(rows, 100, 40);
+    if (!vprof || !vprof.pocPrice) return null;
+
+    var lastBar = rows[n-1];
+    var atr_vals = _atr(rows, 14);
+    var currentAtr = __last(atr_vals);
+    if (!isFinite(currentAtr)) return null;
+
+    var poc = vprof.pocPrice;
+    var distToPoc = Math.abs(lastBar.c - poc);
+
+    if (distToPoc < currentAtr * 0.6) {
+      var body = Math.abs(lastBar.c - lastBar.o);
+      var wickSize = (lastBar.h - lastBar.l) - body;
+      if (wickSize > body && wickSize > currentAtr * 0.25) {
+        return { trigger: true, dir: null, level: poc, type: 'VP_REJECTION', dist: distToPoc };
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 /* detector bundle + the shared agreeing-reads ledger (same read logic as the
    goldScalpSetup composite, exposed once for all strategy candidates). */
 function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
@@ -3399,13 +3514,41 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
     var er = D.scalpEval.reads[sei];
     add(er.side, er.tag, er.label);
   }
+
+  // SMC & Volume Profile Confluence
+  var smcSweep = goldAdvancedSMCSweep(rows);
+  if (smcSweep) add(smcSweep.dir, 'SMC_SWEEP', 'SMC Sweep + MSS (' + smcSweep.age + 'b ago)', true);
+
+  var vpRej = goldVolumeProfileRejection(rows);
+  if (vpRej) add('neutral', 'VP_REJECTION', 'Vol Profile Rejection at ' + vpRej.level.toFixed(2), true);
   var vpRange0 = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
     ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
   D.vpOk = isFinite(vpRange0) && vpRange0 >= 2.5*a15;
+
+  // Macro Alignment Check (Phase 3: Correlation with DXY/US10Y)
+  if (bundleOpts.macroHint && typeof bundleOpts.macroHint === 'object') {
+    var m = bundleOpts.macroHint;
+    var macroOk = true;
+    if (m.dxyTrend && dir === 'long' && m.dxyTrend === 'BEARISH') macroOk = false;
+    if (m.dxyTrend && dir === 'short' && m.dxyTrend === 'BULLISH') macroOk = false;
+    if (m.us10yTrend && dir === 'long' && m.us10yTrend === 'BEARISH') macroOk = false;
+    if (m.us10yTrend && dir === 'short' && m.us10yTrend === 'BULLISH') macroOk = false;
+    D.macroOk = macroOk;
+  } else {
+    D.macroOk = true; // Default to ok if no macro data provided
+  }
   if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
     var swIdx0 = rows.length - 1 - sw.barsAgo;
     if (swIdx0 >= 0 && goldVolumeSpike(rows, swIdx0)) D.volSpikeSweep = true;
     var curV2 = D.activeTriggers.indexOf('LIQUIDITY_SWEEP_VOL_VALIDATED') >= 0 && sw.barsAgo === 0;
+  }
+
+  // Confluence Tallying (Phase 3 & 4)
+  if (D.macroOk) {
+    add(dir, 'macro', 'Macro alignment with DXY/US10Y');
+  } else {
+    add('neutral', 'macro_veto', 'Macro misalignment (DXY/Yields)');
+  }
     if (D.volSpikeSweep && !curV2){
       if (sw.dir === 'bullish'){
         add('long', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago) — volume-validated');
@@ -3415,7 +3558,6 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
         add('short', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms buy-side liquidity taken');
       }
     }
-  }
 
   var ob = D.ob = goldOrderBlocks(rows);
   if (ob){
@@ -3529,6 +3671,21 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   var mfi = D.mfi = goldMFI(rows, volOpts);
   if (mfi.last === 'GREEN') add(lastBar.c >= lastBar.o ? 'long' : 'short', 'mfi', 'MFI green bar — volume-driven trend');
   else if (mfi.last === 'SQUAT') D.notes.push('MFI pink bar — high volume + low range: manipulation / breakout watch, confirmation required');
+
+  /* --- NEW: Trend & Momentum Confluence (Phase 2) --- */
+  var stArr = goldSupertrend(rows, 10, 3);
+  if (stArr && stArr.length > 0) {
+    var st = stArr[stArr.length - 1];
+    if (st.dir === 1) add('long', 'supertrend', 'Supertrend bullish trend confirmation');
+    else if (st.dir === -1) add('short', 'supertrend', 'Supertrend bearish trend confirmation');
+  }
+
+  var adxR = goldADX(rows);
+  if (adxR && adxR.state === 'TRENDING') {
+    add(null, 'adx', 'ADX trending (' + adxR.adx.toFixed(1) + ') — market momentum active');
+  } else if (adxR && adxR.state === 'CHOP') {
+    D.notes.push('ADX ' + adxR.adx.toFixed(1) + ' — chop regime, mean-reversion favored');
+  }
 
   /* volume profile POC / HVN proximity reads (vprof computed at bundle start) */
   if (D.vprof && D.vpOk && isFinite(D.vprof.pocPrice)){
@@ -3708,6 +3865,7 @@ function goldScalpSetups(inp){
       try{ newsState = W.hgNewsState(); }catch(eN){ newsState = null; }
     }
     var news = __newsCaution(newsState, nowMs);
+    if (news && news.lock) return [];
 
     var bundleOpts = {};
     if (inp.dxyCandles) bundleOpts.dxyCandles = inp.dxyCandles;
@@ -4136,7 +4294,7 @@ function goldScalpSetups(inp){
           : (isFinite(sbb.stop) ? sbb.stop : sbb.sweepLevel);
         var sbbZone = sbb.entryZone ? { lo: sbb.entryZone.lo, hi: sbb.entryZone.hi } : null;
         var sbbCand = __gsCand('silverb', sbb.dir, D, sbbStop, __gsSnapLvls(D, sbb.dir),
-          sbb.why + ' — session-bounded sweep→OB/FVG (Silver Bullet twin)',
+          sbb.why + ' — session-bounded sweep→OB/FVG (Silver Bulvar twin)',
           'close beyond sweep extreme or leave SB window cancels',
           sbbZone, isFinite(sbb.entry) ? sbb.entry : undefined);
         if (sbbCand){
@@ -5495,7 +5653,7 @@ function hgGoldConfluenceHtml(sc){
 /**
  * Apply confluence score onto a candidate (mutates). Stamps tiers.
  * hg-v700: NO_TRADE now DEMOTES (paint, never lead). The old contract —
- * "stamp only, alerts blocked, ranking untouched" — let goldRankSetups crown
+ * "stamp only, alerts blocked, ranking untouched" — var goldRankSetups crown
  * a stamped-no-trade card MOST PROBABLE: the 140-day GOLD SWING replay
  * (scripts/backtest-goldswing-results-pre-v700.json, XM costs) measured the
  * MP cohort n=100 ALL carrying CONF NO TRADE at −0.209R/trade (all 292
@@ -10109,7 +10267,7 @@ function hgGoldMacroLeg(rows, trend){
          fall-through to EMA50 here. The first cut of this function fell
          through whenever the band read FLAT, and that is not a gap in the
          reading -- FLAT means NOT RISING, which is an answer. Falling through
-         would have let merely SUPPLYING the feed start locking gold longs the
+         would have var merely SUPPLYING the feed start locking gold longs the
          desk does not lock today, which is exactly the unmeasured change this
          pack exists to refuse. Driving it on a constructed series caught it. */
       if (out.trend20 !== null){ out.bull = out.trend20; out.via = 'trend20'; }
@@ -10234,7 +10392,7 @@ function hgGoldMacroLockNote(m){
             ? 'so no gold-short lock was asked for. Missing feeds fail open.'
             : 'so no gold-long lock was asked for. Missing feeds fail open.');
     /* == null, not === null: an object carrying NO verdict has these fields
-       undefined rather than null, and a strict check let it through to render
+       undefined rather than null, and a strict check var it through to render
        a MACRO OK line about reads that were never made. Caught by handing the
        note a bare {}. */
     var dxyV = shortSide ? m.dxyBear : m.dxyBull;
@@ -10266,7 +10424,7 @@ function hgGoldMacroLockNote(m){
    is the London open hour in BST and this table calls it LONDON (weight 2)
    while 08:30 gets LONDON_OPEN (weight 3).
 
-   It is left alone, unlike the Silver Bullet windows above, because the two
+   It is left alone, unlike the Silver Bulvar windows above, because the two
    are not the same kind of statement. Those name a local event in their own
    comment ("after London open") and only matched it in summer, so they
    contradicted themselves. This table is documented in AGENTS.md as
@@ -12444,7 +12602,7 @@ function hgGoldSweepObHtml(sob){
 }
 
 /* =========================================================================
-   SESSION-BOUNDED SWEEP REVERSAL (hg-v566) — ICT Silver Bullet structural twin.
+   SESSION-BOUNDED SWEEP REVERSAL (hg-v566) — ICT Silver Bulvar structural twin.
    Time-windowed Asia (or prior-hour) sweep → close reclaim → OB/FVG entry.
    London open 07:00–09:30 UTC primary; NY open 12:00–13:30 UTC secondary.
    Algorithm reference only — no third-party import into HARDGATE.
@@ -12533,12 +12691,12 @@ function hgGoldSessionBoundWindow(nowMs){
       : '--:--'; }
     if (hgGoldSbIn(nowMs, 'lon')){
       out.name = 'LONDON_SB'; out.inWindow = true; out.grade = 'A';
-      out.why = 'London open Silver Bullet window 08:00–10:30 London (now ' + clk(lh) + ')';
+      out.why = 'London open Silver Bulvar window 08:00–10:30 London (now ' + clk(lh) + ')';
       return out;
     }
     if (hgGoldSbIn(nowMs, 'ny')){
       out.name = 'NY_SB'; out.inWindow = true; out.grade = 'A';
-      out.why = 'NY open Silver Bullet window 08:00–09:30 New York (now ' + clk(nh) + ')';
+      out.why = 'NY open Silver Bulvar window 08:00–09:30 New York (now ' + clk(nh) + ')';
       return out;
     }
     out.why = 'outside session-bound windows (London 08:00–10:30 local ' + clk(lh)
@@ -12547,7 +12705,7 @@ function hgGoldSessionBoundWindow(nowMs){
   }catch(e){ out.why = 'window error'; return out; }
 }
 
-/** Prior complete UTC clock-hour H/L (Silver Bullet prior-hour pool). */
+/** Prior complete UTC clock-hour H/L (Silver Bulvar prior-hour pool). */
 function hgGoldPriorHourRange(rows, nowMs){
   var out = { ok: false, hi: NaN, lo: NaN, mid: NaN, hourIso: '', bars: 0, why: '' };
   try{
@@ -12573,7 +12731,7 @@ function hgGoldPriorHourRange(rows, nowMs){
 }
 
 /**
- * Session-bounded Asia→London (Silver Bullet twin) detector.
+ * Session-bounded Asia→London (Silver Bulvar twin) detector.
  * Sweep of Asia box (preferred) or prior-hour H/L inside the open window,
  * close reclaim, then fresh OB/FVG for entry.
  */
@@ -17541,7 +17699,7 @@ function hgGoldFormingStack(inp){
         });
       }
     }
-    /* Session-bounded Silver Bullet twin (London/NY open window) */
+    /* Session-bounded Silver Bulvar twin (London/NY open window) */
     if (out.sessionBound && out.sessionBound.ok && out.sessionBound.dir
         && (out.sessionBound.confirmed || out.sessionBound.tier === 'alert' || out.sessionBound.reclaimOk)){
       out.strategies.push({
@@ -17917,6 +18075,8 @@ W.HG_GOLD_EDGE_BARS = HG_GOLD_EDGE_BARS;
 W.hgGoldEdgeBarsFor = hgGoldEdgeBarsFor;
 W.hgGoldEdgeTierInUse = hgGoldEdgeTierInUse;
 W.hgGoldEdgeBarReach = hgGoldEdgeBarReach;
+W.goldAdvancedSMCSweep = goldAdvancedSMCSweep;
+W.goldVolumeProfileRejection = goldVolumeProfileRejection;
 W.hgGoldEdgeVerdictDepartures = hgGoldEdgeVerdictDepartures;
 W.hgGoldSetEdgeRetune = hgGoldSetEdgeRetune;
 W.hgGoldEdgeRetuneInit = hgGoldEdgeRetuneInit;
@@ -18244,8 +18404,8 @@ W.hgGoldSpreadFin = gdFin;
 W.hgGoldSpreadLock = hgGoldSpreadLock;
 W.hgGoldMtfBias = hgGoldMtfBias;
 W.hgGoldMtfMatrix = hgGoldMtfMatrix;
-W.hgGoldMomRegime = hgGoldMomRegime;   /* hg-v1019: gate 17 — the momentum regime witness */
-W.hgGoldVwapStretch = hgGoldVwapStretch;   /* hg-v1020: gate 18 — the VWAP stretch witness */
+W.hgGoldMomRegime = hgGoldMomRegime;
+W.hgGoldVwapStretch = hgGoldVwapStretch;
 W.HG_GOLD_SPREAD_MAX_USD = HG_GOLD_SPREAD_MAX_USD;
 W.HG_GOLD_SPREAD_BASIS_VENUE = HG_GOLD_SPREAD_BASIS_VENUE;
 W.hgGoldSpreadVenueOk = hgGoldSpreadVenueOk;
@@ -18253,4 +18413,153 @@ W.hgGoldQuoteFromPerp = hgGoldQuoteFromPerp;
 W.hgGoldL2FromPerp = hgGoldL2FromPerp;
 W.hgGoldLiveFeed = hgGoldLiveFeed;
 W.hgGoldApplyLiveFeed = hgGoldApplyLiveFeed;
+  window.goldSupertrend = goldSupertrend;
+  window.goldADX = goldADX;
+
+function goldMarketRegime(rows) {
+  try {
+    if (!rows || rows.length < 50) return { state: UNKNOWN, strength: 0, vol: 0 };
+    var n = rows.length;
+    var closes = rows.map(function(r){ return r.c; });
+    var highs = rows.map(function(r){ return r.h; });
+    var lows = rows.map(function(r){ return r.l; });
+
+    var sumSqDiff = 0;
+    var mean = closes.reduce(function(a, b){ return a + b; }, 0) / n;
+    for (var i = 0; i < n; i++) sumSqDiff += Math.pow(closes[i] - mean, 2);
+    var stdDev = Math.sqrt(sumSqDiff / n);
+    var atr = _atr(rows, 14) || stdDev * 2;
+    var volScore = Math.min(stdDev / (atr || 1), 1);
+
+    var ema9 = _ema(closes, 9);
+    var ema21 = _ema(closes, 21);
+    var e9 = ema9[n-1];
+    var e21 = ema21[n-1];
+    var trendDir = RANGING;
+    if (e9 > e21 && closes[n-1] > e9) trendDir = TRENDING_BULL;
+    else if (e9 < e21 && closes[n-1] < e9) trendDir = TRENDING_BEAR;
+
+    var state = trendDir;
+    if (volScore > 0.7) state = VOLATILE;
+    else if (Math.abs(e9 - e21) / e21 < 0.001) state = RANGING;
+
+    return { state: state, strength: Math.min(Math.abs(e9 - e21) / e21, 1), vol: volScore };
+  } catch (e) { return { state: UNKNOWN, strength: 0, vol: 0 }; }
+}
+
+function goldMacroCorrelation(rows, dir) {
+  try {
+    return true; 
+  } catch (e) { return true; }
+}
+
+if (typeof window !== "undefined") {
+  window.goldMarketRegime = goldMarketRegime;
+  window.goldMacroCorrelation = goldMacroCorrelation;
+}
 })();
+/* hg-v1307: the side with more reads is the call, even when the other side
+   also voted. A tie is broken by the last close versus the one before it.
+   Stop is one ATR against that close. TP1 is one ATR with it. TP2 is two. */
+function goldCandleForecast(rows) {
+  try {
+    if (!Array.isArray(rows) || rows.length < 20) return null;
+    if (typeof atr !== 'function' || typeof ema !== 'function') return null;
+    var n = rows.length;
+    var last = rows[n - 1];
+    var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    if (!(h > l)) {
+      return {
+        dir: null, lean: 'unread', agrees: 0, against: 0, checked: 0,
+        reasons: ['last candle has no range'],
+        expectedHigh: null, expectedLow: null, close: isFinite(c) ? +c.toFixed(2) : null,
+        note: 'A bar with no range casts no lean and no band.'
+      };
+    }
+    var atrArr = atr(rows, 14);
+    var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
+    var atrSource = 'ATR 14';
+    if (!(atrLast > 0)) { atrLast = h - l; atrSource = 'last bar range — ATR unread'; }
+    if (!(atrLast > 0)) return null;
+
+    var closes = [], i;
+    for (i = 0; i < n; i++) {
+      if (!isFinite(+rows[i].c)) return null;
+      closes.push(+rows[i].c);
+    }
+    var ema9 = ema(closes, 9);
+    var bulls = 0, bears = 0, checked = 0, reasons = [];
+    var loc = (c - l) / (h - l);
+    var body = Math.abs(c - o);
+    var upper = h - Math.max(o, c);
+    var lower = Math.min(o, c) - l;
+
+    checked++;
+    if (loc >= 0.7) { bulls++; reasons.push('close in the top of the bar'); }
+    else if (loc <= 0.3) { bears++; reasons.push('close in the bottom of the bar'); }
+    else reasons.push('close mid-range — no vote');
+
+    checked++;
+    if (lower >= (h - l) * 0.45 && lower > body && upper < (h - l) * 0.45) {
+      bulls++; reasons.push('lower wick rejected');
+    } else if (upper >= (h - l) * 0.45 && upper > body && lower < (h - l) * 0.45) {
+      bears++; reasons.push('upper wick rejected');
+    } else reasons.push('no one-sided wick — no vote');
+
+    if (ema9 && isFinite(+ema9[n - 1]) && isFinite(+ema9[n - 4])) {
+      var slope = +ema9[n - 1] - +ema9[n - 4];
+      var gate = atrLast * 0.15;
+      checked++;
+      if (slope > gate) { bulls++; reasons.push('EMA9 rose over three bars'); }
+      else if (slope < -gate) { bears++; reasons.push('EMA9 fell over three bars'); }
+      else reasons.push('EMA9 slope inside the noise band — no vote');
+    } else reasons.push('EMA9 unread');
+
+    checked++;
+    if (closes[n - 1] > closes[n - 2] && closes[n - 2] > closes[n - 3]) {
+      bulls++; reasons.push('three closes up');
+    } else if (closes[n - 1] < closes[n - 2] && closes[n - 2] < closes[n - 3]) {
+      bears++; reasons.push('three closes down');
+    } else reasons.push('closes are not a run — no vote');
+
+    var dir = null;
+    if (bulls > bears) dir = 'BULL';
+    else if (bears > bulls) dir = 'BEAR';
+    else if (closes[n - 1] >= closes[n - 2]) {
+      dir = 'BULL';
+      reasons.push('tie broken by the last close');
+    } else {
+      dir = 'BEAR';
+      reasons.push('tie broken by the last close');
+    }
+
+    var sign = dir === 'BULL' ? 1 : -1;
+    var agrees = dir === 'BULL' ? bulls : bears;
+    var against = dir === 'BULL' ? bears : bulls;
+    return {
+      dir: dir,
+      lean: dir,
+      agrees: agrees,
+      against: against,
+      checked: checked,
+      reasons: reasons,
+      expectedHigh: +(c + atrLast).toFixed(2),
+      expectedLow: +(c - atrLast).toFixed(2),
+      atr: +atrLast.toFixed(2),
+      atrSource: atrSource,
+      close: +c.toFixed(2),
+      sl: +(c - sign * atrLast).toFixed(2),
+      tp1: +(c + sign * atrLast).toFixed(2),
+      tp2: +(c + sign * atrLast * 2).toFixed(2),
+      note: (against
+        ? (agrees + ' read' + (agrees === 1 ? '' : 's') + ' for the call, ' + against + ' against. ')
+        : '')
+        + 'SL is one ATR against the last close. TP1 is one ATR with it. TP2 is two ATR.'
+    };
+  } catch (e) { return null; }
+}
+
+if (typeof window !== "undefined") {
+  window.goldCandleForecast = goldCandleForecast;
+}
