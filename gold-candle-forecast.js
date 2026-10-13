@@ -69,7 +69,7 @@ the next candle's range, direction, TP, and SL.
 
       const dirClass = forecast.dir === 'BULL' ? 'long' : 'short';
       const dirLabel = forecast.dir === 'BULL' ? 'LONG CANDLE' : 'SHORT CANDLE';
-      const color = forecast.dir === 'BULL' ? '#15803d' : '#dc2626';
+      const color = forecast.dir === 'BULL' ? '#15803d' : '#dc262c';
 
       resultArea.className = ''; // remove empty class
       resultArea.innerHTML = `
@@ -97,6 +97,6 @@ the next candle's range, direction, TP, and SL.
 
   if (typeof window !== 'undefined') {
     window.HG_TAB_MODS = window.HG_TAB_MODS || {};
-    window.HG_TAB_MODS[mod.id] = mod;
+    window.HG_TAB_MODS['candle-forecast'] = mod;
   }
 })();
