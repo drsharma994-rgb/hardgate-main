@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A setup prints only when a candlestick pattern and a structure read agree. Structure is a break of structure, a change of character, a fair-value gap, an order block that holds, or equal highs or lows raided. The stop is still the pattern extreme when that sits between 0.25 and 2.5 ATR, otherwise one ATR.
+            No forecast yet. A setup prints when a candlestick pattern agrees with structure or with the gold desk. The desk votes only on a fresh RSI, EMA, supertrend, CCI or StochRSI cross, a fresh Asia-range break, or two measured macro legs (real rate, silver, VIX, miners). A standing trend does not vote. Fundamentals left unread stay unread. The stop is still the pattern extreme, or one ATR.
           </div>
         </div>
       `;
@@ -99,7 +99,7 @@ on every page load since v14-2:
         throw new Error('Predictive Engine (goldCandleForecast) not loaded. Please refresh.');
       }
 
-      const forecast = window.goldCandleForecast(candles);
+      const forecast = window.goldCandleForecast(candles, await this.loadMacro());
       if (!forecast) {
         resultArea.innerHTML = 'The candle read failed closed. Nothing was invented.';
         statusEl.textContent = 'Unread';
@@ -160,6 +160,21 @@ on every page load since v14-2:
     return { rows: [], source: '' };
   };
 
+  mod.loadMacro = async function() {
+    var cached = null;
+    try {
+      if (typeof window.getGoldMacroCached === 'function') cached = window.getGoldMacroCached();
+    } catch (e0) { cached = null; }
+    if (cached && typeof cached === 'object') return cached;
+    if (typeof window.getGoldMacro !== 'function') return null;
+    try {
+      return await Promise.race([
+        window.getGoldMacro(),
+        new Promise(function(resolve) { setTimeout(function() { resolve(null); }, 4000); })
+      ]);
+    } catch (e1) { return null; }
+  };
+
   /**
    * One unopposed read is the call. Stop and targets are one and two ATR
    * from the last close. A fight between reads prints no side.
@@ -177,6 +192,7 @@ on every page load since v14-2:
       : 'none';
     var setupLine = forecast.setup ? (forecast.setup + ' — ' + (forecast.setupParts || '')) : 'not formed';
     var levels = '<li><b>Setup:</b> ' + setupLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
+      + '<li><b>Gold desk:</b> ' + String(forecast.desk || 'unread').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
       + '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
       + (called
         ? '<li><b>Stop:</b> <span class="neg" style="font-weight:700;">' + this.fmt(forecast.sl) + '</span> <span class="note">(' + (forecast.stopSource === 'pattern' ? 'pattern extreme' : 'one ATR') + ')</span></li>'

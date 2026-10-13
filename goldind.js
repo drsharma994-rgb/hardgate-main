@@ -18989,6 +18989,170 @@ function aAdvance(rows, atrLast) {
   return c.h >= swingHi - atrLast * 0.08;
 }
 
+/* Gold-tab confluence. A fresh cross or a measured macro leg is one read.
+   A standing trend is not. Two reads on one side and none against are one vote.
+   This vote does not set the stop. */
+function hgCfGoldDesk(rows, macro) {
+  var empty = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [], notes: ['gold desk unread'] };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) return empty;
+    if (typeof rsi !== 'function' || typeof ema !== 'function' || typeof atr !== 'function') return empty;
+    var n = rows.length, i, bulls = [], bears = [], notes = [];
+    var closes = [];
+    for (i = 0; i < n; i++) {
+      if (!isFinite(+rows[i].c) || !isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return empty;
+      closes.push(+rows[i].c);
+    }
+    var atr14 = atr(rows, 14);
+    var a14 = (atr14 && isFinite(+atr14[n - 1])) ? +atr14[n - 1] : NaN;
+    var freshBar = a14 > 0 && Math.abs(closes[n - 1] - +rows[n - 1].o) >= a14 * 0.35;
+    var r = rsi(closes, 14);
+    var rv = r && r.length ? +r[n - 1] : NaN;
+    var rp = r && r.length > 1 ? +r[n - 2] : NaN;
+    if (freshBar && isFinite(rv) && isFinite(rp)) {
+      if (rp <= 50 && rv > 50) bulls.push('RSI crossed 50');
+      else if (rp >= 50 && rv < 50) bears.push('RSI crossed 50');
+      else if (rp <= 25 && rv > 25) bulls.push('RSI left oversold');
+      else if (rp >= 75 && rv < 75) bears.push('RSI left overbought');
+    }
+    if (r && r.length === n) {
+      var lows = [], k;
+      for (k = 2; k <= n - 3; k++) {
+        if (+rows[k].l < +rows[k - 1].l && +rows[k].l < +rows[k - 2].l && +rows[k].l < +rows[k + 1].l && +rows[k].l < +rows[k + 2].l)
+          lows.push(k);
+      }
+      if (lows.length >= 2) {
+        var p1 = lows[lows.length - 2], p2 = lows[lows.length - 1];
+        if (p2 > n - 22 && +rows[p2].l < +rows[p1].l && isFinite(+r[p2]) && isFinite(+r[p1]) && +r[p2] > +r[p1])
+          bulls.push('RSI bullish divergence');
+      }
+      var highs = [];
+      for (k = 2; k <= n - 3; k++) {
+        if (+rows[k].h > +rows[k - 1].h && +rows[k].h > +rows[k - 2].h && +rows[k].h > +rows[k + 1].h && +rows[k].h > +rows[k + 2].h)
+          highs.push(k);
+      }
+      if (highs.length >= 2) {
+        var q1 = highs[highs.length - 2], q2 = highs[highs.length - 1];
+        if (q2 > n - 22 && +rows[q2].h > +rows[q1].h && isFinite(+r[q2]) && isFinite(+r[q1]) && +r[q2] < +r[q1])
+          bears.push('RSI bearish divergence');
+      }
+    }
+    var e20 = ema(closes, 20), e50 = ema(closes, 50);
+    if (freshBar && e20 && e50 && isFinite(+e20[n - 1]) && isFinite(+e20[n - 2]) && isFinite(+e50[n - 1])) {
+      if (closes[n - 2] <= +e20[n - 2] && closes[n - 1] > +e20[n - 1] && +e20[n - 1] > +e50[n - 1])
+        bulls.push('EMA20 cross with the 50');
+      else if (closes[n - 2] >= +e20[n - 2] && closes[n - 1] < +e20[n - 1] && +e20[n - 1] < +e50[n - 1])
+        bears.push('EMA20 cross with the 50');
+    }
+    var atr10 = atr(rows, 10);
+    if (atr10 && atr10.length === n) {
+      function stAt(upto) {
+        var upper = NaN, lower = NaN, dir = 1, j;
+        for (j = 0; j <= upto; j++) {
+          var mid = (+rows[j].h + +rows[j].l) / 2, a = +atr10[j];
+          if (!isFinite(mid) || !isFinite(a)) continue;
+          var bu = mid + 3 * a, bl = mid - 3 * a;
+          if (!isFinite(upper)) { upper = bu; lower = bl; }
+          else { upper = Math.min(bu, upper); lower = Math.max(bl, lower); }
+          if (+rows[j].c > upper) dir = 1;
+          else if (+rows[j].c < lower) dir = -1;
+        }
+        return dir;
+      }
+      var nowDir = stAt(n - 1), prevDir = stAt(n - 4);
+      if (freshBar && nowDir !== prevDir) {
+        if (nowDir === 1) bulls.push('supertrend flip');
+        else bears.push('supertrend flip');
+      }
+    }
+    function cciAt(idx) {
+      if (idx < 19) return NaN;
+      var s = 0, t, tp;
+      for (t = idx - 19; t <= idx; t++) s += (+rows[t].h + +rows[t].l + +rows[t].c) / 3;
+      var m = s / 20, md = 0;
+      for (t = idx - 19; t <= idx; t++) {
+        tp = (+rows[t].h + +rows[t].l + +rows[t].c) / 3;
+        md += Math.abs(tp - m);
+      }
+      md /= 20;
+      tp = (+rows[idx].h + +rows[idx].l + +rows[idx].c) / 3;
+      return md > 0 ? (tp - m) / (0.015 * md) : NaN;
+    }
+    var cciSig = 0;
+    for (i = Math.max(20, n - 3); i < n; i++) {
+      var ca = cciAt(i - 1), cb = cciAt(i);
+      if (!isFinite(ca) || !isFinite(cb)) continue;
+      if (ca <= 0 && cb > 0) cciSig = 1;
+      else if (ca >= 0 && cb < 0) cciSig = -1;
+    }
+    if (freshBar && cciSig === 1) bulls.push('CCI crossed zero');
+    else if (freshBar && cciSig === -1) bears.push('CCI crossed zero');
+    function stochK(idx) {
+      if (!r || idx < 13) return NaN;
+      var lo = Infinity, hi = -Infinity, j;
+      for (j = idx - 13; j <= idx; j++) {
+        if (!isFinite(+r[j])) return NaN;
+        if (+r[j] < lo) lo = +r[j];
+        if (+r[j] > hi) hi = +r[j];
+      }
+      if (!(hi > lo)) return NaN;
+      return 100 * (+r[idx] - lo) / (hi - lo);
+    }
+    var k0 = stochK(n - 1), k1 = stochK(n - 2);
+    if (freshBar && isFinite(k0) && isFinite(k1)) {
+      if (k1 <= 20 && k0 > 20) bulls.push('StochRSI crossed up');
+      else if (k1 >= 80 && k0 < 80) bears.push('StochRSI crossed down');
+    }
+    var tl = +rows[n - 1].t;
+    if (tl > 1e9) {
+      var ds = Math.floor(tl / 86400) * 86400, boxEnd = ds + 8 * 3600;
+      if (tl >= boxEnd) {
+        var aHi = -Infinity, aLo = Infinity, aBars = 0;
+        for (i = 0; i < n; i++) {
+          var tt = +rows[i].t;
+          if (!(tt >= ds && tt < boxEnd)) continue;
+          if (+rows[i].h > aHi) aHi = +rows[i].h;
+          if (+rows[i].l < aLo) aLo = +rows[i].l;
+          aBars++;
+        }
+        if (aBars >= 3 && aHi > aLo) {
+          if (+rows[n - 1].c > aHi && +rows[n - 2].c <= aHi) bulls.push('Asia range break');
+          else if (+rows[n - 1].c < aLo && +rows[n - 2].c >= aLo) bears.push('Asia range break');
+        }
+      }
+    }
+    if (macro && typeof macro === 'object') {
+      if (macro.realRateHint === 'TAILWIND') bulls.push('real rate tailwind');
+      else if (macro.realRateHint === 'HEADWIND') bears.push('real rate headwind');
+      else if (!macro.realRateHint && macro.dxy && macro.dxy.trend20 === 'FALLING') bulls.push('DXY falling');
+      else if (!macro.realRateHint && macro.dxy && macro.dxy.trend20 === 'RISING') bears.push('DXY rising');
+      if (macro.silverTrend === 'RISING') bulls.push('silver rising');
+      else if (macro.silverTrend === 'FALLING') bears.push('silver falling');
+      if (macro.vixTrend === 'RISING') bulls.push('VIX rising');
+      else if (macro.vixTrend === 'FALLING') bears.push('VIX falling');
+      if (macro.minersGoldTrend === 'RISING') bulls.push('miners leading gold');
+      else if (macro.minersGoldTrend === 'FALLING') bears.push('miners lagging gold');
+    } else notes.push('fundamentals unread');
+    if (bulls.length && bears.length) {
+      notes.push(bulls.concat(bears).join(', ') + ' — desk split, no vote');
+      bulls = []; bears = [];
+    }
+    var voted = bulls.length >= 2 || bears.length >= 2;
+    if (!voted && (bulls.length === 1 || bears.length === 1)) {
+      notes.push((bulls[0] || bears[0]) + ' — one desk read, no vote');
+      bulls = []; bears = [];
+    }
+    if (!bulls.length && !bears.length && !notes.length) notes.push('no fresh gold-desk cross');
+    return {
+      bullVotes: bulls.length ? 1 : 0,
+      bearVotes: bears.length ? 1 : 0,
+      bullNames: bulls,
+      bearNames: bears,
+      notes: notes
+    };
+  } catch (e) { return empty; }
+}
+
 function hgCfConfluence(rows, opts, fc) {
   /* hg-v1314: THE CONFLUENCE READ — what the OTHER gold desks know, put beside the
      candle read, on this tab.
@@ -19167,6 +19331,7 @@ function hgCfConfluence(rows, opts, fc) {
 }
 
 function goldCandleForecast(rows) {
+  var macro = arguments.length > 1 ? arguments[1] : null;
   try {
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
        its standard error to mean anything and the empirical range needs a
@@ -19256,15 +19421,19 @@ function goldCandleForecast(rows) {
 
     var pat = hgCfCandlePatterns(rows, atrLast);
     var struct = hgCfStructure(rows, atrLast);
+    var desk = hgCfGoldDesk(rows, macro);
     var pi;
-    bulls += pat.bullVotes + struct.bullVotes;
-    bears += pat.bearVotes + struct.bearVotes;
-    checked += pat.bullVotes + pat.bearVotes + struct.bullVotes + struct.bearVotes;
+    bulls += pat.bullVotes + struct.bullVotes + desk.bullVotes;
+    bears += pat.bearVotes + struct.bearVotes + desk.bearVotes;
+    checked += pat.bullVotes + pat.bearVotes + struct.bullVotes + struct.bearVotes + desk.bullVotes + desk.bearVotes;
     if (pat.names.length) reasons.push('patterns: ' + pat.names.join(', '));
     else reasons.push('no candlestick pattern');
     var structNames = struct.bullNames.concat(struct.bearNames);
     if (structNames.length) reasons.push('structure: ' + structNames.join(', '));
     else reasons.push('no structure');
+    var deskNames = desk.bullNames.concat(desk.bearNames);
+    if (deskNames.length) reasons.push('gold desk: ' + deskNames.join(', '));
+    else reasons.push('gold desk: ' + (desk.notes[0] || 'unread'));
     for (pi = 0; pi < pat.notes.length; pi++) reasons.push(pat.notes[pi]);
     /* hg-v1311: the advanced pattern layer. DISCLOSED ONLY — it is deliberately
        NOT added to bulls/bears/checked and never touches rawStop below, because
@@ -19383,12 +19552,18 @@ function goldCandleForecast(rows) {
       tp2 = +(c + sign * risk * 2).toFixed(2);
     }
     var setup = null, setupParts = '';
-    if (!neutral && dir === 'BULL' && pat.bullVotes > 0 && struct.bullVotes > 0) {
+    function hgCfSetupParts(patNames, structNamesSide, deskNamesSide, structOn, deskOn) {
+      var parts = patNames.slice();
+      if (structOn) parts = parts.concat(structNamesSide);
+      if (deskOn) parts = parts.concat(deskNamesSide);
+      return parts.join(', ');
+    }
+    if (!neutral && dir === 'BULL' && pat.bullVotes > 0 && (struct.bullVotes > 0 || desk.bullVotes > 0)) {
       setup = 'LONG SETUP';
-      setupParts = pat.bullNames.concat(struct.bullNames).join(', ');
-    } else if (!neutral && dir === 'BEAR' && pat.bearVotes > 0 && struct.bearVotes > 0) {
+      setupParts = hgCfSetupParts(pat.bullNames, struct.bullNames, desk.bullNames, struct.bullVotes > 0, desk.bullVotes > 0);
+    } else if (!neutral && dir === 'BEAR' && pat.bearVotes > 0 && (struct.bearVotes > 0 || desk.bearVotes > 0)) {
       setup = 'SHORT SETUP';
-      setupParts = pat.bearNames.concat(struct.bearNames).join(', ');
+      setupParts = hgCfSetupParts(pat.bearNames, struct.bearNames, desk.bearNames, struct.bearVotes > 0, desk.bearVotes > 0);
     }
     return {
       dir: dir,
@@ -19406,6 +19581,7 @@ function goldCandleForecast(rows) {
       patternWherePos: (typeof adv.wherePos === 'number' ? adv.wherePos : null),
       patternDrift: adv.aligned,
       structure: structNames,
+      desk: deskNames.length ? deskNames.join(', ') : (desk.notes[0] || 'unread'),
       setup: setup,
       setupParts: setupParts,
       stopSource: stopSource,
@@ -19434,10 +19610,5 @@ function goldCandleForecast(rows) {
 
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
-  /* hg-v1314: the confluence composer, beside the forecast it confluences. Both
-     sit OUTSIDE the file's IIFE, so neither can see the IIFE-privates — that is
-     why this composer reaches for hgGoldIndicatorReads, hgGoldCatalogEngine and
-     hgFundamentalRegime through W with a typeof guard, and fails open to unread
-     when one is absent rather than throwing. */
   window.hgCfConfluence = hgCfConfluence;
 }

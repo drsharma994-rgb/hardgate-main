@@ -28,6 +28,24 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 /* The function is LIFTED from source (hg-v1022) and handed the three helpers
    it reads, so this guard never boots the 18k-line goldind.js. */
 const src = read('goldind.js');
+/* BRACE-COUNTED lift, added by hg-v1314. The non-greedy regex stops at the first
+   nested `}` once the function is no longer last before the export block, and the
+   sandbox then throws "Unexpected end of input". Comment/string aware, because a
+   doc comment that quotes code derails a naive counter. */
+function liftFn(text, name){
+  const start = text.indexOf('function ' + name + '(');
+  if (start < 0) throw new Error('could not lift ' + name + ' from goldind.js');
+  let depth = 0, i = text.indexOf('{', start);
+  for (; i < text.length; i++){
+    const c = text[i];
+    if (c === '/' && text[i + 1] === '/'){ while (i < text.length && text[i] !== '\n') i++; continue; }
+    if (c === '/' && text[i + 1] === '*'){ i += 2; while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++; i += 2; continue; }
+    if (c === '"' || c === "'" || c === '\`'){ const q = c; i++; while (i < text.length && text[i] !== q){ if (text[i] === '\\') i++; i++; } i++; continue; }
+    if (c === '{') depth++;
+    else if (c === '}'){ depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+  throw new Error('unbalanced braces lifting ' + name);
+}
 const mm = src.match(/function goldCandleForecast\(rows\) \{[\s\S]*?\n\}/);
 ok(!!mm, 'goldCandleForecast body is readable in source (hg-v1022 lift)');
 const helperStart = src.indexOf('function hgCfPack');

@@ -148,6 +148,16 @@ console.log('== candle forecast leans only when reads agree ==');
   const formed = forecast(rev);
   ok(formed && formed.setup === 'LONG SETUP',
     'a reversal candle through the prior high is a long setup (' + (formed && formed.setup) + ' | ' + (formed && formed.setupParts) + ' | ' + (formed && formed.reasons || []).join(' | ') + ')');
+
+  const withFunds = forecast(decline, { realRateHint: 'TAILWIND', silverTrend: 'RISING' });
+  ok(withFunds && withFunds.setup === 'LONG SETUP' && String(withFunds.setupParts).indexOf('real rate tailwind') >= 0
+      && String(withFunds.setupParts).indexOf('silver rising') >= 0,
+    'two measured gold-macro legs plus a hammer form the setup (' + (withFunds && withFunds.setupParts) + ')');
+  const oneFund = forecast(decline, { realRateHint: 'TAILWIND' });
+  ok(oneFund && String(oneFund.desk).indexOf('one desk read') >= 0 && String(oneFund.setupParts).indexOf('real rate tailwind') < 0,
+    'one macro leg is shown and does not confirm the setup (' + (oneFund && oneFund.desk) + ')');
+  ok(bull.desk && String(bull.desk).indexOf('fundamentals unread') >= 0,
+    'a scan with no macro leaves fundamentals unread');
 }
 
 console.log('== the tab does not invent a trade ==');
