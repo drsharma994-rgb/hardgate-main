@@ -3558,7 +3558,6 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
         add('short', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms buy-side liquidity taken');
       }
     }
-  }
 
   var ob = D.ob = goldOrderBlocks(rows);
   if (ob){
