@@ -492,8 +492,15 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
      judged.length + ' of the ' + goldTabs.length + ' gold tabs are judged against the floor');
   /* and the ones that are not are named, with a reason that holds */
   for (const t of unjudged){
-    const file = t === 'gold' ? null : root + t + '.js';
-    if (!file || !fs.existsSync(file)){
+    /* `gold` is the inline scan (records under CARD:<scanId>). Every
+       other gold tab lives in a file whose basename matches its id,
+       OR — for a hg-v1306+ tab registered through HG_tabs — carries
+       a `gold-` prefix (gold-candle-forecast.js registers id
+       `candle-forecast`). Try both so this convention does not
+       hard-fail a new display-only tab. */
+    const candidates = t === 'gold' ? [] : [root + t + '.js', root + 'gold-' + t + '.js'];
+    const file = candidates.find(f => fs.existsSync(f)) || null;
+    if (!file){
       ok(t === 'gold', 'unjudged gold tab "' + t + '" is the inline scan, which records under CARD:<scanId>');
       continue;
     }

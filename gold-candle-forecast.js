@@ -1,22 +1,21 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (hg-v1306)
-CANDLE FORECAST tab for the GOLD group. Reads the shell's gold feed chain
-(getXAUCandles → XM / Delta XAUT / PAXG, hg-v1161 anchored) and prints the
-next-candle direction, expected range, TP1/TP2 and SL on ATR + EMA9 slope.
+HARDGATE — gold-candle-forecast.js (hg-v1314)
+CANDLE FORECAST tab for the GOLD group.
 
-DOCTRINE (hg-v966 / hg-v955):
-- This is a DISPLAY tool, not a gate. No setup leaves any board on it, no
-  threshold moves, no forward ledger reads a mark from it. The forecast
-  is a projection, not a measurement of accuracy.
-- The engine (window.goldCandleForecast) is bar-only pure math — ATR and
-  the sign of the EMA9 slope on the last closed bar. It fails open on a
-  thin tape (<20 rows), on a non-finite ATR, or on a feed that threw.
+hg-v1314 extends the hg-v1306 engine from an EMA9-slope read into three
+legs: (1) advanced candlestick pattern recognition (16 patterns), (2)
+structural reads (BOS/CHoCH, FVG, OB, equal highs/lows, trend direction),
+(3) full gold-tab confluence — hgGoldFreeFeedVerdicts (free feeds),
+hgGoldIndicatorReads + hgGoldIndicatorMarks (18 indicators),
+pineGoldLayerStates + pineGoldPineMarks (Pine states), hgGoldFormingRegime
+(ER / vol / DXY / yield). A SETUP forms when patterns + structure +
+confluence agree. A LEAN forms on patterns + structure alone. CONFLICT
+when confluence opposes. NEUTRAL otherwise.
 
-The user previously saw "Waiting for data..." with v14-1 chip. That inline
-HTML (the pane's default content) was the problem: the module's mount
-replaces it, but the mount cannot run until the user opens the tab. The
-module is now registered through window.HG_tabs so bootHgTabs picks it up,
-and the tab is listed in HG_NAV_GROUPS so it renders in the GOLD group.
+DOCTRINE (hg-v966 / hg-v955): DISPLAY tool, not a gate. No setup leaves
+any board on it. No forward-ledger mark. No threshold moves. Confluence
+counts marks that the gold readers *already* produce on every scan — it
+adds no new weight to any desk.
 ========================================================================= */
 (function(){
 'use strict';
@@ -28,20 +27,27 @@ function fmtF(n){
     return n.toFixed(2);
   }catch(e){ return '—'; }
 }
+function esc(x){ return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* Idempotency on MODULE STATE, not a DOM query. A stub shell's
+   querySelector returns a truthy element for ANY selector, so a
+   DOM-query guard fires on the FIRST mount and the tab renders
+   nothing — the hg-v955 shape and the hg-v1313 lesson. */
+var __cfMounted = null;    /* the container reference the module last mounted into */
 
 function mount(container){
   if (!container) return;
-  /* idempotent mount — a second showTab click must not re-paint */
-  if (container.querySelector('#cfRunBtn')) return;
+  if (__cfMounted === container) return;   /* second mount of the SAME pane is a no-op */
+  __cfMounted = container;
   container.innerHTML = ''
     + '<div class="panel">'
-    +   '<h2>Candle Forecast <span id="cfVersion" class="verbadge">v1306</span></h2>'
+    +   '<h2>Candle Forecast <span id="cfVersion" class="verbadge">v1314</span></h2>'
     +   '<div class="row" style="margin-bottom:12px">'
     +     '<button class="btn" id="cfRunBtn">SCAN NEXT CANDLE</button>'
     +     '<span class="note" id="cfStatus" style="margin-left:8px;font-weight:700">Ready</span>'
     +   '</div>'
     +   '<div id="cfResultArea" class="empty">'
-    +     'No forecast yet. Click <b>SCAN NEXT CANDLE</b> to project the next 15m gold candle from ATR and the EMA9 slope. This is a display tool — nothing is gated on it.'
+    +     'No forecast yet. Click <b>SCAN NEXT CANDLE</b> to run 16 candlestick patterns, structural reads (BOS/FVG/OB), and the full gold-tab confluence (free feeds, 18 indicators, Pine states, regime) on the next 15m gold candle. This is a display tool — nothing is gated on it.'
     +   '</div>'
     + '</div>';
   var btn = container.querySelector('#cfRunBtn');
@@ -54,6 +60,34 @@ function refresh(){
   return runForecast(host);
 }
 
+async function gatherContext(rows){
+  /* collect ctx fields that the gold confluence readers consume. Every
+     call is a soft read: a failure or missing helper reads NEITHER on
+     that leg (hg-v989 third state), never a guessed value. */
+  var ctx = { macro: null, rows1d: null, spot: null, fundingRate: null, fng: null };
+  try{
+    if (typeof G.getGoldMacro === 'function'){
+      var p = G.getGoldMacro();
+      ctx.macro = (p && typeof p.then === 'function') ? (await p.catch(function(){ return null; })) : p;
+    } else if (typeof G.getGoldMacroCached === 'function'){
+      ctx.macro = G.getGoldMacroCached() || null;
+    }
+  }catch(e){ ctx.macro = null; }
+  try{
+    if (typeof G.getXAUCandles === 'function'){
+      ctx.rows1d = await G.getXAUCandles('1d', 90).catch(function(){ return null; });
+    }
+  }catch(e){ ctx.rows1d = null; }
+  try{
+    if (G.S && G.S.fng) ctx.fng = G.S.fng;
+    else if (typeof G.hgFng === 'function') ctx.fng = G.hgFng();
+  }catch(e){}
+  try{
+    if (G.S && G.S.goldSpot) ctx.spot = G.S.goldSpot;
+  }catch(e){}
+  return ctx;
+}
+
 async function runForecast(container){
   var statusEl = container.querySelector('#cfStatus');
   var resultArea = container.querySelector('#cfResultArea');
@@ -64,7 +98,7 @@ async function runForecast(container){
   try{
     var rows = null;
     if (typeof G.getXAUCandles === 'function'){
-      rows = await G.getXAUCandles('15m', 50);
+      rows = await G.getXAUCandles('15m', 60);
     }
     if (!Array.isArray(rows) || rows.length < 20){
       resultArea.innerHTML = '<span class="note warn">Gold feed is thin or unavailable — need ≥20 closed 15m bars; got ' + ((rows && rows.length) || 0) + '.</span>';
@@ -76,9 +110,10 @@ async function runForecast(container){
       statusEl.textContent = 'Failed';
       return 'no-engine';
     }
-    var f = G.goldCandleForecast(rows);
-    if (!f || !f.dir){
-      resultArea.innerHTML = 'No clear signal on this bar — the EMA9 slope and ATR did not agree. The forecast abstains rather than guess.';
+    var ctx = await gatherContext(rows);
+    var f = G.goldCandleForecast(rows, ctx);
+    if (!f){
+      resultArea.innerHTML = 'No forecast available — engine returned null (thin tape, missing indicators, or an unreadable last bar).';
       statusEl.textContent = 'Ready';
       return 'no-signal';
     }
@@ -86,31 +121,100 @@ async function runForecast(container){
     return 'ok';
   }catch(e){
     try{ console.error('[CandleForecast]', e); }catch(_){}
-    resultArea.innerHTML = '<span class="note warn">Forecast failed: ' + (e && e.message ? e.message : e) + '.</span>';
+    resultArea.innerHTML = '<span class="note warn">Forecast failed: ' + esc(e && e.message ? e.message : e) + '.</span>';
     statusEl.textContent = 'Failed';
     return 'error';
   }
 }
 
+function listCell(label, items, cls){
+  if (!items || !items.length) return '<li><b>' + label + ':</b> <span class="note">none on this bar</span></li>';
+  var html = items.map(function(p){ return '<span class="chip ' + cls + '" style="margin-right:4px">' + esc(p) + '</span>'; }).join('');
+  return '<li><b>' + label + ':</b> ' + html + '</li>';
+}
+
+function marksBlock(marks, group){
+  var keys = Object.keys(marks || {});
+  if (!keys.length) return '';
+  var cells = keys.map(function(k){
+    var v = marks[k];
+    var cls = v === true ? 'chip ok' : (v === false ? 'chip no' : 'chip');
+    var tag = v === true ? 'WITH' : (v === false ? 'AGAINST' : 'UNREAD');
+    return '<span class="' + cls + '" style="margin-right:4px;margin-bottom:2px" title="' + esc(k) + '"><b>' + esc(k.replace(/^(free:|ind:|pine:)/, '')) + '</b> ' + tag + '</span>';
+  }).join('');
+  return '<div style="margin-top:6px"><b>' + esc(group) + ':</b> ' + cells + '</div>';
+}
+
 function renderResult(container, statusEl, f){
-  var dirClass = (f.dir === 'BULL') ? 'long' : 'short';
-  var dirLabel = (f.dir === 'BULL') ? 'LONG CANDLE' : 'SHORT CANDLE';
+  var isSetup = f.tier === 'SETUP';
+  var isLean = f.tier === 'LEAN';
+  var isConflict = f.tier === 'CONFLICT';
+  var neutral = f.tier === 'NEUTRAL';
+  var dirClass = (f.dir === 'BULL') ? 'long' : (f.dir === 'BEAR' ? 'short' : '');
+  var dirLabel = neutral ? 'NEUTRAL — NO CLEAR LEAN'
+               : isSetup ? ((f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' SETUP')
+               : isLean  ? ((f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' LEAN')
+               : /* conflict */ ((f.dir === 'BULL' ? 'LONG' : 'SHORT') + ' — CONFLUENCE AGAINST');
   var color = (f.dir === 'BULL') ? '#15803d' : '#dc262c';
+
+  /* confluence summary */
+  var conf = f.confluence || null;
+  var confSummary = '';
+  if (conf && conf.readableN > 0){
+    var pct = conf.readableN > 0 ? Math.round(100 * conf.withN / conf.readableN) : 0;
+    confSummary = '<li><b>Confluence:</b> <span style="color:' + color + ';font-weight:700">' + conf.withN + ' WITH / ' + conf.againstN + ' AGAINST</span> of ' + conf.readableN + ' readable marks (' + pct + '% WITH)'
+      + (conf.regime ? ' · regime: <b>' + esc(conf.regime.style) + '</b>' + (isFinite(conf.regime.er) ? ' (ER ' + conf.regime.er.toFixed(2) + ')' : '') : '')
+      + '</li>';
+  } else if (conf) {
+    confSummary = '<li><b>Confluence:</b> <span class="note">no gold readers responded on this bar</span></li>';
+  }
+
+  /* setup levels block — only on SETUP and LEAN; CONFLICT and NEUTRAL
+     omit the levels so a reader does not treat the tape as tradeable */
+  var levelsBlock = '';
+  if ((isSetup || isLean) && f.entry != null && f.sl != null){
+    levelsBlock = ''
+      + '<li><b>Entry:</b> <span style="font-weight:700">' + fmtF(f.entry) + '</span></li>'
+      + '<li><b>Stop:</b> <span style="color:#dc262c;font-weight:700">' + fmtF(f.sl) + '</span> <span class="note">(' + esc(f.slSource) + ', ' + fmtF(f.slDistance) + ' from entry)</span></li>'
+      + '<li><b>Target 1 (TP1 · 1R):</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.tp1) + '</span></li>'
+      + '<li><b>Target 2 (TP2 · 2R):</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.tp2) + '</span></li>';
+  } else if (isConflict && f.entry != null){
+    levelsBlock = '<li><b>Entry (confluence against):</b> <span class="note">' + fmtF(f.entry) + ' — levels withheld, tape is not confirming</span></li>';
+  }
+
+  var patternsBlock = ''
+    + listCell('Bull patterns', (f.patterns && f.patterns.bull) || [], 'ok')
+    + listCell('Bear patterns', (f.patterns && f.patterns.bear) || [], 'no')
+    + ((f.patterns && f.patterns.neutral && f.patterns.neutral.length) ? listCell('Neutral patterns', f.patterns.neutral, '') : '')
+    + listCell('Bull structure', (f.structure && f.structure.bull) || [], 'ok')
+    + listCell('Bear structure', (f.structure && f.structure.bear) || [], 'no');
+
+  var marksHtml = '';
+  if (conf){
+    marksHtml += marksBlock(conf.freeMarks, 'FREE FEEDS (' + conf.freeWith + 'W / ' + conf.freeAgainst + 'A)');
+    marksHtml += marksBlock(conf.indMarks, 'INDICATOR STACK (' + conf.indWith + 'W / ' + conf.indAgainst + 'A)');
+    marksHtml += marksBlock(conf.pineMarks, 'PINE STATES (' + conf.pineWith + 'W / ' + conf.pineAgainst + 'A)');
+  }
+
   container.className = '';
   container.innerHTML = ''
     + '<div class="omni-side ' + dirClass + '" style="margin:0;border-left-width:4px">'
-    +   '<div class="omni-side-call">' + dirLabel + ' · CANDLE FORECAST</div>'
+    +   '<div class="omni-side-call">' + esc(dirLabel) + ' · CANDLE FORECAST</div>'
     +   '<ul class="lst">'
-    +     '<li><b>Expected Range:</b> <span style="font-weight:700">' + fmtF(f.expectedLow) + ' — ' + fmtF(f.expectedHigh) + '</span></li>'
-    +     '<li><b>Target 1 (TP1):</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.tp1) + '</span></li>'
-    +     '<li><b>Target 2 (TP2):</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.tp2) + '</span></li>'
-    +     '<li><b>Stop Loss (SL):</b> <span style="color:' + color + ';font-weight:700">' + fmtF(f.sl) + '</span></li>'
+    +     '<li><b>Last close:</b> <span style="font-weight:700">' + fmtF(f.close) + '</span> · ATR ' + fmtF(f.atr) + '</li>'
+    +     '<li><b>Next-bar band:</b> ' + fmtF(f.expectedLow) + ' – ' + fmtF(f.expectedHigh) + '</li>'
+    +     '<li><b>Bias tally:</b> ' + f.bullBias + ' bull / ' + f.bearBias + ' bear</li>'
+    +     confSummary
+    +     levelsBlock
+    +     patternsBlock
     +   '</ul>'
+    +   (marksHtml ? '<div class="note" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;font-size:11px">' + marksHtml + '</div>' : '')
     +   '<div class="note" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">'
-    +     'Vol. normalisation: ' + Math.round((f.confidence || 0) * 100) + '% · ATR/price ratio, not a hit-rate claim · DISPLAY ONLY — no setup is gated on this.'
+    +     esc(f.note || '')
+    +     ' · Vol. normalisation: ' + Math.round((f.confidence || 0) * 100) + '% (ATR/price ratio, not a hit-rate claim) · DISPLAY ONLY — no setup is gated on this.'
     +   '</div>'
     + '</div>';
-  statusEl.textContent = 'Done';
+  statusEl.textContent = neutral ? 'Neutral' : (isSetup ? 'Setup' : (isLean ? 'Lean' : 'Conflict'));
 }
 
 /* Register through HG_tabs so bootHgTabs picks it up, mirroring every
