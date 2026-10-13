@@ -160,6 +160,16 @@
       "version": "hg-v1330",
       "built": "2026-10-14T03:45:00Z",
       "note": "THREE STALE TAB-MEMBERSHIP FIXTURES, all of them behind the CANDLE FORECAST tab joining the GOLD group. test-tabs and test-hard-refresh each keep a hand-typed GOLD group list and both stopped one entry short of the shipped nav. They are fixed by recording candle-forecast in its real position, NOT by loosening the pin to a pattern: the pin exists so the shipped composition cannot drift silently, not to freeze membership. test-tabs own comment already described this exact failure mode - \"a list kept by hand goes stale\" - and this time the assertion caught it rather than a user noticing a missing tab. test-accuracy-floor needed a real fix rather than a list edit. It accepted any unjudged gold tab whose MODULE FILE did not exist, which was true of the inline gold scan and stayed true only while every other gold tab recorded. CANDLE FORECAST has a file and records NOTHING - it forecasts the next candle and mints no ticket, no level and no forward row - so \"no file\" was the wrong test. Exemptions are now an explicit named map, each with its reason, and each reason must HOLD: a tab claiming it records nothing is asserted to really write no forward row, so the exemption cannot become a way to hide a floor miss. MY OWN MISTAKE, recorded because the guard that caught it is the point: the first draft of that exemption had an `ok(true, ...)` branch for the no-file case - a vacuous assertion - and the suite own not-vacuous meta-guard turned it red. Both arms are real assertions now. SUITE: 15 failed -> 12. test-tabs (78 assertions), test-hard-refresh (66) and test-accuracy-floor (142) are green, and no other suite moved. MERGED WITH UPSTREAM hg-v1329, which shipped the SAME id for DIFFERENT content: it asks the shared perfect bar and walks the candle forecast forward against the ledger (hg-v1329: perfect bar, in-sample walk and forward ledger on candle forecast). Both packs are on this tree. The id moved to hg-v1330 because one version number cannot describe two contents - a client holding a cached 1329 would otherwise run code that does not match the ledger. This is the FOURTH same-version collision recorded in this ledger."
+    },
+    {
+      "version": "hg-v1331",
+      "built": "2026-10-14T03:45:00Z",
+      "note": "TREND MATRIX mints again. An unread input abstains; it does not refuse. trendmxSetupGrade treated every unread reason as a SKIP, so a tape those readers could not fill minted nothing. Unread reasons stay on the row and only a real refusal blocks TRADE. Origin published this as hg-v1331 and left the trendtable.js loader on ?v=1330. That loader moves with the next id. The candle-forecast display does not reuse this id."
+    },
+    {
+      "version": "hg-v1332",
+      "built": "2026-10-14T04:30:00Z",
+      "note": "CANDLE FORECAST publishes confirmed swing setups only. A swing is confirmed when a named shape is already confirmed by structure, a gold desk, or a higher timeframe, and no family nets against. The 15m scalp is not a published setup. Two are enough for the day. An earlier confirmed swing past that cap is stood down. Nothing is invented. Origin had already published hg-v1331, so this display takes the next id."
     }
   ]
 }
