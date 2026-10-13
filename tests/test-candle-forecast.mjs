@@ -40,21 +40,36 @@ const sandbox = {
     return out;
   },
   _atr: (rows, n) => {
+    /* A TRUE ATR: the mean of the last n true ranges. The earlier version in
+       this file averaged the RUNNING MEANS (s / n where s was itself a sum of
+       already-averaged values), which on a tape of constant range returns
+       range/n — 2.0 became 0.14 on the flat fixture — and on a rising tape
+       returns the WARM-UP value of the first bar rather than the current one.
+       Both fed the engine a volatility figure the tape does not have. */
     const trs = rows.map((r, i) => {
       if (!i) return r.h - r.l;
       const q = rows[i - 1];
       return Math.max(r.h - r.l, Math.abs(r.h - q.c), Math.abs(r.l - q.c));
     });
     const out = [];
-    let s = 0;
     for (let i = 0; i < trs.length; i++){
-      s += trs[i];
-      if (i >= n) s -= trs[i - n];
-      out.push(i >= n - 1 ? s / n : trs[i]);
+      if (i < n - 1) { out.push(trs[i]); continue; }
+      let s = 0;
+      for (let j = i - n + 1; j <= i; j++) s += trs[j];
+      out.push(s / n);
     }
     return out;
   }
 };
+/* The lifted body calls `atr(...)` and `ema(...)` — those are the names it
+   guards with `typeof atr !== 'function'`. This sandbox used to expose only the
+   UNDERSCORED aliases, so both guards were true on every call and the function
+   returned null before reading a single bar. That made every assertion in this
+   file measure the absent-helper path instead of the forecast: the "dead-flat
+   tape reads NEUTRAL (got null)" failure was this, not the tape. Aliased here so
+   the body sees the helpers it actually asks for. */
+sandbox.atr = sandbox._atr;
+sandbox.ema = sandbox._ema;
 vm.createContext(sandbox);
 vm.runInContext(mm[0] + '\nthis.goldCandleForecast = goldCandleForecast;', sandbox, { filename: 'lifted-goldCandleForecast' });
 const f = sandbox.goldCandleForecast;

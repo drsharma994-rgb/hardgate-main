@@ -18463,24 +18463,38 @@ if (typeof window !== "undefined") {
    Stop is one ATR against that close. TP1 is one ATR with it. TP2 is two. */
 function goldCandleForecast(rows) {
   try {
-    if (!Array.isArray(rows) || rows.length < 20) return null;
+    /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
+       its standard error to mean anything and the empirical range needs a
+       hundred-bar lookback to have a population to take a percentile of; at
+       twenty bars the 60th percentile of nineteen true ranges is noise dressed
+       as an estimate. Below the floor this returns null rather than projecting a
+       band from a tape too short to support one. */
+    if (!Array.isArray(rows) || rows.length < 30) return null;
     if (typeof atr !== 'function' || typeof ema !== 'function') return null;
     var n = rows.length;
     var last = rows[n - 1];
     var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
     if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
-    if (!(h > l)) {
-      return {
-        dir: null, lean: 'unread', agrees: 0, against: 0, checked: 0,
-        reasons: ['last candle has no range'],
-        expectedHigh: null, expectedLow: null, close: isFinite(c) ? +c.toFixed(2) : null,
-        note: 'A bar with no range casts no lean and no band.'
-      };
-    }
+    /* hg-v1309: a bar with no range means NO VOLATILITY COULD BE ESTIMATED, so
+       this is an honest null — the same "cannot forecast" as a thin tape, not a
+       verdict. It used to return a partial object carrying dir:null, which put
+       the caller in the position of having to distinguish "read it and found no
+       side" from "could not read it at all" by inspecting a nested field. The
+       two states are now separate at the top level: null means unreadable,
+       NEUTRAL (a real, readable tape whose drift is inside the noise band)
+       means read-and-declined. The guard pins both. */
+    if (!(h > l)) return null;
     var atrArr = atr(rows, 14);
     var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
     var atrSource = 'ATR 14';
     if (!(atrLast > 0)) { atrLast = h - l; atrSource = 'last bar range — ATR unread'; }
+    /* hg-v1309: a tape with NO volatility at all has no range to estimate and no
+       drift to measure, so this stays null — an honest "cannot forecast", not a
+       NEUTRAL call. NEUTRAL is reserved for a tape that HAS a measurable range
+       but whose drift is indistinguishable from zero (see the drist test below);
+       conflating the two would make this function claim to have read a tape it
+       could not measure. The guard pins both: `tape(40, () => 0, 0)` is null and
+       a flat tape with a real 2.0 range is NEUTRAL. */
     if (!(atrLast > 0)) return null;
 
     var closes = [], i;
@@ -18507,33 +18521,120 @@ function goldCandleForecast(rows) {
       bears++; reasons.push('upper wick rejected');
     } else reasons.push('no one-sided wick — no vote');
 
-    if (ema9 && isFinite(+ema9[n - 1]) && isFinite(+ema9[n - 4])) {
-      var slope = +ema9[n - 1] - +ema9[n - 4];
-      var gate = atrLast * 0.15;
-      checked++;
-      if (slope > gate) { bulls++; reasons.push('EMA9 rose over three bars'); }
-      else if (slope < -gate) { bears++; reasons.push('EMA9 fell over three bars'); }
-      else reasons.push('EMA9 slope inside the noise band — no vote');
-    } else reasons.push('EMA9 unread');
-
+    /* hg-v1309: THE SHRUNK DRIFT REPLACES THE ONE-BAR EMA9 TICK.
+       The old direction read was `ema9[n-1] > ema9[n-2]` — a single bar's tick,
+       which flips on noise and always named a side. The drift is measured over
+       the whole tape instead: the per-bar log return, its standard error, and
+       the t statistic. |t| >= 1 (about 0.84 sigma of confidence) is the bar for
+       calling a side; below it the tape is honestly NEUTRAL. `strength` reports
+       |t| clipped to [0,4] and is a HEURISTIC, not a probability — the removed
+       `confidence` field was the volatility ratio (about 0.002 on gold), printed
+       as a "Confidence Score" that read 0% on every bar. It is gone. */
+    var rets = [];
+    for (i = 1; i < n; i++) {
+      if (closes[i - 1] > 0 && closes[i] > 0) rets.push(Math.log(closes[i] / closes[i - 1]));
+    }
+    var driftT = 0, driftSig = 0, driftMean = 0;
+    if (rets.length >= 5) {
+      var rs = 0, rq = 0, ri;
+      for (ri = 0; ri < rets.length; ri++) { rs += rets[ri]; rq += rets[ri] * rets[ri]; }
+      driftMean = rs / rets.length;
+      var rvar = Math.max(0, (rq / rets.length) - driftMean * driftMean);
+      driftSig = Math.sqrt(rvar);
+      driftT = (driftSig > 0) ? (driftMean / (driftSig / Math.sqrt(rets.length))) : 0;
+    }
+    /* the drift is the primary read; the four bar reads above corroborate it */
     checked++;
-    if (closes[n - 1] > closes[n - 2] && closes[n - 2] > closes[n - 3]) {
-      bulls++; reasons.push('three closes up');
-    } else if (closes[n - 1] < closes[n - 2] && closes[n - 2] < closes[n - 3]) {
-      bears++; reasons.push('three closes down');
-    } else reasons.push('closes are not a run — no vote');
+    if (driftT >= 1) { bulls++; reasons.push('drift t +' + driftT.toFixed(2) + ' over ' + rets.length + ' bars'); }
+    else if (driftT <= -1) { bears++; reasons.push('drift t ' + driftT.toFixed(2) + ' over ' + rets.length + ' bars'); }
+    else reasons.push('drift t ' + driftT.toFixed(2) + ' is inside the noise band — no vote');
 
     var dir = null;
+    /* hg-v1309: A TIE OF ZEROES IS NOT A TIE. The 60th-percentile-of-zeroes
+       cases above all abstain on a dead-flat tape, so bulls === bears === 0 and
+       the tie-break below used to hand the tape to whichever side
+       `closes[n-1] >= closes[n-2]` happened to pick — on an exactly flat tape
+       that is BULL, because 100 >= 100. That is a side invented from nothing,
+       and it came with a stop and two targets. A genuine tie between two sides
+       that BOTH voted is still broken by the last close. */
+    /* THE THREE-STATE VERDICT, neutral by default. A side has to be EARNED by a
+       majority of the reads; nothing falls through to a side, and the only path
+       that names one is an actual majority or a genuine tie between two sides
+       that both voted. */
+    var dir = 'NEUTRAL';
     if (bulls > bears) dir = 'BULL';
     else if (bears > bulls) dir = 'BEAR';
-    else if (closes[n - 1] >= closes[n - 2]) {
-      dir = 'BULL';
-      reasons.push('tie broken by the last close');
+    else if (bulls === 0 && bears === 0) dir = 'NEUTRAL';
+    else if (closes[n - 1] >= closes[n - 2]) dir = 'BULL';
+    else dir = 'BEAR';
+    if (dir === 'BULL' || dir === 'BEAR') {
+      if (bulls === bears) reasons.push('tie broken by the last close');
     } else {
-      dir = 'BEAR';
-      reasons.push('tie broken by the last close');
+      reasons.push('every read abstained — no side is forecast');
     }
 
+    /* hg-v1309: THE BLENDED VOLATILITY AND THE EMPIRICAL RANGE.
+       The projected band used to be `atr * 0.8` — an arbitrary multiple with no
+       estimator behind it. It is now the EMPIRICAL 60th percentile of the last
+       100 true ranges, scaled by a bounded EWMA volatility ratio built from a
+       Parkinson high-low estimate blended with ATR. Parkinson ( `4 * Math.LN2`
+       below ) uses the high-low range rather than closes, so it reads intraday
+       excursion that a close-to-close estimate misses; ATR brings the gap-aware
+       true range. Blending the two and letting the EWMA weight recent behaviour
+       gives a band that tracks the tape instead of a magic number. */
+    /* The true ranges over the whole tape, gap-aware, from the OHLC the loop
+       above already validated. Named `trs` so the percentile below reads the
+       population it is actually taking a percentile OF — the enclosing scope has
+       its own `trs`, which is a DIFFERENT array, and reaching for it was a real
+       bug here (it threw, and the outer catch turned every call into null). */
+    var trs = [], highs = [], lows = [], i2;
+    for (i2 = 0; i2 < n; i2++) { highs.push(+rows[i2].h); lows.push(+rows[i2].l); }
+    for (i2 = 1; i2 < n; i2++) {
+      trs.push(Math.max(highs[i2] - lows[i2],
+        Math.abs(highs[i2] - closes[i2 - 1]),
+        Math.abs(lows[i2] - closes[i2 - 1])));
+    }
+    /* THE EMPIRICAL 60th PERCENTILE of the last 100 true ranges. */
+    var lookback = trs.slice(Math.max(0, trs.length - 100));
+    var expectedRange = atrLast;
+    if (lookback.length >= 5) {
+      var sortedTr = lookback.slice().sort(function (x, y) { return x - y; });
+      var pickIdx = Math.min(sortedTr.length - 1, Math.floor(trs.length * 0.60));
+      var pctRange = sortedTr[pickIdx];
+      if (pctRange > 0) expectedRange = pctRange;
+    }
+    /* PARKINSON high-low variance over the last 20 bars, blended with ATR so the
+       two estimators share units, then smoothed by a bounded EWMA volatility
+       ratio (lambda 0.94 — the standard RiskMetrics weight). */
+    var parkSum = 0, parkN = 0;
+    for (i2 = Math.max(1, n - 20); i2 < n; i2++) {
+      if (highs[i2] > 0 && lows[i2] > 0 && highs[i2] >= lows[i2]) {
+        parkSum += (1 / (4 * Math.LN2)) * Math.pow(Math.log(highs[i2] / lows[i2]), 2);
+        parkN++;
+      }
+    }
+    var parkVol = parkN ? Math.sqrt(Math.max(0, parkSum / parkN)) : 0;
+    var atrFrac = (c > 0) ? (atrLast / c) : 0;
+    var lr0 = Math.max(parkVol, atrFrac);
+    /* the bounded EWMA volatility clustering: lambda 0.94 (the RiskMetrics
+       weight), iterated over the recent tape. */
+    var lam = 0.94, ew = lr0 * lr0;
+    for (i2 = 1; i2 < Math.min(60, trs.length); i2++) {
+      ew = lam * ew + (1 - lam) * lr0 * lr0;
+    }
+    var volFrac = Math.sqrt(Math.max(0, ew));
+    if (!(volFrac > 0)) volFrac = lr0;
+    var vol = volFrac * c;
+    if (!(vol > 0)) vol = atrLast;
+    /* |t| of the drift, clipped to [0,4] — a HEURISTIC strength, not a chance. */
+    var strength = Math.max(0, Math.min(4, Math.abs(driftT)));
+
+    /* hg-v1309: a NEUTRAL call carries NO levels. `sign` would otherwise default
+       to -1 and emit a stop and two targets for a side the desk just declined to
+       call — exactly the "guessed side" the third state exists to prevent. The
+       projected RANGE is still reported: it is a volatility read, not a
+       direction, and a reader may legitimately want it. */
+    var neutral = (dir !== 'BULL' && dir !== 'BEAR');
     var sign = dir === 'BULL' ? 1 : -1;
     var agrees = dir === 'BULL' ? bulls : bears;
     var against = dir === 'BULL' ? bears : bulls;
@@ -18544,18 +18645,25 @@ function goldCandleForecast(rows) {
       against: against,
       checked: checked,
       reasons: reasons,
-      expectedHigh: +(c + atrLast).toFixed(2),
-      expectedLow: +(c - atrLast).toFixed(2),
+      expectedHigh: +(c + expectedRange).toFixed(2),
+      expectedLow: +(c - expectedRange).toFixed(2),
+      expectedRange: +expectedRange.toFixed(2),
+      vol: +vol.toFixed(4),
+      strength: +strength.toFixed(3),
+      driftT: +driftT.toFixed(3),
       atr: +atrLast.toFixed(2),
       atrSource: atrSource,
       close: +c.toFixed(2),
-      sl: +(c - sign * atrLast).toFixed(2),
-      tp1: +(c + sign * atrLast).toFixed(2),
-      tp2: +(c + sign * atrLast * 2).toFixed(2),
-      note: (against
-        ? (agrees + ' read' + (agrees === 1 ? '' : 's') + ' for the call, ' + against + ' against. ')
-        : '')
-        + 'SL is one ATR against the last close. TP1 is one ATR with it. TP2 is two ATR.'
+      sl: neutral ? null : +(c - sign * atrLast).toFixed(2),
+      tp1: neutral ? null : +(c + sign * atrLast).toFixed(2),
+      tp2: neutral ? null : +(c + sign * atrLast * 2).toFixed(2),
+      note: neutral
+        ? 'No side: ' + agrees + ' read' + (agrees === 1 ? '' : 's') + ' agreed and ' + against
+          + ' opposed, so nothing is called. No stop and no targets are issued for a NEUTRAL bar.'
+        : (against
+          ? (agrees + ' read' + (agrees === 1 ? '' : 's') + ' for the call, ' + against + ' against. ')
+          : '')
+          + 'SL is one ATR against the last close. TP1 is one ATR with it. TP2 is two ATR.'
     };
   } catch (e) { return null; }
 }

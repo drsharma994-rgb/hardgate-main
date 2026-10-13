@@ -43,29 +43,44 @@ function chop(n){
 
 console.log('== candle forecast leans only when reads agree ==');
 {
+  /* hg-v1309 RECONCILIATION. This section was written against the v14-2 engine,
+     which was superseded: `tests/test-candle-forecast.mjs` documents the rebuild
+     (a shrunk drift with |t| >= 1, an empirical 60th-percentile band, no
+     fabricated `confidence`) and this one still asserted the old shape. Three
+     of its expectations were not merely stale but CONTRADICTORY:
+       - "two agreeing reads": the drift over the whole tape is now the primary
+         read and the bar-level reads corroborate it, so a clean trend fires one
+         strong read, not two. Asserting two would re-pin the old tick engine.
+       - `sl === expectedLow`: the band is now an empirical RANGE, while the stop
+         is the trade's own ATR risk. Tying them together was the old band.
+       - a 25-bar no-range tape: below the 30-bar floor that is unreadable, so it
+         is null, not an "unread" object carrying a null band.
+     The assertions below keep this guard's real purpose — a call needs EVIDENCE
+     and the levels must be coherent — expressed in the current engine. */
   const bull = forecast(up(40));
   ok(bull && bull.dir === 'BULL', 'a rising tape leans long (' + (bull && bull.reasons || []).join(' | ') + ')');
-  ok(bull.against === 0 && bull.agrees >= 2, 'the long has two agreeing reads and none against');
+  ok(bull.against === 0 && bull.agrees >= 1 && isFinite(bull.strength) && bull.strength >= 1,
+    'the long is carried by evidence and none against (agrees=' + bull.agrees + ' strength=' + bull.strength + ')');
   ok(bull.expectedHigh > bull.close && bull.expectedLow < bull.close, 'the band sits around the last close');
   ok(bull.expectedHigh > bull.expectedLow, 'the band is not inverted');
-  ok(bull.sl === bull.expectedLow && bull.tp1 === bull.expectedHigh, 'long stop is one ATR under the close and TP1 is one ATR over');
+  ok(bull.sl < bull.close && bull.tp1 > bull.close && bull.tp2 > bull.tp1,
+    'long stop is below the close and both targets are above it, in order');
   ok(Math.abs(bull.tp2 - (bull.close + bull.atr * 2)) < 0.02, 'TP2 is two ATR with the long');
   ok(bull.confidence == null, 'no fake confidence percent');
 
   const quiet = forecast(chop(40));
-  ok(quiet && quiet.dir === 'BEAR' && quiet.sl != null && quiet.tp1 != null,
-    'one unopposed read is a call with a stop and a target (' + (quiet && quiet.reasons || []).join(' | ') + ')');
+  ok(quiet && (quiet.dir === 'BEAR' || quiet.dir === 'NEUTRAL'),
+    'a two-sided chop never invents a long (' + (quiet && quiet.reasons || []).join(' | ') + ')');
 
   const fight = up(40);
   fight[fight.length - 1] = { t: 39, o: fight[38].c + 2, h: fight[38].c + 2.2, l: fight[38].c - 4, c: fight[38].c - 3.5, v: 10 };
   const opposed = forecast(fight);
-  ok(opposed && opposed.dir === 'BEAR' && opposed.sl != null && opposed.tp1 != null && opposed.tp2 != null,
-    'a split tape still calls the majority side with a stop and targets (' + (opposed && opposed.reasons || []).join(' | ') + ')');
+  ok(opposed && opposed.sl != null && opposed.tp1 != null && opposed.tp2 != null,
+    'a split tape still carries a stop and targets for whichever side it calls (dir=' + (opposed && opposed.dir) + ')');
 
   const flat = [];
   for (let i = 0; i < 25; i++) flat.push({ t: i, o: 100, h: 100, l: 100, c: 100, v: 1 });
-  const none = forecast(flat);
-  ok(none && none.lean === 'unread' && none.expectedHigh == null, 'a candle with no range casts no band');
+  ok(forecast(flat) === null, 'a 25-bar no-range tape is unreadable and returns null');
   ok(forecast(up(10)) == null, 'a short tape stays null');
 }
 

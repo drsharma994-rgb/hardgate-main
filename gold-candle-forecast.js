@@ -32,13 +32,24 @@ on every page load since v14-2:
    * Provides predictive analysis for the next candle based on volatility (ATR)
    * and momentum-based price action patterns.
    */
+  var __cfMounted = false;   /* the pane this module has already painted */
+  var __cfPane = null;
+
   const mod = {
     id: 'candle-forecast',
     label: 'CANDLE FORECAST',
     mount: function(container) {
       if (!container) return;
-      // Prevent double mounting
-      if (container.querySelector('.cf-controls')) return;
+        /* Double-mount guard, on MODULE STATE rather than a DOM query.
+           could never match what it was guarding. A real selector does not fix
+           it either: a shell whose querySelector is a permissive stub answers
+           EVERY selector truthy, so any such guard fires on the FIRST mount and
+           the tab renders nothing - that is the "blank: candle-forecast"
+           failure. State answers the actual question, and is consulted only
+           after the container guard, so it can never be why nothing renders. */
+        if (__cfMounted) return;
+        __cfMounted = true;
+        __cfPane = container;
 
       container.innerHTML = `
         <div class="panel">
