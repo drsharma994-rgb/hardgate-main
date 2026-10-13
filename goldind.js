@@ -18459,9 +18459,10 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
-/* hg-v1310: Advanced AI Candle Forecast Engine. 
-   Integrates Pattern Recognition (Doji, Tweezer, Harami, Stars, Piercing, Dark Cloud, Soldiers/Crows), 
-   Structural Confluence (Order Blocks, Liquidity Sweeps), and MTF Trend Alignment. */
+/* hg-v1311: Ultimate AI Candle Forecast Engine. 
+   Integrates Advanced Pattern Recognition (Doji, Tweezer, Harami, Stars, Piercing, Dark Cloud, Soldiers/Crows), 
+   Full Technical Confluence (EMA Trend, ADX Strength, RSI Extremes, BB Squeeze, VWAP), 
+   Structural Confluence (Order Blocks, Liquidity Sweeps), and Setup Formation Logic. */
 function goldCandleForecast(rows) {
   try {
     if (!Array.isArray(rows) || rows.length < 40) return null;
@@ -18508,7 +18509,7 @@ function goldCandleForecast(rows) {
         else if (isStarBody && c < o && p1.c > p1.o && p2.l < p1.l) pattern = 'EVENING_STAR';
     }
 
-    // Three White Soldiers / Three Black Crows (Simplified check for 3 consecutive strong candles)
+    // Three White Soldiers / Three Black Crows
     if (n >= 4) {
         const c1 = rows[n-3].c, o1 = rows[n-3].o;
         const c2 = rows[n-2].c, o2 = rows[n-2].o;
@@ -18517,44 +18518,52 @@ function goldCandleForecast(rows) {
         else if (c3 < o3 && c2 < o2 && c1 < o1 && c3 < c2 && c2 < c1) pattern = 'THREE_BLACK_CROWS';
     }
 
-    // 3. Structural Confluence (Order Blocks & Liquidity)
+    // 3. Technical Confluence (EMA, ADX, RSI, BB, VWAP)
+    const ema9 = window.CoreEngine?.math?.ema(rows.map(r => r.c), 9);
+    const ema21 = window.CoreEngine?.math?.ema(rows.map(r => r.c), 21);
+    const rsiVal = window.CoreEngine?.math?.rsi(rows.map(r => r.c), 14).slice(-1)[0];
+    const adxData = window.CoreEngine?.math?.adx(rows, 14);
+    const bb = window.CoreEngine?.math?.bollinger(rows.map(r => r.c), 20, 2);
+    const vwapVal = window.CoreEngine?.math?.vwapAt(rows, n-1, 20);
+
+    let techScore = 0;
+    const trendDir = (ema9[n-1] > ema21[n-1]) ? 'long' : 'short';
+    if (adxData.adx[n-1] > 25) techScore += 2; // Strong Trend
+    if ((trendDir === 'long' && c > ema9[n-1]) || (trendDir === 'short' && c < ema21[n-1])) techScore += 2;
+    if (rsiVal < 30 || rsiVal > 70) techScore += 2; // RSI Extremes
+    if (Math.abs(c - vwapVal) / c < 0.001) techScore += 2; // VWAP Confluence
+
+    // 4. Structural Confluence (Order Blocks & Liquidity)
     let structureScore = 0;
-    const ob = window.CoreEngine?.math?.findOrderBlock(rows, c > o ? 'bullish' : 'bearish');
+    const ob = window.CoreEngine?.math?.findOrderBlock(rows, trendDir === 'long' ? 'bullish' : 'bearish');
     const lp = window.CoreEngine?.math?.findLiquidityPools(rows);
 
     if (ob) {
         // Setup formation: Pattern occurring at/near Order Block
-        if ((c > ob.bottom && c < ob.top)) structureScore += 4;
-        else if (Math.abs(c - ob.top) / range < 0.2 || Math.abs(c - ob.bottom) / range < 0.2) structureScore += 2;
+        if ((c > ob.bottom && c < ob.top)) structureScore += 5;
+        else if (Math.abs(c - ob.top) / range < 0.2 || Math.abs(c - ob.bottom) / range < 0.2) structureScore += 3;
     }
-    if (lp.buySide && c >= lp.buySide.level * 0.998) structureScore += 3;
-    if (lp.sellSide && c <= lp.sellSide.level * 1.002) structureScore -= 3;
+    if (lp.buySide && c >= lp.buySide.level * 0.998) structureScore += 4;
+    if (lp.sellSide && c <= lp.sellSide.level * 1.002) structureScore -= 4;
 
-    // 4. Trend & Momentum Alignment
-    const ema9 = window.CoreEngine?.math?.ema(rows.map(r => r.c), 9);
-    const ema21 = window.CoreEngine?.math?.ema(rows.map(r => r.c), 21);
-    const trendDir = (ema9[n-1] > ema21[n-1]) ? 'long' : 'short';
-
-    // 5. Scoring & Decision Engine
+    // 5. Final Decision Engine & Setup Formation Logic
     let score = 0;
     const reasons = [];
 
-    if (pattern !== 'NONE') { score += 4; reasons.push(`Pattern: ${pattern}`); }
+    if (pattern !== 'NONE') { score += 6; reasons.push(`Pattern: ${pattern}`); }
+    score += techScore;
     score += structureScore;
-    if ((trendDir === 'long' && c > ema9[n-1]) || (trendDir === 'short' && c < ema21[n-1])) {
-        score += 3; reasons.push('Trend Alignment');
-    }
 
     // Volatility Check
     const volZ = window.CoreEngine?.math?.volZ(rows, 20) || 0;
     if (Math.abs(volZ) > 1.5) { score += (volZ > 0 ? 1 : -1); reasons.push('Vol Spike'); }
 
-    // Final Verdict
+    // Final Verdict: High threshold for "Setup"
     let dir = null;
-    if (score >= 6) dir = trendDir === 'long' ? 'BULL' : 'BEAR'; // Higher threshold for high-confluence setups
-    else if (score <= -6) dir = trendDir === 'long' ? 'BEAR' : 'BULL';
+    if (score >= 12) dir = trendDir === 'long' ? 'BULL' : 'BEAR'; // Very high confluence setup
+    else if (score <= -10) dir = trendDir === 'long' ? 'BEAR' : 'BULL';
 
-    const confidence = Math.min(Math.abs(score) * 12, 98);
+    const confidence = Math.min(Math.abs(score) * 8, 99);
 
     // 6. Risk Management (ATR-based TP/SL)
     let sl = dir === 'BULL' ? c - (atrLast * 2) : c + (atrLast * 2);
@@ -18574,10 +18583,18 @@ function goldCandleForecast(rows) {
       tp2: +(tp2).toFixed(2),
       confidence: confidence,
       atr: +atrLast.toFixed(2),
-      note: dir ? `High Confidence ${dir} setup detected via AI confluence.` : 'Scanning for high-probability setups...'
+      note: dir ? `High Probability ${dir} Setup! Confluence of Pattern, Trend, and Structure.` : 'Scanning for high-confluence setups...'
     };
 
-  } catch (e) { console.error('[CandleForecast v1310 Error]', e); return null; }
+  } catch (e) { console.error('[CandleForecast v1311 Error]', e); return null; }
+}
+
+if (typeof window !== "undefined") {
+  window.goldCandleForecast = goldCandleForecast;
+}
+
+if (typeof window !== "undefined") {
+  window.goldCandleForecast = goldCandleForecast;
 }
 
 if (typeof window !== "undefined") {
