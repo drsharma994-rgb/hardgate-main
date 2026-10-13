@@ -125,6 +125,11 @@ const CONNECT_SRC = [
   'https://api.blockchain.info',               /* omnibtc-engines.js BTC hashrate (hg-v1294) */
   'https://community-api.coinmetrics.io',      /* omnibtc-engines.js BTC NVT + active addresses (hg-v1294) */
   'https://api.coinbase.com',                  /* omnibtc-engines.js Coinbase BTC-USD spot cross-check (hg-v1301) */
+  /* news.js free RSS desks (upstream hg-v1302 added these without permitting
+     them, so connect-src blocked all three and the news feed read empty) */
+  'https://cointelegraph.com',
+  'https://cryptobriefing.com',
+  'https://www.coindesk.com',
 ].join(' ');
 
 /* vercel.json parity — security headers on every response */

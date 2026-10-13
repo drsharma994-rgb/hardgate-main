@@ -35,6 +35,11 @@
       "version": "hg-v1303",
       "built": "2026-10-11T16:00:00Z",
       "note": "OMNIBTC CONFIRMATORY SETUP: the independent-evidence verdict the desk already computed is now assembled and shown. crossValidation and accuracyScore were written on every candidate and read NOWHERE (3 write sites, 0 read sites), and the six weighted contributions existed only as inline score += lines, so no reader could tell which evidence confirmed a crown. The weights are now ONE TABLE (hgObtcAccuracyParts) whose sum IS the score, and hgObtcConfirmatoryRead/Html render it: what confirmed, what disagreed, and what was never read. Readout only - no weight added, no threshold moved, cannot mint or demote. Also fixed a null-coercion defect found while building it: +null === 0 and isFinite(0) is true, so an ABSENT accuracyScore silently read as a real zero."
+    },
+    {
+      "version": "hg-v1304",
+      "built": "2026-10-11T18:00:00Z",
+      "note": "SETUP CONFIRM now reads the TAPE. The desk own header said it never fetches market data of its own, so CONFIRMED only ever meant \"several desks agree\" and nothing on the tab had looked at the candles those desks read. Added cfCandleContext: a pure, three-state read of the repo ONE candle seam (W.getCandles, the same one book.js and brain.js use), disclosing range position, tape lean vs the direction, ATR expansion, last-bar volume participation, wrong-ended EXTENDED entries and whether the last closed bar finished with the direction. Readout only - adds no weight and cannot promote, demote or block; fails open on every path and is bounded to 8 symbols with a 6s per-read timeout."
     }
   ]
 }
