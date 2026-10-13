@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — goldind.js (v14-0)
+HARDGATE — goldind.js (v14-2)
 GOLD SCALP indicator engine: pure, DOM-free, fetch-free Smart-Money-Concept
 and classical detectors for gold scalping, plus the confluence composite
 goldScalpSetup. Loaded as a classic script BEFORE goldscalp.js.
@@ -196,9 +196,10 @@ function __atrLocal(rows, p){
   return out;
 }
 /* reuse the house implementations when indicators.js is loaded */
-var _ema = (typeof ema === 'function') ? ema : __emaLocal;
-var _rsi = (typeof rsi === 'function') ? rsi : __rsiLocal;
-var _atr = (typeof atr === 'function') ? atr : __atrLocal;
+const _math = (typeof window !== 'undefined' && window.CoreEngine && window.CoreEngine.math) ? window.CoreEngine.math : null;
+var _ema = (_math && _math.ema) ? _math.ema : ((typeof ema === 'function') ? ema : __emaLocal);
+var _rsi = (_math && _math.rsi) ? _math.rsi : ((typeof rsi === 'function') ? rsi : __rsiLocal);
+var _atr = (_math && _math.atr) ? _math.atr : ((typeof atr === 'function') ? atr : __atrLocal);
 
 function goldSupertrend(rows, period=10, multiplier=3){
   try{
@@ -206,7 +207,7 @@ function goldSupertrend(rows, period=10, multiplier=3){
     if (n < period) return null;
     var out = new Array(n).fill(null);
     var mid = rows.map(r => (r.h + r.l) / 2);
-    var atr_vals = _atr(rows, period);
+    var atr_vals = __atr(rows, period);
     var upperBand = NaN, lowerBand = NaN;
     var dir = 1;
 
@@ -256,7 +257,7 @@ function goldADX(rows, period=14){
    it, and an OMNIGOLD scan reaches them through a per-bar replay, so the full
    re-reads multiply. Measured on a 600-bar tape through a real scan: 426,844
    calls, 126,054,685 bar reads, 46.6% of the whole scan's CPU — the largest
-   single line in the profile, ahead of atr() at 8.0%. Stubbing this function
+   single line in the profile, ahead of _atr() at 8.0%. Stubbing this function
    to a no-op cut the scan from 48.3s to 19.1s, so roughly three fifths of a
    gold scan was this one loop re-proving a tape it had already read.
 
@@ -426,7 +427,7 @@ function goldOrderBlocks(rows){
     rows = __rows(rows);
     if (!rows || rows.length < 30) return null;
     var n = rows.length;
-    var aArr = _atr(rows, 14);
+    var aArr = __atr(rows, 14);
     var bull = [], bear = [], breakers = [];
     var start = Math.max(21, n - 60);
     for (var j = start; j < n - 1; j++){
@@ -591,8 +592,8 @@ function goldRibbon(rows){
     rows = __rows(rows);
     if (!rows || rows.length < 50) return out;
     var c = __closes(rows), n = c.length;
-    var e20 = __last(_ema(c, 20)), e50 = __last(_ema(c, 50)), e200 = __last(_ema(c, 200));
-    var cl = c[n-1], a = __last(_atr(rows, 14));
+    var e20 = __last(__ema(c, 20)), e50 = __last(__ema(c, 50)), e200 = __last(__ema(c, 200));
+    var cl = c[n-1], a = __last(__atr(rows, 14));
     out.e20 = e20; out.e50 = e50; out.e200 = e200;
     if (!isFinite(cl)) return out;
     if (isFinite(e20)) out.above20 = cl > e20;
@@ -692,7 +693,7 @@ function goldVolSqueeze(rows, opts){
     if (!rows || rows.length < 30) return out;
     var n = rows.length, c = __closes(rows);
     /* local bollinger + keltner (indicators2 math) */
-    var mid = _ema(c, 20), a20 = _atr(rows, 20);
+    var mid = __ema(c, 20), a20 = __atr(rows, 20);
     var on = new Array(n).fill(false);
     var bbU = new Array(n).fill(NaN), bbL = new Array(n).fill(NaN), bbM = new Array(n).fill(NaN);
     for (var i = 19; i < n; i++){
@@ -771,7 +772,7 @@ function goldRSIGold(rows){
     rows = __rows(rows);
     if (!rows || rows.length < 20) return out;
     var n = rows.length, c = __closes(rows);
-    var r = _rsi(c, 14), rv = r[n-1];
+    var r = __rsi(c, 14), rv = r[n-1];
     out.rsi = rv;
     if (!isFinite(rv)) return out;
     out.zone = (rv >= 75) ? 'OVERBOUGHT' : ((rv <= 25) ? 'OVERSOLD' : 'NEUTRAL');
@@ -849,7 +850,7 @@ function goldStochRSI(rows){
     rows = __rows(rows);
     if (!rows || rows.length < 30) return out;
     var c = __closes(rows), n = c.length;
-    var r = _rsi(c, 14), kArr = new Array(n).fill(NaN);
+    var r = __rsi(c, 14), kArr = new Array(n).fill(NaN);
     for (var i = 13; i < n; i++){
       var lo = Infinity, hi = -Infinity, ok = true;
       for (var j = i - 13; j <= i; j++){
@@ -933,7 +934,7 @@ function goldScalpSetup(inp){
     var rows = __rows(inp.rows15m);
     if (!rows || rows.length < 30) return null;
     var n = rows.length, lastBar = rows[n-1];
-    var a15 = __last(_atr(rows, 14));
+    var a15 = __last(__atr(rows, 14));
     if (!isFinite(a15) || !(a15 > 0)) return null;
     var entry = lastBar.c;
     if (!isFinite(entry) || !(entry > 0)) return null;
@@ -3414,7 +3415,7 @@ function goldAdvancedSMCSweep(rows) {
     var recentSweep = sweeps.all ? sweeps.all.find(s => s.barsAgo <= 25) : null;
     if (!recentSweep) return null;
 
-    var atr_vals = _atr(rows, 14);
+    var atr_vals = __atr(rows, 14);
     var currentAtr = __last(atr_vals);
     if (!isFinite(currentAtr)) return null;
 
@@ -3445,7 +3446,7 @@ function goldVolumeProfileRejection(rows) {
     if (!vprof || !vprof.pocPrice) return null;
 
     var lastBar = rows[n-1];
-    var atr_vals = _atr(rows, 14);
+    var atr_vals = __atr(rows, 14);
     var currentAtr = __last(atr_vals);
     if (!isFinite(currentAtr)) return null;
 
@@ -3838,7 +3839,7 @@ function goldDetectorReads(inp){
     inp = inp || {};
     var rows = __rows(inp.rows15m);
     if (!rows || rows.length < 30) return [];
-    var a15 = __last(_atr(rows, 14));
+    var a15 = __last(__atr(rows, 14));
     if (!isFinite(a15) || !(a15 > 0)) return [];
     var entry = rows[rows.length - 1].c;
     if (!isFinite(entry)) return [];
@@ -3853,7 +3854,7 @@ function goldScalpSetups(inp){
     var rows = __rows(inp.rows15m);
     if (!rows || rows.length < 30) return [];
     var n = rows.length;
-    var a15 = __last(_atr(rows, 14));
+    var a15 = __last(__atr(rows, 14));
     if (!isFinite(a15) || !(a15 > 0)) return [];
     var entry = rows[n-1].c;
     if (!isFinite(entry) || !(entry > 0)) return [];
@@ -3894,7 +3895,7 @@ function goldScalpSetups(inp){
        200-EMA-15m value + 5-bar slope (trend alignment), the 4H EMA50/200
        stack ('bull' | 'bear' | null when unknowable), Kaufman ER(20) chop. */
     var closes15 = __closes(rows);
-    var e2arr = _ema(closes15, 200);
+    var e2arr = __ema(closes15, 200);
     D.e200v = __last(e2arr);
     var e2back = (e2arr && e2arr.length >= 6) ? e2arr[e2arr.length - 6] : NaN;
     D.e200Slope = (isFinite(D.e200v) && isFinite(e2back)) ? (D.e200v - e2back) : NaN;
@@ -5045,7 +5046,7 @@ function goldWatch(inp){
     var rows = __rows(inp.rows15m);
     if (!rows || rows.length < 30) return [];
     var n = rows.length;
-    var a15 = __last(_atr(rows, 14));
+    var a15 = __last(__atr(rows, 14));
     if (!isFinite(a15) || !(a15 > 0)) return [];
     var entry = rows[n-1].c;
     if (!isFinite(entry) || !(entry > 0)) return [];
@@ -5504,7 +5505,7 @@ function hgGoldConfluenceScore(cand, ctx){
     var rsiRows = rows || rows1h;
     if (rsiRows && typeof _rsi === 'function'){
       try{
-        var rs = _rsi(rsiRows.map(function(r){ return r.c; }), (key === 'stochrsi' || /scalp/i.test(cand.tf || '')) ? 5 : 14);
+        var rs = __rsi(rsiRows.map(function(r){ return r.c; }), (key === 'stochrsi' || /scalp/i.test(cand.tf || '')) ? 5 : 14);
         var rv = rs && rs.length ? rs[rs.length - 1] : NaN;
         if (isFinite(rv)){
           if ((dir === 'long' && rv >= 50 && rv < 75) || (dir === 'short' && rv <= 50 && rv > 25)){
@@ -6372,7 +6373,7 @@ function goldRankSetups(cands, ctx){
           try{
             if (ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 210){
               var pfC4 = ctx.rows4h.map(function(x){ return +x.c; });
-              var pfE50 = _ema(pfC4, 50), pfE200 = _ema(pfC4, 200);
+              var pfE50 = __ema(pfC4, 50), pfE200 = __ema(pfC4, 200);
               if (pfE50 && pfE200 && pfE50.length && pfE200.length){
                 var pfA4 = pfE50[pfE50.length - 1], pfB4 = pfE200[pfE200.length - 1];
                 if (isFinite(pfA4) && isFinite(pfB4) && pfA4 !== pfB4) pfReads.structureTrend = (pfA4 > pfB4) ? 'up' : 'down';
@@ -6635,7 +6636,7 @@ function goldBOS(rows){
     if (!isFinite(sH) || !isFinite(sL)) return null;
     var last = rows[n-1], pre = rows[n-2];
     if (!last || !pre) return null;
-    var aArr = _atr(rows, 14);
+    var aArr = __atr(rows, 14);
     var atr = __last(aArr);
     var out = { bos: null, choch: null, lastSwingHigh: sH, lastSwingLow: sL, bosAge: null, chochAge: null, strength: null };
     if (last.c > sH && pre.c <= sH){
@@ -7604,7 +7605,7 @@ function goldEqualLevels(rows){
     rows = __rows(rows);
     if (!rows || rows.length < 30) return null;
     var n = rows.length;
-    var aArr = _atr(rows, 14);
+    var aArr = __atr(rows, 14);
     var atr = __last(aArr);
     if (!isFinite(atr) || !(atr > 0)) return null;
     var tol = 0.3*atr;
@@ -7688,7 +7689,7 @@ function goldRangeBound(rows){
     var sd = Math.sqrt(sq/20);
     var bbWidthPct = mid > 0 ? (2*sd*2)/mid*100 : NaN;
     var bbOk = isFinite(bbWidthPct) && bbWidthPct < 5.0;
-    var aArr = _atr(rows, 14);
+    var aArr = __atr(rows, 14);
     var atrNow = __last(aArr);
     var atrHist = [];
     for (k = 19; k < n; k++) if (isFinite(aArr[k])) atrHist.push(aArr[k]);
@@ -7739,7 +7740,7 @@ function goldSmartExit(dir, entry, stop, t1, t2, rows, opts){
     opts = opts || {};
     var isScalp = opts.scalp !== false;
     var notes = [];
-    var a = _atr(rows, 14);
+    var a = __atr(rows, 14);
     var atr = __last(a);
     if (!isFinite(atr) || !(atr > 0)) atr = Math.abs(entry - stop)/1.5;
     var trail = null;
@@ -7982,7 +7983,7 @@ function hgGoldVpSlice(rows, mode, opts){
   }
   if (mode === 'anchored'){
     /* Anchor from prior-day extreme or last large impulse (≥1.2×ATR body) */
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs && atrs.length ? atrs[atrs.length - 1] : NaN;
     var anchorIdx = Math.max(0, rows.length - 40);
     var pd = typeof hgGoldPriorDayLevels === 'function' ? hgGoldPriorDayLevels(rows) : null;
@@ -8093,7 +8094,7 @@ function hgGoldVpAuction(rows, vprof, opts){
     var n = rows.length;
     var cur = rows[n - 1];
     var prev = rows[n - 2] || cur;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     var rvol = typeof hgGoldSessionRvol === 'function'
       ? hgGoldSessionRvol(rows, n - 1, opts).rvol
@@ -8614,9 +8615,9 @@ function hgGoldVpPlaybook(rows, opts){
     var bundle = opts.bundle || hgGoldVpBundle(rows, { now: nowMs });
     var vprof = opts.vprof || (bundle && (bundle.weekly || bundle.session)) || goldVolumeProfile(rows, 100, 50);
     var rows4h = __rows(opts.rows4h) || rows;
-    var atrs4 = _atr(rows4h, 14);
+    var atrs4 = __atr(rows4h, 14);
     var atr4h = atrs4[atrs4.length - 1];
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     var px = rows[rows.length - 1].c;
     var bias = hgGoldVpBias4h(rows4h.length >= 30 ? rows4h : rows, bundle, opts);
@@ -9006,7 +9007,7 @@ function goldOrderBlockAt(rows, index, atr){
     var cur = rows[index], prev = rows[index - 1];
     if (!cur || !prev) return { type: 'none' };
     if (!isFinite(atr) || !(atr > 0)){
-      atr = __last(_atr(rows, 14));
+      atr = __last(__atr(rows, 14));
     }
     if (!isFinite(atr) || !(atr > 0)) return { type: 'none' };
     var bodyUp = cur.c - cur.o;
@@ -9043,7 +9044,7 @@ function goldActiveOrderBlocks(rows, atr, endIndex){
     endIndex = Math.floor(endIndex);
     if (endIndex < 5) return empty;
     if (endIndex >= n) endIndex = n - 1;
-    if (!isFinite(atr) || !(atr > 0)) atr = __last(_atr(rows, 14));
+    if (!isFinite(atr) || !(atr > 0)) atr = __last(__atr(rows, 14));
     if (!isFinite(atr) || !(atr > 0)) return empty;
     var active = [], i, ob, cur, j, dup;
     for (i = 5; i <= endIndex; i++){
@@ -9203,7 +9204,7 @@ function evaluateScalp(m15Data, ctx){
 
     /* Maintain market structure & active OB zones, then evaluate OB retest. */
     var atr15 = out.context.atr15;
-    if (!isFinite(atr15) || !(atr15 > 0)) atr15 = __last(_atr(rows, 14));
+    if (!isFinite(atr15) || !(atr15 > 0)) atr15 = __last(__atr(rows, 14));
     if (isFinite(atr15) && atr15 > 0) out.context.atr15 = atr15;
 
     var swings = goldSwings(rows, 5, 5);
@@ -9372,7 +9373,7 @@ function evaluateSwing(h4Data, ctx){
     out.volProfile = goldVolumeProfile(rows, 100, 50);
 
     var atr4 = out.context.atr4;
-    if (!isFinite(atr4) || !(atr4 > 0)) atr4 = __last(_atr(rows, 14));
+    if (!isFinite(atr4) || !(atr4 > 0)) atr4 = __last(__atr(rows, 14));
     if (isFinite(atr4) && atr4 > 0) out.context.atr4 = atr4;
 
     var swings = goldSwings(rows, 5, 5);
@@ -9800,8 +9801,8 @@ function hgGoldMtfBias(rows){
     rows = __rows(rows);
     if (!rows || rows.length < 55) return out;
     var closes = __closes(rows);
-    var e20 = __last(_ema(closes, 20));
-    var e50 = __last(_ema(closes, 50));
+    var e20 = __last(__ema(closes, 20));
+    var e50 = __last(__ema(closes, 50));
     var px = closes[closes.length - 1];
     out.px = px; out.ema20 = e20; out.ema50 = e50;
     if (!isFinite(px) || !isFinite(e20) || !isFinite(e50)) return out;
@@ -9906,7 +9907,7 @@ function hgGoldMomRegime(rows4h, dir){
     /* RSI(14) wants 15 closes minimum — fewer is an unreadable tape, and an
        unreadable tape demotes nothing */
     if (closes.length < 16) return out;
-    var rr = _rsi(closes, 14);
+    var rr = __rsi(closes, 14);
     var rv = (rr && rr.length) ? rr[rr.length - 1] : NaN;
     if (!isFinite(rv)) return out;
     out.rsi = rv;
@@ -9997,7 +9998,7 @@ function hgGoldEma50Above(rows){
     rows = norm;
     if (!rows || rows.length < 52) return null;
     var closes = __closes(rows);
-    var e = _ema(closes, 50);
+    var e = __ema(closes, 50);
     var last = closes[closes.length - 1];
     var ev = e[e.length - 1];
     if (!isFinite(last) || !isFinite(ev)) return null;
@@ -10012,7 +10013,7 @@ function hgGoldDisplacementBar(rows, dir, look){
     if (!rows || rows.length < 16) return out;
     look = isFinite(look) ? look : 16;
     var n = rows.length;
-    var aArr = _atr(rows, 14);
+    var aArr = __atr(rows, 14);
     var lastAtr = aArr[n - 1];
     if (!isFinite(lastAtr) || !(lastAtr > 0)) return out;
     out.atr = lastAtr;
@@ -10722,7 +10723,7 @@ function hgGoldAtrVolPercentile(rows, period, trail){
     period = period || 14;
     trail = trail || 100;
     if (!rows || rows.length < period + 5) return out;
-    var atrs = _atr(rows, period);
+    var atrs = __atr(rows, period);
     var cur = atrs[atrs.length - 1];
     if (!isFinite(cur) || !(cur > 0)) return out;
     out.atr = cur;
@@ -10947,7 +10948,7 @@ function hgGoldEqualExtremes(rows, atrMul){
     rows = __rows(rows);
     atrMul = isFinite(atrMul) ? atrMul : 0.12;
     if (!rows || rows.length < 40) return out;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!isFinite(atr) || !(atr > 0)) return out;
     var tol = atr * atrMul;
@@ -11359,7 +11360,7 @@ function hgGoldSweepDisplacement(rows, level, dir, opt){
     opt = opt || {};
     rows = __rows(rows);
     if (!rows || rows.length < 25 || !isFinite(level)) return out;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!isFinite(atr) || !(atr > 0)) return out;
     var minBreach = (isFinite(opt.minAtr) ? opt.minAtr : HG_GOLD_FORM_SWEEP_ATR) * atr;
@@ -11468,7 +11469,7 @@ function hgGoldLiquidityMap(rows, opts){
     opts = opts || {};
     rows = __rows(rows);
     if (!rows || rows.length < 30) return out;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     out.atr = atrs[atrs.length - 1];
     var px = rows[rows.length - 1].c;
     out.asia = goldAsianRange(rows);
@@ -11693,7 +11694,7 @@ function hgGoldSweepTwoStageRvol(rows, hit, opts){
     var sweepIdx = rows.length - 1;
     var bi, atr = hit.atr || NaN;
     if (!isFinite(atr)){
-      var atrs = _atr(rows, 14);
+      var atrs = __atr(rows, 14);
       atr = atrs && atrs.length ? atrs[atrs.length - 1] : NaN;
     }
     for (bi = rows.length - 1; bi >= Math.max(0, rows.length - 6); bi--){
@@ -12339,7 +12340,7 @@ function hgGoldSweepOb(rows, opts){
       return out;
     }
 
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(isFinite(atr) && atr > 0)){ out.why = 'ATR unread'; return out; }
 
@@ -12764,7 +12765,7 @@ function hgGoldSessionBoundSweep(rows, opts){
       return out;
     }
 
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(isFinite(atr) && atr > 0)){ out.why = 'ATR unread'; return out; }
 
@@ -12996,7 +12997,7 @@ function hgGoldPart4PoorExtreme(rows){
   try{
     rows = __rows(rows);
     if (!rows || rows.length < 20) return out;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var tol = 0.15 * atr;
@@ -13095,7 +13096,7 @@ function hgGoldPart4LookAboveFail(rows){
   try{
     rows = __rows(rows);
     if (!rows || rows.length < 60){ out.why = 'short series'; return out; }
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var look = Math.min(rows.length - 4, 48);
@@ -13137,7 +13138,7 @@ function hgGoldPart4Gap(rows, adr){
     rows = __rows(rows);
     if (!rows || rows.length < 5) return out;
     var a = adr && isFinite(adr.adr) ? adr.adr : NaN;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     var minGap = isFinite(a) ? HG_GOLD_P4_GAP_MIN_ADR * a : 0.5 * atr;
     var prev = rows[rows.length - 2], cur = rows[rows.length - 1];
@@ -13423,7 +13424,7 @@ function hgGoldPart5Wyckoff(rows){
     var rng = hgGoldPart5CompositeRange(rows, HG_GOLD_P5_SPRING_LOOK, exclude);
     if (!rng.ok || rng.sessions < 3){ out.why = 'composite range < 3 sessions'; return out; }
     out.rangeHi = rng.hi; out.rangeLo = rng.lo;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var i, springI = -1, springDir = null, springExt = NaN, springVol = 0;
@@ -13527,7 +13528,7 @@ function hgGoldPart5TurtleSoup(rows){
     if (!rows || rows.length < 80){ out.why = 'short series'; return out; }
     var sess = hgGoldPart5SessionExtremes(rows, HG_GOLD_P5_TURTLE_SESS);
     if (sess.length < HG_GOLD_P5_TURTLE_SESS){ out.why = 'need 20 sessions'; return out; }
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var cur = sess[sess.length - 1];
@@ -13605,7 +13606,7 @@ function hgGoldPart5VwapFade(rows, vwap, ker){
     if (!rows || !vwap || !vwap.ok || !ker || !ker.ok) return out;
     if (ker.regime !== 'CHOP'){ out.why = 'S22 needs KER < 0.3 (got ' + ker.regime + ')'; return out; }
     var last = rows[rows.length - 1];
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var vprof = goldVolumeProfile(rows, 80, 40);
@@ -13653,7 +13654,7 @@ function hgGoldPart5ThreeDrive(rows){
   try{
     rows = __rows(rows);
     if (!rows || rows.length < 30) return out;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var i0 = Math.max(0, rows.length - HG_GOLD_P5_DRIVE_BARS - 1);
@@ -13799,7 +13800,7 @@ function hgGoldPart5NewsSpike(rows, opts){
       out.why = 'S27 needs post-Tier1 window'; return out;
     }
     if (ng && ng.lock){ out.why = 'S27 lockout still active'; return out; }
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var i0 = Math.max(0, rows.length - 8);
@@ -14308,7 +14309,7 @@ function hgGoldPart6SessionPullback(rows, comps, ker){
     if (!rows || !comps || !comps.london || !comps.london.hvns || !comps.london.hvns.length) return out;
     if (ker && ker.regime === 'CHOP'){ out.why = 'S30 needs non-CHOP'; return out; }
     var last = rows[rows.length - 1];
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var nowH = new Date((last.t < 1e12 ? last.t * 1000 : last.t)).getUTCHours();
@@ -14354,7 +14355,7 @@ function hgGoldPart6ZFade(rows, zsc, ker, ac, comps){
     if (ker && ker.regime === 'TREND'){ out.why = 'S33 disabled when KER TREND'; return out; }
     if (ac && ac.ok && ac.ac1 > 0){ out.why = 'S33 needs ac1 ≤ 0'; return out; }
     var last = rows[rows.length - 1];
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var vprof = goldVolumeProfile(rows, 100, 50);
@@ -14395,7 +14396,7 @@ function hgGoldPart6SmtSweep(rows, dxyRows){
     rows = __rows(rows); dxyRows = __rows(dxyRows);
     if (!rows || rows.length < 40) return out;
     if (!dxyRows || dxyRows.length < 20){ out.why = 'DXY unread — S36 unchecked'; return out; }
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     /* Asia box on gold */
@@ -14447,7 +14448,7 @@ function hgGoldPart6FailedSweep(rows){
   try{
     rows = __rows(rows);
     if (!rows || rows.length < 50) return out;
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var vprof = goldVolumeProfile(rows, 100, 50);
@@ -14779,7 +14780,7 @@ function hgGoldPart7McxGapFade(mcxRows, opts){
     var gap = (last.o - prev.c) / prev.c;
     if (Math.abs(gap) < HG_GOLD_P7_GAP_PCT){ out.why = 'S40 gap < 0.4%'; return out; }
     var parity = opts.parityInr;
-    var atrs = _atr(mcxRows, 14);
+    var atrs = __atr(mcxRows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var rej = gap > 0 ? (last.c < last.o && last.c < last.o - 0.1 * atr)
@@ -14860,7 +14861,7 @@ function hgGoldPart7RatioPair(goldRows, silverRows){
     out.ratio = cur;
     /* Ticket levels are gold USD (last close ± ATR); ratio stays advisory. */
     var gLast = goldRows[goldRows.length - 1];
-    var gatrs = _atr(goldRows, 14);
+    var gatrs = __atr(goldRows, 14);
     var gAtr = gatrs[gatrs.length - 1] || (gLast.c * 0.005);
     if (cur >= p95){
       out.ok = true; out.dir = 'short'; /* short gold / long silver */
@@ -14961,7 +14962,7 @@ function hgGoldPart7ScalpModule(rows15, opts){
     if (opts.swingWarmSameSide){ out.why = 'scalp suppressed — swing S0 warming same side'; return out; }
     if (opts.tradesToday >= 3){ out.why = 'scalp s9 — 3 trades already'; return out; }
 
-    var atrs = _atr(rows15, 14);
+    var atrs = __atr(rows15, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
 
@@ -15247,10 +15248,10 @@ function hgGoldNormCdf(z){
     change any earlier entry — the series extends, it does not shift. It was
     nonetheless rebuilt in full on every call, and with an inner window loop
     that makes it O(n x window); through the replay's per-bar walk it was
-    2,292ms, 9.7% of a 600-bar scan, the largest goldind line after atr(). Most
+    2,292ms, 9.7% of a 600-bar scan, the largest goldind line after _atr(). Most
     of hgGoldNormCdf's own 3.6% is called from this loop.
 
-    Same memo rule as atr() and __rows: resume only on an append (remembered
+    Same memo rule as _atr() and __rows: resume only on an append (remembered
     length no greater than the current one, last bar read still the same
     object), keyed by window as well as by rows, everything else rebuilt. No
     running state to carry here — out[i] is computed from bars alone, so
@@ -15627,7 +15628,7 @@ function hgGoldPart8ResidualTrade(rows, resid, opts){
     rows = __rows(rows);
     if (!rows || rows.length < 30) return out;
     var last = rows[rows.length - 1];
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     var dir = resid.residZ > 0 ? 'long' : 'short';
@@ -15667,7 +15668,7 @@ function hgGoldRegimeCluster(rows, opts){
     if (!rows || rows.length < 80){ out.why = 'S56 need bars'; return out; }
     var ker = typeof calculateKaufmanER === 'function' ? calculateKaufmanER(rows, 20)
       : (typeof W !== 'undefined' && W.calculateKaufmanER ? W.calculateKaufmanER(rows, 20) : null);
-    var atr14 = _atr(rows, 14), atr50 = _atr(rows, 50);
+    var atr14 = __atr(rows, 14), atr50 = __atr(rows, 50);
     var a14 = atr14[atr14.length - 1], a50 = atr50[atr50.length - 1];
     var atrRatio = (a50 > 0) ? (a14 / a50) : 1;
     var er = ker && isFinite(ker.er) ? ker.er : 0.4;
@@ -15755,7 +15756,7 @@ function hgGoldPart8GeoSpike(rows, intensity, opts){
     rows = __rows(rows);
     if (!rows || rows.length < 40) return out;
     var last = rows[rows.length - 1];
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
     /* daily_1σ stand-in: ATR*√(day bars) rough */
@@ -15812,7 +15813,7 @@ function hgGoldRangeBarSweep(rows, opts){
     opts = opts || {};
     rows = __rows(rows);
     if (!rows || rows.length < 40){ out.why = 'S52 need bars'; return out; }
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr1h = atrs[atrs.length - 1];
     /* On 15m, approx 1H ATR ≈ ATR15 * 2 */
     var atrH = atr1h * (opts.tfHourMult || 2);
@@ -15870,7 +15871,7 @@ function hgGoldPart8VpinBreakout(rows, vpin){
     var brkUp = isNr7 && last.c > prev.h;
     var brkDn = isNr7 && last.c < prev.l;
     if (!brkUp && !brkDn){ out.why = 'S54 NR7 without break (or not NR7)'; return out; }
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     out.ok = true;
     out.dir = brkUp ? 'long' : 'short';
@@ -16442,7 +16443,7 @@ function hgGoldVolumeBarSweep(rows, opts){
       if (vb[i].l < poolLo) poolLo = vb[i].l;
     }
     var a = vb[vb.length - 2], b = vb[vb.length - 1];
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     var bull = a.l < poolLo && b.c > poolLo;
     var bear = a.h > poolHi && b.c < poolHi;
@@ -16641,7 +16642,7 @@ function hgGoldPremiumFade(rows, opts){
       if (opts.indexAtExtreme){ out.why = 'S65 index at session extreme — not perp-specific'; return out; }
     }
 
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(atr > 0)) return out;
 
@@ -16934,7 +16935,7 @@ function hgGoldNyExhaustion(rows, opts){
     if (!rows || rows.length < 40){ out.why = 'need ≥40 bars'; return out; }
     var nowMs = opts.now || (isFinite(rows[rows.length - 1].t) ? rows[rows.length - 1].t * 1000 : Date.now());
     out.block = hgGoldNyBlock(nowMs);
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     var atr = atrs[atrs.length - 1];
     if (!(isFinite(atr) && atr > 0)){ out.why = 'ATR unread'; return out; }
 
@@ -17197,7 +17198,7 @@ function hgGoldSessionAtrBuffer(rows, nowMs){
   var out = { atr: NaN, session: 'OFF', bufferMult: 0.20, stopBuffer: NaN };
   try{
     rows = __rows(rows);
-    var atrs = _atr(rows, 14);
+    var atrs = __atr(rows, 14);
     out.atr = atrs && atrs.length ? atrs[atrs.length - 1] : NaN;
     var ms = __toMs(nowMs); if (!isFinite(ms)) ms = Date.now();
     var h = new Date(ms).getUTCHours() + new Date(ms).getUTCMinutes() / 60;
@@ -17254,7 +17255,7 @@ function hgGoldOiTrap(priceRows, oiRows, opts){
       out.unchecked = true; out.why = 'OI history unread (Delta OI:SYMBOL)'; return out;
     }
     var n = priceRows.length;
-    var atrs = _atr(priceRows, 14);
+    var atrs = __atr(priceRows, 14);
     var atr = atrs && atrs.length ? atrs[n - 1] : NaN;
     if (!(isFinite(atr) && atr > 0)){ out.why = 'ATR unread'; return out; }
 
@@ -17600,7 +17601,7 @@ function hgGoldFormingStack(inp){
           : (isFinite(lead.level) ? lead.level + (lead.dir === 'long' ? -1 : 1) * (out.sessionBuf.stopBuffer || 0) : NaN);
         var vw = null;
         try{ vw = goldVWAP(rows); }catch(_v){}
-        var atrsVp = _atr(rows, 14);
+        var atrsVp = __atr(rows, 14);
         out.vpTargets = hgGoldVpTargets({
           dir: lead.dir,
           entry: px,
@@ -18428,11 +18429,11 @@ function goldMarketRegime(rows) {
     var mean = closes.reduce(function(a, b){ return a + b; }, 0) / n;
     for (var i = 0; i < n; i++) sumSqDiff += Math.pow(closes[i] - mean, 2);
     var stdDev = Math.sqrt(sumSqDiff / n);
-    var atr = _atr(rows, 14) || stdDev * 2;
+    var atr = __atr(rows, 14) || stdDev * 2;
     var volScore = Math.min(stdDev / (atr || 1), 1);
 
-    var ema9 = _ema(closes, 9);
-    var ema21 = _ema(closes, 21);
+    var ema9 = __ema(closes, 9);
+    var ema21 = __ema(closes, 21);
     var e9 = ema9[n-1];
     var e21 = ema21[n-1];
     var trendDir = RANGING;
@@ -18477,7 +18478,7 @@ function goldCandleForecast(rows) {
         note: 'A bar with no range casts no lean and no band.'
       };
     }
-    var atrArr = atr(rows, 14);
+    var atrArr = _atr(rows, 14);
     var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
     var atrSource = 'ATR 14';
     if (!(atrLast > 0)) { atrLast = h - l; atrSource = 'last bar range — ATR unread'; }
@@ -18488,7 +18489,7 @@ function goldCandleForecast(rows) {
       if (!isFinite(+rows[i].c)) return null;
       closes.push(+rows[i].c);
     }
-    var ema9 = ema(closes, 9);
+    var ema9 = _ema(closes, 9);
     var bulls = 0, bears = 0, checked = 0, reasons = [];
     var loc = (c - l) / (h - l);
     var body = Math.abs(c - o);
