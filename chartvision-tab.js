@@ -581,7 +581,7 @@ function mount(el){
   if (!el) return;
   el.innerHTML = '<div class="panel">'
     + '<h2>CHART VISION <span>6/7 NEAR + 7/7 CLEAN · independent next-bar reads on gate-qualified setups</span></h2>'
-    + '<p class="note">Scans the full futures universe, keeps contracts that pass <b>6/7</b> or <b>7/7</b> of the shared hard gates, renders the chart, then runs chart vision on <b>every card shown</b> for an independent <b>NEXT BAR</b> opinion (hybrid TA skill — <code>qrak/LLM_trader</code> + <code>TauricResearch/TradingAgents</code>; optional Gemini multimodal PNG when <code>GEMINI_API_KEY</code> is set). NEAR cards are watch-only — not tickets until 7/7.</p>'
+    + '<p class="note">Scans the full futures universe, keeps contracts that pass <b>6/7</b> or <b>7/7</b> of the shared hard gates, renders the chart, then reads the <b>last closed candle</b> on every card shown. The next-bar line names close location and wick rejection. It does not predict a price, and a bar with no range stays unread. Optional Gemini PNG when <code>GEMINI_API_KEY</code> is set. NEAR cards are watch-only — not tickets until 7/7.</p>'
     + '<div class="row">'
     + '<button class="btn" id="cvRun">RUN SCAN</button>'
     + '<label class="note" style="margin-left:10px">Style '
