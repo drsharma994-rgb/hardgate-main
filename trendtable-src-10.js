@@ -205,6 +205,7 @@ function hgPaintTrendmxFromSnap(){
       crypto: el.querySelector('[data-r="crypto"]'),
       golden: el.querySelector('[data-r="golden"]'),
       death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
+      candles: el.querySelector('[data-r="candles"]'), /* hg-v1337 */
       cards: el.querySelector('[data-r="cards"]'),
       near: el.querySelector('[data-r="near"]'),
       forming: el.querySelector('[data-r="forming"]'),
@@ -366,6 +367,7 @@ function mountTrendMatrix(el){
       '<div data-r="crypto"></div>' +
       '<div data-r="golden"></div>' +
       '<div data-r="death"></div>' +   /* hg-v1015: the bear desk stands on its own, right under the bull desk */
+      '<div data-r="candles"></div>' + /* hg-v1337: candle confluence, shared engine, trend side must agree */
       '<div class="cards" data-r="cards"></div>' +
       '<div data-r="near"></div>' +
       '<div data-r="forming"></div>' +

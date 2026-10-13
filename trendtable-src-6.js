@@ -100,6 +100,54 @@ function trendmxDeathDeskHTML(death){
     + '</div>';
 }
 
+function trendmxCandleCardHTML(g){
+  if (!g || !fin(+g.entry) || !fin(+g.stop) || !fin(+g.t1)) return '';
+  var isShort = g.dir === 'short';
+  var col = isShort ? '#b91c1c' : '#047857';
+  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: 'trendmx-candle' })
+    : '';
+  var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(180,83,9,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:#fff">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + '</span>'
+    + '<span class="stamp">CANDLE</span>'
+    + '<span class="stamp ' + (isShort ? 'bad' : 'pass') + '">' + (isShort ? 'SHORT' : 'LONG') + '</span>'
+    + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.candleNote || '') + '</div>'
+    + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
+    + tradeBtn
+    + '</div>';
+}
+
+function trendmxCandleDeskHTML(list){
+  list = list || [];
+  var held = list.held || {};
+  var shown = Math.min(list.length, 6);
+  var cards = '';
+  for (var i = 0; i < shown; i++) cards += trendmxCandleCardHTML(list[i]);
+  var stood = list.length - shown;
+  var why = '';
+  if (!list.length){
+    why = list.why
+      ? '<div class="note">' + escH(list.why) + '</div>'
+      : ('<div class="note">No candle confluence setup. A setup needs the row\'s own trend side and a one-sided named shape from the shared candlestick engine. A clash is not a setup. A pattern against the trend is not a setup. Unread is not agreement. Nothing was invented.'
+        + (held.unread ? ' ' + held.unread + ' tapes unread.' : '')
+        + (held.clash ? ' ' + held.clash + ' clashed.' : '')
+        + (held.against ? ' ' + held.against + ' named a shape against the trend.' : '')
+        + (held.none ? ' ' + held.none + ' had no named shape.' : '')
+        + (held.noDir ? ' ' + held.noDir + ' had no trend side.' : '')
+        + (held.plan ? ' ' + held.plan + ' had no valid trend plan.' : '')
+        + '</div>');
+  }
+  var extra = stood > 0 ? '<div class="note">' + stood + ' more agreed and are stood down. Six are enough on this desk.</div>' : '';
+  return '<div class="panel" data-tm-candles="1" style="margin:12px 0;border-left:4px solid #b45309">'
+    + '<h2>CANDLE CONFLUENCE <span>shared candlestick engine · the trend side must agree · the pattern stop is not the trade stop</span></h2>'
+    + why + extra
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
 function trendmxLimitCardHTML(item){
   if (!item || !item.plan) return '';
   var p = item.plan, r = item.row, dir = item.dir;
