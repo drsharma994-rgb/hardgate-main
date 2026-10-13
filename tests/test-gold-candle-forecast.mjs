@@ -158,6 +158,18 @@ console.log('== candle forecast leans only when reads agree ==');
     'one macro leg is shown and does not confirm the setup (' + (oneFund && oneFund.desk) + ')');
   ok(bull.desk && String(bull.desk).indexOf('fundamentals unread') >= 0,
     'a scan with no macro leaves fundamentals unread');
+  ok(src.indexOf("once('goldProVerdict', 'GOLD PRO'") >= 0
+      && src.indexOf("once('goldBasisSignal', 'GOLD SPOT'") >= 0
+      && src.indexOf("once('goldDirectionScan', 'GOLD DIRECTION'") >= 0
+      && src.indexOf("once('goldUltraState', 'GOLD ULTRA'") >= 0
+      && src.indexOf("once('omnigold1State', 'OMNIGOLD'") >= 0
+      && src.indexOf("once('goldCointState', 'GOLD COINT'") >= 0
+      && src.indexOf("once('hgOgDetect', 'OMNIGOLD DESK'") >= 0
+      && src.indexOf("once('optiGoldState', 'OPTI GOLD'") >= 0
+      && src.indexOf("once('ngAssess', 'NEW GOLD'") >= 0
+      && src.indexOf("once('superGoldScan', 'SUPER GOLD'") >= 0
+      && src.indexOf("push('MILLI GOLD', 'MILLI GOLD'") >= 0,
+    'every gold tab is named beside the candle');
 }
 
 console.log('== the tab does not invent a trade ==');

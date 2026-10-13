@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A setup prints when a candlestick pattern agrees with structure or with the gold desk. The desk votes only on a fresh RSI, EMA, supertrend, CCI or StochRSI cross, a fresh Asia-range break, or two measured macro legs (real rate, silver, VIX, miners). A standing trend does not vote. Fundamentals left unread stay unread. The stop is still the pattern extreme, or one ATR.
+            No forecast yet. A setup prints when a named candlestick pattern has two independent families with it and none against. The families are the candle, the shared indicators, the core strategies, the gold fundamentals, and every gold tab: scalp, swing, pine, ganesh, pro, spot, direction, ultra, omnigold, omnigold desk, opti, new gold, super gold, milli and coint. A tab that has not been scanned stays unread. Nothing is filled in. The stop is still the pattern extreme, or one ATR. Tab prices are not the stop.
           </div>
         </div>
       `;
@@ -99,7 +99,9 @@ on every page load since v14-2:
         throw new Error('Predictive Engine (goldCandleForecast) not loaded. Please refresh.');
       }
 
-      const forecast = window.goldCandleForecast(candles, await this.loadMacro());
+      const tapes = await this.loadTapes();
+      const macroLive = await this.loadMacro();
+      const forecast = window.goldCandleForecast(candles, macroLive, tapes);
       if (!forecast) {
         resultArea.innerHTML = 'The candle read failed closed. Nothing was invented.';
         statusEl.textContent = 'Unread';
@@ -128,11 +130,51 @@ on every page load since v14-2:
       try {
         if (typeof window.hgCfConfluence === 'function') {
           forecast.confluence = window.hgCfConfluence(candles, {
-            fundExtra: macroSnap || {},
-            ctx: macroSnap ? { macro: macroSnap } : null
+            fundExtra: macroSnap || macroLive || {},
+            rows1h: tapes && tapes.rows1h,
+            rows4h: tapes && tapes.rows4h,
+            rows1d: tapes && tapes.rows1d,
+            spot: tapes && tapes.spot,
+            perp: tapes && tapes.perp,
+            macro: macroSnap || macroLive || null,
+            ctx: (macroSnap || macroLive) ? { macro: macroSnap || macroLive } : null
           }, forecast);
         }
       } catch (eCf) { forecast.confluence = null; }
+      /* A confluence ticket is the setup. The candle engine still owns the
+         stop: pattern extreme when it sits 0.25 to 2.5 ATR away, otherwise one
+         ATR. No tab price is copied onto that stop. Done before the scalp
+         bracket is built, so that bracket sees the setup the ticket earned. */
+      var cflNow = forecast.confluence;
+      if (cflNow && cflNow.desks && cflNow.desks.length) {
+        forecast.tabs = cflNow.desks.map(function (d) {
+          var side = d.lean === true ? 'with' : (d.lean === false ? 'against' : 'unread');
+          return String(d.desk) + ' ' + side;
+        }).join(', ');
+      }
+      if (cflNow && cflNow.ticket && (forecast.dir === 'BULL' || forecast.dir === 'BEAR') && !forecast.setup) {
+        var patNames = (forecast.patterns && forecast.patterns.length) ? forecast.patterns.slice() : [];
+        var wantLean = forecast.dir === 'BULL' ? 1 : -1;
+        var leans = forecast.patternLeans || [];
+        var ai, oneLean;
+        for (ai = 0; ai < leans.length; ai++) {
+          oneLean = leans[ai];
+          if (oneLean && oneLean.lean === wantLean && oneLean.name) patNames.push(oneLean.name);
+        }
+        if (!patNames.length && forecast.advancedPatterns && forecast.advancedPatterns.length) {
+          patNames = forecast.advancedPatterns.slice();
+        }
+        if (patNames.length) {
+          var fams = [];
+          (cflNow.voters || []).forEach(function (v) {
+            if (v && v.lean === true && v.family && v.family !== 'candles' && fams.indexOf(v.family) < 0) fams.push(v.family);
+          });
+          forecast.setup = forecast.dir === 'BULL' ? 'LONG SETUP' : 'SHORT SETUP';
+          forecast.setupParts = patNames.join(', ') + (fams.length ? ' · ' + fams.join(', ') : '');
+          var note = String(forecast.note || '').replace(/^No setup formed — the call is the vote only\. /, '');
+          forecast.note = forecast.setup + ': ' + forecast.setupParts + '. ' + note;
+        }
+      }
 
       /* hg-v1318: THE SCALP AND THE SWING.
          The tab printed ONE bracket with no statement of which horizon it belonged
@@ -233,6 +275,24 @@ on every page load since v14-2:
     } catch (e1) { return null; }
   };
 
+  mod.loadTapes = async function() {
+    function pack(tf, n) {
+      if (typeof window.getGoldCandles !== 'function') return Promise.resolve(null);
+      return Promise.race([
+        window.getGoldCandles(tf, n).then(function(p) { return p && p.rows && p.rows.length ? p.rows : null; }).catch(function() { return null; }),
+        new Promise(function(resolve) { setTimeout(function() { resolve(null); }, 4000); })
+      ]);
+    }
+    var out = { rows1h: null, rows4h: null, rows1d: null, spot: null, perp: null };
+    try {
+      var got = await Promise.all([pack('1h', 80), pack('4h', 80), pack('1d', 220)]);
+      out.rows1h = got[0];
+      out.rows4h = got[1];
+      out.rows1d = got[2];
+    } catch (e2) {}
+    return out;
+  };
+
   /**
    * One unopposed read is the call. Stop and targets are one and two ATR
    * from the last close. A fight between reads prints no side.
@@ -245,12 +305,12 @@ on every page load since v14-2:
     var reasons = (forecast.reasons || []).map(function(r) {
       return '<li>' + String(r).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
     }).join('');
-    var patLine = (forecast.patterns && forecast.patterns.length)
-      ? forecast.patterns.join(', ')
-      : 'none';
+    var namedPats = (forecast.patterns || []).concat(forecast.advancedPatterns || []);
+    var patLine = namedPats.length ? namedPats.join(', ') : 'none';
     var setupLine = forecast.setup ? (forecast.setup + ' — ' + (forecast.setupParts || '')) : 'not formed';
     var levels = '<li><b>Setup:</b> ' + setupLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
       + '<li><b>Gold desk:</b> ' + String(forecast.desk || 'unread').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
+      + '<li><b>Gold tabs:</b> ' + String(forecast.tabs || 'unread').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
       + '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
       + (called
         ? '<li><b>Stop:</b> <span class="neg" style="font-weight:700;">' + this.fmt(forecast.sl) + '</span> <span class="note">(' + (forecast.stopSource === 'pattern' ? 'pattern extreme' : 'one ATR') + ')</span></li>'

@@ -106,7 +106,8 @@ console.log('\n== 3) ONE DESK COUNTS ONCE — a chatty engine cannot outvote a q
   const dv = ctx.hgCfDeskVotes(rows, {}, 'BULL');
   ok(dv.with_ === 1 && dv.against === 1,
     'fifty candidates from one desk count as ONE vote, exactly as one does (' + dv.with_ + ' with / ' + dv.against + ' against)');
-  ok(dv.checked === 4, 'and every desk is still represented (' + dv.checked + ')');
+  ok(dv.checked === dv.desks.length && dv.checked >= 10,
+    'every gold tab is represented, and one desk still counts once (' + dv.checked + ')');
 }
 
 console.log('\n== 4) an exactly split desk is undecided, not a coin toss ==');

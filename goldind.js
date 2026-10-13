@@ -18884,6 +18884,26 @@ function hgCfAdvancedPatterns(rows, atrLast) {
       && Math.abs(b.c - c.c) <= atrLast * 0.15 && Math.abs(b.o - c.o) <= atrLast * 0.15)
     record('side-by-side white lines', tag(1, 'side-by-side white lines'));
 
+  /* hg-v1318: four more shapes the three-bar voter cannot see. Matching high
+     and low are equal CLOSES, not equal wicks. Separating lines share an open
+     and resume. A stick sandwich is two equal bear closes around a bull bar.
+     Upside-gap two crows is a gap that fails. Disclosure only: they do not
+     vote and they do not move the stop. */
+  if (big(c) && big(d) && mid(c) && mid(d)) {
+    if (c.bear && d.bear && Math.abs(c.c - d.c) <= atrLast * 0.08 && Math.abs(c.l - d.l) > atrLast * 0.08)
+      record('matching low', tag(1, 'matching low'));
+    if (c.bull && d.bull && Math.abs(c.c - d.c) <= atrLast * 0.08 && Math.abs(c.h - d.h) > atrLast * 0.08)
+      record('matching high', tag(-1, 'matching high'));
+  }
+  if (mid(c) && mid(d) && Math.abs(c.o - d.o) <= atrLast * 0.05) {
+    if (c.bear && d.bull && d.c > c.o) record('bullish separating lines', tag(1, 'bullish separating lines'));
+    if (c.bull && d.bear && d.c < c.o) record('bearish separating lines', tag(-1, 'bearish separating lines'));
+  }
+  if (b.bear && c.bull && d.bear && mid(b) && mid(d) && Math.abs(b.c - d.c) <= atrLast * 0.08 && c.c > Math.max(b.o, b.c))
+    record('stick sandwich', tag(1, 'stick sandwich'));
+  if (b.bull && mid(b) && c.bear && d.bear && c.l > b.h && d.o > c.c && d.o < c.o && d.c < c.c && d.c > b.c)
+    record('upside gap two crows', tag(-1, 'upside gap two crows'));
+
   /* ---- EXHAUSTION / STRUCTURE ---- */
   /* THREE-BAR CLIMAX: three consecutive expanding ranges with shrinking bodies —
      participation rising into a stall. Location decides what it means, which is
@@ -19257,6 +19277,106 @@ function hgCfDeskVotes(rows, opts, dir) {
       } : null;
     })());
 
+    /* The four desks above are the ones that mint on this tape. These six are the
+       rest of the gold tabs. Each is named. An engine that is not on the page, or
+       a feed it does not have, stays unread. None of them is scored. */
+    function once(name, label, run) {
+      var f = (typeof W !== 'undefined' && W && typeof W[name] === 'function') ? W[name]
+        : ((typeof globalThis !== 'undefined' && globalThis && typeof globalThis[name] === 'function') ? globalThis[name] : null);
+      if (!f) { push(label, label, null, 'engine not loaded on this page'); return; }
+      try {
+        var r = run(f);
+        var t = tally(Array.isArray(r) ? r : []);
+        push(label, label, t, (t.long + t.short)
+          ? (t.long + ' long / ' + t.short + ' short formed')
+          : 'formed nothing on this tape');
+      } catch (eOnce) {
+        push(label, label, null, 'engine unavailable: ' + String((eOnce && eOnce.message) || eOnce).slice(0, 60));
+      }
+    }
+    once('goldProVerdict', 'GOLD PRO', function (f) {
+      var above = null;
+      var daily = opts && opts.rows1d;
+      if (daily && daily.length >= 200 && typeof ema === 'function') {
+        var cs = [], i;
+        for (i = 0; i < daily.length; i++) cs.push(+daily[i].c);
+        var e200 = ema(cs, 200);
+        if (e200 && isFinite(+e200[e200.length - 1])) above = cs[cs.length - 1] > +e200[e200.length - 1];
+      }
+      var macro = (opts && opts.macro) || null;
+      var g = f({
+        goldAbove200: above,
+        dxyTrend: macro && macro.dxy && macro.dxy.trend20,
+        tnxTrend: macro && macro.tnxTrend,
+        realRateHint: macro && macro.realRateHint
+      });
+      if (g && g.word === 'STRUCTURAL BULL') return [{ dir: 'long' }];
+      if (g && g.word === 'STRUCTURAL BEAR') return [{ dir: 'short' }];
+      return [];
+    });
+    once('goldBasisSignal', 'GOLD SPOT', function (f) {
+      var spot = opts && +opts.spot, perp = opts && +opts.perp;
+      if (!(spot > 0) || !(perp > 0)) throw new Error('spot or perp unread');
+      var g = f({ spot: spot, perp: perp, perpSymbol: opts.perpSymbol, funding: opts.funding });
+      if (g && g.verdict === 'shorts-crowding') return [{ dir: 'long' }];
+      if (g && g.verdict === 'longs-crowding') return [{ dir: 'short' }];
+      return [];
+    });
+    once('goldDirectionScan', 'GOLD DIRECTION', function (f) {
+      var g = f();
+      if (!g || g.fundBlackout) return [];
+      var picks = [];
+      if (g.scalp && g.scalp.pick) picks.push(g.scalp.pick);
+      if (g.swing && g.swing.pick) picks.push(g.swing.pick);
+      if (g.side) picks.push({ dir: g.side });
+      return picks;
+    });
+    once('goldUltraState', 'GOLD ULTRA', function (f) {
+      var g = f();
+      if (!g || g.fire !== true || g.recordOnly) return [];
+      return g.dir ? [{ dir: g.dir }] : [];
+    });
+    once('omnigold1State', 'OMNIGOLD', function (f) {
+      var g = f();
+      if (!g || g.ok === false) return [];
+      return Array.isArray(g.candidates) ? g.candidates : [];
+    });
+    once('goldCointState', 'GOLD COINT', function () { return []; });
+    /* The rest of the gold book. Each is named. A last scan that is not on the
+       page, or an engine that formed no side, stays unread. Their prices are
+       not read here. */
+    once('hgOgDetect', 'OMNIGOLD DESK', function (f) {
+      var g = f(rows, { rows1h: opts && opts.rows1h, rows4h: opts && opts.rows4h });
+      return Array.isArray(g) ? g : [];
+    });
+    once('optiGoldState', 'OPTI GOLD', function (f) {
+      var g = f();
+      if (!g) throw new Error('not scanned this session');
+      var live = [], iLive, sLive;
+      var bag = Array.isArray(g.setups) ? g.setups : [];
+      for (iLive = 0; iLive < bag.length; iLive++) {
+        sLive = bag[iLive];
+        if (sLive && (sLive.state === 'waiting' || sLive.state === 'open') && sLive.dir) live.push({ dir: sLive.dir });
+      }
+      return live;
+    });
+    once('ngAssess', 'NEW GOLD', function (f) {
+      var g = f(rows);
+      if (!g || !g.dir) return [];
+      return [{ dir: g.dir }];
+    });
+    once('superGoldScan', 'SUPER GOLD', function (f) {
+      var g = f();
+      if (!g || !Array.isArray(g.cands)) throw new Error('not scanned this session');
+      var live = [], iSg, cSg;
+      for (iSg = 0; iSg < g.cands.length; iSg++) {
+        cSg = g.cands[iSg];
+        if (cSg && cSg.dir) live.push({ dir: cSg.dir });
+      }
+      return live;
+    });
+    push('MILLI GOLD', 'MILLI GOLD', null, 'roster only — this tab does not form a side');
+
     out.checked = out.desks.length;
     out.why = out.with_ || out.against
       ? (out.with_ + ' desk' + (out.with_ === 1 ? '' : 's') + ' with the call, ' + out.against + ' against, ' + out.unread + ' formed nothing')
@@ -19593,11 +19713,11 @@ function hgCfConfluence(rows, opts, fc) {
     out.ok = false;
     out.why = 'confluence error';
     return out;
-  }
-}
+  }}
 
 function goldCandleForecast(rows) {
   var macro = arguments.length > 1 ? arguments[1] : null;
+  var tapes = arguments.length > 2 ? arguments[2] : null;
   try {
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
        its standard error to mean anything and the empirical range needs a
@@ -19688,6 +19808,7 @@ function goldCandleForecast(rows) {
     var pat = hgCfCandlePatterns(rows, atrLast);
     var struct = hgCfStructure(rows, atrLast);
     var desk = hgCfGoldDesk(rows, macro);
+    var tabs = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [], notes: ['gold tabs are named under the call'], line: 'named under the call' };
     var pi;
     bulls += pat.bullVotes + struct.bullVotes + desk.bullVotes;
     bears += pat.bearVotes + struct.bearVotes + desk.bearVotes;
@@ -19818,18 +19939,25 @@ function goldCandleForecast(rows) {
       tp2 = +(c + sign * risk * 2).toFixed(2);
     }
     var setup = null, setupParts = '';
-    function hgCfSetupParts(patNames, structNamesSide, deskNamesSide, structOn, deskOn) {
-      var parts = patNames.slice();
-      if (structOn) parts = parts.concat(structNamesSide);
-      if (deskOn) parts = parts.concat(deskNamesSide);
+    function hgCfSetupParts(patNames, extras) {
+      var parts = patNames.slice(), i;
+      for (i = 0; i < extras.length; i++) if (extras[i] && extras[i].length) parts = parts.concat(extras[i]);
       return parts.join(', ');
     }
-    if (!neutral && dir === 'BULL' && pat.bullVotes > 0 && (struct.bullVotes > 0 || desk.bullVotes > 0)) {
+    if (!neutral && dir === 'BULL' && pat.bullVotes > 0 && (struct.bullVotes > 0 || desk.bullVotes > 0 || tabs.bullVotes > 0)) {
       setup = 'LONG SETUP';
-      setupParts = hgCfSetupParts(pat.bullNames, struct.bullNames, desk.bullNames, struct.bullVotes > 0, desk.bullVotes > 0);
-    } else if (!neutral && dir === 'BEAR' && pat.bearVotes > 0 && (struct.bearVotes > 0 || desk.bearVotes > 0)) {
+      setupParts = hgCfSetupParts(pat.bullNames, [
+        struct.bullVotes ? struct.bullNames : null,
+        desk.bullVotes ? desk.bullNames : null,
+        tabs.bullVotes ? tabs.bullNames : null
+      ]);
+    } else if (!neutral && dir === 'BEAR' && pat.bearVotes > 0 && (struct.bearVotes > 0 || desk.bearVotes > 0 || tabs.bearVotes > 0)) {
       setup = 'SHORT SETUP';
-      setupParts = hgCfSetupParts(pat.bearNames, struct.bearNames, desk.bearNames, struct.bearVotes > 0, desk.bearVotes > 0);
+      setupParts = hgCfSetupParts(pat.bearNames, [
+        struct.bearVotes ? struct.bearNames : null,
+        desk.bearVotes ? desk.bearNames : null,
+        tabs.bearVotes ? tabs.bearNames : null
+      ]);
     }
     return {
       dir: dir,
@@ -19848,6 +19976,7 @@ function goldCandleForecast(rows) {
       patternDrift: adv.aligned,
       structure: structNames,
       desk: deskNames.length ? deskNames.join(', ') : (desk.notes[0] || 'unread'),
+      tabs: tabs.line || 'unread',
       setup: setup,
       setupParts: setupParts,
       stopSource: stopSource,
