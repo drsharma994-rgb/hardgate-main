@@ -109,7 +109,7 @@
     {
       "version": "hg-v1319",
       "built": "2026-10-13T18:45:00Z",
-      "note": "CANDLE FORECAST names every remaining gold tab beside the candle pattern. OMNIGOLD DESK is driven on this tape. OPTI GOLD counts only a live open or waiting setup from its last scan. NEW GOLD counts only when its own three legs fire, and that level is not the stop. SUPER GOLD counts only a scan already on the page. MILLI GOLD is named and has no side. An unscanned or unloaded engine stays unread and is never agreement. A confluence ticket \u2014 a named candle pattern, two families with the call, none against \u2014 becomes the setup, including on the scalp bracket. The stop stays the pattern extreme or one ATR. Tab prices are not the stop. Four more candle shapes are named beside the call and do not vote: matching high and low, separating lines, stick sandwich, and upside-gap two crows."
+      "note": "CANDLE FORECAST names every remaining gold tab beside the candle pattern. OMNIGOLD DESK is driven on this tape. OPTI GOLD counts only a live open or waiting setup from its last scan. NEW GOLD counts only when its own three legs fire, and that level is not the stop. SUPER GOLD counts only a scan already on the page. MILLI GOLD is named and has no side. An unscanned or unloaded engine stays unread and is never agreement. A confluence ticket — a named candle pattern, two families with the call, none against — becomes the setup, including on the scalp bracket. The stop stays the pattern extreme or one ATR. Tab prices are not the stop. Four more candle shapes are named beside the call and do not vote: matching high and low, separating lines, stick sandwich, and upside-gap two crows."
     },
     {
       "version": "hg-v1320",
@@ -140,6 +140,11 @@
       "version": "hg-v1325",
       "built": "2026-10-13T23:15:00Z",
       "note": "ULTIMATE AI CONFLUENCE stays on the candle forecast card after a scan. It names a side only when the 15m scalp and the 4h swing agree. An ultimate setup needs both tapes formed, both confluence tickets clean, and no family net against. Unread is not agreement. A split is not a side. There is no third stop. The fifteen-read tally now paints under the card instead of being wiped, and a thin count prints no stop. A side on that tally shows its own one-ATR illustration and says it is not the scalp stop and not the swing stop. The gold tape veto stays a disclosed reason and does not decide the setup."
+    },
+    {
+      "version": "hg-v1326",
+      "built": "2026-10-14T00:15:00Z",
+      "note": "ULTIMATE AI CONFLUENCE stays on the candle forecast card after a scan. It names a side only when the 15m scalp and the 4h swing agree. An ultimate setup needs both tapes formed, both confluence tickets clean, and no family net against. Unread is not agreement. A split is not a side. There is no third stop. The fifteen-read tally now paints under the card instead of being wiped, and a thin count prints no stop. A side on that tally shows its own one-ATR illustration and says it is not the scalp stop and not the swing stop. The gold tape veto stays a disclosed reason and does not decide the setup. BRANCH NOTE: the merge that produced this id left trendtable.js with its HEADER on hg-v1326 and its LOADER still requesting ?v=1325, so every trendtable-src-N.js part would have been served from the previous cache entry. Caught by the batch-bump discipline guard (it reported two ids across the five surfaces) and fixed by moving the loader pins to 1326. This is the SAME defect class recorded earlier in this ledger: a triad that is consistent in the header but stale in the loader silently serves old parts."
     }
   ]
 }
