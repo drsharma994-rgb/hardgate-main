@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. News, headlines, fear and greed, COT and the cached macro feeds are listed on each tape and do not cast a second vote. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, what that shape means, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. News, headlines, fear and greed, COT and the cached macro feeds are listed on each tape and do not cast a second vote. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, what that shape means, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR. A formed setup is asked against the shared perfect bar. That bar does not invent a grade. An in-sample walk counts what formed on this tape only. The forward ledger records a formed setup and settles it on later bars.
           </div>
         </div>
       `;
@@ -227,6 +227,11 @@ on every page load since v14-2:
       try {
         if (typeof window.hgCfUltimate === 'function') forecast.ultimate = window.hgCfUltimate(forecast.scalp, forecast.swing);
       } catch (eUlt) { forecast.ultimate = null; }
+      try {
+        forecast.measure = (typeof window.hgCfMeasure === 'function')
+          ? window.hgCfMeasure(forecast.scalp, forecast.swing, candles, (Array.isArray(c4) ? c4 : null))
+          : null;
+      } catch (eMeas) { forecast.measure = null; }
       this.renderResult(resultArea, statusEl, forecast);
       /* hg-v1325: the wide tally paints AFTER the card. The earlier call sat
          above renderResult, and the card replaces innerHTML, so the tally
@@ -389,7 +394,10 @@ on every page load since v14-2:
         var veto = bracket.tapeVeto
           ? ('<div class="note warn">Gold tape veto: ' + String(bracket.tapeVeto).replace(/</g, '') + '</div>')
           : '';
-        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + veto + '</td>';
+        var pf = bracket.perfectWhy
+          ? ('<div class="note">Perfect bar: ' + String(bracket.perfectWhy).replace(/</g, '') + '</div>')
+          : '';
+        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + veto + pf + '</td>';
       }).join('');
       horizonsHtml = '<div class="note" data-cf-horizons="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>SCALP AND SWING</b> <span class="note">— both built by one builder, each on its own tape</span><table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>' + cells + '</tr></table><div class="note">A scalp stop and a swing stop in dollars are not the same risk: read each against its own ATR above.</div></div>';
     })();
@@ -405,7 +413,7 @@ on every page load since v14-2:
         if (!ds.length) return '';
         var rows2 = ds.map(function (d) {
           var mark = d.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>' : (d.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>' : '<span class="note">formed nothing</span>');
-          return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/&/g, '&').replace(/</g, '<')) : '') + '</span></li>';
+          return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/&/g, '&').replace(/</g, '<')) : '') + (d.perfectWhy ? (' · ' + String(d.perfectWhy).replace(/</g, '')) : '') + '</span></li>';
         }).join('');
         return '<div class="note" style="margin-top:6px;"><b>GOLD DESKS ON THIS TAPE</b> — <span class="note">' + String(cfl.deskWhy || '').replace(/</g, '') + '</span><ul class="lst">' + rows2 + '</ul></div>';
       })();
@@ -429,7 +437,7 @@ on every page load since v14-2:
       }).join('');
       var swDesks = (swingView.desks || []).map(function (d) {
         var mark = d.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>' : (d.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>' : '<span class="note">formed nothing</span>');
-        return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/</g, '')) : '') + '</span></li>';
+        return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/</g, '')) : '') + (d.perfectWhy ? (' · ' + String(d.perfectWhy).replace(/</g, '')) : '') + '</span></li>';
       }).join('');
       var swVerdict = swingView.ticket ? '<b class="pos">CONFLUENCE SETUP</b>' : '<b>CONFLUENCE READ</b> <span class="note">· NOT A TICKET</span>';
       swingConflHtml = '<div class="note" data-cf-swing="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
@@ -452,6 +460,21 @@ on every page load since v14-2:
         + '<div class="note">' + String(ult.swing || '').replace(/</g, '') + '</div>'
         + '<div class="note">The two stops are not combined. Read the scalp against the 15m ATR and the swing against the 4h ATR. News and the free feeds are listed on each tape and do not cast a second vote.</div></div>';
     }
+    var m = forecast.measure;
+    function cfEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&').replace(/</g, '<'); }
+    var measureHtml = '<div class="note" data-cf-measure="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
+      + '<div style="margin-bottom:4px;"><b>PERFECT, BACKTEST, FORWARD</b></div>';
+    if (!m) {
+      measureHtml += '<div class="note">The shared perfect bar was not read this scan. Nothing was called perfect. Nothing was counted as a win.</div>';
+    } else {
+      measureHtml += '<div class="note"><b>Scalp.</b> ' + cfEsc(m.scalpAsk && m.scalpAsk.line) + '</div>'
+        + '<div class="note"><b>Swing.</b> ' + cfEsc(m.swingAsk && m.swingAsk.line) + '</div>'
+        + '<div class="note"><b>In-sample walk, 15m.</b> ' + cfEsc(m.walk15 && m.walk15.why) + '</div>'
+        + '<div class="note"><b>In-sample walk, 4h.</b> ' + cfEsc(m.walk4 && m.walk4.why) + '</div>'
+        + '<div class="note"><b>Forward ledger.</b> ' + cfEsc(m.fwd15 && m.fwd15.why) + ' ' + cfEsc(m.fwd4 && m.fwd4.why) + '</div>'
+        + (m.fwdHtml || '');
+    }
+    measureHtml += '<div class="note">Perfect is a badge from the shared bar. It does not form the setup and it does not move the stop. The walk is in-sample on this tape only. It is not a forward result and not a probability. Higher frames were not fed into that walk. The forward ledger is the out-of-sample test.</div></div>';
 
     container.className = '';
     container.innerHTML = `
@@ -465,6 +488,7 @@ on every page load since v14-2:
         </ul>
         <ul class="lst">${reasons}</ul>
         ${ultHtml}
+        ${measureHtml}
         ${horizonsHtml}
         ${conflHtml}
         ${swingConflHtml}
