@@ -1,0 +1,31 @@
+hg-v1337: falsify the closed-rows theory and trace the gate step further
+
+No code change. Correcting my own last entry, by measurement.
+
+THE CLOSED-ROWS THEORY IS WRONG. I recorded that trendmxClosedGate returned null because
+tmClosedRows dropped rows below its 210 floor. tmClosedRows only ever drops the SINGLE last
+row, and only when that row is still open (open + 14400 > now). Driving both timestamp
+formulas directly - the old floor(now/14400)*14400 - (n+1)*14400 + i*14400 and the new
+absolute-base one - gives closed = 240 of 240 for BOTH, with dropsLast = false for both.
+The timestamp formula was never the problem and should not be changed.
+
+WHAT IS ESTABLISHED, and it narrows the work considerably. The row is stopped by the gate
+condition in trendmxDeathCrossSetups, which holds the row when the gate is missing, vetoed,
+or reports fewer than 6 of 7 passed. Measured state: held.gates = 1 with every other held
+counter at zero. The v1014 fixture SUPPLIES gate: { gatesPassed: 0, label: 'trend only' } on
+mkDeath - deliberately weak, because that test is about the cross desk and not about the
+gate. So the assertion can only pass when trendmxClosedGate RE-DERIVES six or more of the
+seven from the TAPE, ignoring the row-supplied number.
+
+trendmxGateEval does that by delegating to the REAL swingTryClean and swingTryNear, which
+live in cryptogates.js and plans.js - not in trendtable, and not in the files my measurement
+sandbox loaded. Driving swingTryClean there reported 'not a function', so that reading is
+VOID rather than a finding, and it is recorded as void.
+
+REMAINING WORK, exactly: drive the five-phase tape against the REAL swingTryClean from
+cryptogates.js and find the geometry that passes 6+ of the 7 swing gates. That is a
+DIFFERENT and stricter gate family from trendmxSetupGrade, which the tape already clears -
+so the five-phase shape recorded earlier is necessary but not sufficient. The next attempt
+must load cryptogates.js in its sandbox FIRST or its measurement is invalid.
+
+Both install attempts remain REVERTED; suite unchanged at 7 red; discipline guard 205 passed.
