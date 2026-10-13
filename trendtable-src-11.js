@@ -224,6 +224,34 @@
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
             state.death = trendmxDeathCrossSetups(state.rows);
+            /* hg-v1332: THE CROSS DESKS NOW SAY WHY THEY ARE EMPTY.
+               Both desks drop a row at six points, and four of those
+               dropped it SILENTLY — so a board with no golden and no
+               death setup reported nothing at all, which is exactly
+               how it was reported to me. The counters are surfaced
+               here as plain words a reader can act on. */
+            try {
+              var gH = state.golden.held || {}, dH = state.death.held || {};
+              var why = function(h, tag) {
+                var bits = [];
+                if (h.noCross) bits.push(h.noCross + ' without a fresh ' + tag + ' cross');
+                if (h.noComps) bits.push(h.noComps + ' with the daily EMAs not aligned');
+                if (h.noPrice) bits.push(h.noPrice + ' with an unreadable price');
+                if (h.dir) bits.push(h.dir + ' on the wrong side of the cross');
+                if (h.conv) bits.push(h.conv + ' with no conviction');
+                if (h.cascade) bits.push(h.cascade + ' with no 4h cascade');
+                if (h.gates) bits.push(h.gates + ' held by the 7-gate matrix');
+                if (h.grade) bits.push(h.grade + ' refused at the grade');
+                if (h.waiting) bits.push(h.waiting + ' waiting on an EMA tag');
+                if (h.plan) bits.push(h.plan + ' with an invalid plan');
+                return bits.length ? bits.join(' · ') : 'nothing was held';
+              };
+              state.crossWhy = {
+                rows: (state.rows || []).length,
+                golden: why(gH, 'GOLDEN'),
+                death: why(dH, 'DEATH')
+              };
+            } catch (eWhy) { state.crossWhy = null; }
           } catch (eB) {}
           renderAll();
           setProg(info.total ? info.done / info.total : 0);

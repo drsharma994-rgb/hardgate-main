@@ -4712,22 +4712,25 @@ function trendmxConviction(row){
 /** Rows with fresh ⚡GOLDEN (EMA50/200 cross ≤10d) + bull cross + long plan + conviction. Pure. */
 function trendmxGoldenCrossSetups(rows){
   var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0,
+                noRow: 0, noCross: 0, noComps: 0, noPrice: 0, dir: 0, conv: 0, plan: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
-    if (!r || r.freshCross !== 'GOLDEN') continue;
-    if (!r.comps || r.comps.d1Cross <= 0) continue;
+    if (!r){ out.held.noRow++; continue; }
+    if (r.freshCross !== 'GOLDEN'){ out.held.noCross++; continue; }
+    if (!r.comps){ out.held.noComps++; continue; }
+    if (r.comps.d1Cross <= 0){ out.held.noComps++; continue; }
     /* hg-v1150: an unpriceable row is not a setup. hgBestLevels can price a
        plan straight off the tape, which is right for a THIN row — but a row
        whose own published price is unreadable is corrupt, and a corrupt row
        must not mint a ticket the board would show beside a price it cannot
        print. */
-    if (!isFinite(+r.price)) continue;
+    if (!isFinite(+r.price)){ out.held.noPrice++; continue; }
     var dir = tmDirOf(r);
-    if (dir !== 'long') continue;
+    if (dir !== 'long'){ out.held.dir++; continue; }
     var conv = trendmxConviction(r);
-    if (!conv) continue;
+    if (!conv){ out.held.conv++; continue; }
     if (tmCascadeDir(r.rows4h) !== 1){ out.held.cascade++; continue; }
     /* hg-v1150: THE ROW-CARRIED VETO IS RESPECTED. The closed-gate recompute
        below re-derives the 7-gate matrix off the tape, but it can never
@@ -4744,7 +4747,7 @@ function trendmxGoldenCrossSetups(rows){
     var tag = trendmxEmaTag(r.rows4h, dir);
     if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
     var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
     out.push({
       sym: r.sym, dir: 'long', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
@@ -4770,7 +4773,8 @@ function trendmxGoldenCrossSetups(rows){
    surface on the tab. Pure. */
 function trendmxDeathCrossSetups(rows){
   var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0,
+                noRow: 0, noCross: 0, noComps: 0, noPrice: 0, dir: 0, conv: 0, plan: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -4793,7 +4797,7 @@ function trendmxDeathCrossSetups(rows){
     var tag = trendmxEmaTag(r.rows4h, dir);
     if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
     var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
     out.push({
       sym: r.sym, dir: 'short', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
@@ -4883,7 +4887,7 @@ function tmSmcScanPass(rows, golden, death){
       r = cands[i];
       var dir = tmDirOf(r);
       var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!tmValidSetup(plan)) continue;
+      if (!tmValidSetup(plan)){ out.held.plan++; continue; }
       var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
       tmSmcMark(syn, r.rows4h);
       if (syn.smc) r.smc = syn.smc;
@@ -8927,6 +8931,34 @@ function mountTrendMatrix(el){
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
             state.death = trendmxDeathCrossSetups(state.rows);
+            /* hg-v1332: THE CROSS DESKS NOW SAY WHY THEY ARE EMPTY.
+               Both desks drop a row at six points, and four of those
+               dropped it SILENTLY — so a board with no golden and no
+               death setup reported nothing at all, which is exactly
+               how it was reported to me. The counters are surfaced
+               here as plain words a reader can act on. */
+            try {
+              var gH = state.golden.held || {}, dH = state.death.held || {};
+              var why = function(h, tag) {
+                var bits = [];
+                if (h.noCross) bits.push(h.noCross + ' without a fresh ' + tag + ' cross');
+                if (h.noComps) bits.push(h.noComps + ' with the daily EMAs not aligned');
+                if (h.noPrice) bits.push(h.noPrice + ' with an unreadable price');
+                if (h.dir) bits.push(h.dir + ' on the wrong side of the cross');
+                if (h.conv) bits.push(h.conv + ' with no conviction');
+                if (h.cascade) bits.push(h.cascade + ' with no 4h cascade');
+                if (h.gates) bits.push(h.gates + ' held by the 7-gate matrix');
+                if (h.grade) bits.push(h.grade + ' refused at the grade');
+                if (h.waiting) bits.push(h.waiting + ' waiting on an EMA tag');
+                if (h.plan) bits.push(h.plan + ' with an invalid plan');
+                return bits.length ? bits.join(' · ') : 'nothing was held';
+              };
+              state.crossWhy = {
+                rows: (state.rows || []).length,
+                golden: why(gH, 'GOLDEN'),
+                death: why(dH, 'DEATH')
+              };
+            } catch (eWhy) { state.crossWhy = null; }
           } catch (eB) {}
           renderAll();
           setProg(info.total ? info.done / info.total : 0);
