@@ -18458,105 +18458,90 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
+/* hg-v1300: the next candle is not a trade. Direction prints only when two
+   measured reads agree and none oppose (close location, one-sided wick,
+   EMA9 slope past the noise band, three-close run). The band is one ATR
+   around the last close. It is a range, not a target and not a stop.
+   A flat or mixed tape stays unread. A missing ATR or EMA stays null. */
 function goldCandleForecast(rows) {
-  /* The v14-2 body read a ONE-BAR EMA9 tick for direction, projected an
-     arbitrary `atr * 0.8` for the next bar's range, and printed
-     `Math.min(1, atr / current.c)` as a "Confidence Score" -- which is the
-     volatility RATIO (about 0.002 on gold), so the card read 0% on every bar
-     and the number meant nothing. It also ALWAYS returned BULL or BEAR: a
-     tape whose drift is indistinguishable from zero still got a guessed side.
-     Rebuilt on four standard estimators:
-       1. VOLATILITY -- ATR(14) blended with the PARKINSON high-low estimator
-          (sqrt(mean(ln(h/l)^2) / (4 ln 2))), which reads each bar's own range
-          and is far less noisy than a close-to-close series.
-       2. CLUSTERING -- an EWMA of squared log returns (lambda .94, the
-          RiskMetrics decay): volatility persists, so a hot tape projects a
-          wider bar. The scale is bounded 0.6x..1.6x so one spike cannot run
-          away with the projection.
-       3. RANGE -- the expected next-bar range is the EMPIRICAL 60th
-          percentile of the last 100 true ranges, not an arbitrary multiple.
-       4. DIRECTION -- a SHRUNK drift: the mean log return over 40 bars, kept
-          only when its own t-statistic clears |t| >= 1, else NEUTRAL. A tape
-          that cannot distinguish its drift from zero says so (three-state).
-     `confidence` is gone: it was never a probability. `strength` replaces it
-     and is |t| of the drift, which the card labels as a heuristic. */
   try {
-    if (!rows || rows.length < 30) return null;
-    var n = rows.length, i;
-    var current = rows[n-1];
-    var atr_vals = _atr(rows, 14);
-    var atr = __last(atr_vals) || (current.h - current.l);
-    if (!isFinite(atr) || atr <= 0) return null;
-
-    /* 1. Parkinson high-low volatility, blended with ATR */
-    var pkSum = 0, pkN = 0;
-    for (i = Math.max(0, n - 60); i < n; i++){
-      var pb = rows[i];
-      if (!(pb.h > pb.l) || !(pb.c > 0)) continue;
-      var hl = Math.log(pb.h / pb.l);
-      pkSum += hl * hl; pkN++;
+    if (!Array.isArray(rows) || rows.length < 20) return null;
+    if (typeof atr !== 'function' || typeof ema !== 'function') return null;
+    var n = rows.length;
+    var last = rows[n - 1];
+    var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    if (!(h > l)) {
+      return {
+        dir: null, lean: 'unread', agrees: 0, against: 0, checked: 0,
+        reasons: ['last candle has no range'],
+        expectedHigh: null, expectedLow: null, close: isFinite(c) ? +c.toFixed(2) : null,
+        note: 'A bar with no range casts no lean and no band.'
+      };
     }
-    var parkinson = pkN ? Math.sqrt(pkSum / pkN / (4 * Math.LN2)) * current.c : NaN;
-    var vol = (isFinite(parkinson) && parkinson > 0) ? (atr + parkinson) / 2 : atr;
+    var atrArr = atr(rows, 14);
+    var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
+    var atrSource = 'ATR 14';
+    if (!(atrLast > 0)) { atrLast = h - l; atrSource = 'last bar range — ATR unread'; }
+    if (!(atrLast > 0)) return null;
 
-    /* 2. EWMA of squared log returns -> a bounded volatility scale */
-    var lam = 0.94, ew = NaN;
-    for (i = 1; i < n; i++){
-      var lr0 = Math.log(rows[i].c / rows[i-1].c);
-      if (!isFinite(lr0)) continue;
-      ew = isFinite(ew) ? (lam * ew + (1 - lam) * lr0 * lr0) : lr0 * lr0;
+    var closes = [], i;
+    for (i = 0; i < n; i++) {
+      if (!isFinite(+rows[i].c)) return null;
+      closes.push(+rows[i].c);
     }
-    var ewVol = Math.sqrt(ew) * current.c;
-    var volScale = (isFinite(ewVol) && vol > 0) ? Math.max(0.6, Math.min(1.6, ewVol / vol)) : 1;
+    var ema9 = ema(closes, 9);
+    var bulls = 0, bears = 0, checked = 0, reasons = [];
+    var loc = (c - l) / (h - l);
+    var body = Math.abs(c - o);
+    var upper = h - Math.max(o, c);
+    var lower = Math.min(o, c) - l;
 
-    /* 3. the next bar's range = empirical 60th percentile of true ranges */
-    var trs = [];
-    for (i = Math.max(1, n - 100); i < n; i++){
-      var tb = rows[i], tprev = rows[i-1];
-      trs.push(Math.max(tb.h - tb.l, Math.abs(tb.h - tprev.c), Math.abs(tb.l - tprev.c)));
-    }
-    trs.sort(function(a, b){ return a - b; });
-    var q60 = trs.length ? trs[Math.min(trs.length - 1, Math.floor(trs.length * 0.60))] : vol;
-    var expectedRange = (isFinite(q60) && q60 > 0 ? q60 : vol) * volScale;
+    checked++;
+    if (loc >= 0.7) { bulls++; reasons.push('close in the top of the bar'); }
+    else if (loc <= 0.3) { bears++; reasons.push('close in the bottom of the bar'); }
+    else reasons.push('close mid-range — no vote');
 
-    /* 4. the shrunk drift -> three-state direction */
-    var rets = [], mu = 0, m;
-    for (i = Math.max(1, n - 40); i < n; i++){
-      var lr = Math.log(rows[i].c / rows[i-1].c);
-      if (isFinite(lr)) rets.push(lr);
-    }
-    m = rets.length;
-    if (m < 10) return null;
-    for (i = 0; i < m; i++) mu += rets[i];
-    mu /= m;
-    var ss = 0;
-    for (i = 0; i < m; i++) ss += (rets[i] - mu) * (rets[i] - mu);
-    var sd = Math.sqrt(ss / Math.max(1, m - 1));
-    var tstat = sd > 0 ? mu / (sd / Math.sqrt(m)) : 0;
-    var dir = 'NEUTRAL';
-    if (Math.abs(tstat) >= 1 && mu > 0) dir = 'BULL';
-    else if (Math.abs(tstat) >= 1 && mu < 0) dir = 'BEAR';
+    checked++;
+    if (lower >= (h - l) * 0.45 && lower > body && upper < (h - l) * 0.45) {
+      bulls++; reasons.push('lower wick rejected');
+    } else if (upper >= (h - l) * 0.45 && upper > body && lower < (h - l) * 0.45) {
+      bears++; reasons.push('upper wick rejected');
+    } else reasons.push('no one-sided wick — no vote');
 
-    /* the projection leans WITH the drift instead of widening both sides */
-    var high, low;
-    if (dir === 'BULL'){ high = current.c + expectedRange * 0.6; low = current.c - expectedRange * 0.4; }
-    else if (dir === 'BEAR'){ high = current.c + expectedRange * 0.4; low = current.c - expectedRange * 0.6; }
-    else { high = current.c + expectedRange * 0.5; low = current.c - expectedRange * 0.5; }
+    if (ema9 && isFinite(+ema9[n - 1]) && isFinite(+ema9[n - 4])) {
+      var slope = +ema9[n - 1] - +ema9[n - 4];
+      var gate = atrLast * 0.15;
+      checked++;
+      if (slope > gate) { bulls++; reasons.push('EMA9 rose over three bars'); }
+      else if (slope < -gate) { bears++; reasons.push('EMA9 fell over three bars'); }
+      else reasons.push('EMA9 slope inside the noise band — no vote');
+    } else reasons.push('EMA9 unread');
 
-    /* a NEUTRAL bar carries NO directional levels -- the honest third state */
-    var risk = expectedRange * 0.5;
-    var neutral = (dir === 'NEUTRAL');
+    checked++;
+    if (closes[n - 1] > closes[n - 2] && closes[n - 2] > closes[n - 3]) {
+      bulls++; reasons.push('three closes up');
+    } else if (closes[n - 1] < closes[n - 2] && closes[n - 2] < closes[n - 3]) {
+      bears++; reasons.push('three closes down');
+    } else reasons.push('closes are not a run — no vote');
+
+    var dir = null;
+    if (bulls >= 2 && bears === 0) dir = 'BULL';
+    else if (bears >= 2 && bulls === 0) dir = 'BEAR';
+
     return {
       dir: dir,
-      expectedHigh: +high.toFixed(2),
-      expectedLow: +low.toFixed(2),
-      tp1: neutral ? null : +(current.c + (dir === 'BEAR' ? -risk : risk)).toFixed(2),
-      tp2: neutral ? null : +(current.c + (dir === 'BEAR' ? -risk * 2 : risk * 2)).toFixed(2),
-      sl: neutral ? null : (dir === 'BEAR' ? +high.toFixed(2) : +low.toFixed(2)),
-      /* NOT a probability: |t| of the drift, labelled as such on the card */
-      strength: +Math.min(4, Math.abs(tstat)).toFixed(2),
-      vol: +vol.toFixed(2),
-      expectedRange: +expectedRange.toFixed(2)
+      lean: dir || 'unread',
+      agrees: dir === 'BULL' ? bulls : (dir === 'BEAR' ? bears : Math.max(bulls, bears)),
+      against: dir === 'BULL' ? bears : (dir === 'BEAR' ? bulls : Math.min(bulls, bears)),
+      checked: checked,
+      reasons: reasons,
+      expectedHigh: +(c + atrLast).toFixed(2),
+      expectedLow: +(c - atrLast).toFixed(2),
+      atr: +atrLast.toFixed(2),
+      atrSource: atrSource,
+      close: +c.toFixed(2),
+      note: 'The band is one ATR around the last close. It is a range, not a target and not a stop.'
     };
   } catch (e) { return null; }
 }
