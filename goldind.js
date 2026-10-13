@@ -18644,16 +18644,18 @@ function hgCfCandlePatterns(rows, atrLast) {
       else g.stop = Math.max(g.stop, h.stop);
     }
   }
-  var out = { bullVotes: 0, bearVotes: 0, names: [], notes: notes, longStop: null, shortStop: null };
+  var out = { bullVotes: 0, bearVotes: 0, names: [], bullNames: [], bearNames: [], notes: notes, longStop: null, shortStop: null };
   for (fam in by) {
     g = by[fam];
     if (g.clash) { out.notes.push(g.names.join(' / ') + ' conflict — no vote'); continue; }
     out.names = out.names.concat(g.names);
     if (g.dir === 1) {
       out.bullVotes++;
+      out.bullNames = out.bullNames.concat(g.names);
       out.longStop = out.longStop == null ? g.stop : Math.min(out.longStop, g.stop);
     } else {
       out.bearVotes++;
+      out.bearNames = out.bearNames.concat(g.names);
       out.shortStop = out.shortStop == null ? g.stop : Math.max(out.shortStop, g.stop);
     }
   }
@@ -18828,6 +18830,77 @@ function hgCfAdvancedPatterns(rows, atrLast) {
   return out;
 }
 
+/* A setup is a candle pattern plus a structure read on the same side.
+   Structure never sets the stop. The candle pattern still does. */
+function hgCfStructure(rows, atrLast) {
+  var n = rows.length;
+  var empty = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [] };
+  if (!(atrLast > 0) || n < 12) return empty;
+  var hi = [], lo = [], i;
+  for (i = 0; i < n; i++) { hi.push(+rows[i].h); lo.push(+rows[i].l); }
+  var ph = [], pl = [];
+  var from = Math.max(2, n - 24);
+  for (i = from; i <= n - 3; i++) {
+    if (hi[i] >= hi[i - 1] && hi[i] >= hi[i - 2] && hi[i] > hi[i + 1] && hi[i] > hi[i + 2]) ph.push(hi[i]);
+    if (lo[i] <= lo[i - 1] && lo[i] <= lo[i - 2] && lo[i] < lo[i + 1] && lo[i] < lo[i + 2]) pl.push(lo[i]);
+  }
+  var c = +rows[n - 1].c;
+  var bulls = [], bears = [];
+  if (ph.length >= 2) {
+    var h1 = ph[ph.length - 1], h0 = ph[ph.length - 2];
+    if (c > h1 && h1 < h0 - atrLast * 0.1) bulls.push('change of character');
+    else if (c > h1 && h1 >= h0) bulls.push('break of structure');
+  } else if (ph.length === 1 && c > ph[0]) bulls.push('break of structure');
+  if (pl.length >= 2) {
+    var l1 = pl[pl.length - 1], l0 = pl[pl.length - 2];
+    if (c < l1 && l1 > l0 + atrLast * 0.1) bears.push('change of character');
+    else if (c < l1 && l1 <= l0) bears.push('break of structure');
+  } else if (pl.length === 1 && c < pl[0]) bears.push('break of structure');
+  if (bulls.length && bears.length) { bulls = []; bears = []; }
+
+  var mid = hgCfPack(rows[n - 2]);
+  var gapBull = +rows[n - 1].l - +rows[n - 3].h;
+  var gapBear = +rows[n - 3].l - +rows[n - 1].h;
+  if (gapBull >= atrLast * 0.2 && mid.body >= atrLast * 0.4 && c >= +rows[n - 1].l)
+    bulls.push('bullish fair value gap');
+  if (gapBear >= atrLast * 0.2 && mid.body >= atrLast * 0.4 && c <= +rows[n - 1].h)
+    bears.push('bearish fair value gap');
+
+  var j, ob;
+  for (j = n - 2; j >= Math.max(0, n - 8); j--) {
+    ob = hgCfPack(rows[j]);
+    if (ob.bear && ob.body >= atrLast * 0.35 && c > ob.h) { bulls.push('bullish order block held'); break; }
+    if (ob.bull && ob.body >= atrLast * 0.35 && c < ob.l) { bears.push('bearish order block held'); break; }
+  }
+  if (pl.length >= 2 && Math.abs(pl[pl.length - 1] - pl[pl.length - 2]) <= atrLast * 0.15) {
+    var eq = Math.min(pl[pl.length - 1], pl[pl.length - 2]);
+    if (+rows[n - 1].l < eq && c > eq) bulls.push('equal lows raided');
+  }
+  if (ph.length >= 2 && Math.abs(ph[ph.length - 1] - ph[ph.length - 2]) <= atrLast * 0.15) {
+    var eqh = Math.max(ph[ph.length - 1], ph[ph.length - 2]);
+    if (+rows[n - 1].h > eqh && c < eqh) bears.push('equal highs raided');
+  }
+  if (aAdvance(rows, atrLast)) bears.push('advance block');
+  return {
+    bullVotes: bulls.length ? 1 : 0,
+    bearVotes: bears.length ? 1 : 0,
+    bullNames: bulls,
+    bearNames: bears
+  };
+}
+
+function aAdvance(rows, atrLast) {
+  var n = rows.length;
+  var a = hgCfPack(rows[n - 3]), b = hgCfPack(rows[n - 2]), c = hgCfPack(rows[n - 1]);
+  if (!(a.bull && b.bull && c.bull)) return false;
+  if (!(a.body > b.body && b.body > c.body && c.body >= atrLast * 0.15)) return false;
+  if (!(c.upper > b.upper && b.upper > a.upper)) return false;
+  if (!(c.c > b.c && b.c > a.c)) return false;
+  var swingHi = -Infinity, k;
+  for (k = Math.max(0, n - 9); k <= n - 2; k++) swingHi = Math.max(swingHi, +rows[k].h);
+  return c.h >= swingHi - atrLast * 0.08;
+}
+
 function goldCandleForecast(rows) {
   try {
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
@@ -18917,12 +18990,16 @@ function goldCandleForecast(rows) {
     else reasons.push('drift t ' + driftT.toFixed(2) + ' is inside the noise band — no vote');
 
     var pat = hgCfCandlePatterns(rows, atrLast);
+    var struct = hgCfStructure(rows, atrLast);
     var pi;
-    bulls += pat.bullVotes;
-    bears += pat.bearVotes;
-    checked += pat.bullVotes + pat.bearVotes;
+    bulls += pat.bullVotes + struct.bullVotes;
+    bears += pat.bearVotes + struct.bearVotes;
+    checked += pat.bullVotes + pat.bearVotes + struct.bullVotes + struct.bearVotes;
     if (pat.names.length) reasons.push('patterns: ' + pat.names.join(', '));
     else reasons.push('no candlestick pattern');
+    var structNames = struct.bullNames.concat(struct.bearNames);
+    if (structNames.length) reasons.push('structure: ' + structNames.join(', '));
+    else reasons.push('no structure');
     for (pi = 0; pi < pat.notes.length; pi++) reasons.push(pat.notes[pi]);
     /* hg-v1311: the advanced pattern layer. DISCLOSED ONLY — it is deliberately
        NOT added to bulls/bears/checked and never touches rawStop below, because
@@ -19040,6 +19117,14 @@ function goldCandleForecast(rows) {
       tp1 = +(c + sign * risk).toFixed(2);
       tp2 = +(c + sign * risk * 2).toFixed(2);
     }
+    var setup = null, setupParts = '';
+    if (!neutral && dir === 'BULL' && pat.bullVotes > 0 && struct.bullVotes > 0) {
+      setup = 'LONG SETUP';
+      setupParts = pat.bullNames.concat(struct.bullNames).join(', ');
+    } else if (!neutral && dir === 'BEAR' && pat.bearVotes > 0 && struct.bearVotes > 0) {
+      setup = 'SHORT SETUP';
+      setupParts = pat.bearNames.concat(struct.bearNames).join(', ');
+    }
     return {
       dir: dir,
       lean: dir,
@@ -19055,6 +19140,9 @@ function goldCandleForecast(rows) {
       patternWhere: adv.where,
       patternWherePos: (typeof adv.wherePos === 'number' ? adv.wherePos : null),
       patternDrift: adv.aligned,
+      structure: structNames,
+      setup: setup,
+      setupParts: setupParts,
       stopSource: stopSource,
       expectedHigh: +(c + expectedRange).toFixed(2),
       expectedLow: +(c - expectedRange).toFixed(2),
@@ -19070,7 +19158,8 @@ function goldCandleForecast(rows) {
       tp2: tp2,
       note: neutral
         ? 'No side earned a majority, so nothing is called and no stop is issued.'
-        : ((against ? (agrees + ' for the call, ' + against + ' against. ') : '')
+        : ((setup ? (setup + ': ' + setupParts + '. ') : 'No setup formed — the call is the vote only. ')
+          + (against ? (agrees + ' for the call, ' + against + ' against. ') : '')
           + (stopSource === 'pattern'
             ? 'Stop is the pattern high or low. TP1 is one times that risk. TP2 is two.'
             : 'No pattern stop in range, so the stop is one ATR. TP1 is one ATR. TP2 is two.'))

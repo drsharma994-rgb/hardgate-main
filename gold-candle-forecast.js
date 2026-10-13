@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. The scan reads the shape and where it sits. A hammer after a decline is not a hanging man at a high. It also reads sweeps, outside bars, railroad tracks, belt holds, kickers, meeting lines and rising or falling three methods, along with engulfing, stars, soldiers and harami. The side with more votes is the call. A pattern high or low is the stop when it sits between 0.25 and 2.5 ATR from the close.
+            No forecast yet. A setup prints only when a candlestick pattern and a structure read agree. Structure is a break of structure, a change of character, a fair-value gap, an order block that holds, or equal highs or lows raided. The stop is still the pattern extreme when that sits between 0.25 and 2.5 ATR, otherwise one ATR.
           </div>
         </div>
       `;
@@ -158,14 +158,16 @@ on every page load since v14-2:
     var lean = forecast.lean || (forecast.dir ? forecast.dir : 'unread');
     var called = lean === 'BULL' || lean === 'BEAR';
     var dirClass = lean === 'BULL' ? 'long' : (lean === 'BEAR' ? 'short' : '');
-    var dirLabel = lean === 'BULL' ? 'LONG' : (lean === 'BEAR' ? 'SHORT' : 'NEUTRAL');
+    var dirLabel = forecast.setup ? forecast.setup : (lean === 'BULL' ? 'LONG' : (lean === 'BEAR' ? 'SHORT' : 'NEUTRAL'));
     var reasons = (forecast.reasons || []).map(function(r) {
       return '<li>' + String(r).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
     }).join('');
     var patLine = (forecast.patterns && forecast.patterns.length)
       ? forecast.patterns.join(', ')
       : 'none';
-    var levels = '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
+    var setupLine = forecast.setup ? (forecast.setup + ' — ' + (forecast.setupParts || '')) : 'not formed';
+    var levels = '<li><b>Setup:</b> ' + setupLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
+      + '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
       + (called
         ? '<li><b>Stop:</b> <span class="neg" style="font-weight:700;">' + this.fmt(forecast.sl) + '</span> <span class="note">(' + (forecast.stopSource === 'pattern' ? 'pattern extreme' : 'one ATR') + ')</span></li>'
           + '<li><b>TP1:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp1) + '</span></li>'

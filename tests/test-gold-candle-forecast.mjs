@@ -66,7 +66,7 @@ console.log('== candle forecast leans only when reads agree ==');
   ok(bull.sl < bull.close && bull.tp1 > bull.close && bull.tp2 > bull.tp1,
     'long stop is below the close and both targets are above it, in order');
   ok(Math.abs(bull.tp2 - (bull.close + bull.atr * 2)) < 0.02, 'TP2 is two ATR with the long');
-  ok(bull.confidence == null, 'no fake confidence percent');
+  ok(bull.setup == null, 'a staircase with no candle pattern does not form a setup');
 
   const quiet = forecast(chop(40));
   ok(quiet && (quiet.dir === 'BEAR' || quiet.dir === 'NEUTRAL'),
@@ -131,6 +131,23 @@ console.log('== candle forecast leans only when reads agree ==');
   const sw = forecast(sweep);
   ok(sw && sw.patterns.indexOf('low sweep reclaimed') >= 0,
     'a wick through the prior lows that closes back is a sweep (' + (sw && sw.patterns || []).join(', ') + ')');
+
+  const rev = [];
+  let rp = 2000;
+  for (let i = 0; i < 12; i++) {
+    rp += 1.5;
+    rev.push({ t: i, o: rp - 1, h: rp + 0.4, l: rp - 1.4, c: rp, v: 10 });
+  }
+  const peak = rp + 0.4;
+  for (let i = 12; i < 28; i++) {
+    rp -= 1.2;
+    rev.push({ t: i, o: rp + 1, h: rp + 1.3, l: rp - 0.3, c: rp, v: 10 });
+  }
+  rev.push({ t: 28, o: rp + 0.2, h: rp + 0.5, l: rp - 1.6, c: rp - 1.3, v: 10 });
+  rev.push({ t: 29, o: rp - 1.5, h: peak + 2, l: rp - 1.8, c: peak + 1.4, v: 10 });
+  const formed = forecast(rev);
+  ok(formed && formed.setup === 'LONG SETUP',
+    'a reversal candle through the prior high is a long setup (' + (formed && formed.setup) + ' | ' + (formed && formed.setupParts) + ' | ' + (formed && formed.reasons || []).join(' | ') + ')');
 }
 
 console.log('== the tab does not invent a trade ==');
