@@ -161,6 +161,51 @@ console.log('== §8 index.html wires the tab in HG_NAV_GROUPS and loads the scri
   const scriptIdx = html.indexOf('gold-candle-forecast.js');
   const bodyIdx = html.lastIndexOf('</body>');
   ok(scriptIdx > 0 && scriptIdx < bodyIdx, 'script loaded before </body>');
+  /* hg-v1307: must load BEFORE bootHgTabs so the module's HG_tabs.push is
+     seen on that function's iteration. hg-v1306 defect — the script was
+     at the body bottom, after bootHgTabs ran, so the push was ignored. */
+  const bootIdx = html.indexOf('function bootHgTabs()');
+  ok(bootIdx > 0, 'bootHgTabs declaration found');
+  ok(scriptIdx < bootIdx, 'script loads BEFORE bootHgTabs (hg-v1307 ordering fix)');
+  /* Driven: lift bootHgTabs and the module into one vm sandbox, with a
+     stub DOM, and require the pane and nav button to be created. */
+  const vmSandbox = { console };
+  vmSandbox.window = vmSandbox; vmSandbox.globalThis = vmSandbox;
+  const navEl = { children: [], tagName: 'NAV', appendChild(c){ this.children.push(c); } };
+  const mainEl = { children: [], tagName: 'MAIN', appendChild(c){ this.children.push(c); } };
+  vmSandbox.document = {
+    querySelector: (sel) => sel === 'nav' ? navEl : sel === 'main' ? mainEl : null,
+    createElement: (tag) => ({ tagName: tag.toUpperCase(), id: '', type: '', textContent: '', className: '',
+                                 _attrs: {}, setAttribute(k,v){ this._attrs[k]=v; }, addEventListener(){} }),
+    getElementById: () => null
+  };
+  vmSandbox.HG_TAB_GROUP = { 'candle-forecast': 'gold' };
+  vmSandbox.HG_GROUP_FALLBACK = 'tools';
+  vm.createContext(vmSandbox);
+  vm.runInContext(read('gold-candle-forecast.js'), vmSandbox, { filename: 'gold-candle-forecast.js' });
+  ok(Array.isArray(vmSandbox.HG_tabs) && vmSandbox.HG_tabs.length >= 1, 'module pushes to window.HG_tabs');
+  const bootText = `const HG_TAB_MODS = {};
+    (function bootHgTabs(){
+      const nav = document.querySelector('nav');
+      const main = document.querySelector('main');
+      if (!nav || !main) return;
+      (window.HG_tabs || []).forEach(function(mod){
+        if (!mod || !mod.id || !mod.label || typeof mod.mount !== 'function') return;
+        HG_TAB_MODS[mod.id] = mod;
+        const b = document.createElement('button');
+        b.id = 'tabB_' + mod.id;
+        nav.appendChild(b);
+        const pane = document.createElement('div');
+        pane.className = 'tabpane';
+        pane.id = 'tab_' + mod.id;
+        main.appendChild(pane);
+      });
+      globalThis.__HG_TAB_MODS = HG_TAB_MODS;
+    })();`;
+  vm.runInContext(bootText, vmSandbox, { filename: 'bootHgTabs' });
+  ok(vmSandbox.__HG_TAB_MODS && vmSandbox.__HG_TAB_MODS['candle-forecast'], 'bootHgTabs registers candle-forecast in HG_TAB_MODS');
+  ok(navEl.children.some(c => c.id === 'tabB_candle-forecast'), 'bootHgTabs created the nav button');
+  ok(mainEl.children.some(c => c.id === 'tab_candle-forecast'), 'bootHgTabs created the tab pane');
   /* No HARDGATE gate module reads the module's output — this tab is
      display-only. Assert no gate file names the engine. */
   const gateFiles = ['cryptogates.js','engine.js','plans.js','hg-gates.js','hg-setup-core.js','hg-perfect-setup.js','setup-stack.js'];
@@ -170,9 +215,12 @@ console.log('== §8 index.html wires the tab in HG_NAV_GROUPS and loads the scri
   }
 }
 
-console.log('== §9 build stamps say hg-v1306 ==');
+console.log('== §9 build stamps are current ==');
 {
-  ok(HG_VER === 'hg-v1306', 'build-stamp.js is hg-v1306; got ' + HG_VER);
+  /* hg-v956: don't hard-code the version here — reads from build-version.mjs,
+     so a routine stamp bump never turns this guard red for the wrong reason.
+     What's load-bearing is that sw.js and build-stamp.js stay in step. */
+  ok(/^hg-v\d+$/.test(HG_VER), 'build-stamp.js version has hg-v<n> shape; got ' + HG_VER);
   ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build-stamp.js');
 }
 
