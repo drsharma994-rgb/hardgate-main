@@ -144,32 +144,6 @@
   root.HG_GaneshGoldEngine = GaneshGoldEngine;
   root.hgGaneshAuditHtml = hgGaneshAuditHtml;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
-function tmCrownedCardHTML(s){return "test";}
-function tmCrownedCardHTML(s) {
-  if (!s || !s.sym) return '';
-  var dir = (s.bias === 'LONG' || s.bias === 'long') ? 'long' : 'short';
-  var color = dir === 'long' ? '#15803d' : '#dc2626';
-
-  return '<div class="card ' + dir + '" style="border-left: 4px solid ' + color + '; background: #ffffff; padding: 16px; border-radius: 8px; font-family: \"JetBrains Mono\", monospace; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">' +
-    '<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">' +
-      '<b style="font-size: 17px; letter-spacing: .04em;">' + s.sym + '</b>' +
-      '<span class="dir" style="font-size: 10px; font-weight: 700; letter-spacing: .14em; color: ' + color + ';">' + dir.toUpperCase() + '</span>' +
-    '</div>' +
-    '<div class="plan" style="margin-top: 8px; font-size: 12px; line-height: 1.6; color: #172033;">' +
-      '<b style="color: #0f5cc0;">Market Thesis:</b> ' + (s.thesis || 'N/A') + '<br>' +
-      '<div style="margin-top: 8px; border-top: 1px solid #edf1f6; padding-top: 4px;">' +
-        '<b style="color: #dc2626;">Invalidation (SL):</b> ' + (s.invalidation || 'N/A') + '<br>' +
-        '<b style="color: #15803d;">Targets:</b><br>' +
-        (s.targets ? s.targets.map(function(t){ return "&nbsp;&nbsp;• " + t; }).join('<br>') : '') + '<br>' +
-        '<div style="margin-top: 8px; font-weight: 700; color: #dc2626;">R:R: ' + (s.rr || 'N/A') + '</div>' +
-      '</div>' +
-    '</div>' +
-  '</div>';
-}
-
-if (typeof window !== "undefined") {
-  window.tmCrownedCardHTML = tmCrownedCardHTML;
-}' >> hardgate-main/ganesh-gold.js
 function tmCrownedCardHTML(s) {
   if (!s || !s.sym) return '';
   var dir = (s.bias === 'LONG' || s.bias === 'long') ? 'long' : 'short';

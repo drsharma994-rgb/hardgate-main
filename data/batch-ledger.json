@@ -55,6 +55,11 @@
       "version": "hg-v1307",
       "built": "2026-10-13T03:22:00Z",
       "note": "upstream: a split candle tape still calls a side with stop and targets; candle forecast leans only when two reads agree. Also carries this branch: SETUP CONFIRM reads historical candles (cfCandleContext, three-state, readout only) and three CSP-blocked news hosts permitted"
+    },
+    {
+      "version": "hg-v1308",
+      "built": "2026-10-13T04:22:00Z",
+      "note": "PARSE REPAIRS on two modules index.html actually loads, both corrupted by earlier commits. gold-scalp.js (HG_GoldScalpEngine) had NEVER parsed: commit 94350044 collapsed a block onto one line, dropped a closing brace, and left a setup.direction test against \"long\" on a BEAR setup plus a reference to an out-of-scope adr. gold-core-engine.js instantiates that engine for the gold judas read, so that read has silently failed inside its try/catch since that commit - a try/catch no test covered. Restored from the last revision that parses (dd7a40ad), keeping the one legitimate intent: the ATR stop factor 0.40 to 0.50. ganesh-gold.js carried a stray shell artifact, an orphaned duplicate function body that did not parse, a dead stub returning \"test\", and was missing its IIFE closer. Both repaired; all 229 standalone top-level modules now parse."
     }
   ]
 }
