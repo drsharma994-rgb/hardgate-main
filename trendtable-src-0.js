@@ -314,7 +314,26 @@ function trendmxSetupGrade(r, dir){
   }
   var value = tmValueState(r, dir);
   for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+  /* hg-v1331: AN UNREAD INPUT ABSTAINS — IT DOES NOT REFUSE.
+     This line graded SKIP on `reasons.length` alone, and tmValueState pushes
+     a reason for every input it could not read: 'hurst unread', 'anchored
+     VWAP unread', '1h cloud unread', 'pullback volume unread'. On any tape
+     where those readers return nothing — the normal case — EVERY row carried
+     at least one unread reason, so every row graded SKIP and the desk minted
+     NOTHING AT ALL. That is the three-state rule broken: a series nobody could
+     read is not evidence against a setup, it is the absence of evidence.
+     The unread reasons are still reported so a reader can see exactly what
+     could not be read; only a REAL refusal blocks TRADE. Every genuine gate
+     (extended from the EMA, ADX exhaustion or chop, RSI against, OBV
+     divergence, funding, BTC structure, below/inside the 1h cloud, no pullback
+     into the 1h EMA21, distribution volume) still refuses exactly as before. */
+  var blocking = [];
+  for (var ri = 0; ri < reasons.length; ri++){
+    if (/unread/i.test(reasons[ri])) continue;
+    blocking.push(reasons[ri]);
+  }
+  return { grade: blocking.length ? 'SKIP' : 'TRADE', reasons: reasons, blocking: blocking,
+           unread: reasons.length - blocking.length, volConf: volConf, value: value };
 }
 function tmValueState(row, dir){
   var out = { reasons: [], distAtr: null, adx4: null, touched: null };
@@ -409,8 +428,8 @@ function tmValueState(row, dir){
       var rsiSeries = rsi(closes, 14);
       var rsiNow = rsiSeries && rsiSeries.length ? rsiSeries[rsiSeries.length - 1] : NaN;
       if (isFinite(rsiNow)){
-        if (dir === 'long' && rsiNow > 52) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is above the bull floor');
-        if (dir === 'short' && rsiNow < 50) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is below the bear ceiling');
+        if (dir === 'long' && rsiNow < TM_MOM_BULL_FLOOR) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is under the bull floor');
+        if (dir === 'short' && rsiNow > TM_MOM_BEAR_CEIL) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is over the bear ceiling');
       }
     } catch (eRsi) {}
   }
@@ -3799,19 +3818,21 @@ function trendmxEmaTag(rows4h, dir){
   return { state: 'waiting', ema: name };
 }
 function tmRsiDivergence(rows, dir) {
-  if (!rows || rows.length < 30) return false;
-  const rsi = rsi(rows, 14);
-  if (!rsi) return false;
-  const n = rows.length;
-  for (let i = n - 20; i < n - 1; i++) {
-    if (!isFinite(rows[i].c) || !isFinite(rsi[i])) continue;
-    const prevIdx = i - 5;
+  /* Do not name this series rsi. That shadows the indicator, the call throws
+     before the binding exists, and trendScore's catch then zeros the row. */
+  if (!rows || rows.length < 30 || typeof rsi !== 'function') return false;
+  var rsiSeries = rsi(rows.map(function (bar) { return bar ? bar.c : NaN; }), 14);
+  if (!rsiSeries) return false;
+  var n = rows.length;
+  for (var i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(rsiSeries[i])) continue;
+    var prevIdx = i - 5;
     if (prevIdx < 5) continue;
 
     if (dir === 'long') {
-      if (rows[i].l < rows[prevIdx].l && rsi[i] > rsi[prevIdx]) return true;
+      if (rows[i].l < rows[prevIdx].l && rsiSeries[i] > rsiSeries[prevIdx]) return true;
     } else if (dir === 'short') {
-      if (rows[i].h > rows[prevIdx].h && rsi[i] < rsi[prevIdx]) return true;
+      if (rows[i].h > rows[prevIdx].h && rsiSeries[i] < rsiSeries[prevIdx]) return true;
     }
   }
   return false;

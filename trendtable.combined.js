@@ -245,6 +245,18 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
+function tmRsiDivChipHtml(r){
+  if (!r || !r.rsiDivLong && !r.rsiDivShort) return '';
+  var dir = r.rsiDivLong ? 'long' : 'short';
+  return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'RSI DIV' : 'RSI DIV') + '</span>';
+}
+
+function tmVolDivChipHtml(r){
+  if (!r || !r.volDivLong && !r.volDivShort) return '';
+  var dir = r.volDivLong ? 'long' : 'short';
+  return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'VOL DIV' : 'VOL DIV') + '</span>';
+}
+
 function tmBarOpenSec(row){
   var t = row && row.t;
   if (!isFinite(+t)) return NaN;
@@ -302,7 +314,26 @@ function trendmxSetupGrade(r, dir){
   }
   var value = tmValueState(r, dir);
   for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+  /* hg-v1331: AN UNREAD INPUT ABSTAINS — IT DOES NOT REFUSE.
+     This line graded SKIP on `reasons.length` alone, and tmValueState pushes
+     a reason for every input it could not read: 'hurst unread', 'anchored
+     VWAP unread', '1h cloud unread', 'pullback volume unread'. On any tape
+     where those readers return nothing — the normal case — EVERY row carried
+     at least one unread reason, so every row graded SKIP and the desk minted
+     NOTHING AT ALL. That is the three-state rule broken: a series nobody could
+     read is not evidence against a setup, it is the absence of evidence.
+     The unread reasons are still reported so a reader can see exactly what
+     could not be read; only a REAL refusal blocks TRADE. Every genuine gate
+     (extended from the EMA, ADX exhaustion or chop, RSI against, OBV
+     divergence, funding, BTC structure, below/inside the 1h cloud, no pullback
+     into the 1h EMA21, distribution volume) still refuses exactly as before. */
+  var blocking = [];
+  for (var ri = 0; ri < reasons.length; ri++){
+    if (/unread/i.test(reasons[ri])) continue;
+    blocking.push(reasons[ri]);
+  }
+  return { grade: blocking.length ? 'SKIP' : 'TRADE', reasons: reasons, blocking: blocking,
+           unread: reasons.length - blocking.length, volConf: volConf, value: value };
 }
 function tmValueState(row, dir){
   var out = { reasons: [], distAtr: null, adx4: null, touched: null };
@@ -397,8 +428,8 @@ function tmValueState(row, dir){
       var rsiSeries = rsi(closes, 14);
       var rsiNow = rsiSeries && rsiSeries.length ? rsiSeries[rsiSeries.length - 1] : NaN;
       if (isFinite(rsiNow)){
-        if (dir === 'long' && rsiNow > 52) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is above the bull floor');
-        if (dir === 'short' && rsiNow < 50) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is below the bear ceiling');
+        if (dir === 'long' && rsiNow < TM_MOM_BULL_FLOOR) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is under the bull floor');
+        if (dir === 'short' && rsiNow > TM_MOM_BEAR_CEIL) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is over the bear ceiling');
       }
     } catch (eRsi) {}
   }
@@ -3786,6 +3817,45 @@ function trendmxEmaTag(rows4h, dir){
   }
   return { state: 'waiting', ema: name };
 }
+function tmRsiDivergence(rows, dir) {
+  /* Do not name this series rsi. That shadows the indicator, the call throws
+     before the binding exists, and trendScore's catch then zeros the row. */
+  if (!rows || rows.length < 30 || typeof rsi !== 'function') return false;
+  var rsiSeries = rsi(rows.map(function (bar) { return bar ? bar.c : NaN; }), 14);
+  if (!rsiSeries) return false;
+  var n = rows.length;
+  for (var i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(rsiSeries[i])) continue;
+    var prevIdx = i - 5;
+    if (prevIdx < 5) continue;
+
+    if (dir === 'long') {
+      if (rows[i].l < rows[prevIdx].l && rsiSeries[i] > rsiSeries[prevIdx]) return true;
+    } else if (dir === 'short') {
+      if (rows[i].h > rows[prevIdx].h && rsiSeries[i] < rsiSeries[prevIdx]) return true;
+    }
+  }
+  return false;
+}
+
+function tmVolDivergence(rows, dir) {
+  if (!rows || rows.length < 30) return false;
+  const v = rows.map(r => r.v || r.volume);
+  const n = rows.length;
+  for (let i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(v[i])) continue;
+    const prevIdx = i - 5;
+    if (prevIdx < 5) continue;
+
+    if (dir === 'long') {
+      if (rows[i].l < rows[prevIdx].l && v[i] > v[prevIdx]) return true;
+    } else if (dir === 'short') {
+      if (rows[i].h > rows[prevIdx].h && v[i] < v[prevIdx]) return true;
+    }
+  }
+  return false;
+}
+
 function trendScore(rows1d, rows4h){
   var out = zeroResult();
   try{
@@ -3837,6 +3907,14 @@ function trendScore(rows1d, rows4h){
     if (ok1){
       var a = adx(rows1d, 14);
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
+
+      // Divergence Evidence (hg-v1021: RSI & Volume divergence on the 1D tape)
+      if (tmRsiDivergence(rows1d, 'long')) out.comps.rsiDivLong = 1;
+      else if (tmRsiDivergence(rows1d, 'short')) out.comps.rsiDivShort = 1;
+
+      if (tmVolDivergence(rows1d, 'long')) out.comps.volDivLong = 1;
+      else if (tmVolDivergence(rows1d, 'short')) out.comps.volDivShort = 1;
+
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
          byte-identical, so every recorded tmScore stays on its own scale
@@ -4634,22 +4712,25 @@ function trendmxConviction(row){
 /** Rows with fresh ⚡GOLDEN (EMA50/200 cross ≤10d) + bull cross + long plan + conviction. Pure. */
 function trendmxGoldenCrossSetups(rows){
   var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0,
+                noRow: 0, noCross: 0, noComps: 0, noPrice: 0, dir: 0, conv: 0, plan: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
-    if (!r || r.freshCross !== 'GOLDEN') continue;
-    if (!r.comps || r.comps.d1Cross <= 0) continue;
+    if (!r){ out.held.noRow++; continue; }
+    if (r.freshCross !== 'GOLDEN'){ out.held.noCross++; continue; }
+    if (!r.comps){ out.held.noComps++; continue; }
+    if (r.comps.d1Cross <= 0){ out.held.noComps++; continue; }
     /* hg-v1150: an unpriceable row is not a setup. hgBestLevels can price a
        plan straight off the tape, which is right for a THIN row — but a row
        whose own published price is unreadable is corrupt, and a corrupt row
        must not mint a ticket the board would show beside a price it cannot
        print. */
-    if (!isFinite(+r.price)) continue;
+    if (!isFinite(+r.price)){ out.held.noPrice++; continue; }
     var dir = tmDirOf(r);
-    if (dir !== 'long') continue;
+    if (dir !== 'long'){ out.held.dir++; continue; }
     var conv = trendmxConviction(r);
-    if (!conv) continue;
+    if (!conv){ out.held.conv++; continue; }
     if (tmCascadeDir(r.rows4h) !== 1){ out.held.cascade++; continue; }
     /* hg-v1150: THE ROW-CARRIED VETO IS RESPECTED. The closed-gate recompute
        below re-derives the 7-gate matrix off the tape, but it can never
@@ -4666,7 +4747,7 @@ function trendmxGoldenCrossSetups(rows){
     var tag = trendmxEmaTag(r.rows4h, dir);
     if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
     var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
     out.push({
       sym: r.sym, dir: 'long', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
@@ -4692,7 +4773,8 @@ function trendmxGoldenCrossSetups(rows){
    surface on the tab. Pure. */
 function trendmxDeathCrossSetups(rows){
   var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0,
+                noRow: 0, noCross: 0, noComps: 0, noPrice: 0, dir: 0, conv: 0, plan: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -4715,7 +4797,7 @@ function trendmxDeathCrossSetups(rows){
     var tag = trendmxEmaTag(r.rows4h, dir);
     if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
     var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
     out.push({
       sym: r.sym, dir: 'short', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
@@ -4732,6 +4814,112 @@ function trendmxDeathCrossSetups(rows){
 }
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
+
+/* hg-v1337: TREND MATRIX reads the shared candlestick engine. It does not
+   copy the pattern math and it does not let the advanced layer vote inside
+   the gold engine. A setup exists only when that read names one side and
+   the row's own trend side is the same side. Prices come from trendmxPlan.
+   The pattern stop is not copied. Unread is not agreement. */
+function tmCandlePick(name){
+  if (typeof W !== 'undefined' && W && typeof W[name] === 'function') return W[name];
+  return null;
+}
+function trendmxCandleRead(rows){
+  var unread = function(why){ return { state: 'unread', side: null, names: [], why: why, source: null }; };
+  var none = function(why){ return { state: 'none', side: null, names: [], why: why, source: null }; };
+  var clash = function(why, names){ return { state: 'clash', side: null, names: names || [], why: why, source: null }; };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) return unread('4h tape is too short to read a candle pattern');
+    var patterns = tmCandlePick('hgCfCandlePatterns');
+    var atrFn = tmCandlePick('atr');
+    if (!patterns || !atrFn) return unread('candle engine unread');
+    var series = atrFn(rows, 14);
+    var atrLast = (series && series.length) ? series[series.length - 1] : NaN;
+    if (!(atrLast > 0)) return unread('ATR is not readable');
+    var pat = patterns(rows, atrLast);
+    if (!pat) return unread('candle pattern read returned nothing');
+    var bull = +pat.bullVotes || 0;
+    var bear = +pat.bearVotes || 0;
+    function namesOf(sideNames){
+      var list = Array.isArray(sideNames) ? sideNames.filter(Boolean) : [];
+      if (!list.length && Array.isArray(pat.names)) list = pat.names.filter(Boolean);
+      return list.slice();
+    }
+    if (bull > 0 && bear > 0) return clash('3-bar voter is on both sides', namesOf(pat.bullNames).concat(namesOf(pat.bearNames)));
+    if (bull > 0 && bear === 0){
+      var bullNames = namesOf(pat.bullNames);
+      if (!bullNames.length) return none('3-bar voter had no name');
+      return { state: 'named', side: 'long', names: bullNames, why: '3-bar voter is long', source: 'voter' };
+    }
+    if (bear > 0 && bull === 0){
+      var bearNames = namesOf(pat.bearNames);
+      if (!bearNames.length) return none('3-bar voter had no name');
+      return { state: 'named', side: 'short', names: bearNames, why: '3-bar voter is short', source: 'voter' };
+    }
+    var advanced = tmCandlePick('hgCfAdvancedPatterns');
+    var located = tmCandlePick('hgCfLocatedSide');
+    if (!advanced || !located) return none('no 3-bar vote, and the advanced reader is unread');
+    var loc = located(advanced(rows, atrLast));
+    if (!loc) return none('no named candle shape');
+    var locBull = Array.isArray(loc.bull) ? loc.bull.filter(Boolean) : [];
+    var locBear = Array.isArray(loc.bear) ? loc.bear.filter(Boolean) : [];
+    if (loc.clash || (locBull.length && locBear.length)) return clash('advanced leans clash', locBull.concat(locBear));
+    if (locBull.length) return { state: 'named', side: 'long', names: locBull.slice(), why: 'location-confirmed advanced lean is long', source: 'advanced' };
+    if (locBear.length) return { state: 'named', side: 'short', names: locBear.slice(), why: 'location-confirmed advanced lean is short', source: 'advanced' };
+    return none('no named candle shape');
+  } catch (e) {
+    return unread('candle engine unread');
+  }
+}
+function trendmxCandleSetups(rows){
+  var out = [];
+  out.held = { unread: 0, none: 0, clash: 0, against: 0, noDir: 0, plan: 0, noRow: 0, noTape: 0 };
+  out.why = null;
+  if (!Array.isArray(rows)){
+    out.why = 'The shared candlestick engine is not loaded. Unread is not agreement. Nothing was formed.';
+    return out;
+  }
+  if (!tmCandlePick('hgCfCandlePatterns') || !tmCandlePick('atr')){
+    out.why = 'The shared candlestick engine is not loaded. Unread is not agreement. Nothing was formed.';
+    out.held.unread = rows.length;
+    return out;
+  }
+  var cands = [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r){ out.held.noRow++; continue; }
+    if (!Array.isArray(r.rows4h) || r.rows4h.length < 2){ out.held.noTape++; continue; }
+    var tape = tmClosedRows(r.rows4h, 14400);
+    var read = trendmxCandleRead(tape);
+    if (!read || read.state === 'unread'){ out.held.unread++; continue; }
+    if (read.state === 'clash'){ out.held.clash++; continue; }
+    if (read.state !== 'named' || (read.side !== 'long' && read.side !== 'short') || !read.names || !read.names.length){
+      out.held.none++; continue;
+    }
+    var dir = tmDirOf(r);
+    if (dir !== 'long' && dir !== 'short'){ out.held.noDir++; continue; }
+    if (dir !== read.side){ out.held.against++; continue; }
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir, rows4h: tape }));
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
+    cands.push({
+      sym: r.sym, dir: dir,
+      entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+      rr1: plan.rr1, rr2: plan.rr2, note: plan.note, score: r.score,
+      names: read.names.slice(), source: read.source,
+      candleNote: (read.source === 'advanced' ? 'Advanced lean' : '3-bar shape')
+        + ' ' + read.names.join(', ')
+        + ' agrees with the trend ' + dir
+        + '. Prices are the trend plan. The pattern stop was not copied.'
+    });
+  }
+  cands.sort(function(a, b){
+    var sa = isFinite(+a.score) ? Math.abs(+a.score) : -1;
+    var sb = isFinite(+b.score) ? Math.abs(+b.score) : -1;
+    return sb - sa;
+  });
+  for (var j = 0; j < cands.length; j++) out.push(cands[j]);
+  return out;
+}
 
 /* ---------------- SMC context (record-only) ----------------
    hgSmcEnrich attaches .smc (structure bias, OB/FVG confluence, a grade) and
@@ -4805,7 +4993,7 @@ function tmSmcScanPass(rows, golden, death){
       r = cands[i];
       var dir = tmDirOf(r);
       var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!tmValidSetup(plan)) continue;
+      if (!tmValidSetup(plan)){ out.held.plan++; continue; }
       var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
       tmSmcMark(syn, r.rows4h);
       if (syn.smc) r.smc = syn.smc;
@@ -6836,6 +7024,54 @@ function trendmxDeathDeskHTML(death){
     + '</div>';
 }
 
+function trendmxCandleCardHTML(g){
+  if (!g || !fin(+g.entry) || !fin(+g.stop) || !fin(+g.t1)) return '';
+  var isShort = g.dir === 'short';
+  var col = isShort ? '#b91c1c' : '#047857';
+  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: 'trendmx-candle' })
+    : '';
+  var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(180,83,9,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:#fff">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + '</span>'
+    + '<span class="stamp">CANDLE</span>'
+    + '<span class="stamp ' + (isShort ? 'bad' : 'pass') + '">' + (isShort ? 'SHORT' : 'LONG') + '</span>'
+    + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.candleNote || '') + '</div>'
+    + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
+    + tradeBtn
+    + '</div>';
+}
+
+function trendmxCandleDeskHTML(list){
+  list = list || [];
+  var held = list.held || {};
+  var shown = Math.min(list.length, 6);
+  var cards = '';
+  for (var i = 0; i < shown; i++) cards += trendmxCandleCardHTML(list[i]);
+  var stood = list.length - shown;
+  var why = '';
+  if (!list.length){
+    why = list.why
+      ? '<div class="note">' + escH(list.why) + '</div>'
+      : ('<div class="note">No candle confluence setup. A setup needs the row\'s own trend side and a one-sided named shape from the shared candlestick engine. A clash is not a setup. A pattern against the trend is not a setup. Unread is not agreement. Nothing was invented.'
+        + (held.unread ? ' ' + held.unread + ' tapes unread.' : '')
+        + (held.clash ? ' ' + held.clash + ' clashed.' : '')
+        + (held.against ? ' ' + held.against + ' named a shape against the trend.' : '')
+        + (held.none ? ' ' + held.none + ' had no named shape.' : '')
+        + (held.noDir ? ' ' + held.noDir + ' had no trend side.' : '')
+        + (held.plan ? ' ' + held.plan + ' had no valid trend plan.' : '')
+        + '</div>');
+  }
+  var extra = stood > 0 ? '<div class="note">' + stood + ' more agreed and are stood down. Six are enough on this desk.</div>' : '';
+  return '<div class="panel" data-tm-candles="1" style="margin:12px 0;border-left:4px solid #b45309">'
+    + '<h2>CANDLE CONFLUENCE <span>shared candlestick engine · the trend side must agree · the pattern stop is not the trade stop</span></h2>'
+    + why + extra
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
 function trendmxLimitCardHTML(item){
   if (!item || !item.plan) return '';
   var p = item.plan, r = item.row, dir = item.dir;
@@ -7642,6 +7878,7 @@ function trendmxPaintDeskSections(refs, state){
   if (refs.crypto) refs.crypto.innerHTML = trendmxCryptoDeskHTML(state.crypto || []);
   if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
   if (refs.death) refs.death.innerHTML = trendmxDeathDeskHTML(death);
+  if (refs.candles) refs.candles.innerHTML = trendmxCandleDeskHTML(trendmxCandleSetups(rows));
   var clean = [], near = [], forming = [];
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -8411,6 +8648,7 @@ function hgPaintTrendmxFromSnap(){
       crypto: el.querySelector('[data-r="crypto"]'),
       golden: el.querySelector('[data-r="golden"]'),
       death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
+      candles: el.querySelector('[data-r="candles"]'), /* hg-v1337 */
       cards: el.querySelector('[data-r="cards"]'),
       near: el.querySelector('[data-r="near"]'),
       forming: el.querySelector('[data-r="forming"]'),
@@ -8572,6 +8810,7 @@ function mountTrendMatrix(el){
       '<div data-r="crypto"></div>' +
       '<div data-r="golden"></div>' +
       '<div data-r="death"></div>' +   /* hg-v1015: the bear desk stands on its own, right under the bull desk */
+      '<div data-r="candles"></div>' + /* hg-v1337: candle confluence, shared engine, trend side must agree */
       '<div class="cards" data-r="cards"></div>' +
       '<div data-r="near"></div>' +
       '<div data-r="forming"></div>' +
@@ -8614,6 +8853,7 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
+    candles: el.querySelector('[data-r="candles"]'),   /* hg-v1337 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -8840,6 +9080,34 @@ function mountTrendMatrix(el){
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
             state.death = trendmxDeathCrossSetups(state.rows);
+            /* hg-v1332: THE CROSS DESKS NOW SAY WHY THEY ARE EMPTY.
+               Both desks drop a row at six points, and four of those
+               dropped it SILENTLY — so a board with no golden and no
+               death setup reported nothing at all, which is exactly
+               how it was reported to me. The counters are surfaced
+               here as plain words a reader can act on. */
+            try {
+              var gH = state.golden.held || {}, dH = state.death.held || {};
+              var why = function(h, tag) {
+                var bits = [];
+                if (h.noCross) bits.push(h.noCross + ' without a fresh ' + tag + ' cross');
+                if (h.noComps) bits.push(h.noComps + ' with the daily EMAs not aligned');
+                if (h.noPrice) bits.push(h.noPrice + ' with an unreadable price');
+                if (h.dir) bits.push(h.dir + ' on the wrong side of the cross');
+                if (h.conv) bits.push(h.conv + ' with no conviction');
+                if (h.cascade) bits.push(h.cascade + ' with no 4h cascade');
+                if (h.gates) bits.push(h.gates + ' held by the 7-gate matrix');
+                if (h.grade) bits.push(h.grade + ' refused at the grade');
+                if (h.waiting) bits.push(h.waiting + ' waiting on an EMA tag');
+                if (h.plan) bits.push(h.plan + ' with an invalid plan');
+                return bits.length ? bits.join(' · ') : 'nothing was held';
+              };
+              state.crossWhy = {
+                rows: (state.rows || []).length,
+                golden: why(gH, 'GOLDEN'),
+                death: why(dH, 'DEATH')
+              };
+            } catch (eWhy) { state.crossWhy = null; }
           } catch (eB) {}
           renderAll();
           setProg(info.total ? info.done / info.total : 0);
@@ -8860,6 +9128,22 @@ function mountTrendMatrix(el){
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
       renderAll();
+      /* hg-v1333: THE BOARD NAMES ITS OWN NUMBERS.
+         A tab that paints nothing in ANY of its categories (CLEAN, NEAR,
+         GOLDEN, DEATH, CONVICTION, STRONG) has to say which link broke: did
+         the scan produce no rows at all, did the fetches fail, or did rows
+         arrive and get held? Every one of those is a different bug and the
+         board used to look identical for all three. This line prints the
+         counts, and the cross desks' held reasons, right under the scan. */
+      try {
+        var whyX = state.crossWhy || {};
+        setStatus('Scan done · ' + results.length + ' rows on the board · '
+          + (state.crypto || []).length + ' crypto setup(s) · '
+          + (state.golden || []).length + ' GOLDEN · ' + (state.death || []).length + ' DEATH'
+          + (failed ? (' · ' + failed + ' fetch failure(s)') : '')
+          + (whyX.golden ? (' · golden held: ' + whyX.golden) : '')
+          + (whyX.death ? (' · death held: ' + whyX.death) : ''));
+      } catch (eWhy2) {}
       /* hg-v1039: THE CROWN JOINS THE FORWARD BOOK — the desk has crowned
          CLEAN / PERFECT rows for its whole life and never recorded one, so
          'does the trend-matrix crown pay?' could never be asked. Each 7/7
@@ -8950,6 +9234,7 @@ function mountTrendMatrix(el){
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxClosedGate = trendmxClosedGate;   /* hg-v1335: the alert-desk gate, exported like its siblings */
 W.trendmxSetupGrade = trendmxSetupGrade;
 W.tmValueState = tmValueState;
 W.tmBodyCommit = tmBodyCommit;
@@ -9144,9 +9429,12 @@ W.trendmxLimitDeskHTML = trendmxLimitDeskHTML;
 W.trendmxSummaryLine = trendmxSummaryLine;
 W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
 W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
+W.trendmxCandleRead = trendmxCandleRead;               /* hg-v1337: shared candlestick engine, read only */
+W.trendmxCandleSetups = trendmxCandleSetups;           /* hg-v1337: trend side must agree; prices are trendmxPlan */
 W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
 W.trendmxGoldenDeskHTML = trendmxGoldenDeskHTML;   /* hg-v1015 */
 W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
+W.trendmxCandleDeskHTML = trendmxCandleDeskHTML; /* hg-v1337 */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;

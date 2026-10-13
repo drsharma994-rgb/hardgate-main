@@ -28,8 +28,30 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 /* The function is LIFTED from source (hg-v1022) and handed the three helpers
    it reads, so this guard never boots the 18k-line goldind.js. */
 const src = read('goldind.js');
+/* BRACE-COUNTED lift, added by hg-v1314. The non-greedy regex stops at the first
+   nested `}` once the function is no longer last before the export block, and the
+   sandbox then throws "Unexpected end of input". Comment/string aware, because a
+   doc comment that quotes code derails a naive counter. */
+function liftFn(text, name){
+  const start = text.indexOf('function ' + name + '(');
+  if (start < 0) throw new Error('could not lift ' + name + ' from goldind.js');
+  let depth = 0, i = text.indexOf('{', start);
+  for (; i < text.length; i++){
+    const c = text[i];
+    if (c === '/' && text[i + 1] === '/'){ while (i < text.length && text[i] !== '\n') i++; continue; }
+    if (c === '/' && text[i + 1] === '*'){ i += 2; while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++; i += 2; continue; }
+    if (c === '"' || c === "'" || c === '\`'){ const q = c; i++; while (i < text.length && text[i] !== q){ if (text[i] === '\\') i++; i++; } i++; continue; }
+    if (c === '{') depth++;
+    else if (c === '}'){ depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+  throw new Error('unbalanced braces lifting ' + name);
+}
 const mm = src.match(/function goldCandleForecast\(rows\) \{[\s\S]*?\n\}/);
 ok(!!mm, 'goldCandleForecast body is readable in source (hg-v1022 lift)');
+const helperStart = src.indexOf('function hgCfPack');
+const helperEnd = src.indexOf('function goldCandleForecast');
+ok(helperStart >= 0 && helperEnd > helperStart, 'the candlestick pattern readers sit above the engine');
+const helpers = src.slice(helperStart, helperEnd);
 const sandbox = {
   console, Math, isFinite,
   __last: a => (a && a.length) ? a[a.length - 1] : NaN,
@@ -40,23 +62,38 @@ const sandbox = {
     return out;
   },
   _atr: (rows, n) => {
+    /* A TRUE ATR: the mean of the last n true ranges. The earlier version in
+       this file averaged the RUNNING MEANS (s / n where s was itself a sum of
+       already-averaged values), which on a tape of constant range returns
+       range/n — 2.0 became 0.14 on the flat fixture — and on a rising tape
+       returns the WARM-UP value of the first bar rather than the current one.
+       Both fed the engine a volatility figure the tape does not have. */
     const trs = rows.map((r, i) => {
       if (!i) return r.h - r.l;
       const q = rows[i - 1];
       return Math.max(r.h - r.l, Math.abs(r.h - q.c), Math.abs(r.l - q.c));
     });
     const out = [];
-    let s = 0;
     for (let i = 0; i < trs.length; i++){
-      s += trs[i];
-      if (i >= n) s -= trs[i - n];
-      out.push(i >= n - 1 ? s / n : trs[i]);
+      if (i < n - 1) { out.push(trs[i]); continue; }
+      let s = 0;
+      for (let j = i - n + 1; j <= i; j++) s += trs[j];
+      out.push(s / n);
     }
     return out;
   }
 };
+/* The lifted body calls `atr(...)` and `ema(...)` — those are the names it
+   guards with `typeof atr !== 'function'`. This sandbox used to expose only the
+   UNDERSCORED aliases, so both guards were true on every call and the function
+   returned null before reading a single bar. That made every assertion in this
+   file measure the absent-helper path instead of the forecast: the "dead-flat
+   tape reads NEUTRAL (got null)" failure was this, not the tape. Aliased here so
+   the body sees the helpers it actually asks for. */
+sandbox.atr = sandbox._atr;
+sandbox.ema = sandbox._ema;
 vm.createContext(sandbox);
-vm.runInContext(mm[0] + '\nthis.goldCandleForecast = goldCandleForecast;', sandbox, { filename: 'lifted-goldCandleForecast' });
+vm.runInContext(helpers + '\n' + mm[0] + '\nthis.goldCandleForecast = goldCandleForecast;', sandbox, { filename: 'lifted-goldCandleForecast' });
 const f = sandbox.goldCandleForecast;
 ok(typeof f === 'function', 'the lifted engine runs in the sandbox');
 

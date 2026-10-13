@@ -189,6 +189,7 @@ function trendmxPaintDeskSections(refs, state){
   if (refs.crypto) refs.crypto.innerHTML = trendmxCryptoDeskHTML(state.crypto || []);
   if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
   if (refs.death) refs.death.innerHTML = trendmxDeathDeskHTML(death);
+  if (refs.candles) refs.candles.innerHTML = trendmxCandleDeskHTML(trendmxCandleSetups(rows));
   var clean = [], near = [], forming = [];
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];

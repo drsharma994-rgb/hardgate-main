@@ -327,6 +327,18 @@ const STARVED = await sweep(true);
     'super-gold': { file: 'super-gold.js', mark: /__hgSuperGoldSnap/, why: "other desks' published snapshots" },
     goldspot:     { file: 'goldspot.js',   mark: /[/]api[/]proxy/,    why: 'a proxied spot print' },
     tauric:       { file: 'tauric.js',     mark: /api[/]tauric/,      why: 'the TradingAgents pipeline' },
+    /* hg-v1336 listed CANDLE FORECAST, and it is listed reluctantly. The tab DOES own
+       a candle path — it is the whole point of the tab — but not one this harness can
+       reach: refresh() runs runForecast(), which FETCHES its own 15m and 4h tapes
+       through mod.loadGold, and this sweep stubs no network. Measured both arms: fed
+       bars and starved bars render the SAME 1225 characters, and that text is still the
+       mount placeholder ("Ready" / "No forecast yet"), so no render ever happened —
+       the tab never had bars to lose. The mark below records that the fetch is the
+       path, and the entry is honest about being a harness limitation rather than a
+       claim that the tab ignores candles. If this tab is ever given a tape seam — an
+       injected candle source the sweep can drive, the way the other desks read their
+       feeds — it comes OFF this list, exactly as MILLI GOLD did at hg-v938. */
+    'candle-forecast': { file: 'gold-candle-forecast.js', mark: /loadGold/, why: 'its own fetched 15m/4h tape, which this sweep stubs no network for' },
     /* hg-v936 listed MILLI GOLD here; hg-v938 REMOVED it, and the removal is
        the point. That tab was running its own scan with an empty context, so
        it could not respond to the bars in this sweep. It now reads the cards

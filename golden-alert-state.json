@@ -557,10 +557,10 @@
       "expired": true
     },
     "OGN": {
-      "at": "2026-10-12T19:50:09.477Z",
-      "score": 4,
+      "at": "2026-10-13T19:49:13.251Z",
+      "score": 5,
       "fresh": true,
-      "ago": 3,
+      "ago": 4,
       "crossDay": "2026-10-08",
       "expired": true
     },
@@ -595,9 +595,17 @@
       "ago": 6,
       "crossDay": "2026-10-06",
       "expired": true
+    },
+    "S": {
+      "at": "2026-10-13T19:49:12.386Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 1,
+      "crossDay": "2026-10-11",
+      "expired": true
     }
   },
-  "lastRunAt": "2026-10-13T01:22:19.231Z",
+  "lastRunAt": "2026-10-13T19:49:33.238Z",
   "scanned": 504,
   "cards": 0
 }

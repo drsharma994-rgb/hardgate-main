@@ -10,14 +10,44 @@ let pass = 0;
 const ok = (c, m) => { if (!c) throw new Error('FAIL: ' + m); pass++; console.log('  ok —', m); };
 
 const src = fs.readFileSync(path.join(root, 'goldind.js'), 'utf8');
-const start = src.indexOf('function goldCandleForecast');
-const end = src.indexOf('if (typeof window', start);
-if (start < 0 || end < 0) throw new Error('engine not found');
+/* hg-v1330: LIFT BY NAMED FUNCTION, NOT BY SLICE RANGE.
+   This used to slice from `function hgCfPack` to the first `if (typeof window` after
+   it. That worked only while no `if (typeof window ...)` appeared between the helpers
+   and the engine — and a later pack added one, so the slice began cutting a function
+   in half and the sandbox died with "Unexpected end of input", which reads like the
+   ENGINE is broken rather than the harness.
+   Brace-counting each declaration is immune to what is added between them, and this
+   also lifts by NAME so a rename fails loudly here (hg-v956) instead of silently
+   producing a truncated unit. Comment- and string-aware, because a doc comment that
+   quotes code contains braces that a naive counter counts. */
+function liftFn(text, name) {
+  const start = text.indexOf('function ' + name + '(');
+  if (start < 0) throw new Error('could not lift ' + name + ' from goldind.js (renamed or deleted?)');
+  let depth = 0, i = text.indexOf('{', start);
+  for (; i < text.length; i++) {
+    const c = text[i];
+    if (c === '/' && text[i + 1] === '/') { while (i < text.length && text[i] !== '\n') i++; continue; }
+    if (c === '/' && text[i + 1] === '*') { i += 2; while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++; i += 2; continue; }
+    if (c === '{') { depth++; continue; }
+    if (c === '}') { depth--; if (depth === 0) return text.slice(start, i + 1); continue; }
+    if (c === '"' || c === "'" || c === '`') { const q = c; i++; while (i < text.length && text[i] !== q) { if (text[i] === '\\') i++; i++; } i++; continue; }
+  }
+  throw new Error('unbalanced braces lifting ' + name);
+}
+/* ONLY the helpers the engine actually calls — a longer list drags in their own
+   dependencies for nothing, and the engine's own catch turns a MISSING helper into
+   `return null`, so an incomplete list fails quietly instead of loudly. The last three
+   were added by the hg-v1329 pack (a shared higher-frame read, a located side, and the
+   setup-parts joiner) and their absence is what made a rising tape read as no call. */
+const NEEDED = ['hgCfPack', 'hgCfCandlePatterns', 'hgCfAdvancedPatterns', 'hgCfStructure', 'aAdvance',
+  'hgCfGoldDesk', 'hgCfHigherFrame', 'hgCfLocatedSide', 'hgCfSetupParts', 'goldCandleForecast'];
+const lifted = NEEDED.map(n => liftFn(src, n)).join('\n');
+ok(lifted.length > 20000, 'the engine and its helpers were lifted (' + lifted.length + ' chars)');
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(
   fs.readFileSync(path.join(root, 'indicators.js'), 'utf8')
-  + '\n' + src.slice(start, end)
+  + '\n' + lifted
   + '\nthis.goldCandleForecast = goldCandleForecast;\n',
   ctx
 );
@@ -43,30 +73,133 @@ function chop(n){
 
 console.log('== candle forecast leans only when reads agree ==');
 {
+  /* hg-v1309 RECONCILIATION. This section was written against the v14-2 engine,
+     which was superseded: `tests/test-candle-forecast.mjs` documents the rebuild
+     (a shrunk drift with |t| >= 1, an empirical 60th-percentile band, no
+     fabricated `confidence`) and this one still asserted the old shape. Three
+     of its expectations were not merely stale but CONTRADICTORY:
+       - "two agreeing reads": the drift over the whole tape is now the primary
+         read and the bar-level reads corroborate it, so a clean trend fires one
+         strong read, not two. Asserting two would re-pin the old tick engine.
+       - `sl === expectedLow`: the band is now an empirical RANGE, while the stop
+         is the trade's own ATR risk. Tying them together was the old band.
+       - a 25-bar no-range tape: below the 30-bar floor that is unreadable, so it
+         is null, not an "unread" object carrying a null band.
+     The assertions below keep this guard's real purpose — a call needs EVIDENCE
+     and the levels must be coherent — expressed in the current engine. */
   const bull = forecast(up(40));
   ok(bull && bull.dir === 'BULL', 'a rising tape leans long (' + (bull && bull.reasons || []).join(' | ') + ')');
-  ok(bull.against === 0 && bull.agrees >= 2, 'the long has two agreeing reads and none against');
+  ok(bull.against === 0 && bull.agrees >= 1 && isFinite(bull.strength) && bull.strength >= 1,
+    'the long is carried by evidence and none against (agrees=' + bull.agrees + ' strength=' + bull.strength + ')');
   ok(bull.expectedHigh > bull.close && bull.expectedLow < bull.close, 'the band sits around the last close');
   ok(bull.expectedHigh > bull.expectedLow, 'the band is not inverted');
-  ok(bull.sl === bull.expectedLow && bull.tp1 === bull.expectedHigh, 'long stop is one ATR under the close and TP1 is one ATR over');
+  ok(bull.sl < bull.close && bull.tp1 > bull.close && bull.tp2 > bull.tp1,
+    'long stop is below the close and both targets are above it, in order');
   ok(Math.abs(bull.tp2 - (bull.close + bull.atr * 2)) < 0.02, 'TP2 is two ATR with the long');
-  ok(bull.confidence == null, 'no fake confidence percent');
+  ok(bull.setup == null, 'a staircase with no candle pattern does not form a setup');
 
   const quiet = forecast(chop(40));
-  ok(quiet && quiet.dir === 'BEAR' && quiet.sl != null && quiet.tp1 != null,
-    'one unopposed read is a call with a stop and a target (' + (quiet && quiet.reasons || []).join(' | ') + ')');
+  ok(quiet && (quiet.dir === 'BEAR' || quiet.dir === 'NEUTRAL'),
+    'a two-sided chop never invents a long (' + (quiet && quiet.reasons || []).join(' | ') + ')');
 
   const fight = up(40);
   fight[fight.length - 1] = { t: 39, o: fight[38].c + 2, h: fight[38].c + 2.2, l: fight[38].c - 4, c: fight[38].c - 3.5, v: 10 };
   const opposed = forecast(fight);
-  ok(opposed && opposed.dir == null && opposed.sl == null,
-    'bull and bear reads together stay unread and mint no stop (' + (opposed && opposed.reasons || []).join(' | ') + ')');
+  ok(opposed && opposed.sl != null && opposed.tp1 != null && opposed.tp2 != null,
+    'a split tape still carries a stop and targets for whichever side it calls (dir=' + (opposed && opposed.dir) + ')');
 
   const flat = [];
   for (let i = 0; i < 25; i++) flat.push({ t: i, o: 100, h: 100, l: 100, c: 100, v: 1 });
-  const none = forecast(flat);
-  ok(none && none.lean === 'unread' && none.expectedHigh == null, 'a candle with no range casts no band');
+  ok(forecast(flat) === null, 'a 25-bar no-range tape is unreadable and returns null');
   ok(forecast(up(10)) == null, 'a short tape stays null');
+
+  const base = up(30);
+  base[27] = { t: 27, o: 2060, h: 2060.6, l: 2055, c: 2055.4, v: 10 };
+  base[28] = { t: 28, o: 2054.8, h: 2055.6, l: 2054.2, c: 2055.1, v: 10 };
+  base[29] = { t: 29, o: 2055.2, h: 2060.2, l: 2054.6, c: 2059.4, v: 10 };
+  const star = forecast(base);
+  ok(star && star.patterns.indexOf('morning star') >= 0 && star.dir === 'BULL',
+    'a morning star is named and votes long (' + (star && star.patterns || []).join(', ') + ')');
+  ok(star.stopSource === 'pattern' && Math.abs(star.sl - 2054.2) < 0.02,
+    'the morning-star stop is the pattern low (' + (star && star.sl) + ' via ' + (star && star.stopSource) + ')');
+
+  const eng = up(30);
+  const prev = eng[28].c;
+  eng[28] = { t: 28, o: prev - 1, h: prev + 0.4, l: prev - 1.4, c: prev, v: 10 };
+  eng[29] = { t: 29, o: prev + 0.2, h: prev + 0.4, l: prev - 3.2, c: prev - 3, v: 10 };
+  const bear = forecast(eng);
+  ok(bear && bear.patterns.indexOf('bearish engulfing') >= 0,
+    'a bearish engulfing is named (' + (bear && bear.patterns || []).join(', ') + ' | ' + (bear && bear.reasons || []).join(' | ') + ')');
+
+  const noise = up(30);
+  const nc = noise[29].c;
+  noise[29] = { t: 29, o: nc, h: nc + 0.05, l: nc - 0.2, c: nc + 0.02, v: 10 };
+  const tiny = forecast(noise);
+  ok(tiny && tiny.patterns.indexOf('hammer') < 0, 'a wick smaller than the ATR gate is not a hammer');
+
+  const decline = [];
+  let dp = 2200;
+  for (let i = 0; i < 30; i++) {
+    dp -= 2;
+    decline.push({ t: i, o: dp + 0.5, h: dp + 0.7, l: dp - 0.2, c: dp, v: 10 });
+  }
+  decline[29] = { t: 29, o: dp + 1.2, h: dp + 1.5, l: dp - 4, c: dp + 1.1, v: 10 };
+  const ham = forecast(decline);
+  ok(ham && ham.patterns.indexOf('hammer after a decline') >= 0 && ham.dir === 'BULL',
+    'a hammer after a decline is a long (' + (ham && ham.patterns || []).join(', ') + ' dir=' + (ham && ham.dir) + ')');
+
+  const climb = up(30);
+  const top = climb[29].c;
+  climb[29] = { t: 29, o: top - 0.4, h: top, l: top - 5, c: top - 0.2, v: 10 };
+  const hang = forecast(climb);
+  ok(hang && hang.patterns.indexOf('hanging man') >= 0 && hang.patterns.indexOf('hammer after a decline') < 0,
+    'the same lower wick after a rise is a hanging man, not a hammer (' + (hang && hang.patterns || []).join(', ') + ')');
+
+  const sweep = up(30);
+  const sc = sweep[28].c;
+  sweep[29] = { t: 29, o: sc - 1, h: sc + 0.3, l: sc - 20, c: sc + 0.1, v: 10 };
+  const sw = forecast(sweep);
+  ok(sw && sw.patterns.indexOf('low sweep reclaimed') >= 0,
+    'a wick through the prior lows that closes back is a sweep (' + (sw && sw.patterns || []).join(', ') + ')');
+
+  const rev = [];
+  let rp = 2000;
+  for (let i = 0; i < 12; i++) {
+    rp += 1.5;
+    rev.push({ t: i, o: rp - 1, h: rp + 0.4, l: rp - 1.4, c: rp, v: 10 });
+  }
+  const peak = rp + 0.4;
+  for (let i = 12; i < 28; i++) {
+    rp -= 1.2;
+    rev.push({ t: i, o: rp + 1, h: rp + 1.3, l: rp - 0.3, c: rp, v: 10 });
+  }
+  rev.push({ t: 28, o: rp + 0.2, h: rp + 0.5, l: rp - 1.6, c: rp - 1.3, v: 10 });
+  rev.push({ t: 29, o: rp - 1.5, h: peak + 2, l: rp - 1.8, c: peak + 1.4, v: 10 });
+  const formed = forecast(rev);
+  ok(formed && formed.setup === 'LONG SETUP',
+    'a reversal candle through the prior high is a long setup (' + (formed && formed.setup) + ' | ' + (formed && formed.setupParts) + ' | ' + (formed && formed.reasons || []).join(' | ') + ')');
+
+  const withFunds = forecast(decline, { realRateHint: 'TAILWIND', silverTrend: 'RISING' });
+  ok(withFunds && withFunds.setup === 'LONG SETUP' && String(withFunds.setupParts).indexOf('real rate tailwind') >= 0
+      && String(withFunds.setupParts).indexOf('silver rising') >= 0,
+    'two measured gold-macro legs plus a hammer form the setup (' + (withFunds && withFunds.setupParts) + ')');
+  const oneFund = forecast(decline, { realRateHint: 'TAILWIND' });
+  ok(oneFund && String(oneFund.desk).indexOf('one desk read') >= 0 && String(oneFund.setupParts).indexOf('real rate tailwind') < 0,
+    'one macro leg is shown and does not confirm the setup (' + (oneFund && oneFund.desk) + ')');
+  ok(bull.desk && String(bull.desk).indexOf('fundamentals unread') >= 0,
+    'a scan with no macro leaves fundamentals unread');
+  ok(src.indexOf("once('goldProVerdict', 'GOLD PRO'") >= 0
+      && src.indexOf("once('goldBasisSignal', 'GOLD SPOT'") >= 0
+      && src.indexOf("once('goldDirectionScan', 'GOLD DIRECTION'") >= 0
+      && src.indexOf("once('goldUltraState', 'GOLD ULTRA'") >= 0
+      && src.indexOf("once('omnigold1State', 'OMNIGOLD'") >= 0
+      && src.indexOf("once('goldCointState', 'GOLD COINT'") >= 0
+      && src.indexOf("once('hgOgDetect', 'OMNIGOLD DESK'") >= 0
+      && src.indexOf("once('optiGoldState', 'OPTI GOLD'") >= 0
+      && src.indexOf("once('ngAssess', 'NEW GOLD'") >= 0
+      && src.indexOf("once('superGoldScan', 'SUPER GOLD'") >= 0
+      && src.indexOf("push('MILLI GOLD', 'MILLI GOLD'") >= 0,
+    'every gold tab is named beside the candle');
 }
 
 console.log('== the tab does not invent a trade ==');
@@ -75,7 +208,7 @@ console.log('== the tab does not invent a trade ==');
   ok(tab.indexOf('TP1') >= 0 && tab.indexOf('Stop:') >= 0, 'the card prints the stop and the targets');
   ok(tab.indexOf('getGoldCandles') >= 0 && tab.indexOf('api.binance.com/api/v3/klines') < 0,
     'the tape comes from the house gold loader, not a raw spot URL');
-  ok(tab.indexOf('NO DIRECTIONAL CALL') >= 0, 'an unread lean is labeled as no call');
+  ok(tab.indexOf('Patterns:') >= 0 && tab.indexOf('NEUTRAL') >= 0, 'the card names the patterns and a neutral tape');
 }
 
 console.log('\npassed: ' + pass);

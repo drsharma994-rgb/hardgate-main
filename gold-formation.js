@@ -939,7 +939,19 @@
     { desk: 'GOLD SPOT',  tab: 'goldspot',
       why: 'spot-vs-perp basis monitor: reads a live quote and prints a verdict, prices no entry, stop or target and writes no forward record' },
     { desk: 'GOLD COINT', tab: 'goldcoint',
-      why: 'cointegration context ledger: its own header says CONTEXT only, no spread execution path -- no levels, no ticket, no record' }
+      why: 'cointegration context ledger: its own header says CONTEXT only, no spread execution path -- no levels, no ticket, no record' },
+    /* hg-v1309: CANDLE FORECAST (gold-candle-forecast.js, upstream v14-3) is the
+       NINETEENTH gold tab and had no row here, so this census named it as a gap
+       the moment it appeared -- the mechanism working exactly as designed.
+       Classified from measurement, not from its name: it contains no `ticket:`,
+       no `ticket =`, no `hgFwdRecord`, no `recordForward`, no `entry` and no
+       `stopLoss`. It forecasts the NEXT candle's range and direction FROM ATR
+       and momentum and renders that forecast; it prices no entry, stop or
+       target and writes no forward record, so there is no ticket to withhold
+       and no ledger to contaminate. It is a non-minter on the GOLD SPOT
+       precedent, not a minter needing a weekend calendar. */
+    { desk: 'CANDLE FORECAST', tab: 'candle-forecast',
+      why: 'predictive forecast renderer: forecasts the next candle range and direction from ATR and momentum, prices no entry, stop or target and writes no forward record' }
   ];
 
   /* Reads the shell's own nav registry when it is reachable and names any
