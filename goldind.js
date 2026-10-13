@@ -20442,6 +20442,69 @@ function goldCandleForecast(rows) {
   } catch (e) { return null; }
 }
 
+function hgCfUltimate(scalp, swing) {
+  /* hg-v1323: ULTIMATE AI CONFLUENCE.
+     The scalp and the swing are already built. This only asks whether those two
+     reads agree. It does not make a third entry, stop or target. Unread is not
+     agreement. A neutral tape is not agreement. A family that nets against on
+     either tape blocks an ultimate setup. */
+  var out = { ok: false, title: 'ULTIMATE AI CONFLUENCE', side: null, formed: false, why: '', scalp: '', swing: '' };
+  try {
+    function sideOf(b) {
+      if (!b || b.ok !== true) return null;
+      var d = String(b.dir || '').toUpperCase();
+      return (d === 'BULL' || d === 'BEAR' || d === 'NEUTRAL') ? d : null;
+    }
+    function line(name, b) {
+      if (!b || b.ok !== true) return name + ' unread' + (b && b.why ? (' — ' + b.why) : '');
+      var cv = b.confluenceView;
+      var fam = cv
+        ? (cv.familiesWith + ' families net with' + (cv.familiesAgainst ? (', ' + cv.familiesAgainst + ' net against') : ', none net against') + (cv.ticket ? ', confluence ticket' : ', not a ticket'))
+        : 'confluence unread';
+      return name + ' ' + String(b.dir || 'unread') + ' · ' + (b.formed ? String(b.label || 'setup') : 'not a setup') + ' · ' + fam;
+    }
+    out.scalp = line('scalp 15m', scalp);
+    out.swing = line('swing 4h', swing);
+    out.ok = true;
+    var s = sideOf(scalp), w = sideOf(swing);
+    if (!s || !w) {
+      out.why = 'One horizon is unread. Unread is not agreement, so there is no ultimate side and no blended stop.';
+      return out;
+    }
+    if (s === 'NEUTRAL' || w === 'NEUTRAL') {
+      out.side = 'NEUTRAL';
+      out.why = 'One horizon is NEUTRAL. That is not agreement, so there is no ultimate side.';
+      return out;
+    }
+    if (s !== w) {
+      out.side = 'SPLIT';
+      out.why = 'The 15m scalp is ' + s + ' and the 4h swing is ' + w + '. They do not agree, so there is no ultimate side and no blended stop.';
+      return out;
+    }
+    out.side = s;
+    var scalpCv = scalp.confluenceView, swingCv = swing.confluenceView;
+    if (!scalpCv || !swingCv) {
+      out.why = 'Both horizons read ' + s + ', but a confluence was not read on one of them. Unread is not a ticket. Each tape keeps its own stop.';
+      return out;
+    }
+    if (scalpCv.familiesAgainst > 0 || swingCv.familiesAgainst > 0) {
+      out.why = 'Both horizons read ' + s + ', but a family nets against on one tape. No ultimate setup. Each tape keeps its own stop.';
+      return out;
+    }
+    if (!(scalp.formed && swing.formed && scalpCv.ticket && swingCv.ticket)) {
+      out.why = 'Both horizons read ' + s + ' and no family nets against. An ultimate setup still needs a formed setup and a confluence ticket on BOTH tapes. Each tape keeps its own stop.';
+      return out;
+    }
+    out.formed = true;
+    out.why = 'Both horizons read ' + s + ', both formed a setup, and both confluence tickets are clean. The scalp stop and the swing stop stay on their own tapes. This is not a third price.';
+    return out;
+  } catch (eU) {
+    out.ok = false;
+    out.why = 'ultimate confluence unread';
+    return out;
+  }
+}
+
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
   window.hgCfConfluence = hgCfConfluence;
@@ -20453,4 +20516,5 @@ if (typeof window !== "undefined") {
      built by the SAME code path and stay comparable (hg-v949). */
   window.hgCfBuildSetup = hgCfBuildSetup;
   window.hgCfHigherFrame = hgCfHigherFrame;
+  window.hgCfUltimate = hgCfUltimate;
 }
