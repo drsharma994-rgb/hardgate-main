@@ -19078,6 +19078,36 @@ function hgCfAdvancedPatterns(rows, atrLast) {
   if (typeof aAdvance === 'function' && aAdvance(rows, atrLast))
     record('advance block', null);
 
+  /* hg-v1326: shapes the earlier layers still do not name. Disclosure only.
+     A counterattack gaps open and closes back at the prior close, so it is
+     not a piercing line and not meeting lines. A morning or evening doji
+     star is the gapped doji plus the bar that closes back through the first
+     bar's midpoint. A takuri is a hammer whose lower shadow is at least
+     three bodies. A closing marubozu closes on its extreme and leaves the
+     open off that extreme. A high-price or low-price gapping play holds a
+     window with two small bars; a tasuki walks back into the gap, so these
+     are not the same shape. None of these is added to the vote or the stop. */
+  if (big(c) && mid(c) && mid(d) && c.bear && d.bull && d.o < c.l && Math.abs(d.c - c.c) <= atrLast * 0.08)
+    record('bullish counterattack', tag(1, 'bullish counterattack'));
+  if (big(c) && mid(c) && mid(d) && c.bull && d.bear && d.o > c.h && Math.abs(d.c - c.c) <= atrLast * 0.08)
+    record('bearish counterattack', tag(-1, 'bearish counterattack'));
+  if (big(b) && mid(b) && b.bear && c.range > 0 && c.body <= Math.min(c.range * 0.1, atrLast * 0.15)
+      && c.h < b.l && big(d) && mid(d) && d.bull && d.c > (b.o + b.c) / 2)
+    record('morning doji star', tag(1, 'morning doji star'));
+  if (big(b) && mid(b) && b.bull && c.range > 0 && c.body <= Math.min(c.range * 0.1, atrLast * 0.15)
+      && c.l > b.h && big(d) && mid(d) && d.bear && d.c < (b.o + b.c) / 2)
+    record('evening doji star', tag(-1, 'evening doji star'));
+  if (d.body > 0 && d.lower >= d.body * 3 && d.lower >= d.range * 0.6 && d.upper <= d.body * 0.3 && d.upper <= atrLast * 0.12)
+    record('takuri line', tag(1, 'takuri line'));
+  if (d.bull && mid(d) && d.upper <= atrLast * 0.05 && d.lower >= atrLast * 0.12)
+    record('bullish closing marubozu', tag(1, 'bullish closing marubozu'));
+  if (d.bear && mid(d) && d.lower <= atrLast * 0.05 && d.upper >= atrLast * 0.12)
+    record('bearish closing marubozu', tag(-1, 'bearish closing marubozu'));
+  if (b.l > a.h && c.body < atrLast * 0.35 && d.body < atrLast * 0.35 && c.l > a.h && d.l > a.h && d.c >= d.o)
+    record('high-price gapping play', tag(1, 'high-price gapping play'));
+  if (b.h < a.l && c.body < atrLast * 0.35 && d.body < atrLast * 0.35 && c.h < a.l && d.h < a.l && d.c <= d.o)
+    record('low-price gapping play', tag(-1, 'low-price gapping play'));
+
   /* ---- EXHAUSTION / STRUCTURE ---- */
   /* THREE-BAR CLIMAX: three consecutive expanding ranges with shrinking bodies —
      participation rising into a stall. Location decides what it means, which is
@@ -19099,6 +19129,36 @@ function hgCfAdvancedPatterns(rows, atrLast) {
     var ago = hgCfCandlePatterns(rows.slice(0, n - 1), atrLast);
     if (ago && ago.names && ago.names.length)
       out.notes.push('one bar ago: ' + ago.names.join(', ') + ' — not this bar, so it does not name the setup');
+  }
+
+  /* hg-v1326: say what kind of pattern printed. A continuation means
+     something when the drift agrees. A reversal means something at the
+     other end of the move. A late pattern says the move is tired.
+     The sentence does not start with the pattern name, and it does not
+     use the location phrase the setup namer looks for, so it cannot name
+     a setup by itself and it cannot add a vote. */
+  if (out.leans.length) {
+    var senseN = 0, sk, sName, sRole, sUp, senseLine, driftAgrees;
+    for (sk = 0; sk < out.leans.length && senseN < 6; sk++) {
+      sName = String(out.leans[sk].name || '');
+      sUp = out.leans[sk].lean === 1;
+      if (/three methods|tasuki|side-by-side|mat hold|on-neck|in-neck|separating|two black gapping|identical three crows|thrusting|gapping play|three-line strike/.test(sName)) sRole = 'continuation';
+      else if (/three gaps|exhaustion|deliberation|stalled|two crows|advance block|climax/.test(sName)) sRole = 'late';
+      else sRole = 'reversal';
+      if (sRole === 'continuation') {
+        senseLine = 'Understanding: ' + sName + ' is a continuation. It means something when the drift agrees';
+        driftAgrees = (sUp && out.aligned === 'up') || (!sUp && out.aligned === 'down');
+        if (out.aligned === 'up' || out.aligned === 'down') {
+          senseLine += '. The 20-bar drift is ' + out.aligned + (driftAgrees ? ', so this continuation agrees' : ', so this continuation does not agree');
+        } else senseLine += '. The drift was flat or unread, so the continuation is not confirmed';
+      } else if (sRole === 'late') {
+        senseLine = 'Understanding: ' + sName + ' is late. It says the move is tired. It is not a fresh entry';
+      } else {
+        senseLine = 'Understanding: ' + sName + ' is a reversal. It means something at the far end of the move it fades. The location line above is that test';
+      }
+      out.notes.push(senseLine + '. It does not add a vote.');
+      senseN++;
+    }
   }
 
   /* ---- the trend the pattern landed in ----
@@ -19783,6 +19843,106 @@ function hgCfLocatedSide(adv) {
   return out;
 }
 
+function hgCfFeedBoard(opts) {
+  /* hg-v1326: NEWS AND THE FREE FEEDS, LISTED, NOT A SECOND VOTE.
+     The gold desks already fold a measured macro leg into hgCfGoldDesk, and
+     the fundamental regime already folds real rates. Naming the same leg
+     again as its own family would count one derivation twice. This board
+     only says what the calendar, the headlines, fear and greed, COT, and
+     the cached macro feeds actually printed — or that they are unread.
+     Unread is not agreement. Nothing here returns a side. */
+  var bits = [];
+  var darkNews = true, darkMacro = true;
+  function pick(name) {
+    if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name];
+    if (typeof W !== 'undefined' && W && typeof W[name] === 'function') return W[name];
+    return null;
+  }
+  try {
+    var newsFn = pick('hgNewsRisk');
+    if (!newsFn) bits.push('news calendar unread — news engine not loaded');
+    else {
+      darkNews = false;
+      var news = newsFn('XAUUSD');
+      if (!news || news.unchecked) bits.push('news calendar unread' + (news && news.note ? (' — ' + String(news.note).replace(/\s+/g, ' ').slice(0, 80)) : ''));
+      else if (news.blackout) bits.push('news BLACKOUT — red-folder window, listed, not a side');
+      else bits.push('news risk ' + String(news.risk || 'unread') + ' — calendar checked, not a side');
+      if (news && Array.isArray(news.events)) {
+        var ev = [], ei, title;
+        for (ei = 0; ei < news.events.length && ev.length < 3; ei++) {
+          title = news.events[ei] && (news.events[ei].title || news.events[ei].name || news.events[ei].event);
+          if (title) ev.push(String(title).replace(/\s+/g, ' ').slice(0, 42));
+        }
+        if (ev.length) bits.push('calendar ' + ev.join(', '));
+      }
+    }
+  } catch (eNews) { bits.push('news calendar unread'); }
+  try {
+    var stFn = pick('hgNewsState');
+    var st = stFn ? stFn() : null;
+    if (st && st.fng && isFinite(+st.fng.value)) {
+      bits.push('fear and greed ' + (+st.fng.value) + (st.fng.classification ? (' ' + String(st.fng.classification)) : '') + ' — listed, not a side');
+    } else bits.push('fear and greed unread');
+    if (st && Array.isArray(st.headlines) && st.headlines.length) {
+      var hb = 0, hs = 0, titles = [], hi, h;
+      for (hi = 0; hi < st.headlines.length && hi < 8; hi++) {
+        h = st.headlines[hi];
+        if (!h) continue;
+        if (h.sentiment === 'bullish') hb++;
+        else if (h.sentiment === 'bearish') hs++;
+        if (titles.length < 3 && h.title) titles.push(String(h.title).replace(/\s+/g, ' ').slice(0, 42));
+      }
+      bits.push('headlines ' + hb + ' bullish / ' + hs + ' bearish' + (titles.length ? (' · ' + titles.join('; ')) : '') + ' — listed, not a side');
+    } else bits.push('headlines unread');
+  } catch (eSt) {
+    bits.push('fear and greed unread');
+    bits.push('headlines unread');
+  }
+  var macro = (opts && opts.macro && typeof opts.macro === 'object') ? opts.macro : null;
+  if (!macro) {
+    try {
+      var mFn = pick('getGoldMacroCached');
+      if (mFn) macro = mFn();
+    } catch (eM) { macro = null; }
+  }
+  function leg(label, val) {
+    if (val === 'RISING' || val === 'FALLING' || val === 'TAILWIND' || val === 'HEADWIND' || val === 'NEUTRAL'
+        || val === 'STEEPENING' || val === 'FLATTENING' || val === 'HIGH' || val === 'LOW') return label + ' ' + val;
+    return label + ' unread';
+  }
+  if (!macro || typeof macro !== 'object') bits.push('gold macro feed unread');
+  else {
+    darkMacro = false;
+    var shown = [
+      leg('real rates', macro.realRateHint),
+      leg('DXY', macro.dxy && macro.dxy.trend20),
+      leg('US10Y', macro.tnxTrend),
+      leg('silver', macro.silverTrend),
+      leg('gold/silver', macro.gsRatioTrend),
+      leg('VIX', macro.vixTrend),
+      leg('miners', macro.minersGoldTrend),
+      leg('GVZ', macro.gvzTrend),
+      leg('TIPS', macro.tipTrend),
+      leg('UUP', macro.uupTrend),
+      leg('EURUSD', macro.eurusdTrend),
+      leg('gold/oil', macro.goldOilTrend),
+      leg('credit', macro.creditTrend)
+    ];
+    bits.push(shown.join(', '));
+  }
+  try {
+    var cot = (typeof window !== 'undefined' && window.__hgGoldCot && typeof window.__hgGoldCot === 'object') ? window.__hgGoldCot : null;
+    if (cot && cot.crowding) bits.push('COT ' + String(cot.crowding).replace(/\s+/g, ' ').slice(0, 40) + ' — listed, not a second vote');
+    else bits.push('COT unread');
+  } catch (eCot) { bits.push('COT unread'); }
+  if (opts && isFinite(+opts.spot) && +opts.spot > 0 && isFinite(+opts.perp) && +opts.perp > 0)
+    bits.push('spot ' + (+opts.spot).toFixed(2) + ' · perp ' + (+opts.perp).toFixed(2));
+  else bits.push('spot and perp unread');
+  if (opts && isFinite(+opts.funding)) bits.push('funding ' + String(+opts.funding) + ' — listed, not a side');
+  else bits.push('funding unread');
+  return { why: bits.join(' · '), dark: !!(darkNews && darkMacro) };
+}
+
 function hgCfConfluence(rows, opts, fc) {
   /* hg-v1314: THE CONFLUENCE READ — what the OTHER gold desks know, put beside the
      candle read, on this tab.
@@ -20055,14 +20215,26 @@ function hgCfConfluence(rows, opts, fc) {
       else if (fund.regime === 'bearish') fLean = !wantsUp;
       /* mixed and quiet are genuinely neither — unread, not agreement */
       if (Array.isArray(fund.legs)) {
-        var legBits = [], unreadLegs = [], li2, leg;
+        var legBits = [], unreadLegs = [], priorBits = [], li2, leg, legTxt;
         for (li2 = 0; li2 < fund.legs.length; li2++) {
           leg = fund.legs[li2];
-          if (!leg || leg.info || leg.key === 'news') continue;
+          if (!leg) continue;
+          legTxt = String(leg.text || leg.vote || '').replace(/\s+/g, ' ').slice(0, 90);
+          if (leg.key === 'news') {
+            if (leg.blackout) priorBits.push('news BLACKOUT — red-folder window, not a side');
+            else if (leg.state === 'checked') priorBits.push('news ' + (legTxt || 'calendar checked') + ' — not a side');
+            else priorBits.push('news unread');
+            continue;
+          }
+          if (leg.info) {
+            priorBits.push(String(leg.key || 'prior') + (leg.state === 'checked' ? (' ' + legTxt) : ' unread') + ' — prior, not a side');
+            continue;
+          }
           if (leg.state === 'checked') legBits.push(String(leg.key || leg.name || 'leg') + ' ' + String(leg.vote || 'no vote'));
           else unreadLegs.push(String(leg.key || leg.name || 'leg') + ' unread');
         }
         if (legBits.length) fWhy += ' · ' + legBits.join(', ');
+        if (priorBits.length) fWhy += ' · ' + priorBits.join(', ');
         if (unreadLegs.length) fWhy += ' · ' + unreadLegs.join(', ');
       }
       out.families.fundamentals = { regime: fund.regime, bulls: fund.bulls, bears: fund.bears, checked: fund.checked, blackout: !!fund.blackout };
@@ -20070,6 +20242,22 @@ function hgCfConfluence(rows, opts, fc) {
     } else {
       voter('fundamentals', 'GOLD fundamental regime', null, fund ? 'regime unread' : 'fundamental stack unavailable');
       out.missing.push('the fundamental stack (hgFundamentalRegime)');
+    }
+
+    /* ---- NEWS AND FREE FEEDS (hg-v1326) ----
+       Listed beside the call. The lean stays unread on purpose: a measured
+       macro leg already votes inside the gold desk, and real rates already
+       vote inside the fundamental regime. A second vote would count one
+       derivation twice. A dark feed is named, not treated as agreement. */
+    var board = null;
+    try { board = hgCfFeedBoard(opts); } catch (eBoard) { board = null; }
+    if (board && board.why) {
+      out.families.feeds = { why: board.why };
+      voter('feeds', 'news and free feeds', null, board.why);
+      if (board.dark) out.missing.push('news and the gold macro feed');
+    } else {
+      voter('feeds', 'news and free feeds', null, 'feeds unread');
+      out.missing.push('news and the gold macro feed');
     }
 
     /* ---- HIGHER TIMEFRAMES (hg-v1320) ----
@@ -20108,7 +20296,7 @@ function hgCfConfluence(rows, opts, fc) {
 
     /* ---- THE VERDICT: a count of families, never a score ---- */
     var famWith = 0, famAgainst = 0;
-    ['candles', 'technicals', 'strategies', 'fundamentals', 'desks', 'higher'].forEach(function (k) {
+    ['candles', 'technicals', 'strategies', 'fundamentals', 'desks', 'higher', 'feeds'].forEach(function (k) {
       var w = 0, a = 0;
       out.voters.forEach(function (v) {
         if (v.family !== k) return;
@@ -20517,4 +20705,5 @@ if (typeof window !== "undefined") {
   window.hgCfBuildSetup = hgCfBuildSetup;
   window.hgCfHigherFrame = hgCfHigherFrame;
   window.hgCfUltimate = hgCfUltimate;
+  window.hgCfFeedBoard = hgCfFeedBoard;
 }

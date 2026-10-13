@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. News, headlines, fear and greed, COT and the cached macro feeds are listed on each tape and do not cast a second vote. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, what that shape means, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR.
           </div>
         </div>
       `;
@@ -408,7 +408,7 @@ on every page load since v14-2:
         + '<ul class="lst">' + rowsHtml + '</ul>' + deskHtml
         + '<div class="note">Macro snapshot: ' + (forecast.macroRead ? 'read — the fundamental family can vote' : 'not cached this scan, so the fundamental family reads UNREAD (never counted as agreement)') + '</div>'
         + (cfl.missing && cfl.missing.length ? ('<div class="note warn">Not read this scan: ' + cfl.missing.join(' · ') + '</div>') : '')
-        + '<div class="note">A confluence setup needs two families net with the call, no family net against, and a named candle pattern. Unread is never counted as agreement. The scalp and the swing each carry their own tape.</div></div>';
+        + '<div class="note">A confluence setup needs two families net with the call, no family net against, and a named candle pattern. Unread is never counted as agreement. News and the free feeds are listed here and do not vote again. The scalp and the swing each carry their own tape.</div></div>';
     } else if (cfl) {
       conflHtml = '<div class="note" data-cf-confluence="unread" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>CONFLUENCE</b> — not read: ' + String(cfl.why || 'unavailable').replace(/</g, '') + '</div>';
     }
@@ -443,7 +443,7 @@ on every page load since v14-2:
         + '<div class="note">' + String(ult.why || '').replace(/</g, '') + '</div>'
         + '<div class="note">' + String(ult.scalp || '').replace(/</g, '') + '</div>'
         + '<div class="note">' + String(ult.swing || '').replace(/</g, '') + '</div>'
-        + '<div class="note">The two stops are not combined. Read the scalp against the 15m ATR and the swing against the 4h ATR.</div></div>';
+        + '<div class="note">The two stops are not combined. Read the scalp against the 15m ATR and the swing against the 4h ATR. News and the free feeds are listed on each tape and do not cast a second vote.</div></div>';
     }
 
     container.className = '';
