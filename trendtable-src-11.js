@@ -378,6 +378,7 @@
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxClosedGate = trendmxClosedGate;   /* hg-v1335: the alert-desk gate, exported like its siblings */
 W.trendmxSetupGrade = trendmxSetupGrade;
 W.tmValueState = tmValueState;
 W.tmBodyCommit = tmBodyCommit;
