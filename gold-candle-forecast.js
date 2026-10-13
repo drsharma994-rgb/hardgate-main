@@ -106,6 +106,20 @@ on every page load since v14-2:
         return;
       }
       forecast.source = loaded.source || '';
+      /* hg-v1315: hand the confluence the HOUSE MACRO SNAPSHOT.
+         The first cut passed an empty options bag, so `hgFundamentalRegime('GOLD')`
+         ran with no `extra` and every macro leg read UNCHECKED — the fundamental
+         family could never vote, not because it had no opinion but because nobody
+         handed it the readings. `getGoldMacroCached` is the accessor every gold desk
+         already reads (macro.js exports it), so this COMPOSES the existing snapshot
+         rather than fetching anything new. Deliberately `Cached`: a display tab must
+         not trigger a network round-trip, and an absent or cold snapshot stays
+         unread, which is the honest state. */
+      var macroSnap = null;
+      try {
+        if (typeof window.getGoldMacroCached === 'function') macroSnap = window.getGoldMacroCached();
+      } catch (eMg) { macroSnap = null; }
+      forecast.macroRead = !!macroSnap;
       /* hg-v1314: the confluence read, beside the candle read. Composed from the
          SHARED gold readers (indicator bag, Master Catalog, fundamental stack), so
          this tab finally knows what the other gold desks know. It never throws: a
@@ -113,7 +127,10 @@ on every page load since v14-2:
          leaves the candle read intact rather than blanking the tab. */
       try {
         if (typeof window.hgCfConfluence === 'function') {
-          forecast.confluence = window.hgCfConfluence(candles, {}, forecast);
+          forecast.confluence = window.hgCfConfluence(candles, {
+            fundExtra: macroSnap || {},
+            ctx: macroSnap ? { macro: macroSnap } : null
+          }, forecast);
         }
       } catch (eCf) { forecast.confluence = null; }
       this.renderResult(resultArea, statusEl, forecast);
@@ -227,6 +244,9 @@ on every page load since v14-2:
         + '</b> · ' + cfl.with_ + ' read' + (cfl.with_ === 1 ? '' : 's') + ' with, '
         + cfl.against + ' against, ' + cfl.unread + ' unread</div>'
         + '<ul class="lst">' + rowsHtml + '</ul>'
+        + '<div class="note">Macro snapshot: ' + (forecast.macroRead
+          ? 'read — the fundamental family can vote'
+          : 'not cached this scan, so the fundamental family reads UNREAD (never counted as agreement)') + '</div>'
         + (cfl.missing && cfl.missing.length
           ? '<div class="note warn">Not read this scan: ' + cfl.missing.join(' · ') + '</div>' : '')
         + '<div class="note">A ticket needs two independent families with the call, none against, and a named candle pattern. '
