@@ -1,12 +1,12 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (v14-3)
+HARDGATE — gold-candle-forecast.js (v1307)
 Predictive Candle Forecasting Module. Uses ATR and momentum to forecast
 the next candle's range, direction, TP, and SL.
 
-v14-3 fixes two defects that kept the tab painting "Waiting for data..."
-on every page load since v14-2:
+v1308 fixes two defects that kept the tab painting "Waiting for data..."
+on every page load since v1308:
 
-  (1) Registration pattern. v14-2 wrote `window.HG_TAB_MODS[mod.id] = mod`.
+  (1) Registration pattern. v1308 wrote `window.HG_TAB_MODS[mod.id] = mod`.
       That writes to the GLOBAL `window.HG_TAB_MODS`, not the lexically-
       scoped `const HG_TAB_MODS = {}` at the top of index.html's shell
       script (line 11004) that `showTab()` reads. A `const` declared at
@@ -16,7 +16,7 @@ on every page load since v14-2:
       `bootHgTabs` iterates — and it copies into the shell's const + auto-
       creates both the nav button and the tab pane in one place.
 
-  (2) Script load order. v14-2 placed the script at the body bottom
+  (2) Script load order. v1308 placed the script at the body bottom
       (line 11188). `bootHgTabs` is an IIFE at line 11006; it runs
       synchronously and only sees modules whose push already landed. A
       script loading at the body bottom pushes AFTER that iteration, so
@@ -163,7 +163,7 @@ on every page load since v14-2:
 
   mod.fmt = function(n) { return Number(n).toFixed(2); };
 
-  // v14-3: register through window.HG_tabs, the array bootHgTabs iterates.
+  // v1308: register through window.HG_tabs, the array bootHgTabs iterates.
   // Writing to window.HG_TAB_MODS directly misses the shell's lexical const
   // of the same name (see header above) and skips the auto-wiring that
   // creates the nav button + pane.

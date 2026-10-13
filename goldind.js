@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — goldind.js (v1307)
+HARDGATE — goldind.js (v1308)
 GOLD SCALP indicator engine: pure, DOM-free, fetch-free Smart-Money-Concept
 and classical detectors for gold scalping, plus the confluence composite
 goldScalpSetup. Loaded as a classic script BEFORE goldscalp.js.
@@ -18464,91 +18464,119 @@ if (typeof window !== "undefined") {
    Reads that fight each other stay unread, and so does a tape with no vote. */
 function goldCandleForecast(rows) {
   try {
-    if (!Array.isArray(rows) || rows.length < 20) return null;
-    if (typeof atr !== 'function' || typeof ema !== 'function') return null;
-    var n = rows.length;
-    var last = rows[n - 1];
-    var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
+    if (!Array.isArray(rows) || rows.length < 30) return null;
+    const n = rows.length;
+    const last = rows[n - 1];
+    const o = +last.o, h = +last.h, l = +last.l, c = +last.c;
     if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
-    if (!(h > l)) {
-      return {
-        dir: null, lean: 'unread', agrees: 0, against: 0, checked: 0,
-        reasons: ['last candle has no range'],
-        expectedHigh: null, expectedLow: null, close: isFinite(c) ? +c.toFixed(2) : null,
-        note: 'A bar with no range casts no lean and no band.'
-      };
+
+    // 1. Setup & Basic Metrics
+    const atrArr = _atr(rows, 14);
+    const atrLast = (atrArr && isFinite(atrArr[n-1])) ? atrArr[n-1] : (h - l);
+    if (!isFinite(atrLast) || atrLast <= 0) return null;
+
+    const closes = rows.map(r => +r.c);
+    const ema9 = _ema(closes, 9);
+    const ema21 = _ema(closes, 21);
+    const rsiVal = _rsi(closes, 14).slice(-1)[0];
+
+    // 2. Regime Detection (using CoreEngine)
+    let regime = 'RANGING';
+    if (typeof window !== 'undefined' && window.CoreEngine) {
+      regime = window.CoreEngine.detectRegime(ema9[n-1], ema21[n-1], _ema(closes, 50)[n-1], atrLast);
     }
-    var atrArr = _atr(rows, 14);
-    var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
-    var atrSource = 'ATR 14';
-    if (!(atrLast > 0)) { atrLast = h - l; atrSource = 'last bar range — ATR unread'; }
-    if (!(atrLast > 0)) return null;
 
-    var closes = [], i;
-    for (i = 0; i < n; i++) {
-      if (!isFinite(+rows[i].c)) return null;
-      closes.push(+rows[i].c);
+    // 3. Pattern Recognition & Signal Scoring
+    let score = 0; // -10 to +10
+    const reasons = [];
+    const prev = rows[n-2];
+    if (!prev) return null;
+
+    // --- A: Candle Body/Wick Patterns ---
+    const bodySize = Math.abs(c - o);
+    const upperWick = h - Math.max(o, c);
+    const lowerWick = Math.min(o, c) - l;
+
+    if (bodySize > 0 && upperWick < bodySize * 0.2 && lowerWick < bodySize * 0.5) {
+      score += 2; reasons.push('Marubozu-style momentum candle');
+    } else if (upperWick > bodySize * 1.5 && lowerWick < bodySize * 0.5) {
+      score -= 2; reasons.push('Shooting Star (Bearish Pin)');
+    } else if (lowerWick > bodySize * 1.5 && upperWick < bodySize * 0.5) {
+      score += 2; reasons.push('Hammer (Bullish Pin)');
     }
-    var ema9 = _ema(closes, 9);
-    var bulls = 0, bears = 0, checked = 0, reasons = [];
-    var loc = (c - l) / (h - l);
-    var body = Math.abs(c - o);
-    var upper = h - Math.max(o, c);
-    var lower = Math.min(o, c) - l;
 
-    checked++;
-    if (loc >= 0.7) { bulls++; reasons.push('close in the top of the bar'); }
-    else if (loc <= 0.3) { bears++; reasons.push('close in the bottom of the bar'); }
-    else reasons.push('close mid-range — no vote');
+    // Engulfing
+    if (c > o && prev.c < prev.o && c > prev.h && o < prev.l) {
+      score += 3; reasons.push('Bullish Engulfing');
+    } else if (c < o && prev.c > prev.o && c < prev.l && o > prev.h) {
+      score -= 3; reasons.push('Bearish Engulfing');
+    }
 
-    checked++;
-    if (lower >= (h - l) * 0.45 && lower > body && upper < (h - l) * 0.45) {
-      bulls++; reasons.push('lower wick rejected');
-    } else if (upper >= (h - l) * 0.45 && upper > body && lower < (h - l) * 0.45) {
-      bears++; reasons.push('upper wick rejected');
-    } else reasons.push('no one-sided wick — no vote');
+    // --- B: Momentum & Trend Confluence ---
+    const emaTrend = (ema9[n-1] > ema21[n-1]) ? 1 : -1;
+    if (regime === 'STRONG_TREND' || regime === 'BULL') {
+      if (emaTrend === 1) { score += 2; reasons.push('Bullish EMA alignment'); }
+      else { score -= 2; reasons.push('Bearish EMA misalignment'); }
+    } else if (regime === 'RANGE') {
+      // In range, look for mean reversion from extremes
+      if (rsiVal > 70) { score -= 3; reasons.push('RSI Overbought in Range'); }
+      else if (rsiVal < 30) { score += 3; reasons.push('RSI Oversold in Range'); }
+    }
 
-    if (ema9 && isFinite(+ema9[n - 1]) && isFinite(+ema9[n - 4])) {
-      var slope = +ema9[n - 1] - +ema9[n - 4];
-      var gate = atrLast * 0.15;
-      checked++;
-      if (slope > gate) { bulls++; reasons.push('EMA9 rose over three bars'); }
-      else if (slope < -gate) { bears++; reasons.push('EMA9 fell over three bars'); }
-      else reasons.push('EMA9 slope inside the noise band — no vote');
-    } else reasons.push('EMA9 unread');
+    // --- C: Volatility/Volume Check ---
+    const volZ = typeof window !== 'undefined' && window.CoreEngine ? window.CoreEngine.math.volZ(rows, 20) : 0;
+    if (Math.abs(volZ) > 1.5) {
+      score += (volZ > 0 ? 1 : -1);
+      reasons.push('High volume volatility spike detected');
+    }
 
-    checked++;
-    if (closes[n - 1] > closes[n - 2] && closes[n - 2] > closes[n - 3]) {
-      bulls++; reasons.push('three closes up');
-    } else if (closes[n - 1] < closes[n - 2] && closes[n - 2] < closes[n - 3]) {
-      bears++; reasons.push('three closes down');
-    } else reasons.push('closes are not a run — no vote');
+    // 4. Final Decision Logic
+    let dir = null;
+    if (score >= 3) dir = 'BULL';
+    else if (score <= -3) dir = 'BEAR';
 
-    var dir = null;
-    if (bulls >= 1 && bears === 0) dir = 'BULL';
-    else if (bears >= 1 && bulls === 0) dir = 'BEAR';
+    const sign = dir === 'BULL' ? 1 : (dir === 'BEAR' ? -1 : 0);
+    const confidence = Math.min(Math.abs(score) * 15, 98); // Scale score to %
 
-    var sign = dir === 'BULL' ? 1 : (dir === 'BEAR' ? -1 : 0);
+    // 5. Dynamic TP/SL with Structure
+    let sl = c - (sign * atrLast * 1.5);
+    let tp1 = c + (sign * atrLast * 2);
+    let tp2 = c + (sign * atrLast * 4);
+
+    const highs = rows.slice(-20).map(r => r.h);
+    const lows = rows.slice(-20).map(r => r.l);
+    const recentHigh = Math.max(...highs);
+    const recentLow = Math.min(...lows);
+
+    if (dir === 'BULL') {
+      sl = Math.min(sl, recentLow - atrLast * 0.5);
+      tp1 = Math.max(tp1, recentHigh + atrLast * 0.2);
+    } else if (dir === 'BEAR') {
+      sl = Math.max(sl, recentHigh + atrLast * 0.5);
+      tp1 = Math.min(tp1, recentLow - atrLast * 0.2);
+    }
+
     return {
       dir: dir,
       lean: dir || 'unread',
-      agrees: dir ? (dir === 'BULL' ? bulls : bears) : 0,
-      against: dir ? 0 : Math.min(bulls, bears),
-      checked: checked,
+      agrees: score > 0 ? Math.ceil(score/3) : (score < 0 ? Math.abs(Math.ceil(score/3)) : 0),
+      against: score < 0 ? Math.ceil(Math.abs(score)/3) : 0,
+      checked: 5,
       reasons: reasons,
-      expectedHigh: +(c + atrLast).toFixed(2),
-      expectedLow: +(c - atrLast).toFixed(2),
-      atr: +atrLast.toFixed(2),
-      atrSource: atrSource,
       close: +c.toFixed(2),
-      sl: sign ? +(c - sign * atrLast).toFixed(2) : null,
-      tp1: sign ? +(c + sign * atrLast).toFixed(2) : null,
-      tp2: sign ? +(c + sign * atrLast * 2).toFixed(2) : null,
-      note: dir
-        ? 'SL is one ATR against the last close. TP1 is one ATR with it. TP2 is two ATR. Levels come from the measured band, not a second price.'
-        : 'Reads disagree or none voted, so there is no direction and no stop.'
+      sl: +(sl).toFixed(2),
+      tp1: +(tp1).toFixed(2),
+      tp2: +(tp2).toFixed(2),
+      confidence: confidence,
+      atr: +atrLast.toFixed(2),
+      note: dir ? `Confidence ${confidence}% based on ${reasons[0] || 'confluence'}` : 'No high-probability setup detected.'
     };
-  } catch (e) { return null; }
+
+  } catch (e) { console.error('[CandleForecast Upgrade Error]', e); return null; }
+}
+
+if (typeof window !== "undefined") {
+  window.goldCandleForecast = goldCandleForecast;
 }
 
 if (typeof window !== "undefined") {
