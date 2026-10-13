@@ -1,4 +1,4 @@
-/* hg-v1328: the shared perfect bar, an in-sample walk, and the forward ledger.
+/* hg-v1329: the shared perfect bar, an in-sample walk, and the forward ledger.
    Perfect is a badge. It does not form a setup and it does not move a stop.
    The walk counts only. It is not a forward result and not a probability. */
 import fs from 'node:fs';
