@@ -1,7 +1,28 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (v14-2)
-Predictive Candle Forecasting Module. Uses ATR and momentum to forecast 
+HARDGATE — gold-candle-forecast.js (v14-3)
+Predictive Candle Forecasting Module. Uses ATR and momentum to forecast
 the next candle's range, direction, TP, and SL.
+
+v14-3 fixes two defects that kept the tab painting "Waiting for data..."
+on every page load since v14-2:
+
+  (1) Registration pattern. v14-2 wrote `window.HG_TAB_MODS[mod.id] = mod`.
+      That writes to the GLOBAL `window.HG_TAB_MODS`, not the lexically-
+      scoped `const HG_TAB_MODS = {}` at the top of index.html's shell
+      script (line 11004) that `showTab()` reads. A `const` declared at
+      script scope is a LEXICAL binding, not a window property, so the two
+      objects are different, and showTab's `const mod = HG_TAB_MODS[id]`
+      found nothing. We now push onto `window.HG_tabs` — the array
+      `bootHgTabs` iterates — and it copies into the shell's const + auto-
+      creates both the nav button and the tab pane in one place.
+
+  (2) Script load order. v14-2 placed the script at the body bottom
+      (line 11188). `bootHgTabs` is an IIFE at line 11006; it runs
+      synchronously and only sees modules whose push already landed. A
+      script loading at the body bottom pushes AFTER that iteration, so
+      the auto-wire never happened. We also deliberately removed the
+      duplicate inlined script tag at the body bottom — the import at
+      the top of the body (beside book.js) is the one home.
 ========================================================================= */
 (function() {
   'use strict';
@@ -21,7 +42,7 @@ the next candle's range, direction, TP, and SL.
 
       container.innerHTML = `
         <div class="panel">
-          <h2>Candle Forecast <span id="cfVersion">v14-2</span></h2>
+          <h2>Candle Forecast <span id="cfVersion">v14-3</span></h2>
           <div class="row" style="margin-bottom: 16px;">
             <button class="btn" id="cfRunBtn">SCAN NEXT CANDLE</button>
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
@@ -128,9 +149,18 @@ the next candle's range, direction, TP, and SL.
 
   mod.fmt = function(n) { return Number(n).toFixed(2); };
 
-  // Register the module with the global registry
+  // v14-3: register through window.HG_tabs, the array bootHgTabs iterates.
+  // Writing to window.HG_TAB_MODS directly misses the shell's lexical const
+  // of the same name (see header above) and skips the auto-wiring that
+  // creates the nav button + pane.
   if (typeof window !== 'undefined') {
-    window.HG_TAB_MODS = window.HG_TAB_MODS || {};
-    window.HG_TAB_MODS[mod.id] = mod;
+    window.HG_tabs = window.HG_tabs || [];
+    window.HG_tabs.push(mod);
+    // Defensive write: if a page has already run bootHgTabs and seeded the
+    // registry object onto window (shell dev builds do this), carry the
+    // module there too so a late-loaded tab can still mount on click.
+    if (window.HG_TAB_MODS && typeof window.HG_TAB_MODS === 'object') {
+      window.HG_TAB_MODS[mod.id] = mod;
+    }
   }
 })();

@@ -18459,34 +18459,49 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
+/* hg-v14-3 fix: the engine sits OUTSIDE the IIFE above (line 18461 `})();`)
+   and referenced `_atr` / `__last` / `_ema` — three helpers scoped INSIDE
+   that IIFE. Those three names were ReferenceErrors swallowed by the
+   function's own try/catch, so every call returned null and the Candle
+   Forecast tab painted "No clear signal detected" forever.
+   Bound to the plain-global `atr` / `ema` from indicators.js (which is
+   NOT an IIFE — its functions live at window scope). */
 function goldCandleForecast(rows) {
   try {
-    if (!rows || rows.length < 20) return null;
+    if (!Array.isArray(rows) || rows.length < 20) return null;
+    if (typeof atr !== 'function' || typeof ema !== 'function') return null;
     var n = rows.length;
     var current = rows[n-1];
-    var atr_vals = _atr(rows, 14);
-    var atr = __last(atr_vals) || (current.h - current.l);
-    if (!isFinite(atr) || atr <= 0) return null;
+    if (!current || !isFinite(+current.c) || !isFinite(+current.h) || !isFinite(+current.l)) return null;
+    var atrArr = atr(rows, 14);
+    var atrLast = (atrArr && atrArr.length) ? atrArr[atrArr.length - 1] : NaN;
+    if (!isFinite(atrLast) || atrLast <= 0) atrLast = Math.max(0, (+current.h) - (+current.l));
+    if (!isFinite(atrLast) || atrLast <= 0) return null;
 
-    var closes = rows.map(function(r){ return r.c; });
-    var ema9 = _ema(closes, 9);
-    var dir = (ema9[n-1] > ema9[n-2]) ? 'BULL' : 'BEAR';
+    var closes = rows.map(function(r){ return +r.c; });
+    var ema9 = ema(closes, 9);
+    if (!ema9 || ema9.length < 2) return null;
+    var e9_last = ema9[n-1], e9_prev = ema9[n-2];
+    if (!isFinite(e9_last) || !isFinite(e9_prev)) return null;
+    if (e9_last === e9_prev) return null;
+    var dir = (e9_last > e9_prev) ? 'BULL' : 'BEAR';
 
-    var expectedRange = atr * 0.8;
-    var high = current.h + (dir === 'BULL' ? expectedRange : -expectedRange);
-    var low = current.l - (dir === 'BULL' ? expectedRange : -expectedRange);
+    var expectedRange = atrLast * 0.8;
+    var high = (+current.h) + (dir === 'BULL' ? expectedRange : -expectedRange);
+    var low  = (+current.l) - (dir === 'BULL' ? expectedRange : -expectedRange);
 
-    var risk = Math.abs(current.c - low);
-    if (risk < 0.1) risk = atr * 0.5;
+    var risk = Math.abs((+current.c) - low);
+    if (!isFinite(risk) || risk < 0.1) risk = atrLast * 0.5;
+    var sign = (dir === 'BULL') ? 1 : -1;
 
     return {
       dir: dir,
       expectedHigh: +high.toFixed(2),
       expectedLow: +low.toFixed(2),
-      tp1: +(current.c + (dir === 'BULL' ? risk * 1 : -risk)).toFixed(2),
-      tp2: +(current.c + (dir === 'BULL' ? risk * 2 : -risk * 2)).toFixed(2),
-      sl: dir === 'BULL' ? low : high,
-      confidence: Math.min(1, atr / current.c)
+      tp1: +((+current.c) + sign * risk).toFixed(2),
+      tp2: +((+current.c) + sign * risk * 2).toFixed(2),
+      sl: dir === 'BULL' ? +low.toFixed(2) : +high.toFixed(2),
+      confidence: (+current.c > 0) ? Math.min(1, atrLast / (+current.c)) : 0
     };
   } catch (e) { return null; }
 }
