@@ -129,7 +129,22 @@ on every page load since v14-2:
       } catch (e2) {}
       try {
         var paxg = await window.binanceKlines('PAXGUSDT', '15m', 80);
-        if (paxg && paxg.length >= 20) return { rows: paxg, source: 'BINANCE PAXGUSDT' };
+        if (paxg && paxg.length >= 20) {
+          /* hg-v1310: a DIRECT PAXG fallback leaves the shared macro chain, so it
+             is anchored here through the one home (gold-iux.js), exactly as
+             getGoldCandles and goldscalp.js anchor their own packs — PAXG is a
+             token, not the metal, and a forecast built on its unanchored level
+             would disagree with every other gold desk. Module absent or anchor
+             unreadable: the feed's own bars (fail open). */
+          try {
+            var iuxFn = (typeof window.hgGoldIuxApplyRows === 'function') ? window.hgGoldIuxApplyRows : null;
+            if (iuxFn) {
+              var anchored = await iuxFn(paxg, 'binance-paxg');
+              if (anchored && anchored.length) return { rows: anchored, source: 'BINANCE PAXGUSDT · IUX anchored' };
+            }
+          } catch (eIx) {}
+          return { rows: paxg, source: 'BINANCE PAXGUSDT' };
+        }
       } catch (e3) {}
     }
     return { rows: [], source: '' };

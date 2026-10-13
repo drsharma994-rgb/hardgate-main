@@ -1,0 +1,58 @@
+hg-v1310: GOLD SCALP was forming ZERO candidates — one free variable, 18 suites
+
+Suite: 40 failed -> 16. GOLD SCALP had been silently producing an empty board.
+
+THE DEFECT. `__goldBundle` in goldind.js read `dir` at its macro read:
+
+    if (D.macroOk) { add(dir, 'macro', 'Macro alignment with DXY/US10Y'); }
+
+`dir` is NOT a parameter of that function and is never declared anywhere in it —
+it is a free variable, so that line threw `ReferenceError: dir is not defined` on
+EVERY invocation. `goldScalpSetups` wraps its whole 1,165-line body in
+`try { ... } catch(e){ return []; }`, which swallowed it, so every scan returned an
+empty board and `rejected` stayed empty too. That is why the failure surfaced as
+"the scalp mint forms 0 candidates" in five guards and as a downstream
+`TypeError: Cannot read properties of undefined (reading 'stamps')` in a sixth: the
+TypeError was a CONSEQUENCE of the emptiness, not a separate defect.
+
+I found it by replacing the swallowing catch with a capture and reading the real
+error, after establishing that none of the four early `return []` gates fired and
+that `preGate` was never assigned — proving execution died before the candidate
+loop.
+
+WHY THE OBVIOUS REPAIR WOULD HAVE BEEN WRONG. The bundle runs BEFORE any direction
+exists: it gathers evidence for every strategy, then candidates are formed from it,
+then each candidate picks a side. So it cannot make a direction-dependent decision,
+and it was never passed a side to make one with. The four `dir === 'long'/'short'`
+tests in the macro block never threw but never did anything either —
+`undefined === 'long'` is false — so `macroOk` was unconditionally true.
+
+So the read is now stamped NEUTRAL and labelled as context. It previously stamped a
+NEUTRAL side under the label "Macro alignment with DXY/US10Y", asserting a check
+that nobody performed — the hg-v955 defect in miniature, a field claiming work that
+did not happen. The duplicate macro read in the Confluence Tallying block — the same
+evidence with a second home — is REMOVED rather than repaired, on the hg-v949 rule.
+
+RECORDED, NOT HIDDEN: the direction-aware macro veto is STILL UNWIRED. I checked,
+and `hgGoldInstFilter` — the seam that does receive the candidate's side — never
+reads `dxyTrend` or `us10yTrend` (0 occurrences of either). That seam is where a real
+veto belongs, and the code comment now says so. I did not invent a veto to fill the
+hole: the doctrine is gates not scores, and a macro rule I cannot measure would be
+the hg-v966 unmeasured-weight trap.
+
+ALSO IN THIS PACK:
+  - gold-candle-forecast.js now anchors its direct PAXG fallback through the one
+    home (gold-iux.js), exactly as goldscalp.js and getGoldCandles anchor their own
+    packs. PAXG is a token, not the metal; a forecast built on its unanchored level
+    would disagree with every other gold desk. Fails open when the anchor is absent.
+  - tests/test-goldswing.mjs: the GOLD-group nav pin records `candle-forecast` in
+    its actual position. That pin exists so the shipped nav and the test cannot
+    drift apart silently — not to forbid new gold tabs — so it is updated rather
+    than loosened to a pattern.
+
+REMAINING: 16 reds, all upstream's own (verified red on origin/main, not merge
+artefacts). They cluster as the GOLD PINE record-layer family (4), TRENDMX (6), and
+six singletons (test-accuracy-floor, test-gates-fail-open, test-gold-family-scan,
+test-hard-refresh, test-tabs, test-trendtable).
+
+BATCH: hg-v1309 -> hg-v1310 across all five surfaces, recorded in the ledger (14 entries).

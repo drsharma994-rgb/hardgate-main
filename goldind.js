@@ -3525,17 +3525,32 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
     ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
   D.vpOk = isFinite(vpRange0) && vpRange0 >= 2.5*a15;
 
-  // Macro Alignment Check (Phase 3: Correlation with DXY/US10Y)
+  /* Macro context (Phase 3: correlation with DXY/US10Y).
+     DIRECTION IS NOT KNOWN HERE. This bundle gathers evidence for EVERY strategy
+     before any candidate is formed, so it has no side to align against — and it
+     was never passed one. The block below used to read a free variable `dir`,
+     which is not a parameter and is never declared in this function: the `add`
+     call threw `ReferenceError: dir is not defined` on every invocation, the
+     caller's `catch { return [] }` swallowed it, and GOLD SCALP therefore formed
+     ZERO candidates on every scan. The four `dir === 'long'/'short'` tests above
+     it never threw but never did anything either — `undefined === 'long'` is
+     false, so `macroOk` was unconditionally true.
+     So the read here is stamped NEUTRAL and says what it is: context, not a
+     verdict. Claiming "Macro alignment" while neutral is the hg-v955 defect in
+     miniature — a field asserting a check nobody performed. The direction-aware
+     macro decision belongs to hgGoldInstFilter, which receives the candidate's
+     side; that seam is where a real veto should be wired, and this comment is the
+     note that it is still open. */
   if (bundleOpts.macroHint && typeof bundleOpts.macroHint === 'object') {
     var m = bundleOpts.macroHint;
-    var macroOk = true;
-    if (m.dxyTrend && dir === 'long' && m.dxyTrend === 'BEARISH') macroOk = false;
-    if (m.dxyTrend && dir === 'short' && m.dxyTrend === 'BULLISH') macroOk = false;
-    if (m.us10yTrend && dir === 'long' && m.us10yTrend === 'BEARISH') macroOk = false;
-    if (m.us10yTrend && dir === 'short' && m.us10yTrend === 'BULLISH') macroOk = false;
-    D.macroOk = macroOk;
+    D.macroOk = true;
+    var mCtx = [];
+    if (m.dxyTrend) mCtx.push('DXY ' + m.dxyTrend);
+    if (m.us10yTrend) mCtx.push('US10Y ' + m.us10yTrend);
+    add('neutral', 'macro', 'Macro context only — DXY/US10Y is read per candidate, not per bundle'
+      + (mCtx.length ? ' (' + mCtx.join(', ') + ')' : ''));
   } else {
-    D.macroOk = true; // Default to ok if no macro data provided
+    D.macroOk = true; // no macro data supplied — fail open, as everywhere else
   }
   if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
     var swIdx0 = rows.length - 1 - sw.barsAgo;
@@ -3543,12 +3558,13 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
     var curV2 = D.activeTriggers.indexOf('LIQUIDITY_SWEEP_VOL_VALIDATED') >= 0 && sw.barsAgo === 0;
   }
 
-  // Confluence Tallying (Phase 3 & 4)
-  if (D.macroOk) {
-    add(dir, 'macro', 'Macro alignment with DXY/US10Y');
-  } else {
-    add('neutral', 'macro_veto', 'Macro misalignment (DXY/Yields)');
-  }
+  /* Confluence Tallying (Phase 3 & 4).
+     The macro read is NOT taken here: it is emitted once, above, in the macro
+     context block. This site was the second copy, and it is the one that threw —
+     `add(dir, 'macro', ...)` read the same undeclared `dir`. Two reads for one
+     piece of evidence is also the hg-v949 second-home defect, so the duplicate is
+     removed rather than repaired. D.macroOk is still set above and still read by
+     the candidate path. */
     if (D.volSpikeSweep && !curV2){
       if (sw.dir === 'bullish'){
         add('long', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago) — volume-validated');
