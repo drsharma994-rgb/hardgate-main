@@ -18474,9 +18474,132 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
-/* hg-v1307: the side with more reads is the call, even when the other side
-   also voted. A tie is broken by the last close versus the one before it.
-   Stop is one ATR against that close. TP1 is one ATR with it. TP2 is two. */
+/* hg-v1308: named candlestick patterns vote with the other reads.
+   A pattern high or low is the stop only when it sits 0.25 to 2.5 ATR
+   from the close. Otherwise the stop stays one ATR. */
+function hgCfPack(row) {
+  var o = +row.o, h = +row.h, l = +row.l, c = +row.c;
+  var range = h - l;
+  return {
+    o: o, h: h, l: l, c: c,
+    range: range,
+    body: Math.abs(c - o),
+    upper: h - Math.max(o, c),
+    lower: Math.min(o, c) - l,
+    bull: c > o,
+    bear: c < o
+  };
+}
+
+function hgCfCandlePatterns(rows, atrLast) {
+  var n = rows.length;
+  var a = hgCfPack(rows[n - 3]);
+  var b = hgCfPack(rows[n - 2]);
+  var c = hgCfPack(rows[n - 1]);
+  var hits = [];
+  var empty = { bullVotes: 0, bearVotes: 0, names: [], notes: [], longStop: null, shortStop: null };
+  if (!(atrLast > 0) || !(a.range >= 0) || !(b.range >= 0) || !(c.range >= 0)) return empty;
+  function big(x) { return x.range >= atrLast * 0.35; }
+  function bodyOk(x, k) { return x.body >= atrLast * k; }
+  function push(fam, name, dir, stop) { hits.push({ fam: fam, name: name, dir: dir, stop: stop }); }
+  function has(fam, dir) {
+    var i;
+    for (i = 0; i < hits.length; i++) if (hits[i].fam === fam && hits[i].dir === dir) return true;
+    return false;
+  }
+
+  if (big(c) && c.range > 0) {
+    var loc = (c.c - c.l) / c.range;
+    if (c.body > 0 && c.lower >= c.body * 2 && c.lower >= c.range * 0.5 && c.upper <= c.range * 0.25 && loc >= 0.6)
+      push('reject', 'hammer', 1, c.l);
+    else if (c.body > 0 && c.upper >= c.body * 2 && c.upper >= c.range * 0.5 && c.lower <= c.range * 0.25 && loc <= 0.4)
+      push('reject', 'shooting star', -1, c.h);
+    if (c.body <= c.range * 0.1) {
+      if (c.lower >= c.range * 0.65 && c.upper <= c.range * 0.15) push('reject', 'dragonfly doji', 1, c.l);
+      else if (c.upper >= c.range * 0.65 && c.lower <= c.range * 0.15) push('reject', 'gravestone doji', -1, c.h);
+      else push('info', 'doji — no vote', 0, null);
+    }
+  }
+  if (bodyOk(c, 0.45) && c.body >= c.range * 0.8) {
+    if (c.bull) push('run', 'bull marubozu', 1, c.l);
+    else if (c.bear) push('run', 'bear marubozu', -1, c.h);
+  }
+  if (big(b) && big(c) && bodyOk(c, 0.4) && b.body > 0 && c.body >= b.body) {
+    if (b.bear && c.bull && c.o <= b.c && c.c >= b.o) push('engulf', 'bullish engulfing', 1, Math.min(b.l, c.l));
+    else if (b.bull && c.bear && c.o >= b.c && c.c <= b.o) push('engulf', 'bearish engulfing', -1, Math.max(b.h, c.h));
+  }
+  if (bodyOk(b, 0.4) && big(c) && c.body > 0) {
+    var midB = (b.o + b.c) / 2;
+    if (b.bear && c.bull && c.o <= b.c && c.c > midB && c.c < b.o && !has('engulf', 1))
+      push('engulf', 'piercing line', 1, Math.min(b.l, c.l));
+    if (b.bull && c.bear && c.o >= b.c && c.c < midB && c.c > b.o && !has('engulf', -1))
+      push('engulf', 'dark cloud cover', -1, Math.max(b.h, c.h));
+  }
+  if (bodyOk(b, 0.5) && c.body > 0 && c.body <= b.body * 0.5) {
+    var hiBody = Math.max(b.o, b.c), loBody = Math.min(b.o, b.c);
+    var cHi = Math.max(c.o, c.c), cLo = Math.min(c.o, c.c);
+    if (cHi <= hiBody && cLo >= loBody) {
+      if (b.bear && c.bull) push('harami', 'bullish harami', 1, Math.min(b.l, c.l));
+      else if (b.bull && c.bear) push('harami', 'bearish harami', -1, Math.max(b.h, c.h));
+    }
+  }
+  if (bodyOk(a, 0.45) && b.body <= a.body * 0.4 && bodyOk(c, 0.35)) {
+    var midA = (a.o + a.c) / 2;
+    if (a.bear && c.bull && c.c > midA) push('star', 'morning star', 1, Math.min(a.l, b.l, c.l));
+    if (a.bull && c.bear && c.c < midA) push('star', 'evening star', -1, Math.max(a.h, b.h, c.h));
+  }
+  if (a.bull && b.bull && c.bull && bodyOk(a, 0.3) && bodyOk(b, 0.3) && bodyOk(c, 0.3)
+      && b.c > a.c && c.c > b.c
+      && b.o >= Math.min(a.o, a.c) && b.o <= Math.max(a.o, a.c)
+      && c.o >= Math.min(b.o, b.c) && c.o <= Math.max(b.o, b.c)
+      && a.upper <= a.body && b.upper <= b.body && c.upper <= c.body)
+    push('run', 'three white soldiers', 1, Math.min(a.l, b.l, c.l));
+  if (a.bear && b.bear && c.bear && bodyOk(a, 0.3) && bodyOk(b, 0.3) && bodyOk(c, 0.3)
+      && b.c < a.c && c.c < b.c
+      && b.o >= Math.min(a.o, a.c) && b.o <= Math.max(a.o, a.c)
+      && c.o >= Math.min(b.o, b.c) && c.o <= Math.max(b.o, b.c)
+      && a.lower <= a.body && b.lower <= b.body && c.lower <= c.body)
+    push('run', 'three black crows', -1, Math.max(a.h, b.h, c.h));
+  if (big(b) && big(c) && Math.abs(b.l - c.l) <= atrLast * 0.1 && b.bear && c.bull)
+    push('tweezer', 'tweezer bottom', 1, Math.min(b.l, c.l));
+  if (big(b) && big(c) && Math.abs(b.h - c.h) <= atrLast * 0.1 && b.bull && c.bear)
+    push('tweezer', 'tweezer top', -1, Math.max(b.h, c.h));
+  if (bodyOk(a, 0.4) && b.h <= a.h && b.l >= a.l && b.range < a.range) {
+    if (c.bull && c.c > a.h) push('inside', 'three inside up', 1, Math.min(a.l, b.l, c.l));
+    else if (c.bear && c.c < a.l) push('inside', 'three inside down', -1, Math.max(a.h, b.h, c.h));
+  } else if (big(b) && c.h <= b.h && c.l >= b.l && c.range < b.range) {
+    push('info', 'inside bar — no vote', 0, null);
+  }
+
+  var by = {}, notes = [], i, h, g, fam;
+  for (i = 0; i < hits.length; i++) {
+    h = hits[i];
+    if (!h.dir) { notes.push(h.name); continue; }
+    g = by[h.fam];
+    if (!g) by[h.fam] = { dir: h.dir, names: [h.name], stop: h.stop, clash: false };
+    else {
+      g.names.push(h.name);
+      if (g.dir !== h.dir) g.clash = true;
+      else if (h.dir === 1) g.stop = Math.min(g.stop, h.stop);
+      else g.stop = Math.max(g.stop, h.stop);
+    }
+  }
+  var out = { bullVotes: 0, bearVotes: 0, names: [], notes: notes, longStop: null, shortStop: null };
+  for (fam in by) {
+    g = by[fam];
+    if (g.clash) { out.notes.push(g.names.join(' / ') + ' conflict — no vote'); continue; }
+    out.names = out.names.concat(g.names);
+    if (g.dir === 1) {
+      out.bullVotes++;
+      out.longStop = out.longStop == null ? g.stop : Math.min(out.longStop, g.stop);
+    } else {
+      out.bearVotes++;
+      out.shortStop = out.shortStop == null ? g.stop : Math.max(out.shortStop, g.stop);
+    }
+  }
+  return out;
+}
+
 function goldCandleForecast(rows) {
   try {
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
@@ -18564,6 +18687,15 @@ function goldCandleForecast(rows) {
     if (driftT >= 1) { bulls++; reasons.push('drift t +' + driftT.toFixed(2) + ' over ' + rets.length + ' bars'); }
     else if (driftT <= -1) { bears++; reasons.push('drift t ' + driftT.toFixed(2) + ' over ' + rets.length + ' bars'); }
     else reasons.push('drift t ' + driftT.toFixed(2) + ' is inside the noise band — no vote');
+
+    var pat = hgCfCandlePatterns(rows, atrLast);
+    var pi;
+    bulls += pat.bullVotes;
+    bears += pat.bearVotes;
+    checked += pat.bullVotes + pat.bearVotes;
+    if (pat.names.length) reasons.push('patterns: ' + pat.names.join(', '));
+    else reasons.push('no candlestick pattern');
+    for (pi = 0; pi < pat.notes.length; pi++) reasons.push(pat.notes[pi]);
 
     var dir = null;
     /* hg-v1309: A TIE OF ZEROES IS NOT A TIE. The 60th-percentile-of-zeroes
@@ -18654,6 +18786,22 @@ function goldCandleForecast(rows) {
     var sign = dir === 'BULL' ? 1 : -1;
     var agrees = dir === 'BULL' ? bulls : bears;
     var against = dir === 'BULL' ? bears : bulls;
+    var sl = null, tp1 = null, tp2 = null, stopSource = null;
+    if (!neutral) {
+      sl = +(c - sign * atrLast).toFixed(2);
+      stopSource = 'ATR';
+      var rawStop = dir === 'BULL' ? pat.longStop : pat.shortStop;
+      if (rawStop != null && ((dir === 'BULL' && rawStop < c) || (dir === 'BEAR' && rawStop > c))) {
+        var dist = Math.abs(c - rawStop);
+        if (dist >= atrLast * 0.25 && dist <= atrLast * 2.5) {
+          sl = +(+rawStop).toFixed(2);
+          stopSource = 'pattern';
+        }
+      }
+      var risk = Math.abs(c - sl);
+      tp1 = +(c + sign * risk).toFixed(2);
+      tp2 = +(c + sign * risk * 2).toFixed(2);
+    }
     return {
       dir: dir,
       lean: dir,
@@ -18661,6 +18809,8 @@ function goldCandleForecast(rows) {
       against: against,
       checked: checked,
       reasons: reasons,
+      patterns: pat.names,
+      stopSource: stopSource,
       expectedHigh: +(c + expectedRange).toFixed(2),
       expectedLow: +(c - expectedRange).toFixed(2),
       expectedRange: +expectedRange.toFixed(2),
@@ -18670,16 +18820,15 @@ function goldCandleForecast(rows) {
       atr: +atrLast.toFixed(2),
       atrSource: atrSource,
       close: +c.toFixed(2),
-      sl: neutral ? null : +(c - sign * atrLast).toFixed(2),
-      tp1: neutral ? null : +(c + sign * atrLast).toFixed(2),
-      tp2: neutral ? null : +(c + sign * atrLast * 2).toFixed(2),
+      sl: sl,
+      tp1: tp1,
+      tp2: tp2,
       note: neutral
-        ? 'No side: ' + agrees + ' read' + (agrees === 1 ? '' : 's') + ' agreed and ' + against
-          + ' opposed, so nothing is called. No stop and no targets are issued for a NEUTRAL bar.'
-        : (against
-          ? (agrees + ' read' + (agrees === 1 ? '' : 's') + ' for the call, ' + against + ' against. ')
-          : '')
-          + 'SL is one ATR against the last close. TP1 is one ATR with it. TP2 is two ATR.'
+        ? 'No side earned a majority, so nothing is called and no stop is issued.'
+        : ((against ? (agrees + ' for the call, ' + against + ' against. ') : '')
+          + (stopSource === 'pattern'
+            ? 'Stop is the pattern high or low. TP1 is one times that risk. TP2 is two.'
+            : 'No pattern stop in range, so the stop is one ATR. TP1 is one ATR. TP2 is two.'))
     };
   } catch (e) { return null; }
 }

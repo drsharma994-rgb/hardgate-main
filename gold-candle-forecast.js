@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. The scan takes the side with more reads of the last closed 15m gold candle. A tie uses the last close. Stop is one ATR against that close. TP1 is one ATR with it. TP2 is two ATR.
+            No forecast yet. The scan reads hammer, star, engulfing, harami, marubozu, soldiers, crows, tweezers and three-inside on the last closed 15m gold candles. Those patterns vote with the other reads. The side with more votes is the call. A pattern high or low is the stop when it sits between 0.25 and 2.5 ATR from the close. Otherwise the stop is one ATR. TP1 is one times that risk. TP2 is two.
           </div>
         </div>
       `;
@@ -158,15 +158,19 @@ on every page load since v14-2:
     var lean = forecast.lean || (forecast.dir ? forecast.dir : 'unread');
     var called = lean === 'BULL' || lean === 'BEAR';
     var dirClass = lean === 'BULL' ? 'long' : (lean === 'BEAR' ? 'short' : '');
-    var dirLabel = lean === 'BULL' ? 'LONG' : (lean === 'BEAR' ? 'SHORT' : 'NO DIRECTIONAL CALL');
+    var dirLabel = lean === 'BULL' ? 'LONG' : (lean === 'BEAR' ? 'SHORT' : 'NEUTRAL');
     var reasons = (forecast.reasons || []).map(function(r) {
       return '<li>' + String(r).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
     }).join('');
-    var levels = called
-      ? '<li><b>Stop:</b> <span class="neg" style="font-weight:700;">' + this.fmt(forecast.sl) + '</span></li>'
-        + '<li><b>TP1:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp1) + '</span></li>'
-        + '<li><b>TP2:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp2) + '</span></li>'
-      : '';
+    var patLine = (forecast.patterns && forecast.patterns.length)
+      ? forecast.patterns.join(', ')
+      : 'none';
+    var levels = '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>'
+      + (called
+        ? '<li><b>Stop:</b> <span class="neg" style="font-weight:700;">' + this.fmt(forecast.sl) + '</span> <span class="note">(' + (forecast.stopSource === 'pattern' ? 'pattern extreme' : 'one ATR') + ')</span></li>'
+          + '<li><b>TP1:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp1) + '</span></li>'
+          + '<li><b>TP2:</b> <span class="pos" style="font-weight:700;">' + this.fmt(forecast.tp2) + '</span></li>'
+        : '<li><b>Stop:</b> none — no side</li>');
 
     container.className = '';
     container.innerHTML = `
@@ -184,7 +188,7 @@ on every page load since v14-2:
         </div>
       </div>
     `;
-    statusEl.textContent = called ? dirLabel : 'Unread';
+    statusEl.textContent = called ? dirLabel : 'NEUTRAL';
   };
 
   mod.fmt = function(n) { return Number(n).toFixed(2); };

@@ -10,7 +10,7 @@ let pass = 0;
 const ok = (c, m) => { if (!c) throw new Error('FAIL: ' + m); pass++; console.log('  ok —', m); };
 
 const src = fs.readFileSync(path.join(root, 'goldind.js'), 'utf8');
-const start = src.indexOf('function goldCandleForecast');
+const start = src.indexOf('function hgCfPack');
 const end = src.indexOf('if (typeof window', start);
 if (start < 0 || end < 0) throw new Error('engine not found');
 const ctx = {};
@@ -82,6 +82,30 @@ console.log('== candle forecast leans only when reads agree ==');
   for (let i = 0; i < 25; i++) flat.push({ t: i, o: 100, h: 100, l: 100, c: 100, v: 1 });
   ok(forecast(flat) === null, 'a 25-bar no-range tape is unreadable and returns null');
   ok(forecast(up(10)) == null, 'a short tape stays null');
+
+  const base = up(30);
+  base[27] = { t: 27, o: 2060, h: 2060.6, l: 2055, c: 2055.4, v: 10 };
+  base[28] = { t: 28, o: 2054.8, h: 2055.6, l: 2054.2, c: 2055.1, v: 10 };
+  base[29] = { t: 29, o: 2055.2, h: 2060.2, l: 2054.6, c: 2059.4, v: 10 };
+  const star = forecast(base);
+  ok(star && star.patterns.indexOf('morning star') >= 0 && star.dir === 'BULL',
+    'a morning star is named and votes long (' + (star && star.patterns || []).join(', ') + ')');
+  ok(star.stopSource === 'pattern' && Math.abs(star.sl - 2054.2) < 0.02,
+    'the morning-star stop is the pattern low (' + (star && star.sl) + ' via ' + (star && star.stopSource) + ')');
+
+  const eng = up(30);
+  const prev = eng[28].c;
+  eng[28] = { t: 28, o: prev - 1, h: prev + 0.4, l: prev - 1.4, c: prev, v: 10 };
+  eng[29] = { t: 29, o: prev + 0.2, h: prev + 0.4, l: prev - 3.2, c: prev - 3, v: 10 };
+  const bear = forecast(eng);
+  ok(bear && bear.patterns.indexOf('bearish engulfing') >= 0,
+    'a bearish engulfing is named (' + (bear && bear.patterns || []).join(', ') + ' | ' + (bear && bear.reasons || []).join(' | ') + ')');
+
+  const noise = up(30);
+  const nc = noise[29].c;
+  noise[29] = { t: 29, o: nc, h: nc + 0.05, l: nc - 0.2, c: nc + 0.02, v: 10 };
+  const tiny = forecast(noise);
+  ok(tiny && tiny.patterns.indexOf('hammer') < 0, 'a wick smaller than the ATR gate is not a hammer');
 }
 
 console.log('== the tab does not invent a trade ==');
@@ -90,7 +114,7 @@ console.log('== the tab does not invent a trade ==');
   ok(tab.indexOf('TP1') >= 0 && tab.indexOf('Stop:') >= 0, 'the card prints the stop and the targets');
   ok(tab.indexOf('getGoldCandles') >= 0 && tab.indexOf('api.binance.com/api/v3/klines') < 0,
     'the tape comes from the house gold loader, not a raw spot URL');
-  ok(tab.indexOf('NO DIRECTIONAL CALL') >= 0, 'an unread lean is labeled as no call');
+  ok(tab.indexOf('Patterns:') >= 0 && tab.indexOf('NEUTRAL') >= 0, 'the card names the patterns and a neutral tape');
 }
 
 console.log('\npassed: ' + pass);
