@@ -21052,6 +21052,100 @@ function hgCfMeasure(scalp, swing, rows15, rows4) {
   }
 }
 
+/* hg-v1332: the day's confirmed swings, and no others.
+   A swing is confirmed only when the builder already formed it: a named shape
+   plus structure, a gold desk, or a higher timeframe, and the higher frame is
+   not one-sided against. A family that nets against is not a confirmation.
+   The scalp is not on this list. Two are enough for the day; an earlier
+   confirmed swing past that cap is stood down, not deleted from the tape.
+   Prices come from the builder. This function does not mint a bracket. */
+function hgCfDaySwings(rows, opts) {
+  var limit = (opts && isFinite(+opts.limit) && +opts.limit > 0) ? Math.floor(+opts.limit) : 2;
+  var out = { ok: false, tf: '4h', limit: limit, day: null, setups: [], stoodDown: 0, why: '' };
+  function dayKey(t) {
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    var d = new Date(ms);
+    if (!isFinite(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  }
+  function take(setup, barT, bag) {
+    if (!setup || setup.formed !== true) return;
+    if (setup.dir !== 'BULL' && setup.dir !== 'BEAR') return;
+    var entry = +setup.entry, stopPx = +setup.stop, t1 = +setup.tp1;
+    if (!isFinite(entry) || !isFinite(stopPx) || !isFinite(t1)) return;
+    if (!(Math.abs(entry - stopPx) > 0)) return;
+    var side = setup.dir === 'BULL' ? 'long' : 'short';
+    if (side === 'long' ? !(t1 > entry) : !(t1 < entry)) return;
+    var cv = setup.confluenceView;
+    if (cv && typeof cv.familiesAgainst === 'number' && cv.familiesAgainst > 0) return;
+    var i;
+    for (i = 0; i < bag.length; i++) {
+      if (bag[i].dir === setup.dir && bag[i].entry === entry && bag[i].stop === stopPx) return;
+    }
+    bag.push({
+      dir: setup.dir,
+      label: setup.label || (setup.dir === 'BULL' ? 'LONG SETUP' : 'SHORT SETUP'),
+      entry: entry,
+      stop: stopPx,
+      tp1: t1,
+      tp2: isFinite(+setup.tp2) ? +setup.tp2 : null,
+      stopSource: setup.stopSource || null,
+      parts: setup.parts || '',
+      barT: isFinite(+barT) ? +barT : null,
+      tf: '4h'
+    });
+  }
+  try {
+    var live = opts && opts.live;
+    var found = [];
+    var lastT = (Array.isArray(rows) && rows.length) ? +(rows[rows.length - 1] && rows[rows.length - 1].t) : NaN;
+    out.day = dayKey(lastT);
+    var timesOk = Array.isArray(rows) && rows.length >= 30;
+    var prev = -Infinity, i, t;
+    if (timesOk) {
+      for (i = 0; i < rows.length; i++) {
+        t = +(rows[i] && rows[i].t);
+        if (!isFinite(t) || t <= prev) { timesOk = false; break; }
+        prev = t;
+      }
+    }
+    var canWalk = timesOk && out.day && typeof goldCandleForecast === 'function' && typeof hgCfBuildSetup === 'function';
+    if (canWalk) {
+      for (i = 30; i < rows.length; i++) {
+        if (dayKey(rows[i].t) !== out.day) continue;
+        if (i === rows.length - 1 && live) {
+          take(live, +rows[i].t, found);
+          continue;
+        }
+        var slice = rows.slice(0, i + 1);
+        var fc = goldCandleForecast(slice, null, null);
+        if (!fc) continue;
+        take(hgCfBuildSetup(slice, { tf: '4h', horizon: 'swing' }, fc), +rows[i].t, found);
+      }
+      if (live) take(live, isFinite(lastT) ? lastT : null, found);
+    } else if (live) {
+      take(live, isFinite(lastT) ? lastT : null, found);
+    }
+    if (found.length > limit) {
+      out.stoodDown = found.length - limit;
+      found = found.slice(found.length - limit);
+    }
+    out.setups = found;
+    out.ok = true;
+    out.why = found.length
+      ? (found.length + ' confirmed swing setup' + (found.length === 1 ? '' : 's') + ' for ' + (out.day || 'this day') + '. Two are enough for the day.'
+        + (out.stoodDown ? (' ' + out.stoodDown + ' earlier confirmed swing' + (out.stoodDown === 1 ? ' was' : 's were') + ' stood down.') : ''))
+      : 'No confirmed swing setup for this day. An unconfirmed read is not shown. Nothing was invented.';
+    return out;
+  } catch (eDay) {
+    out.setups = [];
+    out.why = 'Confirmed swings could not be read. Nothing was invented.';
+    return out;
+  }
+}
+
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
   window.hgCfConfluence = hgCfConfluence;
@@ -21069,4 +21163,5 @@ if (typeof window !== "undefined") {
   window.hgCfWalk = hgCfWalk;
   window.hgCfForwardMark = hgCfForwardMark;
   window.hgCfMeasure = hgCfMeasure;
+  window.hgCfDaySwings = hgCfDaySwings;
 }

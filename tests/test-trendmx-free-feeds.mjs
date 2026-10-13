@@ -262,6 +262,22 @@ console.log('\n5. wired where it must be, one home, nothing read back');
   ok(/'trendtable\.combined\.js'/.test(read('tests/test-crypto-funding-mark.mjs').split('const want = ')[1].split(';')[0]), 'the funding census counts the combined matrix as a carrier');
 }
 
+console.log('\n5b. the divergence helpers cannot shadow the indicators they call (hg-v1334)');
+{
+  /* hg-v1334: `const rsi = rsi(rows, 14)` inside tmRsiDivergence shadowed the
+     global RSI function with its own not-yet-initialized binding — every call
+     threw a TDZ ReferenceError, trendScore's catch swallowed it, and the
+     all-zero composite left every TREND MATRIX category empty (no direction,
+     no majority, no desks) for as long as the bug shipped. Both copies now
+     read the series into a NON-shadowing binding (rsiSeries) with a typeof
+     guard; this pin keeps the shadow from coming back in either copy. */
+  for (const f of ['trendtable-src-0.js', 'trendtable.combined.js']){
+    const s = read(f);
+    ok(!/const rsi = rsi\(/.test(s), f + ' never shadows the rsi indicator with a same-named binding');
+    ok(/rsiSeries = rsi\(/.test(s) && /typeof rsi !== 'function'/.test(s), f + ' reads the RSI series into rsiSeries behind a typeof guard (the divergence chip works)');
+  }
+}
+
 console.log('\n6. version stamps');
 {
   const v = (read('build-stamp.js').match(/version:\s*'(hg-v\d+)'/) || [])[1];

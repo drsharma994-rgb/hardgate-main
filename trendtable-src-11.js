@@ -224,6 +224,34 @@
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
             state.death = trendmxDeathCrossSetups(state.rows);
+            /* hg-v1332: THE CROSS DESKS NOW SAY WHY THEY ARE EMPTY.
+               Both desks drop a row at six points, and four of those
+               dropped it SILENTLY — so a board with no golden and no
+               death setup reported nothing at all, which is exactly
+               how it was reported to me. The counters are surfaced
+               here as plain words a reader can act on. */
+            try {
+              var gH = state.golden.held || {}, dH = state.death.held || {};
+              var why = function(h, tag) {
+                var bits = [];
+                if (h.noCross) bits.push(h.noCross + ' without a fresh ' + tag + ' cross');
+                if (h.noComps) bits.push(h.noComps + ' with the daily EMAs not aligned');
+                if (h.noPrice) bits.push(h.noPrice + ' with an unreadable price');
+                if (h.dir) bits.push(h.dir + ' on the wrong side of the cross');
+                if (h.conv) bits.push(h.conv + ' with no conviction');
+                if (h.cascade) bits.push(h.cascade + ' with no 4h cascade');
+                if (h.gates) bits.push(h.gates + ' held by the 7-gate matrix');
+                if (h.grade) bits.push(h.grade + ' refused at the grade');
+                if (h.waiting) bits.push(h.waiting + ' waiting on an EMA tag');
+                if (h.plan) bits.push(h.plan + ' with an invalid plan');
+                return bits.length ? bits.join(' · ') : 'nothing was held';
+              };
+              state.crossWhy = {
+                rows: (state.rows || []).length,
+                golden: why(gH, 'GOLDEN'),
+                death: why(dH, 'DEATH')
+              };
+            } catch (eWhy) { state.crossWhy = null; }
           } catch (eB) {}
           renderAll();
           setProg(info.total ? info.done / info.total : 0);
@@ -244,6 +272,22 @@
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
       renderAll();
+      /* hg-v1333: THE BOARD NAMES ITS OWN NUMBERS.
+         A tab that paints nothing in ANY of its categories (CLEAN, NEAR,
+         GOLDEN, DEATH, CONVICTION, STRONG) has to say which link broke: did
+         the scan produce no rows at all, did the fetches fail, or did rows
+         arrive and get held? Every one of those is a different bug and the
+         board used to look identical for all three. This line prints the
+         counts, and the cross desks' held reasons, right under the scan. */
+      try {
+        var whyX = state.crossWhy || {};
+        setStatus('Scan done · ' + results.length + ' rows on the board · '
+          + (state.crypto || []).length + ' crypto setup(s) · '
+          + (state.golden || []).length + ' GOLDEN · ' + (state.death || []).length + ' DEATH'
+          + (failed ? (' · ' + failed + ' fetch failure(s)') : '')
+          + (whyX.golden ? (' · golden held: ' + whyX.golden) : '')
+          + (whyX.death ? (' · death held: ' + whyX.death) : ''));
+      } catch (eWhy2) {}
       /* hg-v1039: THE CROWN JOINS THE FORWARD BOOK — the desk has crowned
          CLEAN / PERFECT rows for its whole life and never recorded one, so
          'does the trend-matrix crown pay?' could never be asked. Each 7/7
@@ -334,6 +378,7 @@
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxClosedGate = trendmxClosedGate;   /* hg-v1335: the alert-desk gate, exported like its siblings */
 W.trendmxSetupGrade = trendmxSetupGrade;
 W.tmValueState = tmValueState;
 W.tmBodyCommit = tmBodyCommit;

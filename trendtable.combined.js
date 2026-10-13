@@ -245,15 +245,6 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
-/* hg-v1331: THE PHASE 4 DIVERGENCE CHIPS, baked from the served parts into
-   the combined file so the suite boots what the browser runs (hg-v1160).
-   These were added to trendtable-src-0.js by commit 2c272b61 ("Phase 4:
-   Implement RSI and Volume Divergence chips in Trend Matrix") and never
-   mirrored into the combined; the parts-vs-combined guard would have
-   caught it if that invariant had been checked each pack. The functions
-   are pure HTML returners: they read trendScore's own volDiv/rsiDiv marks
-   off a row and paint a chip. They do not gate, do not score, do not
-   demote; a row with no divergence mark reads nothing and the chip is ''. */
 function tmRsiDivChipHtml(r){
   if (!r || !r.rsiDivLong && !r.rsiDivShort) return '';
   var dir = r.rsiDivLong ? 'long' : 'short';
@@ -323,7 +314,26 @@ function trendmxSetupGrade(r, dir){
   }
   var value = tmValueState(r, dir);
   for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+  /* hg-v1331: AN UNREAD INPUT ABSTAINS — IT DOES NOT REFUSE.
+     This line graded SKIP on `reasons.length` alone, and tmValueState pushes
+     a reason for every input it could not read: 'hurst unread', 'anchored
+     VWAP unread', '1h cloud unread', 'pullback volume unread'. On any tape
+     where those readers return nothing — the normal case — EVERY row carried
+     at least one unread reason, so every row graded SKIP and the desk minted
+     NOTHING AT ALL. That is the three-state rule broken: a series nobody could
+     read is not evidence against a setup, it is the absence of evidence.
+     The unread reasons are still reported so a reader can see exactly what
+     could not be read; only a REAL refusal blocks TRADE. Every genuine gate
+     (extended from the EMA, ADX exhaustion or chop, RSI against, OBV
+     divergence, funding, BTC structure, below/inside the 1h cloud, no pullback
+     into the 1h EMA21, distribution volume) still refuses exactly as before. */
+  var blocking = [];
+  for (var ri = 0; ri < reasons.length; ri++){
+    if (/unread/i.test(reasons[ri])) continue;
+    blocking.push(reasons[ri]);
+  }
+  return { grade: blocking.length ? 'SKIP' : 'TRADE', reasons: reasons, blocking: blocking,
+           unread: reasons.length - blocking.length, volConf: volConf, value: value };
 }
 function tmValueState(row, dir){
   var out = { reasons: [], distAtr: null, adx4: null, touched: null };
@@ -418,8 +428,8 @@ function tmValueState(row, dir){
       var rsiSeries = rsi(closes, 14);
       var rsiNow = rsiSeries && rsiSeries.length ? rsiSeries[rsiSeries.length - 1] : NaN;
       if (isFinite(rsiNow)){
-        if (dir === 'long' && rsiNow > 52) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is above the bull floor');
-        if (dir === 'short' && rsiNow < 50) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is below the bear ceiling');
+        if (dir === 'long' && rsiNow < TM_MOM_BULL_FLOOR) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is under the bull floor');
+        if (dir === 'short' && rsiNow > TM_MOM_BEAR_CEIL) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is over the bear ceiling');
       }
     } catch (eRsi) {}
   }
@@ -3807,34 +3817,16 @@ function trendmxEmaTag(rows4h, dir){
   }
   return { state: 'waiting', ema: name };
 }
-/* hg-v1331: THE PHASE 4 DIVERGENCE DETECTORS, baked into combined for
-   hg-v1160 parity AND the TDZ-shadow bug IS fixed. Added to parts by
-   commit 2c272b61 and never mirrored; the parts' trendScore has silently
-   thrown TDZ on every realistic tape (>=30 daily bars) since 2c272b61
-   because `const rsi = rsi(rows, 14)` on line 2 shadows the global rsi()
-   function (the TDZ throws before the right-hand call runs). The outer
-   trendScore try/catch swallows the exception and returns zeroResult(),
-   so every row scores 0, |score| never clears TM_MAJORITY, tmDirOf()
-   returns null for every row, every mint path (goldenCross, deathCross,
-   cryptoCandidates) returns an empty array, and the TREND MATRIX tab
-   paints as empty — WHICH IS THE USER'S "not forming any setups". This
-   was NOT the hg-v1242..v1268 ensemble (Cluster C); it was a single
-   production-breaking shadow bug the test suite could not see because
-   combined was missing the Phase 4 code. Fix: rename the local to
-   rsiSeries (and vSeries for the mirror). This is a BEHAVIOUR CHANGE
-   that restores trendScore to its intended output on realistic tapes:
-   composite scores no longer collapse to 0, tmDirOf finds a direction,
-   the mint paths see candidates again. comps.rsiDivLong/Short +
-   comps.volDivLong/Short start being set and the Phase 4 chips paint
-   for the first time. */
 function tmRsiDivergence(rows, dir) {
-  if (!rows || rows.length < 30) return false;
-  const rsiSeries = rsi(rows, 14);
+  /* Do not name this series rsi. That shadows the indicator, the call throws
+     before the binding exists, and trendScore's catch then zeros the row. */
+  if (!rows || rows.length < 30 || typeof rsi !== 'function') return false;
+  var rsiSeries = rsi(rows.map(function (bar) { return bar ? bar.c : NaN; }), 14);
   if (!rsiSeries) return false;
-  const n = rows.length;
-  for (let i = n - 20; i < n - 1; i++) {
+  var n = rows.length;
+  for (var i = n - 20; i < n - 1; i++) {
     if (!isFinite(rows[i].c) || !isFinite(rsiSeries[i])) continue;
-    const prevIdx = i - 5;
+    var prevIdx = i - 5;
     if (prevIdx < 5) continue;
 
     if (dir === 'long') {
@@ -3925,6 +3917,7 @@ function trendScore(rows1d, rows4h){
 
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
+
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -4617,6 +4610,7 @@ function trendmxCardStack(r, dir){
       style: 'swing', asset: 'crypto', ticker: ticker,
       clean: !!(gate && gate.clean7),
       nearClean: !!(gate && gate.nearClean),
+
       gatesPassed: gate ? gate.gatesPassed : undefined,
       gatesTotal: 7,
       tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
@@ -4720,22 +4714,25 @@ function trendmxConviction(row){
 /** Rows with fresh ⚡GOLDEN (EMA50/200 cross ≤10d) + bull cross + long plan + conviction. Pure. */
 function trendmxGoldenCrossSetups(rows){
   var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0,
+                noRow: 0, noCross: 0, noComps: 0, noPrice: 0, dir: 0, conv: 0, plan: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
-    if (!r || r.freshCross !== 'GOLDEN') continue;
-    if (!r.comps || r.comps.d1Cross <= 0) continue;
+    if (!r){ out.held.noRow++; continue; }
+    if (r.freshCross !== 'GOLDEN'){ out.held.noCross++; continue; }
+    if (!r.comps){ out.held.noComps++; continue; }
+    if (r.comps.d1Cross <= 0){ out.held.noComps++; continue; }
     /* hg-v1150: an unpriceable row is not a setup. hgBestLevels can price a
        plan straight off the tape, which is right for a THIN row — but a row
        whose own published price is unreadable is corrupt, and a corrupt row
        must not mint a ticket the board would show beside a price it cannot
        print. */
-    if (!isFinite(+r.price)) continue;
+    if (!isFinite(+r.price)){ out.held.noPrice++; continue; }
     var dir = tmDirOf(r);
-    if (dir !== 'long') continue;
+    if (dir !== 'long'){ out.held.dir++; continue; }
     var conv = trendmxConviction(r);
-    if (!conv) continue;
+    if (!conv){ out.held.conv++; continue; }
     if (tmCascadeDir(r.rows4h) !== 1){ out.held.cascade++; continue; }
     /* hg-v1150: THE ROW-CARRIED VETO IS RESPECTED. The closed-gate recompute
        below re-derives the 7-gate matrix off the tape, but it can never
@@ -4752,7 +4749,7 @@ function trendmxGoldenCrossSetups(rows){
     var tag = trendmxEmaTag(r.rows4h, dir);
     if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
     var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
     out.push({
       sym: r.sym, dir: 'long', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
@@ -4778,7 +4775,8 @@ function trendmxGoldenCrossSetups(rows){
    surface on the tab. Pure. */
 function trendmxDeathCrossSetups(rows){
   var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0,
+                noRow: 0, noCross: 0, noComps: 0, noPrice: 0, dir: 0, conv: 0, plan: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -4801,7 +4799,7 @@ function trendmxDeathCrossSetups(rows){
     var tag = trendmxEmaTag(r.rows4h, dir);
     if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
     var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
+    if (!tmValidSetup(plan)){ out.held.plan++; continue; }
     out.push({
       sym: r.sym, dir: 'short', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
@@ -4891,7 +4889,7 @@ function tmSmcScanPass(rows, golden, death){
       r = cands[i];
       var dir = tmDirOf(r);
       var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!tmValidSetup(plan)) continue;
+      if (!tmValidSetup(plan)){ out.held.plan++; continue; }
       var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
       tmSmcMark(syn, r.rows4h);
       if (syn.smc) r.smc = syn.smc;
@@ -5003,6 +5001,7 @@ function trendmxFlowScan(rows){
       if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
     });
   }
+
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -5439,6 +5438,7 @@ function tmVolumeProfile(rows){
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
   var pivots = [];
+
   for (var i = 2; i < rows.length - 2; i++){
     if (dir === 'long'){
       if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
@@ -5980,6 +5980,7 @@ async function trendmxFormOne(ticket, row, ctx){
     var n = rows4.length - 1;
     if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
+
     var lastHigh = null, lastLow = null, si;
     for (si = 0; si < swings.length; si++){
       if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
@@ -6820,6 +6821,7 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     /* hg-v1012: the flow split, read off the stamps the scan left — the
        summary names the evidence the same way the cards do */
     if (r.flow && r.flow.verdict === 'with') flowW++;
+
     else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
@@ -7181,6 +7183,7 @@ function trendmxPerfectState(r){
    drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
 function trendmxAtrRegime(r){
   try{
+
     if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
     if (typeof hgAtrPercentile !== 'function') return null;
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
@@ -7537,6 +7540,7 @@ function trendmxFivePillars(r){
     if (r.flow.verdict === 'against') sentAgainst = true;
     if (r.flow.verdict === 'with') sentWith = true;
   }
+
   if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
     sentRead = true;
     try{
@@ -7744,16 +7748,9 @@ function trendmxPaintDeskSections(refs, state){
   forming.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
   if (refs.cards){
     if (!clean.length){
-      /* hg-v1331: on a fully empty board (no clean, no golden, no death, no crypto)
-         prepend the WHY NO SETUPS panel that aggregates the held.stack reasons
-         across all three mint paths. Fails open: with no state, no held stacks
-         or no reasons, trendmxWhyEmptyHtml returns ''. */
-      var emptyWhy = '';
-      try { emptyWhy = trendmxWhyEmptyHtml(state) || ''; } catch (eWhy) { emptyWhy = ''; }
-      var emptyNote = (typeof hgSetupEmptyHTML === 'function')
+      refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')
         ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. The golden and death cross desks and the limit board surface actionable rows when gates + plan align.' })   /* hg-v1015: two cross desks now */
         : '<div class="empty">No CLEAN tickets.</div>';
-      refs.cards.innerHTML = emptyWhy + emptyNote;
     } else {
       var ch = '<div class="note" style="margin:0 0 10px"><b>CLEAN TICKETS</b> — 7/7 gates + valid plan + min R:R ' + TM_MIN_RR + '.</div>';
       for (var ci = 0; ci < Math.min(clean.length, 12); ci++) ch += trendmxSetupCardHTML(clean[ci], 'clean');
@@ -7919,6 +7916,7 @@ function trendmxTrendFormHTML(rows){
         var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
           + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
         /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
+
            minted tiers; anything below the NEAR floor (or a forming row with
            no majority, whose gate is null) is the house DRAFT ladder, never
            a fabricated 6/7 NEAR. */
@@ -7998,88 +7996,6 @@ function trendmxGridBlockHtml(title, gridLbl, s, callDir){
   }catch(e){ return ''; }
 }
 
-/* hg-v1331: WHY NOTHING FORMED — the empty-state narrator. A scan that
-   mints no CLEAN tickets, no golden-cross tickets, no death-cross tickets
-   and no crypto-formation tickets used to paint four separate empty-state
-   notes (and the DEATH DESK was invisible by return ''). This aggregates
-   held.stack reasons across the three cross/crypto desks + the formation
-   pass's hard[] list and renders ONE panel that names the top binding
-   reasons. The hg-v924 OMNIGOLD WHY NOTHING TICKETED precedent, applied
-   to this desk's own held stacks.
-   Doctrine: NO GATE IS LOOSENED. Per the AGENTS Cluster C standing
-   conclusion, the 325 hard-gate rules (hg-v1242..v1268, each individually
-   measured) are the correct behaviour on an ensemble so tight; this pack
-   makes the empty state readable, not shorter. The user complaint "not
-   forming any setups" is answered by naming WHY, not by relaxing a rule.
-   Fails open: with no state, no state.golden/death/crypto, or empty held
-   stacks, the panel renders ''. */
-function trendmxWhyEmptyHtml(state){
-  try{
-    state = state || {};
-    var golden = state.goldenCross || state.golden || [];
-    var death  = state.deathCross  || state.death  || [];
-    var crypto = state.cryptoSetups || state.crypto || [];
-    /* paint only when the three mint paths all produced ZERO tickets.
-       A non-empty cards board handles its own narration (hg-v552). */
-    if ((golden.length | 0) + (death.length | 0) + (crypto.length | 0) > 0) return '';
-    var buckets = { gates: 0, grade: 0, cascade: 0, waiting: 0 };
-    var reasonCounts = {};
-    function addStack(bag){
-      if (!bag) return;
-      if (bag.waiting) buckets.waiting += bag.waiting | 0;
-      if (bag.gates)   buckets.gates   += bag.gates   | 0;
-      if (bag.cascade) buckets.cascade += bag.cascade | 0;
-      if (bag.grade)   buckets.grade   += bag.grade   | 0;
-      var stack = bag.stack;
-      if (!Array.isArray(stack)) return;
-      for (var i = 0; i < stack.length; i++){
-        var row = stack[i];
-        if (!row || !Array.isArray(row.reasons)) continue;
-        for (var j = 0; j < row.reasons.length; j++){
-          var k = String(row.reasons[j] || '').trim();
-          if (!k) continue;
-          reasonCounts[k] = (reasonCounts[k] | 0) + 1;
-        }
-      }
-    }
-    addStack(golden && golden.held);
-    addStack(death  && death.held);
-    addStack(crypto && crypto.held);
-    /* rank reasons by frequency, cap at top 6 */
-    var ranked = Object.keys(reasonCounts).map(function(k){
-      return { reason: k, n: reasonCounts[k] };
-    }).sort(function(a, b){ return b.n - a.n; });
-    var top = ranked.slice(0, 6);
-    var totalHeld = buckets.waiting + buckets.gates + buckets.cascade + buckets.grade;
-    /* nothing to say if every bucket is zero and no stack reasons */
-    if (!totalHeld && !top.length) return '';
-    var bucketBits = [];
-    if (buckets.cascade) bucketBits.push(buckets.cascade + ' had no 4h cascade');
-    if (buckets.gates)   bucketBits.push(buckets.gates + ' failed the 7-gate matrix');
-    if (buckets.grade)   bucketBits.push(buckets.grade + ' failed the TRADE grade');
-    if (buckets.waiting) bucketBits.push(buckets.waiting + ' waiting for the EMA tag');
-    var reasonHtml = '';
-    if (top.length){
-      reasonHtml = '<div style="margin-top:6px;font-size:12px"><b>Top binding reasons</b><ul style="margin:4px 0 0 20px;padding:0">';
-      for (var ti = 0; ti < top.length; ti++){
-        reasonHtml += '<li>' + top[ti].reason + ' <span style="color:#64748b">×' + top[ti].n + '</span></li>';
-      }
-      reasonHtml += '</ul></div>';
-    }
-    var bucketLine = bucketBits.length
-      ? '<div style="margin-top:4px">' + bucketBits.join(' · ') + '.</div>'
-      : '';
-    return '<div class="panel" style="margin:12px 0;border-left:4px solid #ca8a04">'
-      + '<h2>WHY NO SETUPS <span>no CLEAN tickets, no golden/death cross, no crypto formation — the 325 hard-gate ensemble (hg-v1242..v1268) is deciding, as designed</span></h2>'
-      + '<div class="note">The three mint paths each ran, and together refused every candidate. '
-      + 'Each individual rule is measured and documented; the ensemble is Cluster C — adding or removing a single rule here does not fix an over-tight AND. '
-      + 'The reasons below are what each held candidate hit first.</div>'
-      + bucketLine
-      + reasonHtml
-      + '</div>';
-  }catch(e){ return ''; }
-}
-
 /* hg-v1066: THE CROWN — the OMNIBTC treatment on the TREND MATRIX: a
    single bold call (the strongest majority row with a minted plan), a
    verdict line, the five-dimension complete analysis from the row's own
@@ -8132,7 +8048,7 @@ function trendmxCrownPanelHTML(state){
     if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
     if (isFinite(+pfR.dvolVal)) tech.push('DVOL ' + (+pfR.dvolVal).toFixed(1) + (pfR.dvolRegime ? ' ' + String(pfR.dvolRegime) : ''));
-    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb || pfR.pineCipher || pfR.pineRangeFilter || pfR.pineNwEnvelope || pfR.pineWavwap || pfR.pineSupertrend || pfR.pineMacd || pfR.pineCci){
+    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb || pfR.pineCipher || pfR.pineRangeFilter || pfR.pineNwEnvelope || pfR.pineWavwap){
       var pineBits = [];
       if (pfR.pineLorKnn) pineBits.push('LorKNN ' + pfR.pineLorKnn);
       if (pfR.pineHalfTrend) pineBits.push('half-trend ' + pfR.pineHalfTrend);
@@ -8144,10 +8060,6 @@ function trendmxCrownPanelHTML(state){
       if (pfR.pineRangeFilter) pineBits.push('range ' + pfR.pineRangeFilter);
       if (pfR.pineNwEnvelope) pineBits.push('NW ' + pfR.pineNwEnvelope);
       if (pfR.pineWavwap) pineBits.push('wAVWAP ' + pfR.pineWavwap);
-      /* hg-v1295: three more Pine state readers. */
-      if (pfR.pineSupertrend) pineBits.push('supertrend ' + pfR.pineSupertrend);
-      if (pfR.pineMacd) pineBits.push('MACD ' + pfR.pineMacd);
-      if (pfR.pineCci) pineBits.push('CCI ' + pfR.pineCci);
       tech.push('PINE ' + pineBits.join(' | '));
     }
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
@@ -8322,7 +8234,7 @@ function tmStructureDir(rows){
    five). All four already exist in pinemath.js and were read by nothing on
    this desk. Record-only like the five; nothing scores on them. */
 function trendmxPineMarks(rows){
-  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null, supertrend: null, macd: null, cci: null };
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null };
   try{
     if (!Array.isArray(rows) || rows.length < 30) return out;
     if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
@@ -8335,15 +8247,6 @@ function trendmxPineMarks(rows){
     if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
     if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
     if (typeof W.pineSmcCore === 'function'){ var sc = W.pineSmcCore(rows, { includeContext: true }); if (sc && sc.dir) out.smc = String(sc.dir).toLowerCase(); }
-    /* hg-v1295: three more bar-only Pine state readers. Record-only like
-       the ten above; the forward ledger measures each separation out of
-       sample. Supertrend/MACD/CCI are distinct from HalfTrend/Squeeze/
-       Cipher respectively (ATR-band flip vs amplitude-pivot flip,
-       signal-line cross vs BB-in-KC release, extreme re-entry vs
-       WaveTrend). */
-    if (typeof W.pineSupertrend === 'function'){ var st = W.pineSupertrend(rows, {}); if (st && st.dir) out.supertrend = String(st.dir).toLowerCase(); }
-    if (typeof W.pineMacd === 'function'){ var md = W.pineMacd(rows, {}); if (md && md.dir) out.macd = String(md.dir).toLowerCase(); }
-    if (typeof W.pineCci === 'function'){ var cc = W.pineCci(rows, {}); if (cc && cc.dir) out.cci = String(cc.dir).toLowerCase(); }
   }catch(e){ }
   return out;
 }
@@ -8392,6 +8295,7 @@ async function trendmxPerfectEvidencePass(rows){
         }catch(eLc){ }
       }
       if (isFinite(+r.fundingPct)){
+
         reads.venueFundingPct = +r.fundingPct;
       /* hg-v1144: venue premium = venue funding minus the Binance twin */
       if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
@@ -8540,10 +8444,6 @@ async function trendmxPerfectEvidencePass(rows){
           reads.pineRangeFilter = pm.rfilter;
           reads.pineNwEnvelope = pm.nwenv;
           reads.pineWavwap = pm.wavwap;
-          /* hg-v1295: three more Pine state readers (Supertrend, MACD, CCI). */
-          reads.pineSupertrend = pm.supertrend;
-          reads.pineMacd = pm.macd;
-          reads.pineCci = pm.cci;
           r.pineMarks = pm;
         }
       }catch(ePine){ }
@@ -8806,6 +8706,7 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
+
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -9032,6 +8933,34 @@ function mountTrendMatrix(el){
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
             state.death = trendmxDeathCrossSetups(state.rows);
+            /* hg-v1332: THE CROSS DESKS NOW SAY WHY THEY ARE EMPTY.
+               Both desks drop a row at six points, and four of those
+               dropped it SILENTLY — so a board with no golden and no
+               death setup reported nothing at all, which is exactly
+               how it was reported to me. The counters are surfaced
+               here as plain words a reader can act on. */
+            try {
+              var gH = state.golden.held || {}, dH = state.death.held || {};
+              var why = function(h, tag) {
+                var bits = [];
+                if (h.noCross) bits.push(h.noCross + ' without a fresh ' + tag + ' cross');
+                if (h.noComps) bits.push(h.noComps + ' with the daily EMAs not aligned');
+                if (h.noPrice) bits.push(h.noPrice + ' with an unreadable price');
+                if (h.dir) bits.push(h.dir + ' on the wrong side of the cross');
+                if (h.conv) bits.push(h.conv + ' with no conviction');
+                if (h.cascade) bits.push(h.cascade + ' with no 4h cascade');
+                if (h.gates) bits.push(h.gates + ' held by the 7-gate matrix');
+                if (h.grade) bits.push(h.grade + ' refused at the grade');
+                if (h.waiting) bits.push(h.waiting + ' waiting on an EMA tag');
+                if (h.plan) bits.push(h.plan + ' with an invalid plan');
+                return bits.length ? bits.join(' · ') : 'nothing was held';
+              };
+              state.crossWhy = {
+                rows: (state.rows || []).length,
+                golden: why(gH, 'GOLDEN'),
+                death: why(dH, 'DEATH')
+              };
+            } catch (eWhy) { state.crossWhy = null; }
           } catch (eB) {}
           renderAll();
           setProg(info.total ? info.done / info.total : 0);
@@ -9052,6 +8981,22 @@ function mountTrendMatrix(el){
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
       renderAll();
+      /* hg-v1333: THE BOARD NAMES ITS OWN NUMBERS.
+         A tab that paints nothing in ANY of its categories (CLEAN, NEAR,
+         GOLDEN, DEATH, CONVICTION, STRONG) has to say which link broke: did
+         the scan produce no rows at all, did the fetches fail, or did rows
+         arrive and get held? Every one of those is a different bug and the
+         board used to look identical for all three. This line prints the
+         counts, and the cross desks' held reasons, right under the scan. */
+      try {
+        var whyX = state.crossWhy || {};
+        setStatus('Scan done · ' + results.length + ' rows on the board · '
+          + (state.crypto || []).length + ' crypto setup(s) · '
+          + (state.golden || []).length + ' GOLDEN · ' + (state.death || []).length + ' DEATH'
+          + (failed ? (' · ' + failed + ' fetch failure(s)') : '')
+          + (whyX.golden ? (' · golden held: ' + whyX.golden) : '')
+          + (whyX.death ? (' · death held: ' + whyX.death) : ''));
+      } catch (eWhy2) {}
       /* hg-v1039: THE CROWN JOINS THE FORWARD BOOK — the desk has crowned
          CLEAN / PERFECT rows for its whole life and never recorded one, so
          'does the trend-matrix crown pay?' could never be asked. Each 7/7
@@ -9142,6 +9087,7 @@ function mountTrendMatrix(el){
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxClosedGate = trendmxClosedGate;   /* hg-v1335: the alert-desk gate, exported like its siblings */
 W.trendmxSetupGrade = trendmxSetupGrade;
 W.tmValueState = tmValueState;
 W.tmBodyCommit = tmBodyCommit;
@@ -9339,11 +9285,9 @@ W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
 W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
 W.trendmxGoldenDeskHTML = trendmxGoldenDeskHTML;   /* hg-v1015 */
 W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
-W.trendmxWhyEmptyHtml = trendmxWhyEmptyHtml;   /* hg-v1331: the WHY NO SETUPS panel reader */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
-W.trendmxPineMarks = trendmxPineMarks;   /* hg-v1293: ONE HOME for the 10 crypto Pine port reads (hg-v949). OMNIBTC's record-site stamp delegates to this through hgObtcPineMarks; a second port definition would be a second rule. Three-state (long/short/absent), 30-bar floor, fails open with a null row set — nothing scores, no gate reads. Beside their hg-v1291/v1292 freshness gates, which read newLong/barsAgo directly for firing: this reads final sign for recording, so the ledger can measure which Pine port's agreement paid, out of sample. */
 W.trendmxCrossState = function(){
   try{
     if (!__tmScanSnap) return null;

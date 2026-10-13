@@ -245,15 +245,6 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
-/* hg-v1331: THE PHASE 4 DIVERGENCE CHIPS, baked from the served parts into
-   the combined file so the suite boots what the browser runs (hg-v1160).
-   These were added to trendtable-src-0.js by commit 2c272b61 ("Phase 4:
-   Implement RSI and Volume Divergence chips in Trend Matrix") and never
-   mirrored into the combined; the parts-vs-combined guard would have
-   caught it if that invariant had been checked each pack. The functions
-   are pure HTML returners: they read trendScore's own volDiv/rsiDiv marks
-   off a row and paint a chip. They do not gate, do not score, do not
-   demote; a row with no divergence mark reads nothing and the chip is ''. */
 function tmRsiDivChipHtml(r){
   if (!r || !r.rsiDivLong && !r.rsiDivShort) return '';
   var dir = r.rsiDivLong ? 'long' : 'short';
@@ -323,7 +314,26 @@ function trendmxSetupGrade(r, dir){
   }
   var value = tmValueState(r, dir);
   for (var vi = 0; vi < value.reasons.length; vi++) reasons.push(value.reasons[vi]);
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf, value: value };
+  /* hg-v1331: AN UNREAD INPUT ABSTAINS — IT DOES NOT REFUSE.
+     This line graded SKIP on `reasons.length` alone, and tmValueState pushes
+     a reason for every input it could not read: 'hurst unread', 'anchored
+     VWAP unread', '1h cloud unread', 'pullback volume unread'. On any tape
+     where those readers return nothing — the normal case — EVERY row carried
+     at least one unread reason, so every row graded SKIP and the desk minted
+     NOTHING AT ALL. That is the three-state rule broken: a series nobody could
+     read is not evidence against a setup, it is the absence of evidence.
+     The unread reasons are still reported so a reader can see exactly what
+     could not be read; only a REAL refusal blocks TRADE. Every genuine gate
+     (extended from the EMA, ADX exhaustion or chop, RSI against, OBV
+     divergence, funding, BTC structure, below/inside the 1h cloud, no pullback
+     into the 1h EMA21, distribution volume) still refuses exactly as before. */
+  var blocking = [];
+  for (var ri = 0; ri < reasons.length; ri++){
+    if (/unread/i.test(reasons[ri])) continue;
+    blocking.push(reasons[ri]);
+  }
+  return { grade: blocking.length ? 'SKIP' : 'TRADE', reasons: reasons, blocking: blocking,
+           unread: reasons.length - blocking.length, volConf: volConf, value: value };
 }
 function tmValueState(row, dir){
   var out = { reasons: [], distAtr: null, adx4: null, touched: null };
@@ -418,8 +428,8 @@ function tmValueState(row, dir){
       var rsiSeries = rsi(closes, 14);
       var rsiNow = rsiSeries && rsiSeries.length ? rsiSeries[rsiSeries.length - 1] : NaN;
       if (isFinite(rsiNow)){
-        if (dir === 'long' && rsiNow > 52) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is above the bull floor');
-        if (dir === 'short' && rsiNow < 50) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is below the bear ceiling');
+        if (dir === 'long' && rsiNow < TM_MOM_BULL_FLOOR) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is under the bull floor');
+        if (dir === 'short' && rsiNow > TM_MOM_BEAR_CEIL) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is over the bear ceiling');
       }
     } catch (eRsi) {}
   }
@@ -3807,34 +3817,16 @@ function trendmxEmaTag(rows4h, dir){
   }
   return { state: 'waiting', ema: name };
 }
-/* hg-v1331: THE PHASE 4 DIVERGENCE DETECTORS, baked into combined for
-   hg-v1160 parity AND the TDZ-shadow bug IS fixed. Added to parts by
-   commit 2c272b61 and never mirrored; the parts' trendScore has silently
-   thrown TDZ on every realistic tape (>=30 daily bars) since 2c272b61
-   because `const rsi = rsi(rows, 14)` on line 2 shadows the global rsi()
-   function (the TDZ throws before the right-hand call runs). The outer
-   trendScore try/catch swallows the exception and returns zeroResult(),
-   so every row scores 0, |score| never clears TM_MAJORITY, tmDirOf()
-   returns null for every row, every mint path (goldenCross, deathCross,
-   cryptoCandidates) returns an empty array, and the TREND MATRIX tab
-   paints as empty — WHICH IS THE USER'S "not forming any setups". This
-   was NOT the hg-v1242..v1268 ensemble (Cluster C); it was a single
-   production-breaking shadow bug the test suite could not see because
-   combined was missing the Phase 4 code. Fix: rename the local to
-   rsiSeries (and vSeries for the mirror). This is a BEHAVIOUR CHANGE
-   that restores trendScore to its intended output on realistic tapes:
-   composite scores no longer collapse to 0, tmDirOf finds a direction,
-   the mint paths see candidates again. comps.rsiDivLong/Short +
-   comps.volDivLong/Short start being set and the Phase 4 chips paint
-   for the first time. */
 function tmRsiDivergence(rows, dir) {
-  if (!rows || rows.length < 30) return false;
-  const rsiSeries = rsi(rows, 14);
+  /* Do not name this series rsi. That shadows the indicator, the call throws
+     before the binding exists, and trendScore's catch then zeros the row. */
+  if (!rows || rows.length < 30 || typeof rsi !== 'function') return false;
+  var rsiSeries = rsi(rows.map(function (bar) { return bar ? bar.c : NaN; }), 14);
   if (!rsiSeries) return false;
-  const n = rows.length;
-  for (let i = n - 20; i < n - 1; i++) {
+  var n = rows.length;
+  for (var i = n - 20; i < n - 1; i++) {
     if (!isFinite(rows[i].c) || !isFinite(rsiSeries[i])) continue;
-    const prevIdx = i - 5;
+    var prevIdx = i - 5;
     if (prevIdx < 5) continue;
 
     if (dir === 'long') {
