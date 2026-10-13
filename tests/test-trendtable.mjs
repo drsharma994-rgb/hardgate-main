@@ -369,7 +369,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   const setups = G.trendmxGoldenCrossSetups([row]);
   if (oldSwingTryClean === undefined) delete G.swingTryClean;
   else G.swingTryClean = oldSwingTryClean;
-  assert(setups.length >= 1, 'golden cross row yields at least one alert setup');
+  assert(setups.length >= 1, 'golden cross row yields at least one alert setup — held=' + JSON.stringify(setups.held) + ' conv=' + JSON.stringify((G.trendmxConviction(row) || {}).label) + ' gate=' + JSON.stringify((function(){ try { return G.trendmxClosedGate(row, 'long'); } catch(e){ return 'threw: ' + e.message; } })()) + ' grade=' + JSON.stringify((function(){ try { return G.trendmxSetupGrade(row, 'long'); } catch(e){ return 'threw: ' + e.message; } })()));
   assert(setups[0].entry && setups[0].stop && setups[0].t1, 'setup has entry/stop/t1');
   assert(setups[0].dir === 'long', 'golden cross setup is long');
   const flat = G.trendmxGoldenCrossSetups([{ sym: 'X', score: 0, freshCross: null, comps: {}, rows4h: up4 }]);
