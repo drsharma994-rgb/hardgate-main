@@ -433,6 +433,14 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
   const goldTabs = navGold[1].split(',').map(t => t.trim().replace(/^'|'$/g, ''));
   ok(goldTabs.length >= 14, 'it lists ' + goldTabs.length + ' gold tabs');
 
+  /* gold tabs that legitimately have NO forward record to grade, each with its
+     reason. An explicit map, so a new exemption is a deliberate edit with a stated
+     cause rather than a silent consequence of a module file being absent (hg-v1329). */
+  const NO_FORWARD_RECORD = {
+    'gold': 'the inline scan, which records under CARD:<scanId> rather than a tab pool',
+    'candle-forecast': 'a predictive forecast display — it names the next candle and its band, mints no ticket and writes no forward row, so there is no outcome to grade'
+  };
+
   const orphan = [];
   for (const f of Object.keys(byFile)){
     const src = fs.readFileSync(root + f, 'utf8');
@@ -490,18 +498,32 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
   const unjudged = goldTabs.filter(t => ids.indexOf(t) < 0);
   ok(judged.length >= 13,
      judged.length + ' of the ' + goldTabs.length + ' gold tabs are judged against the floor');
-  /* and the ones that are not are named, with a reason that holds */
+  /* and the ones that are not are named, with a reason that holds.
+     hg-v1329: a gold tab with NO forward record has nothing to judge, which is a
+     legitimate state — but it has to be NAMED, not inferred from a missing file.
+     This loop used to accept any unjudged tab whose module did not exist; that was
+     true of the inline `gold` scan and stayed true only while every other gold tab
+     recorded. CANDLE FORECAST (gold-candle-forecast.js) HAS a file and records
+     NOTHING: it forecasts the next candle and mints no ticket, no level and no
+     forward row. So "no file" was the wrong test — "records nothing, and here is
+     why" is the right one. */
   for (const t of unjudged){
-    /* `gold` is the inline scan (records under CARD:<scanId>). Every
-       other gold tab lives in a file whose basename matches its id,
-       OR — for a hg-v1306+ tab registered through HG_tabs — carries
-       a `gold-` prefix (gold-candle-forecast.js registers id
-       `candle-forecast`). Try both so this convention does not
-       hard-fail a new display-only tab. */
-    const candidates = t === 'gold' ? [] : [root + t + '.js', root + 'gold-' + t + '.js'];
-    const file = candidates.find(f => fs.existsSync(f)) || null;
-    if (!file){
-      ok(t === 'gold', 'unjudged gold tab "' + t + '" is the inline scan, which records under CARD:<scanId>');
+    if (NO_FORWARD_RECORD[t]){
+      /* The reason must HOLD: a tab claiming it records nothing must really record
+         nothing, or the exemption becomes a way to hide a floor miss. Both arms are
+         real assertions — an earlier draft wrote `ok(true, …)` for the no-file case
+         and the suite's own not-vacuous meta-guard caught it, which is exactly what
+         that guard is for. */
+      const exemptFile = root + t + '.js';
+      const exemptSrc = fs.existsSync(exemptFile) ? fs.readFileSync(exemptFile, 'utf8') : null;
+      ok(exemptSrc === null || !/hgFwdRecord|hgFwdRecordScan|recordForward/.test(exemptSrc),
+        'unjudged gold tab "' + t + '" is ' + NO_FORWARD_RECORD[t]
+        + (exemptSrc === null ? ' (and has no module of its own)' : ' (and its module writes no forward row)'));
+      continue;
+    }
+    const file = root + t + '.js';
+    if (!fs.existsSync(file)){
+      ok(false, 'unjudged gold tab "' + t + '" has no file and no recorded reason — name it in NO_FORWARD_RECORD');
       continue;
     }
     const src = fs.readFileSync(file, 'utf8');

@@ -304,7 +304,13 @@ HONESTY
 
     try {
       if (typeof root.hgGoldFreeFeedVerdicts === 'function'){
-        var fv = root.hgGoldFreeFeedVerdicts({ rows: rows }, null);
+        var macro = null;
+        try { if (typeof root.getGoldMacroCached === 'function') macro = root.getGoldMacroCached(); } catch (eM) { macro = null; }
+        var fv = root.hgGoldFreeFeedVerdicts({
+          macro: macro,
+          cot: root.__hgGoldCot || null,
+          fng: (root.S && root.S.fng) || null
+        }, 'long');
         if (fv && typeof fv === 'object'){
           var fl = 0, fs = 0, fk;
           for (fk in fv){
@@ -323,7 +329,7 @@ HONESTY
 
     try {
       if (typeof root.hgNewsRisk === 'function'){
-        var nr = root.hgNewsRisk();
+        var nr = root.hgNewsRisk('XAUUSD');
         if (nr && typeof nr === 'object'){
           ev.news = { blackout: nr.blackout === true, why: nr.why || '' };
           if (nr.blackout === true) ev.notes.push('NEWS BLACKOUT — ' + (nr.why || 'high-impact event window'));

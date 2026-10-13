@@ -299,6 +299,10 @@ const EXPECTED_GROUPS = {
      behind the stale inline-block count in the same file until hg-v762 —
      which is what a permanently red suite costs. Checked against the live
      list: the other four groups match exactly, only gold had drifted. */
+  /* hg-v1329: 'candle-forecast' appended. The CANDLE FORECAST tab joined the GOLD
+     group and this hand-kept list had drifted behind it — the same "a list kept by
+     hand goes stale" mechanism the comment above this block describes, caught this
+     time by the assertion rather than by a user noticing a missing tab. */
   gold:       ['super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric', '80percent', 'candle-forecast'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
@@ -313,7 +317,7 @@ assert(Object.keys(EXPECTED_GROUPS).every(gid =>
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', chartvision:'crypto', regime:'overview',
                    carry:'crypto', venueprem:'crypto', termbasis:'crypto', goldpro:'gold', goldcoint:'gold', ganeshgold:'gold', strats:'strategies', meanrev:'strategies', 'super-setup':'strategies', 'super-best':'strategies', 'super-sniper':'strategies', 'super-book':'strategies', 'super-calibrate':'strategies', reversalsniper:'crypto', edge:'crypto', dexscreener:'crypto', setupconfirm:'overview', combi:'crypto', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
                    scorecard:'strategies', reliability:'strategies', formationlab:'strategies',
-                   brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold', 'candle-forecast':'gold' };
+                   brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),
   'HG_TAB_GROUP maps every dynamic id into its group (brain/execute/news/squeeze/trendmx/oiflow/regime/carry/goldpro/strats/meanrev/scorecard/rotation/onchain/goldspot)');
 

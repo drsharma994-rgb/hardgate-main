@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR.
+            No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. News, headlines, fear and greed, COT and the cached macro feeds are listed on each tape and do not cast a second vote. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, what that shape means, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR. A formed setup is asked against the shared perfect bar. That bar does not invent a grade. An in-sample walk counts what formed on this tape only. The forward ledger records a formed setup and settles it on later bars.
           </div>
         </div>
       `;
@@ -227,6 +227,11 @@ on every page load since v14-2:
       try {
         if (typeof window.hgCfUltimate === 'function') forecast.ultimate = window.hgCfUltimate(forecast.scalp, forecast.swing);
       } catch (eUlt) { forecast.ultimate = null; }
+      try {
+        forecast.measure = (typeof window.hgCfMeasure === 'function')
+          ? window.hgCfMeasure(forecast.scalp, forecast.swing, candles, (Array.isArray(c4) ? c4 : null))
+          : null;
+      } catch (eMeas) { forecast.measure = null; }
       this.renderResult(resultArea, statusEl, forecast);
       /* hg-v1325: the wide tally paints AFTER the card. The earlier call sat
          above renderResult, and the card replaces innerHTML, so the tally
@@ -234,6 +239,13 @@ on every page load since v14-2:
       try {
         var conf = (typeof window.hgUltimateConfluence === 'function')
           ? window.hgUltimateConfluence(candles) : null;
+        /* The first call is the 15m tally. When the 4h tape was read, ask
+           again with that tape so the wide tally can name a swing beside
+           the scalp. The house stop is still not this tally's stop. */
+        if (conf && Array.isArray(c4) && c4.length >= 30 && typeof window.hgUltimateConfluence === 'function') {
+          var withSwing = window.hgUltimateConfluence(candles, { swingRows: c4 });
+          if (withSwing) conf = withSwing;
+        }
         if (conf) this.renderConfluence(resultArea, statusEl, conf);
       } catch (eConf) { /* optional read; the card stands on its own */ }
 
@@ -382,7 +394,10 @@ on every page load since v14-2:
         var veto = bracket.tapeVeto
           ? ('<div class="note warn">Gold tape veto: ' + String(bracket.tapeVeto).replace(/</g, '') + '</div>')
           : '';
-        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + veto + '</td>';
+        var pf = bracket.perfectWhy
+          ? ('<div class="note">Perfect bar: ' + String(bracket.perfectWhy).replace(/</g, '') + '</div>')
+          : '';
+        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + veto + pf + '</td>';
       }).join('');
       horizonsHtml = '<div class="note" data-cf-horizons="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>SCALP AND SWING</b> <span class="note">— both built by one builder, each on its own tape</span><table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>' + cells + '</tr></table><div class="note">A scalp stop and a swing stop in dollars are not the same risk: read each against its own ATR above.</div></div>';
     })();
@@ -398,7 +413,7 @@ on every page load since v14-2:
         if (!ds.length) return '';
         var rows2 = ds.map(function (d) {
           var mark = d.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>' : (d.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>' : '<span class="note">formed nothing</span>');
-          return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/&/g, '&').replace(/</g, '<')) : '') + '</span></li>';
+          return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/&/g, '&').replace(/</g, '<')) : '') + (d.perfectWhy ? (' · ' + String(d.perfectWhy).replace(/</g, '')) : '') + '</span></li>';
         }).join('');
         return '<div class="note" style="margin-top:6px;"><b>GOLD DESKS ON THIS TAPE</b> — <span class="note">' + String(cfl.deskWhy || '').replace(/</g, '') + '</span><ul class="lst">' + rows2 + '</ul></div>';
       })();
@@ -408,7 +423,7 @@ on every page load since v14-2:
         + '<ul class="lst">' + rowsHtml + '</ul>' + deskHtml
         + '<div class="note">Macro snapshot: ' + (forecast.macroRead ? 'read — the fundamental family can vote' : 'not cached this scan, so the fundamental family reads UNREAD (never counted as agreement)') + '</div>'
         + (cfl.missing && cfl.missing.length ? ('<div class="note warn">Not read this scan: ' + cfl.missing.join(' · ') + '</div>') : '')
-        + '<div class="note">A confluence setup needs two families net with the call, no family net against, and a named candle pattern. Unread is never counted as agreement. The scalp and the swing each carry their own tape.</div></div>';
+        + '<div class="note">A confluence setup needs two families net with the call, no family net against, and a named candle pattern. Unread is never counted as agreement. News and the free feeds are listed here and do not vote again. The scalp and the swing each carry their own tape.</div></div>';
     } else if (cfl) {
       conflHtml = '<div class="note" data-cf-confluence="unread" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>CONFLUENCE</b> — not read: ' + String(cfl.why || 'unavailable').replace(/</g, '') + '</div>';
     }
@@ -422,7 +437,7 @@ on every page load since v14-2:
       }).join('');
       var swDesks = (swingView.desks || []).map(function (d) {
         var mark = d.lean === true ? '<span class="pos" style="font-weight:700;">WITH</span>' : (d.lean === false ? '<span class="neg" style="font-weight:700;">AGAINST</span>' : '<span class="note">formed nothing</span>');
-        return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/</g, '')) : '') + '</span></li>';
+        return '<li>' + mark + ' <b>' + String(d.desk).replace(/</g, '') + '</b> <span class="note">— ' + String(d.long) + ' long / ' + String(d.short) + ' short' + (d.why ? (' · ' + String(d.why).replace(/</g, '')) : '') + (d.perfectWhy ? (' · ' + String(d.perfectWhy).replace(/</g, '')) : '') + '</span></li>';
       }).join('');
       var swVerdict = swingView.ticket ? '<b class="pos">CONFLUENCE SETUP</b>' : '<b>CONFLUENCE READ</b> <span class="note">· NOT A TICKET</span>';
       swingConflHtml = '<div class="note" data-cf-swing="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
@@ -443,8 +458,23 @@ on every page load since v14-2:
         + '<div class="note">' + String(ult.why || '').replace(/</g, '') + '</div>'
         + '<div class="note">' + String(ult.scalp || '').replace(/</g, '') + '</div>'
         + '<div class="note">' + String(ult.swing || '').replace(/</g, '') + '</div>'
-        + '<div class="note">The two stops are not combined. Read the scalp against the 15m ATR and the swing against the 4h ATR.</div></div>';
+        + '<div class="note">The two stops are not combined. Read the scalp against the 15m ATR and the swing against the 4h ATR. News and the free feeds are listed on each tape and do not cast a second vote.</div></div>';
     }
+    var m = forecast.measure;
+    function cfEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&').replace(/</g, '<'); }
+    var measureHtml = '<div class="note" data-cf-measure="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">'
+      + '<div style="margin-bottom:4px;"><b>PERFECT, BACKTEST, FORWARD</b></div>';
+    if (!m) {
+      measureHtml += '<div class="note">The shared perfect bar was not read this scan. Nothing was called perfect. Nothing was counted as a win.</div>';
+    } else {
+      measureHtml += '<div class="note"><b>Scalp.</b> ' + cfEsc(m.scalpAsk && m.scalpAsk.line) + '</div>'
+        + '<div class="note"><b>Swing.</b> ' + cfEsc(m.swingAsk && m.swingAsk.line) + '</div>'
+        + '<div class="note"><b>In-sample walk, 15m.</b> ' + cfEsc(m.walk15 && m.walk15.why) + '</div>'
+        + '<div class="note"><b>In-sample walk, 4h.</b> ' + cfEsc(m.walk4 && m.walk4.why) + '</div>'
+        + '<div class="note"><b>Forward ledger.</b> ' + cfEsc(m.fwd15 && m.fwd15.why) + ' ' + cfEsc(m.fwd4 && m.fwd4.why) + '</div>'
+        + (m.fwdHtml || '');
+    }
+    measureHtml += '<div class="note">Perfect is a badge from the shared bar. It does not form the setup and it does not move the stop. The walk is in-sample on this tape only. It is not a forward result and not a probability. Higher frames were not fed into that walk. The forward ledger is the out-of-sample test.</div></div>';
 
     container.className = '';
     container.innerHTML = `
@@ -458,6 +488,7 @@ on every page load since v14-2:
         </ul>
         <ul class="lst">${reasons}</ul>
         ${ultHtml}
+        ${measureHtml}
         ${horizonsHtml}
         ${conflHtml}
         ${swingConflHtml}
@@ -497,8 +528,10 @@ on every page load since v14-2:
       + ' <span class="note">(' + String(c.grade).replace(/</g, '') + ')</span></h3>'
       + '<ul class="lst">'
       + '<li class="note">This tally does not name the ultimate setup. That line is above, and only when the scalp and the swing agree.</li>'
-      + '<li><b>Net:</b> <b>' + c.score + '</b> — long votes minus short votes, a count, not a probability. '
+      + '<li><b>Net:</b> <b>' + c.score + '</b> — the sum of the votes, a count, not a probability. '
       + c.agree + ' long, ' + c.oppose + ' short, ' + c.abstain + ' abstained, of ' + c.checked + '</li>'
+      + (c.swing ? ('<li class="note">4h wide tally: ' + String(c.swing.dir) + ' (' + String(c.swing.grade || '').replace(/</g, '') + '). That read stays on the 4h tape. It is not the swing stop.</li>') : '')
+      + ((c.patterns && c.patterns.length) ? ('<li class="note">Candle shapes on this tally: ' + c.patterns.map(function (p) { return String(p.label || p.id || '').replace(/</g, ''); }).slice(0, 8).join(', ') + '.</li>') : '')
       + '<li><b>Last close:</b> ' + self.fmt(c.close) + ' · <b>ATR band:</b> '
       + (c.bandLow != null ? (self.fmt(c.bandLow) + ' – ' + self.fmt(c.bandHigh)) : 'unread') + '</li>'
       + levels + '</ul>'
