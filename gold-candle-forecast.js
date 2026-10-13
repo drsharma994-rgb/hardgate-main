@@ -138,6 +138,14 @@ on every page load since v14-2:
         return;
       }
       forecast.source = loaded.source || '';
+
+      /* ULTIMATE AI CONFLUENCE — appended beside the card so this engine's
+         tally and levels always paint, whatever the card decides to show. */
+      try {
+        var conf = (typeof window.hgUltimateConfluence === 'function')
+          ? window.hgUltimateConfluence(candles) : null;
+        if (conf) this.renderConfluence(resultArea, statusEl, conf);
+      } catch (eConf) { /* optional read; the card stands on its own */ }
       /* hg-v1315: hand the confluence the HOUSE MACRO SNAPSHOT.
          The first cut passed an empty options bag, so `hgFundamentalRegime('GOLD')`
          ran with no `extra` and every macro leg read UNCHECKED — the fundamental
@@ -441,6 +449,46 @@ on every page load since v14-2:
       </div>
     `;
     statusEl.textContent = called ? dirLabel : 'NEUTRAL';
+  };
+
+  /**
+   * ULTIMATE AI CONFLUENCE — the wide tally, with levels ALWAYS printed.
+   * Fifteen independent reads vote -1/0/+1 at equal weight and are summed.
+   * The grade says how much evidence points one way; it is NOT a probability
+   * and NOT a backtested edge. A thin tally prints BOTH brackets rather than
+   * the card inventing a direction.
+   */
+  mod.renderConfluence = function(container, statusEl, c) {
+    var called = c.dir === 'BULL' || c.dir === 'BEAR';
+    var color = c.dir === 'BEAR' ? '#dc262c' : '#15803d';
+    var rows = (c.reads || []).map(function(r) {
+      var tag = r.vote > 0 ? 'LONG' : (r.vote < 0 ? 'SHORT' : 'no vote');
+      var cls = r.vote > 0 ? 'pos' : (r.vote < 0 ? 'neg' : 'na');
+      return '<li>' + String(r.label).replace(/</g, '') + ' — <span class="' + cls + '">'
+        + tag + '</span> <span class="note">(' + String(r.note).replace(/</g, '') + ')</span></li>';
+    }).join('');
+    var self = this;
+    var br = function(x) {
+      return '<li><b>' + (x.side === 'long' ? 'LONG' : 'SHORT') + ':</b> entry <b>'
+        + self.fmt(x.entry) + '</b> · SL <b>' + self.fmt(x.sl) + '</b> · TP1 <b>'
+        + self.fmt(x.tp1) + '</b> · TP2 <b>' + self.fmt(x.tp2) + '</b></li>';
+    };
+    var levels = called ? br(c.bracket) : (c.bothBrackets || []).map(br).join('');
+    container.insertAdjacentHTML('beforeend',
+      '<div class="panel" style="margin-top:12px; border-left:4px solid ' + color + ';">'
+      + '<h3 style="margin:0 0 6px;">ULTIMATE AI CONFLUENCE — '
+      + '<span style="color:' + color + ';">' + (called ? c.dir : 'NO CALL') + '</span>'
+      + ' <span class="note">(' + c.grade + ')</span></h3>'
+      + '<ul class="lst">'
+      + '<li><b>Tally:</b> score <b>' + c.score + '</b> of ' + c.checked + ' reads — '
+      + c.agree + ' long, ' + c.oppose + ' short, ' + c.abstain + ' abstained</li>'
+      + '<li><b>Last close:</b> ' + self.fmt(c.close) + ' · <b>ATR band:</b> '
+      + (c.bandLow != null ? (self.fmt(c.bandLow) + ' – ' + self.fmt(c.bandHigh)) : 'unread') + '</li>'
+      + levels + '</ul>'
+      + '<ul class="lst" style="max-height:260px; overflow:auto;">' + rows + '</ul>'
+      + '<div class="note" style="margin-top:8px; border-top:1px solid var(--line); padding-top:8px;">'
+      + String(c.note).replace(/</g, '') + '</div></div>');
+    if (called) statusEl.textContent = 'Confluence ' + c.grade;
   };
 
   mod.fmt = function(n) { return Number(n).toFixed(2); };
