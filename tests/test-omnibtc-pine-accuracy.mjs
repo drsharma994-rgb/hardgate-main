@@ -195,5 +195,118 @@ console.log('== a fresh 1h core the other way is a watch; a missing 1h tape is n
   ok(absent.tier === 'clean', 'no 1h argument leaves the 4h confirm standing');
 }
 
+console.log('== a fresh daily core the other way is a watch; a short daily tape is not ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.pineSqueezeMomentum = function(rows){
+    if (rows && rows.length === 260) return { dir: 'short', newShort: true };
+    return { dir: 'long', newLong: true };
+  };
+  const opposed = W.hgObtcApplyPineAccuracy(crown(), bars(280), [], bars(10), bars(260));
+  ok(opposed.tier === 'near' && /1d PINE AGAINST/i.test(opposed.row.pineNote || ''),
+    'a fresh daily squeeze the other way demotes a 4h confirm (' + opposed.row.pineNote + ')');
+  const shortDaily = W.hgObtcApplyPineAccuracy(crown(), bars(280), [], bars(10), bars(12));
+  ok(shortDaily.tier === 'clean' && /PINE CONFIRM/i.test(shortDaily.row.pineNote || ''),
+    'a daily tape too short to read does not invent a refusal');
+}
+
+console.log('== a fresh engulfing body is one indicator vote and does not mint a stop ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.ema = function(vals){ return vals.map(function(){ return 1; }); };
+  W.macdHist = function(vals){ return vals.map(function(){ return 1; }); };
+  W.donchian = function(rows){
+    return { up: rows.map(function(){ return 1e9; }), lo: rows.map(function(){ return -1e9; }) };
+  };
+  function tape(prior, last){
+    const rows = [];
+    for (let i = 0; i < 280; i++) rows.push({ t: i, o: 100, h: 101, l: 99, c: 100, v: 1 });
+    rows[278] = prior;
+    rows[279] = last;
+    return rows;
+  }
+  const bull = tape(
+    { t: 278, o: 102, h: 103, l: 99, c: 100, v: 1 },
+    { t: 279, o: 99, h: 104, l: 98, c: 103, v: 2 }
+  );
+  const crossed = W.hgObtcApplyPineAccuracy(crown(), bull, []);
+  /* Same bar as EMA / MACD / Donchian: one fresh pine family plus one fresh
+     indicator keeps the ticket. The engulfing body does not mint a stop. */
+  ok(crossed.tier === 'clean' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /Engulfing/.test(crossed.row.pineNote || ''),
+    'one fresh pine plus a bullish engulf keeps the ticket without a new stop ('
+    + crossed.row.pineNote + ')');
+  ok(crossed.row.entry === 100 && crossed.row.stop === 90 && crossed.row.t1 === 120,
+    'the engulfing read does not replace ENTRY / STOP / T1');
+
+  /* A second independent family turns the same tape into a ticket — and the
+     engulfing read STILL does not mint or move a stop. */
+  W.pineSqueezeMomentum = function(){ return { dir: 'long', newLong: true }; };
+  const two = W.hgObtcApplyPineAccuracy(crown(), bull, []);
+  ok(two.tier === 'clean' && /Squeeze Momentum/.test(two.row.pineNote || ''),
+    'a second fresh family turns the same tape into a ticket (' + two.row.pineNote + ')');
+  ok(two.row.entry === 100 && two.row.stop === 90 && two.row.t1 === 120,
+    'and even then the engulfing read mints no new stop');
+
+  /* A family that is genuinely on the crown's side only on the BULL tape. A
+     stubbed port that answers `long` unconditionally would confirm the long on
+     the bearish tape too, which is a fixture artefact and not the rule under
+     test — the rule is that a family pointed the OTHER way refuses the crown. */
+  W.pineSqueezeMomentum = function(rows){
+    var last = rows && rows[rows.length - 1];
+    return (last && last.c > last.o) ? { dir: 'long', newLong: true } : { dir: 'short', newLong: true };
+  };
+  const bear = tape(
+    { t: 278, o: 100, h: 103, l: 99, c: 102, v: 1 },
+    { t: 279, o: 103, h: 104, l: 98, c: 99, v: 2 }
+  );
+  const against = W.hgObtcApplyPineAccuracy(crown(), bear, []);
+  ok(against.tier === 'near' && /PINE AGAINST/i.test(against.row.pineNote || ''),
+    'a fresh bearish engulf refuses the long ('
+    + against.row.pineNote + ')');
+  ok(against.row.entry === 100 && against.row.stop === 90 && against.row.t1 === 120,
+    'and the refusal leaves the levels alone rather than inventing a stop');
+}
+
+console.log('== RSI votes only on a fresh cross of 50; a sweep is a wick back inside ==');
+{
+  const W = boot();
+  W.pineHalfTrend = function(){ return { dir: 'long', newLong: true }; };
+  W.ema = function(vals){ return vals.map(function(){ return 1; }); };
+  W.macdHist = function(vals){ return vals.map(function(){ return 1; }); };
+  W.donchian = function(rows){
+    return { up: rows.map(function(){ return 1e9; }), lo: rows.map(function(){ return -1e9; }) };
+  };
+  W.rsi = function(vals){
+    return vals.map(function(_, i){ return i < vals.length - 1 ? 45 : 55; });
+  };
+  const flat = bars(280);
+  const crossed = W.hgObtcApplyPineAccuracy(crown(), flat, []);
+  ok(crossed.tier === 'clean' && /RSI 14/.test(crossed.row.pineNote || ''),
+    'one fresh pine plus an RSI cross of 50 keeps the ticket (' + crossed.row.pineNote + ')');
+  ok(crossed.row.entry === 100 && crossed.row.stop === 90 && crossed.row.t1 === 120,
+    'RSI does not replace ENTRY / STOP / T1');
+
+  W.rsi = function(vals){ return vals.map(function(){ return 55; }); };
+  const parked = W.hgObtcApplyPineAccuracy(crown(), flat, []);
+  ok(parked.tier === 'near' && /only HalfTrend/i.test(parked.row.pineNote || ''),
+    'RSI sitting at 55 is not a pass and not a second vote (' + parked.row.pineNote + ')');
+
+  W.rsi = function(vals){ return vals.map(function(){ return 50; }); };
+  const sweep = bars(280);
+  sweep[279] = { t: 279, o: 100, h: 101, l: 90, c: 100.5, v: 2 };
+  const swept = W.hgObtcApplyPineAccuracy(crown(), sweep, []);
+  ok(swept.tier === 'clean' && /Liquidity sweep/.test(swept.row.pineNote || ''),
+    'a wick through the prior ten lows that closes back inside is one indicator vote (' + swept.row.pineNote + ')');
+  ok(swept.row.entry === 100 && swept.row.stop === 90,
+    'the sweep does not mint a new stop');
+  const broke = bars(280);
+  broke[279] = { t: 279, o: 100, h: 101, l: 90, c: 91, v: 2 };
+  const held = W.hgObtcApplyPineAccuracy(crown(), broke, []);
+  ok(!/Liquidity sweep/.test(held.row.pineNote || ''),
+    'a close that stays under the prior lows is a break, not a sweep (' + held.row.pineNote + ')');
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

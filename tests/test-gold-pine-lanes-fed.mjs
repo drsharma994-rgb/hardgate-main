@@ -260,7 +260,22 @@ console.log('== 5) the real scalp mint: what the two fed fields do ==');
   assert(px.length === 4 && px.every((c, i) => c.agree === xm[i].agree - 1) && px.filter(c => c.grade === 'B').length === 2 && xm.every(c => c.grade === 'A'), 'named binance-paxg: the squeeze / MFI volume votes are withheld, every candidate loses one agreeing read and two fall from grade A to B');
   const xm120 = C.goldScalpSetups(inp(120, { candleSource: 'xm-xauusd' })) || [];
   const px120 = C.goldScalpSetups(inp(120, { candleSource: 'binance-paxg' })) || [];
-  assert(xm120.length === 2 && px120.length === 0, 'and on seed 120 the same rule takes two candidates OFF the board -- this pack can remove candidates on GOLD PINE / GOLD ULTRA / GOLD DIRECTION, which read PAXG / XAUT bars and never said so');
+  /* MEASURED, and the claim corrected. This assertion used to read
+     `px120.length === 0` — "the same rule takes two candidates OFF the board".
+     Driven on seed 120 it is `xm120 = 2, px120 = 1`: the named PAXG feed costs
+     ONE candidate, and the survivor is **kept and demoted**, not deleted —
+     `{ dir:'short', stratKey:'openrange', agree:4, grade:'B', demoted:true,
+     stamps:['COUNTER-TREND','EDGE DEMOTE'] }`. That is this tab's invariant
+     everywhere else (hg-v552 / hg-v572: demote, do not hide), and `count` is
+     `ranked.length`, which INCLUDES demoted rows. The mechanism is narrow and
+     intentional: `volumeTrusted:false` zeroes exactly two readers — `goldMFI`
+     (goldind.js:607) and `goldVolSqueeze` (goldind.js:637) — both of which vote
+     on the scalp mint only. So the honest claim is: the feed costs a candidate,
+     the survivor is stamped demoted, and the withheld volume reads return NONE
+     (asserted on the next line). */
+  assert(xm120.length === 2 && px120.length === 1, 'on seed 120 the named feed costs one candidate (' + xm120.length + ' -> ' + px120.length + ')');
+  assert(px120.every(c => c.demoted === true && (c.stamps || []).indexOf('EDGE DEMOTE') >= 0),
+    'and the survivor is demoted, not deleted — the volume votes are withheld and the row stays on the board');
   assert(C.goldMFI(tapeEnding(WED, 40, 900, 3, 24), { volumeTrusted: false }).last === 'NONE' && C.goldVolSqueeze(tapeEnding(WED, 60, 900, 3, 24), { volumeTrusted: false }).state === 'NONE', 'the two volume reads return NONE on untrusted volume (the pre-existing rule, unchanged)');
   const src = read('goldind.js').replace(/\/\*[\s\S]*?\*\//g, '');
   assert(/paxg\|xaut\|binance-paxg\|binance-xaut/.test(src), 'the proxy-venue pattern is unchanged');

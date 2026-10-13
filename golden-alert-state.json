@@ -71,11 +71,12 @@
       "ago": -1
     },
     "GTC": {
-      "at": "2026-10-05T19:06:09.126Z",
+      "at": "2026-10-12T23:31:22.456Z",
       "score": 5,
       "fresh": true,
-      "ago": 2,
-      "crossDay": "2026-10-03"
+      "ago": 9,
+      "crossDay": "2026-10-02",
+      "expired": true
     },
     "PUMP": {
       "at": "2026-10-05T16:25:35.107Z",
@@ -129,19 +130,20 @@
       "expired": true
     },
     "STRK": {
-      "at": "2026-10-09T19:54:13.486Z",
+      "at": "2026-10-12T06:55:24.445Z",
       "score": 5,
       "fresh": true,
-      "ago": 3,
+      "ago": 6,
       "crossDay": "2026-10-05",
       "expired": true
     },
     "HBAR": {
-      "at": "2026-10-05T19:06:10.136Z",
-      "score": 4,
+      "at": "2026-10-12T06:55:26.189Z",
+      "score": 3,
       "fresh": true,
-      "ago": 3,
-      "crossDay": "2026-10-02"
+      "ago": 9,
+      "crossDay": "2026-10-02",
+      "expired": true
     },
     "ORCA": {
       "at": "2026-10-05T16:25:36.049Z",
@@ -162,18 +164,18 @@
       "ago": -1
     },
     "BEAMX": {
-      "at": "2026-10-08T07:51:00.751Z",
+      "at": "2026-10-13T01:22:06.913Z",
       "score": 5,
       "fresh": true,
-      "ago": 3,
+      "ago": 8,
       "crossDay": "2026-10-04",
       "expired": true
     },
     "FIL": {
-      "at": "2026-10-09T14:22:09.060Z",
+      "at": "2026-10-10T03:17:00.716Z",
       "score": 4,
       "fresh": true,
-      "ago": 8,
+      "ago": 9,
       "crossDay": "2026-09-30",
       "expired": true
     },
@@ -230,11 +232,12 @@
       "crossDay": "2026-09-27"
     },
     "ETC": {
-      "at": "2026-10-05T19:06:13.170Z",
-      "score": 4,
+      "at": "2026-10-10T23:34:23.991Z",
+      "score": 3,
       "fresh": true,
-      "ago": 4,
-      "crossDay": "2026-10-01"
+      "ago": 9,
+      "crossDay": "2026-09-30",
+      "expired": true
     },
     "GRT": {
       "at": "2026-10-05T19:06:13.603Z",
@@ -244,18 +247,18 @@
       "crossDay": "2026-10-05"
     },
     "SYRUP": {
-      "at": "2026-10-06T15:51:09.609Z",
-      "score": 5,
+      "at": "2026-10-13T01:22:07.609Z",
+      "score": 4,
       "fresh": true,
-      "ago": 2,
+      "ago": 9,
       "crossDay": "2026-10-03",
       "expired": true
     },
     "SENT": {
-      "at": "2026-10-08T11:53:04.677Z",
-      "score": 5,
+      "at": "2026-10-11T23:32:51.846Z",
+      "score": 3,
       "fresh": true,
-      "ago": 3,
+      "ago": 6,
       "crossDay": "2026-10-04",
       "expired": true
     },
@@ -377,11 +380,12 @@
       "crossDay": "2026-10-01"
     },
     "1MBABYDOGE": {
-      "at": "2026-10-05T19:06:23.770Z",
-      "score": 4,
+      "at": "2026-10-10T23:34:35.683Z",
+      "score": 0,
       "fresh": true,
-      "ago": 1,
-      "crossDay": "2026-10-04"
+      "ago": 9,
+      "crossDay": "2026-09-30",
+      "expired": true
     },
     "SOMI": {
       "at": "2026-10-05T19:06:23.911Z",
@@ -497,10 +501,10 @@
       "expired": true
     },
     "SEI": {
-      "at": "2026-10-08T15:56:06.474Z",
-      "score": 3,
+      "at": "2026-10-12T14:18:12.995Z",
+      "score": 4,
       "fresh": true,
-      "ago": 1,
+      "ago": 5,
       "crossDay": "2026-10-06",
       "expired": true
     },
@@ -521,15 +525,87 @@
       "expired": true
     },
     "CHR": {
-      "at": "2026-10-09T19:54:21.453Z",
+      "at": "2026-10-10T23:34:27.044Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 2,
+      "crossDay": "2026-10-07",
+      "expired": true
+    },
+    "KNC": {
+      "at": "2026-10-12T06:55:38.434Z",
       "score": 3,
       "fresh": true,
-      "ago": 1,
+      "ago": 5,
+      "crossDay": "2026-10-06",
+      "expired": true
+    },
+    "MANA": {
+      "at": "2026-10-10T23:34:29.029Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 2,
       "crossDay": "2026-10-07",
+      "expired": true
+    },
+    "ADA": {
+      "at": "2026-10-12T14:18:11.342Z",
+      "score": 4,
+      "fresh": true,
+      "ago": 4,
+      "crossDay": "2026-10-07",
+      "expired": true
+    },
+    "OGN": {
+      "at": "2026-10-13T16:07:32.173Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 4,
+      "crossDay": "2026-10-08",
+      "expired": true
+    },
+    "1000SATS": {
+      "at": "2026-10-10T23:34:34.901Z",
+      "score": 2,
+      "fresh": true,
+      "ago": 3,
+      "crossDay": "2026-10-06",
+      "expired": true
+    },
+    "RLC": {
+      "at": "2026-10-12T19:50:09.716Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 3,
+      "crossDay": "2026-10-08",
+      "expired": true
+    },
+    "IMX": {
+      "at": "2026-10-12T10:36:55.812Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 5,
+      "crossDay": "2026-10-06",
+      "expired": true
+    },
+    "METIS": {
+      "at": "2026-10-13T01:22:05.753Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 6,
+      "crossDay": "2026-10-06",
+      "expired": true
+    },
+    "S": {
+      "at": "2026-10-13T16:07:31.943Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 1,
+      "crossDay": "2026-10-11",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-09T19:54:35.275Z",
+  "lastRunAt": "2026-10-13T16:07:47.841Z",
   "scanned": 504,
   "cards": 0
 }

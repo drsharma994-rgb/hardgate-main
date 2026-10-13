@@ -20,7 +20,15 @@
 
   root.hgMacroEventLock = function(now){
     try { return calendar.checkBlackout(now); }
-    catch (e) { return { veto: false, evidence: 'Macro economic window clean' }; }
+    /* A fault here used to return the CLEAN path's exact shape —
+       `{ veto: false, evidence: 'Macro economic window clean' }` — so a dead
+       calendar was indistinguishable from a genuinely clear window, and both
+       consumers (formation-patch.js:137, gold-core-engine.js:572) only test
+       `lock.veto`. The lock still fails OPEN (a data outage must not halt
+       trading), but it no longer claims to have CHECKED: the `unchecked` marker
+       is the same one hgNewsRisk uses, and the evidence line says what actually
+       happened instead of asserting the window is clean. */
+    catch (e) { return { veto: false, unchecked: true, evidence: 'Macro calendar unread — not checked, not clean' }; }
   };
 
   root.HG_riskLine = function(setup){

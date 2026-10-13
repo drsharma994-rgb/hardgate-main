@@ -848,7 +848,13 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
      The ganeshgold desk (the 17-step SMC/ICT framework) joined the group
      after the scalp scanners — the pin below includes it, so the shipped
      nav and the pin can no longer drift apart silently. */
-  assert(/tabs:\['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent'\]/.test(gLine),
+  /* hg-v1310: 'candle-forecast' appended. Upstream added the CANDLE FORECAST tab
+     to the GOLD nav group (it forecasts the next XAUUSD candle from the gold
+     tape), which is a real membership change this pin is SUPPOSED to catch — the
+     point of the pin is that the shipped nav and the test cannot drift apart
+     silently, not that new gold tabs are forbidden. Recorded in its actual
+     position, at the end, rather than loosening the assertion to a pattern. */
+  assert(/tabs:\['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent','candle-forecast'\]/.test(gLine),
          'GOLD group: super desk first, then swing/scalp scanners — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');

@@ -71,6 +71,23 @@ console.log('== outcome prediction ==');
   var nb = chartVisionNextBarOpinion('long', 'long', 'bull continuation', synthUptrend(30), {});
   ok(nb.indexOf('next bar') >= 0, 'next bar opinion string');
   ok(chartVisionNextBarLine({ nextBarOpinion: nb }) === nb, 'next bar line helper');
+  var flat = [];
+  for (var i = 0; i < 8; i++) flat.push({ t: i, o: 100, h: 100, l: 100, c: 100, v: 1 });
+  ok(chartVisionNextBarOpinion('long', 'long', 'range', flat, {}).indexOf('unread') >= 0,
+    'a candle with no range stays unread');
+  var hammer = [];
+  for (var j = 0; j < 12; j++) hammer.push({ t: j, o: 100, h: 101, l: 99, c: 100.4, v: 1 });
+  hammer[11] = { t: 11, o: 100, h: 100.4, l: 96, c: 100.3, v: 2 };
+  var ham = chartVisionNextBarOpinion('long', 'long', 'range', hammer, {});
+  ok(/long lower wick/.test(ham) && /not a promise/.test(ham), 'a rejected low is named and is not a green promise (' + ham + ')');
+  var inside = [];
+  for (var k = 0; k < 12; k++) inside.push({ t: k, o: 100, h: 104, l: 96, c: 101, v: 1 });
+  inside[11] = { t: 11, o: 100.2, h: 102, l: 98, c: 100.5, v: 1 };
+  ok(/inside the prior bar/.test(chartVisionNextBarOpinion('long', 'long', 'compression', inside, {}))
+    && /unread until it leaves the coil/.test(chartVisionNextBarOpinion('long', 'long', 'compression', inside, {})),
+    'an inside bar does not pick a direction');
+  var noStop = chartVisionPredictOutcome('long', 'long', 0.75, 'range', { entry: 100 });
+  ok(noStop.invalidation == null, 'a missing stop is not replaced with a made-up price');
   var merged = chartVisionMergePrediction({ bias: 'long' }, pred);
   ok(merged.outcomeProb === pred.outcomeProb, 'merge prediction fields');
   var line = chartVisionPredictionLine(merged);

@@ -1,0 +1,58 @@
+hg-v1311: CANDLE FORECAST gains an advanced pattern layer (disclosure, not weight)
+
+The user asked for more advanced candlestick recognition on the CANDLE FORECAST tab
+for more accurate gold setups. This adds it without falling into the trap that makes
+"more patterns" actively worse.
+
+THE TRAP I HAD TO AVOID FIRST. `hgCfCandlePatterns` VOTES. Its families add to
+`bulls`/`bears`, which decide the direction call, and its stops become the trade's own
+stop (`rawStop = dir === 'BULL' ? pat.longStop : pat.shortStop`). So adding voting
+families would have silently doubled the pattern weight on a live trade decision —
+the hg-v966 unmeasured-weight trap — and, since three-line strike and three-outside
+both begin with the same two bars the harami/star logic already reads, it could
+re-count one event as two (hg-v1153's own warning).
+
+So the new layer is DISCLOSURE. Every pattern is recorded and rides the result as
+`advancedPatterns` / `patternLeans` / `patternWhere` / `patternDrift`. Nothing in it
+gates, scores or prices anything, and the guard asserts both textually and
+behaviourally that no advanced value reaches `bulls`, `bears`, `checked` or `rawStop`.
+The forward ledger decides out of sample whether any of it separates winners.
+
+WHAT IT ADDS
+
+  Four-bar reversals: bullish/bearish three-line strike, three outside up/down, and
+  abandoned baby — the only member of the star family that requires a real gap on
+  both sides of the doji.
+
+  Continuations: rising and falling three methods, tasuki gap (the unfilled gap is
+  the whole point, so the code checks the close stays above the gap bar's low),
+  side-by-side white lines.
+
+  Exhaustion and structure: three-bar climax (three expanding ranges with shrinking
+  bodies — participation rising into a stall), double inside (compression) and double
+  outside (expansion).
+
+  THE ACCURACY HALF — location and drift context. A hammer at a swing low is a
+  reversal; the same hammer at a swing high is a trap, and the three-bar voter above
+  cannot tell them apart. Every pattern now carries where it sat in the recent
+  20-bar range and whether the drift there runs with or against it, three-state
+  throughout (`at the range high` / `at the range low` / `mid-range`; `up` / `down`
+  / `flat`). A flat window reads flat rather than being guessed as up or down.
+
+FOUND WHILE BUILDING IT: the layer read `.length` before validating its input, so a
+null tape threw instead of failing open. Fixed — the array check now precedes the
+length read, which was exactly the throw it existed to prevent.
+
+TEST DISCIPLINE: building this guard took four wrong fixtures in a row, and every one
+of them was MY error, not the detector's — bars placed in the wrong index slots (the
+detector reads a=rows[n-4] … d=rows[n-1], so a three-bar pattern needs a lead-in),
+an inside bar that poked outside its container, and "small" bars below the body
+floor. Each was found by measuring the lifted function rather than re-reading the
+condition, and the comments record the slot mapping so the next pack does not repeat
+it.
+
+Tests: tests/test-candle-forecast-advanced.mjs — 26 assertions over 6 sections,
+including the non-voting invariant and thin/junk/degenerate tape handling.
+
+BATCH: hg-v1310 -> hg-v1311 across all five surfaces, recorded in the ledger
+(15 entries). The discipline guard is green at 90 assertions.

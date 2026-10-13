@@ -29,6 +29,11 @@ EVIDENCE, not tickets:
   ONE WITNESS NEVER FLIPS A SETUP. 2+ net votes with the direction print a
   TAILWIND chip. Chips inform, gates decide: the stack never mints levels,
   never moves rank math, and an unread feed stays UNCHECKED, never faked.
+  When the host has not warmed Fear & Greed or BTC dominance, the gather
+  asks alternative.me and CoinGecko once. A failed fetch stays unread.
+  Binance BTCUSDT global long/short (free, 4h) votes only at the house
+  65/35 retail lines — inside the band it is checked and silent. One
+  crowded print still cannot flip a setup by itself.
   hg-v1003: the stack itself now lives in fundamental-stack.js — one shared
   asset-aware source of truth for every crypto and gold desk; the
   hgObtcFundamental* wrappers below delegate to it and fail open without it.
@@ -734,14 +739,274 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     return [];
   }
 
+  /* Binance global long/short, account-weighted. The house fade lines live
+     in positioning.js (65 / 35). Inside the band the print is checked and
+     casts no vote. A missing or out-of-range print stays unread. */
+  function hgObtcRetailLeg(extra){
+    var ls = extra && extra.retailLs;
+    var pct = ls && ls.latest ? +ls.latest.longPct : NaN;
+    if (!isFinite(pct) || pct < 0 || pct > 100){
+      return { key: 'retail', label: 'RETAIL LONG/SHORT', vote: 'neutral', state: 'unchecked',
+        text: 'Binance BTCUSDT global long/short absent' };
+    }
+    var vote = pct >= 65 ? 'bear' : (pct <= 35 ? 'bull' : 'neutral');
+    return { key: 'retail', label: 'RETAIL LONG/SHORT', vote: vote, state: 'checked',
+      extreme: vote !== 'neutral',
+      text: pct.toFixed(1) + '% long'
+        + (vote === 'bear' ? ' — crowded long (house >=65 fade)'
+          : vote === 'bull' ? ' — crowded short (house <=35 fade)'
+          : ' — inside 35-65, no vote') };
+  }
+
+  /* hg-v1300: TOP TRADERS vs RETAIL — the house smart-$ spread, taken from
+     positioning.js verbatim (topLongPct - retailLongPct, ±15pp, 'follow top
+     traders'). topLongPct is Binance's topLongShortPositionRatio (position-
+     weighted smart-$ placement); retailLongPct is the global account ratio
+     the RETAIL leg already reads. BOTH prints are required — the spread
+     needs its two sides; a missing side stays UNCHECKED, never a pass.
+     Inside the band the spread is checked and casts no vote. */
+  function hgObtcTopTraderLeg(extra){
+    var tt = extra && extra.topLs;
+    var ls = extra && extra.retailLs;
+    var top = tt && tt.latest ? +tt.latest.longPct : NaN;
+    var ret = ls && ls.latest ? +ls.latest.longPct : NaN;
+    if (!isFinite(top) || top < 0 || top > 100 || !isFinite(ret) || ret < 0 || ret > 100){
+      return { key: 'toptrader', label: 'TOP TRADERS vs RETAIL', vote: 'neutral', state: 'unchecked',
+        text: 'Binance top-trader position ratio absent' };
+    }
+    var diff = top - ret;
+    var vote = diff >= 15 ? 'bull' : (diff <= -15 ? 'bear' : 'neutral');
+    return { key: 'toptrader', label: 'TOP TRADERS vs RETAIL', vote: vote, state: 'checked',
+      extreme: vote !== 'neutral',
+      text: 'top ' + top.toFixed(1) + '% vs retail ' + ret.toFixed(1) + '% long · spread '
+        + (diff >= 0 ? '+' : '') + diff.toFixed(1) + 'pp'
+        + (vote === 'bull' ? ' — smart $ long of retail (house +15pp, follow top traders)'
+          : vote === 'bear' ? ' — smart $ short of retail (house -15pp, follow top traders)'
+          : ' — inside ±15pp, no vote') };
+  }
+
+  /* hg-v1301: PERP FUNDING — the crowding read at the house line.
+     positioning.js's FUNDING_EXTREME (±0.05%/interval) is the house's own
+     crowded-long / crowded-short line and SMART $ / OI FLOW already read
+     funding through it; the BTC board never carried a funding leg. The
+     read is CONTRARIAN the way positioning.js reads it: longs paying past
+     the line is a crowded long (bear), shorts paying past it is a crowded
+     short (bull). Inside the line the print is checked and casts no vote.
+     The value is free — hgObtcGatherExtra already fetches Binance's
+     BTCUSDT perp funding — and absent stays UNCHECKED, never a pass. */
+  function hgObtcFundingLeg(extra){
+    var v = extra ? fin(extra.btcFundingBinance) : NaN;
+    if (!isFinite(v)){
+      return { key: 'funding', label: 'PERP FUNDING', vote: 'neutral', state: 'unchecked',
+        text: 'Binance BTCUSDT funding absent' };
+    }
+    var vote = v >= 0.05 ? 'bear' : (v <= -0.05 ? 'bull' : 'neutral');
+    return { key: 'funding', label: 'PERP FUNDING', vote: vote, state: 'checked',
+      extreme: vote !== 'neutral',
+      text: v.toFixed(4) + '%/8h'
+        + (vote === 'bear' ? ' — longs crowded, past the house +0.05 line'
+          : vote === 'bull' ? ' — shorts crowded, past the house -0.05 line'
+          : ' — inside ±0.05, no vote') };
+  }
+
+  /* hg-v1301: COINBASE PREMIUM — the US spot bid. This is the free
+     cross-exchange read cryptoultra.js names as an acknowledged gap
+     ('needs cross-exchange price comparison — never faked'): Coinbase USD
+     spot against Binance's BTCUSDT perp mark (the price-discovery print the
+     desk already holds from the same premiumIndex call as its funding), in
+     basis points. INFO ONLY — there is no house line for it, so it is
+     disclosed like the EMA stack and never votes; a missing side stays
+     UNCHECKED. */
+  function hgObtcCoinbaseLeg(extra){
+    var c = extra ? fin(extra.cbSpot) : NaN;
+    var m = extra ? fin(extra.btcMarkBinance) : NaN;
+    if (!isFinite(c) || !isFinite(m) || c <= 0 || m <= 0){
+      return { key: 'cbprem', label: 'COINBASE PREMIUM', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'Coinbase USD spot vs Binance mark absent' };
+    }
+    var bp = (c - m) / m * 10000;
+    return { key: 'cbprem', label: 'COINBASE PREMIUM', vote: 'neutral', state: 'checked', info: true,
+      text: (bp >= 0 ? '+' : '') + bp.toFixed(1) + ' bp — US spot '
+        + (bp > 0 ? 'above' : bp < 0 ? 'below' : 'level with')
+        + ' the perp mark (no house line, never votes)' };
+  }
+
+  function hgObtcAppendLeg(r, leg){
+    var i;
+    if (!r || !leg || !Array.isArray(r.legs)) return;
+    for (i = 0; i < r.legs.length; i++){
+      if (r.legs[i] && r.legs[i].key === leg.key) return;
+    }
+    r.legs.push(leg);
+    if (leg.info || leg.state !== 'checked') return;
+    r.checked = (r.checked || 0) + 1;
+    if (leg.vote === 'bull') r.bulls = (r.bulls || 0) + 1;
+    else if (leg.vote === 'bear') r.bears = (r.bears || 0) + 1;
+    if ((r.bulls || 0) === 0 && (r.bears || 0) === 0) r.regime = 'quiet';
+    else if (r.bulls === r.bears) r.regime = 'mixed';
+    else r.regime = r.bulls > r.bears ? 'bullish' : 'bearish';
+  }
+
+  /* blockchain.info 30-day hashrate. Only a drop through -5% votes (miner
+     stress). A stable print is checked and silent. Missing is unread — it
+     is not a pass. */
+  function hgObtcHashLeg(extra){
+    var h = extra && extra.hashrate;
+    var ch = h && isFinite(+h.change30d) ? +h.change30d : NaN;
+    if (!isFinite(ch)){
+      return { key: 'hashrate', label: 'HASHRATE', vote: 'neutral', state: 'unchecked',
+        text: 'blockchain.info hashrate absent' };
+    }
+    var vote = ch < -0.05 ? 'bear' : 'neutral';
+    return { key: 'hashrate', label: 'HASHRATE', vote: vote, state: 'checked',
+      extreme: vote !== 'neutral',
+      text: (ch * 100).toFixed(1) + '% 30d'
+        + (vote === 'bear' ? ' — miner stress (house -5% line)' : ' — inside the -5% line, no vote') };
+  }
+
+  /* CoinMetrics community. NVT votes only at or above 90. A null NVT is
+     unread, never a pass. Active addresses are an info prior. */
+  function hgObtcCoinmetricsRead(rows){
+    var last, first, adrNow, adrPast, txMean, cap, daily;
+    if (!rows || rows.length < 2) return null;
+    last = rows[rows.length - 1];
+    first = rows[0];
+    adrNow = last && +last.AdrActCnt;
+    adrPast = first && +first.AdrActCnt;
+    txMean = last && +last.TxTfrValMeanUSD;
+    cap = last && +last.CapMrktCurUSD;
+    if (!isFinite(adrNow) || adrNow <= 0) return null;
+    daily = (isFinite(txMean) && txMean > 0) ? txMean * adrNow : NaN;
+    return {
+      activeAddresses: adrNow,
+      adrChange30d: (isFinite(adrPast) && adrPast > 0) ? (adrNow - adrPast) / adrPast : null,
+      nvt: (isFinite(cap) && cap > 0 && isFinite(daily) && daily > 0) ? cap / daily : null,
+      marketCap: isFinite(cap) && cap > 0 ? cap : null
+    };
+  }
+
+  function hgObtcNvtLeg(extra){
+    var cm = extra && extra.coinmetrics;
+    var nvt = cm && cm.nvt != null ? +cm.nvt : NaN;
+    if (!isFinite(nvt) || nvt <= 0){
+      return { key: 'nvt', label: 'NVT', vote: 'neutral', state: 'unchecked',
+        text: 'CoinMetrics NVT absent — a missing network value is not a pass' };
+    }
+    var vote = nvt >= 90 ? 'bear' : 'neutral';
+    return { key: 'nvt', label: 'NVT', vote: vote, state: 'checked',
+      extreme: vote !== 'neutral',
+      text: nvt.toFixed(1) + (vote === 'bear' ? ' — network rich (house 90 line)' : ' — under 90, no vote') };
+  }
+
+  function hgObtcAddrLeg(extra){
+    var cm = extra && extra.coinmetrics;
+    var adr = cm && isFinite(+cm.activeAddresses) ? +cm.activeAddresses : NaN;
+    var ch = cm && isFinite(+cm.adrChange30d) ? +cm.adrChange30d : NaN;
+    if (!isFinite(adr)){
+      return { key: 'addr', label: 'ACTIVE ADDRESSES', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'CoinMetrics active-address read absent' };
+    }
+    return { key: 'addr', label: 'ACTIVE ADDRESSES', vote: 'neutral', state: 'checked', info: true,
+      text: Math.round(adr) + (isFinite(ch) ? (' · ' + (ch * 100).toFixed(1) + '% 30d') : '')
+        + ' — activity prior, never a vote' };
+  }
+
+  /* Fresh 12-bar price/OI divergence. A divergence that was already there
+     five bars ago is a standing bias and does not vote. No OI series stays
+     unread. A quiet series is checked and silent. */
+  function hgObtcDivAt(closes, ois, end){
+    var pc, oc;
+    if (!closes || !ois || end < 12 || end >= closes.length || end >= ois.length) return null;
+    pc = closes[end] - closes[end - 12];
+    oc = ois[end] - ois[end - 12];
+    if (!isFinite(pc) || !isFinite(oc) || pc === 0 || oc === 0) return null;
+    if (pc > 0 && oc < 0) return 'short';
+    if (pc < 0 && oc > 0) return 'long';
+    return null;
+  }
+
+  function hgObtcOiDivRead(rows, oiPack){
+    var series = oiPack && (oiPack.series || oiPack);
+    var n, closes, ois, i, c, o, now, prior;
+    if (!rows || !series || !series.length) return undefined;
+    n = Math.min(rows.length, series.length);
+    if (n < 20) return undefined;
+    closes = [];
+    ois = [];
+    for (i = rows.length - n; i < rows.length; i++){
+      c = rows[i] && +rows[i].c;
+      if (!isFinite(c)) return undefined;
+      closes.push(c);
+    }
+    for (i = series.length - n; i < series.length; i++){
+      o = series[i] && (series[i].oi != null ? +series[i].oi : +series[i]);
+      if (!isFinite(o)) return undefined;
+      ois.push(o);
+    }
+    now = hgObtcDivAt(closes, ois, n - 1);
+    if (!now) return null;
+    prior = hgObtcDivAt(closes, ois, n - 1 - 5);
+    if (prior === now) return null;
+    return { dir: now };
+  }
+
+  function hgObtcOiDivLeg(extra){
+    var d = extra && extra.oiDiv;
+    var vote;
+    if (!extra || extra.oiDiv === undefined){
+      return { key: 'oidiv', label: 'OI DIVERGENCE', vote: 'neutral', state: 'unchecked',
+        text: 'OI/price divergence unread — missing open interest is not a pass' };
+    }
+    if (!d || (d.dir !== 'long' && d.dir !== 'short')){
+      return { key: 'oidiv', label: 'OI DIVERGENCE', vote: 'neutral', state: 'checked',
+        extreme: false, text: 'no fresh 12-bar OI divergence — no vote' };
+    }
+    vote = d.dir === 'long' ? 'bull' : 'bear';
+    return { key: 'oidiv', label: 'OI DIVERGENCE', vote: vote, state: 'checked', extreme: true,
+      text: (vote === 'bear' ? 'price up, open interest down' : 'price down, open interest up')
+        + ' — fresh 12-bar divergence, one witness' };
+  }
+
+  function hgObtcEmaStackLeg(extra){
+    var s = extra && extra.emaStack;
+    var text;
+    if (!extra || extra.emaStack === undefined){
+      return { key: 'emastack', label: 'EMA STACK', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'EMA 50/200 stack unread' };
+    }
+    if (!s || (s.side !== 'bull' && s.side !== 'bear' && s.side !== 'mixed')){
+      return { key: 'emastack', label: 'EMA STACK', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'EMA 200 needs 200 bars — a short tape is not a pass' };
+    }
+    text = s.side === 'bull' ? 'price above EMA50 above EMA200'
+      : s.side === 'bear' ? 'price below EMA50 below EMA200'
+      : 'EMA 50 and 200 are not stacked';
+    return { key: 'emastack', label: 'EMA STACK', vote: 'neutral', state: 'checked', info: true,
+      text: text + ' — standing stack, not a fresh signal, no vote' };
+  }
+
+  function hgObtcWithRetail(r, extra){
+    if (!r || !Array.isArray(r.legs)) return r;
+    hgObtcAppendLeg(r, hgObtcRetailLeg(extra));
+    hgObtcAppendLeg(r, hgObtcTopTraderLeg(extra));   /* hg-v1300: the smart-$ spread leg */
+    hgObtcAppendLeg(r, hgObtcFundingLeg(extra));     /* hg-v1301: the perp crowding leg */
+    hgObtcAppendLeg(r, hgObtcCoinbaseLeg(extra));    /* hg-v1301: the US spot bid (info) */
+    hgObtcAppendLeg(r, hgObtcHashLeg(extra));
+    hgObtcAppendLeg(r, hgObtcNvtLeg(extra));
+    hgObtcAppendLeg(r, hgObtcAddrLeg(extra));
+    hgObtcAppendLeg(r, hgObtcOiDivLeg(extra));
+    hgObtcAppendLeg(r, hgObtcEmaStackLeg(extra));
+    return r;
+  }
+
   function hgObtcFundamentalRegime(extra){
     if (gfn('hgFundamentalRegime')){
       try{
         var r = W.hgFundamentalRegime('btc', extra || {});
-        if (r && Array.isArray(r.legs)) return r;
+        if (r && Array.isArray(r.legs)) return hgObtcWithRetail(r, extra);
       }catch(e){}
     }
-    return { regime: 'unknown', bulls: 0, bears: 0, checked: 0, blackout: false, legs: [] };
+    return hgObtcWithRetail({ regime: 'unknown', bulls: 0, bears: 0, checked: 0, blackout: false, legs: [] }, extra);
   }
 
   function hgObtcFundamentalPanelHtml(regime){
@@ -816,6 +1081,12 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
             if (l.key === 'fng') out.chips.push('F&G EXTREME');
             else if (l.key === 'rr25d') out.chips.push('RR25 EXTREME');
             else if (l.key === 'dvol') out.chips.push('DVOL EXTREME');
+            else if (l.key === 'retail') out.chips.push('RETAIL EXTREME');
+            else if (l.key === 'toptrader') out.chips.push('SMART-$ SPREAD EXTREME');   /* hg-v1300 */
+            else if (l.key === 'funding') out.chips.push('FUNDING EXTREME');             /* hg-v1301 */
+            else if (l.key === 'hashrate') out.chips.push('HASHRATE STRESS');
+            else if (l.key === 'nvt') out.chips.push('NVT RICH');
+            else if (l.key === 'oidiv') out.chips.push('OI DIVERGENCE');
           });
         }
       } else {
@@ -859,11 +1130,43 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     try{
       ctx.fundamental = hgObtcFundamentalRegime({
         onchain: ctx.onchain, term: ctx.term, carry: ctx.carry,
-        fng: extra.fng, dom: extra.dom,
+        fng: extra.fng, dom: extra.dom, retailLs: extra.retailLs,
+        hashrate: extra.hashrate, coinmetrics: extra.coinmetrics, oiDiv: extra.oiDiv,
+        emaStack: extra.emaStack,
         options: extra.options, dvol: extra.dvol, news: extra.news
       });
     }catch(e3){}
     return ctx;
+  }
+
+  /* Free sentiment reads. A host value wins. A failed fetch is not cached
+     as a number. Ten minutes is enough that the second venue leg does not
+     ask again. */
+  var __obtcSentAt = { fng: 0, dom: 0 };
+  var __obtcSentVal = { fng: null, dom: null };
+  var OBTC_SENT_MS = 10 * 60 * 1000;
+
+  function hgObtcSentTake(key){
+    if (__obtcSentVal[key] == null) return null;
+    if ((Date.now() - __obtcSentAt[key]) > OBTC_SENT_MS) return null;
+    return __obtcSentVal[key];
+  }
+  function hgObtcFinitePct(v){
+    if (v === null || v === undefined || v === '') return false;
+    var n = +v;
+    return isFinite(n) && n > 0 && n <= 100;
+  }
+  function hgObtcSentKeep(key, val){
+    __obtcSentVal[key] = val;
+    __obtcSentAt[key] = Date.now();
+  }
+  async function hgObtcFetchJson(url){
+    if (typeof fetch !== 'function') return null;
+    try{
+      var res = await fetch(url, { cache: 'no-store' });
+      if (!res || res.ok === false || typeof res.json !== 'function') return null;
+      return await res.json();
+    }catch(eFj){ return null; }
   }
 
   async function hgObtcGatherExtra(sym, ticker){
@@ -908,20 +1211,98 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       if (gfn('binanceFunding')){
         var bf = await W.binanceFunding('BTCUSDT');
         extra.btcFundingBinance = (bf && typeof bf.fundingPct === 'number' && isFinite(bf.fundingPct)) ? bf.fundingPct : null;
+        /* hg-v1301: the same premiumIndex call carries the perp MARK — the
+           reference the Coinbase premium is read against. No extra request. */
+        extra.btcMarkBinance = (bf && typeof bf.markPrice === 'number' && isFinite(bf.markPrice) && bf.markPrice > 0) ? bf.markPrice : null;
       }
-    }catch(eBf){ extra.btcFundingBinance = null; }
+    }catch(eBf){ extra.btcFundingBinance = null; extra.btcMarkBinance = null; }
+    /* hg-v1301: COINBASE PREMIUM — Coinbase's free public USD spot print,
+       cached like the other sentiment reads so a fresh price pairs with the
+       Binance mark above. A failure stays unread, never an error up. */
+    try{
+      var cbCached = hgObtcSentTake('cbspot');
+      if (isFinite(cbCached) && cbCached > 0) extra.cbSpot = cbCached;
+      else {
+        var cbj = await hgObtcFetchJson('https://api.coinbase.com/v2/prices/BTC-USD/spot');
+        var cbAmt = cbj && cbj.data ? +cbj.data.amount : NaN;
+        if (isFinite(cbAmt) && cbAmt > 0){ extra.cbSpot = cbAmt; hgObtcSentKeep('cbspot', cbAmt); }
+        else extra.cbSpot = null;
+      }
+    }catch(eCb){ extra.cbSpot = null; }
     extra.term = evidenceFromExtra(extra).term;
     extra.carry = evidenceFromExtra(extra).carry;
-    /* hg-v1002: sentiment / options positioning / event risk join the
-       evidence bag. STATE-ONLY reads — the Deribit book is boot-warmed
-       (HG_warmups 'dvol'), so a scan never refetches it; F&G and BTC.D
-       sit on the host S; hgNewsRisk is synchronous by contract. */
+    /* Sentiment. The host wins when it already has a number. Otherwise one
+       free read: alternative.me Fear & Greed, CoinGecko BTC dominance, and
+       Binance BTCUSDT global long/short. A failure stays unread. */
     try{
       if (extra.fng === undefined){ var hS = hostS(); extra.fng = (hS && hS.fng) ? hS.fng : null; }
     }catch(eF){}
     try{
+      if (!(extra.fng && isFinite(+extra.fng.v))){
+        var cachedF = hgObtcSentTake('fng');
+        if (cachedF) extra.fng = cachedF;
+        else {
+          var fj = await hgObtcFetchJson('https://api.alternative.me/fng/?limit=1');
+          var fd = fj && fj.data && fj.data[0];
+          if (fd && isFinite(+fd.value)){
+            extra.fng = { v: +fd.value, c: String(fd.value_classification || '') };
+            hgObtcSentKeep('fng', extra.fng);
+          }
+        }
+      }
+    }catch(eFf){}
+    try{
       if (extra.dom === undefined){ var hS2 = hostS(); extra.dom = (hS2 && hS2.dom != null) ? hS2.dom : null; }
     }catch(eD){}
+    try{
+      if (!hgObtcFinitePct(extra.dom)){
+        var cachedD = hgObtcSentTake('dom');
+        if (hgObtcFinitePct(cachedD)) extra.dom = cachedD;
+        else {
+          var gj = await hgObtcFetchJson('https://api.coingecko.com/api/v3/global');
+          var btcDom = gj && gj.data && gj.data.market_cap_percentage && +gj.data.market_cap_percentage.btc;
+          if (isFinite(btcDom)){ extra.dom = btcDom; hgObtcSentKeep('dom', btcDom); }
+        }
+      }
+    }catch(eDg){}
+    try{
+      if (gfn('binanceLongShort')){
+        var ls = await W.binanceLongShort('BTCUSDT', '4h', 6);
+        extra.retailLs = (ls && ls.latest && isFinite(+ls.latest.longPct)) ? ls : null;
+      }
+    }catch(eLs){ extra.retailLs = null; }
+    /* hg-v1300: TOP-TRADER POSITIONING — Binance's topLongShortPositionRatio
+       (position-weighted smart-$ placement), the free print SMART $ / OI
+       FLOW / TREND MATRIX already read house-wide through positioning.js.
+       The TOP TRADERS vs RETAIL leg pairs it with the retail print above:
+       the house read is the top-minus-retail SPREAD at ±15pp, never the raw
+       number. binance.js caches the call; a failure is a null, never an
+       error up, and the leg then honestly reads UNCHECKED. */
+    try{
+      if (gfn('binanceTopTraders')){
+        var tt = await W.binanceTopTraders('BTCUSDT', '4h', 6);
+        extra.topLs = (tt && tt.latest && isFinite(+tt.latest.longPct)) ? tt : null;
+      }
+    }catch(eTt){ extra.topLs = null; }
+    try{
+      var hj = await hgObtcFetchJson('https://api.blockchain.info/charts/hash-rate?format=json&timespan=30days');
+      var hvals = hj && Array.isArray(hj.values) ? hj.values : null;
+      var hy0 = hvals && hvals.length >= 2 ? +hvals[0].y : NaN;
+      var hy1 = hvals && hvals.length >= 2 ? +hvals[hvals.length - 1].y : NaN;
+      if (isFinite(hy0) && hy0 > 0 && isFinite(hy1)){
+        extra.hashrate = { hashrate: hy1, change30d: (hy1 - hy0) / hy0 };
+      } else extra.hashrate = null;
+    }catch(eH){ extra.hashrate = null; }
+    try{
+      var cj = await hgObtcFetchJson('https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=AdrActCnt,TxTfrValMeanUSD,CapMrktCurUSD&frequency=1d&page_size=30');
+      extra.coinmetrics = hgObtcCoinmetricsRead(cj && cj.data) || null;
+    }catch(eCm){ extra.coinmetrics = null; }
+    try{
+      if (gfn('binanceOIHistory')){
+        var oih = await W.binanceOIHistory('BTCUSDT', '4h', 30);
+        extra.oiHist = (oih && Array.isArray(oih.series) && oih.series.length) ? oih : null;
+      }
+    }catch(eOh){ extra.oiHist = null; }
     try{ if (gfn('deribitOptionsState')) extra.options = W.deribitOptionsState(); }catch(eO){}
     try{ if (gfn('deribitVolState')) extra.dvol = W.deribitVolState(); }catch(eV){}
     try{ if (gfn('hgNewsRisk')) extra.news = W.hgNewsRisk('BTC'); }catch(eN){}
@@ -941,6 +1322,39 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       if (!(fin(row.passed) === 6)) row.passed = 6;
     }
     if (ev.chips && ev.chips.length) row.evidenceChips = ev.chips;
+    /* hg-v1299: ACCURACY FLAGS — the weighted verdict in hgObtcPick has
+       scored takerFlowWith and fundamentalAligned since hg-v1168, but
+       nothing ever set them, so real flow and the fundamental stack
+       silently scored ZERO. Both are now stamped here, off the same extra
+       bag the evidence gate reads.
+       takerFlowWith: the REAL Binance taker CVD slope (the desk's own
+       hgObtcCvdSlopeDir reader over extra.takerSeries) agrees with the
+       row's direction. An unreadable or flat slope sets nothing.
+       fundamentalAligned: the house fundamental stack (ctx.fundamental,
+       already resolved above with every fallback the evidence gate gets)
+       has at least two checked legs voting WITH the direction and none
+       against. A quiet, mixed or thin stack sets nothing.
+       The flags inform the accuracy score; they never mint or move
+       levels, and they are stamped on survivors only — a refused row is
+       already gone. */
+    try{
+      var rdir = dirOf(row.dir);
+      if (rdir && extra && Array.isArray(extra.takerSeries) && gfn('hgObtcCvdSlopeDir')){
+        var slopeUp = W.hgObtcCvdSlopeDir(extra.takerSeries);
+        if (slopeUp === true || slopeUp === false){
+          row.takerFlowWith = (rdir === 'long') ? (slopeUp === true) : (slopeUp === false);
+        }
+      }
+    }catch(eTf){}
+    try{
+      var rdir2 = dirOf(row.dir);
+      var fundR = ctx.fundamental;
+      if (rdir2 && fundR && Array.isArray(fundR.legs)){
+        var vWith = rdir2 === 'long' ? (fundR.bulls || 0) : (fundR.bears || 0);
+        var vAg = rdir2 === 'long' ? (fundR.bears || 0) : (fundR.bulls || 0);
+        if ((fundR.checked || 0) >= 2 && vWith >= 2 && vAg === 0) row.fundamentalAligned = true;
+      }
+    }catch(eFa){}
     return { ok: true, row: row, ev: ev };
   }
 
@@ -958,6 +1372,8 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
   W.hgObtcRunExtraEngines = hgObtcRunExtraEngines;
   W.hgObtcEvidenceDecide = hgObtcEvidenceDecide;
   W.hgObtcGatherExtra = hgObtcGatherExtra;
+  W.hgObtcCoinmetricsRead = hgObtcCoinmetricsRead;
+  W.hgObtcOiDivRead = hgObtcOiDivRead;
   W.hgObtcApplyEvidence = hgObtcApplyEvidence;
   W.hgObtcFundamentalLegs = hgObtcFundamentalLegs;
   W.hgObtcFundamentalRegime = hgObtcFundamentalRegime;

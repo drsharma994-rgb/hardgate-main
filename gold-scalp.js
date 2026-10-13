@@ -50,7 +50,7 @@
       var macroL = this.core.evaluateMacroAlignment('BULL', view);
       if (!macroL.pass) return { active: false, veto: true, reason: macroL.reasons };
       if (smt.tripleSmtBearish) return { active: false, veto: true, reason: 'Silver confirmed the high: bearish SMT' };
-      var stopL = +(Math.min(current.low, prev.low) - Math.max(atr * 0.40, 3.00)).toFixed(2);
+      var stopL = +(Math.min(current.low, prev.low) - Math.max(atr * 0.50, 3.00)).toFixed(2);
       var riskL = current.close - stopL;
       if (stopL < current.close && riskL > 0){
         setup = Object.assign({
@@ -72,7 +72,7 @@
       var macroS = this.core.evaluateMacroAlignment('BEAR', view);
       if (!macroS.pass) return { active: false, veto: true, reason: macroS.reasons };
       if (smt.tripleSmtBullish) return { active: false, veto: true, reason: 'Silver refused the low: bullish SMT' };
-      var stopS = +(Math.max(current.high, prev.high) + Math.max(atr * 0.40, 3.00)).toFixed(2);
+      var stopS = +(Math.max(current.high, prev.high) + Math.max(atr * 0.50, 3.00)).toFixed(2);
       var riskS = stopS - current.close;
       if (stopS > current.close && riskS > 0){
         setup = Object.assign({
