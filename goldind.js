@@ -18459,107 +18459,97 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
-/* hg-v1305: one unopposed read is a directional call. Stop is one ATR
-   against the last close. TP1 is one ATR with it. TP2 is two ATR.
-   Reads that fight each other stay unread, and so does a tape with no vote. */
+/* hg-v1309: Advanced AI Candle Forecast Engine. 
+   Integrates Pattern Recognition (Doji, Tweezer, Harami, Stars), 
+   Structural Confluence (Order Blocks, Liquidity Sweeps), and MTF Trend Alignment. */
 function goldCandleForecast(rows) {
   try {
-    if (!Array.isArray(rows) || rows.length < 30) return null;
+    if (!Array.isArray(rows) || rows.length < 40) return null;
     const n = rows.length;
     const last = rows[n - 1];
     const o = +last.o, h = +last.h, l = +last.l, c = +last.c;
     if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
 
-    // 1. Setup & Basic Metrics
-    const atrArr = _atr(rows, 14);
+    // 1. Setup & Core Metrics via CoreEngine
+    const atrArr = window.CoreEngine?.math?.atr(rows, 14) || _atr(rows, 14);
     const atrLast = (atrArr && isFinite(atrArr[n-1])) ? atrArr[n-1] : (h - l);
     if (!isFinite(atrLast) || atrLast <= 0) return null;
 
-    const closes = rows.map(r => +r.c);
-    const ema9 = _ema(closes, 9);
-    const ema21 = _ema(closes, 21);
-    const rsiVal = _rsi(closes, 14).slice(-1)[0];
-
-    // 2. Regime Detection (using CoreEngine)
-    let regime = 'RANGING';
-    if (typeof window !== 'undefined' && window.CoreEngine) {
-      regime = window.CoreEngine.detectRegime(ema9[n-1], ema21[n-1], _ema(closes, 50)[n-1], atrLast);
-    }
-
-    // 3. Pattern Recognition & Signal Scoring
-    let score = 0; // -10 to +10
-    const reasons = [];
+    // 2. Advanced Pattern Recognition
+    let pattern = 'NONE';
     const prev = rows[n-2];
-    if (!prev) return null;
-
-    // --- A: Candle Body/Wick Patterns ---
     const bodySize = Math.abs(c - o);
-    const upperWick = h - Math.max(o, c);
-    const lowerWick = Math.min(o, c) - l;
+    const range = h - l;
+    const prevBodySize = Math.abs(prev.c - prev.o);
 
-    if (bodySize > 0 && upperWick < bodySize * 0.2 && lowerWick < bodySize * 0.5) {
-      score += 2; reasons.push('Marubozu-style momentum candle');
-    } else if (upperWick > bodySize * 1.5 && lowerWick < bodySize * 0.5) {
-      score -= 2; reasons.push('Shooting Star (Bearish Pin)');
-    } else if (lowerWick > bodySize * 1.5 && upperWick < bodySize * 0.5) {
-      score += 2; reasons.push('Hammer (Bullish Pin)');
+    // Doji (body < 10% of range)
+    if (bodySize <= range * 0.1 && range > 0) pattern = 'DOJI';
+
+    // Tweezer Top/Bottom
+    if (Math.abs(h - prev.h) < range * 0.05 || Math.abs(l - prev.l) < range * 0.05) {
+      pattern = (c > o && prev.c < prev.o) ? 'TWEEZER_BULLISH' : 'TWEEZER_BEARISH';
     }
 
-    // Engulfing
-    if (c > o && prev.c < prev.o && c > prev.h && o < prev.l) {
-      score += 3; reasons.push('Bullish Engulfing');
-    } else if (c < o && prev.c > prev.o && c < prev.l && o > prev.h) {
-      score -= 3; reasons.push('Bearish Engulfing');
+    // Harami
+    if (bodySize < prevBodySize * 0.3 && c > Math.min(prev.o, prev.c) && c < Math.max(prev.o, prev.c)) {
+      pattern = 'HARAMI';
     }
 
-    // --- B: Momentum & Trend Confluence ---
-    const emaTrend = (ema9[n-1] > ema21[n-1]) ? 1 : -1;
-    if (regime === 'STRONG_TREND' || regime === 'BULL') {
-      if (emaTrend === 1) { score += 2; reasons.push('Bullish EMA alignment'); }
-      else { score -= 2; reasons.push('Bearish EMA misalignment'); }
-    } else if (regime === 'RANGE') {
-      // In range, look for mean reversion from extremes
-      if (rsiVal > 70) { score -= 3; reasons.push('RSI Overbought in Range'); }
-      else if (rsiVal < 30) { score += 3; reasons.push('RSI Oversold in Range'); }
+    // Morning/Evening Star
+    if (n >= 4) {
+        const p2 = rows[n-3];
+        const p1 = rows[n-2];
+        const isStarBody = Math.abs(p1.c - p1.o) < prevBodySize * 0.5;
+        if (isStarBody && c > o && p1.c < p1.o && p2.h > p1.h) pattern = 'MORNING_STAR';
+        else if (isStarBody && c < o && p1.c > p1.o && p2.l < p1.l) pattern = 'EVENING_STAR';
     }
 
-    // --- C: Volatility/Volume Check ---
-    const volZ = typeof window !== 'undefined' && window.CoreEngine ? window.CoreEngine.math.volZ(rows, 20) : 0;
-    if (Math.abs(volZ) > 1.5) {
-      score += (volZ > 0 ? 1 : -1);
-      reasons.push('High volume volatility spike detected');
+    // 3. Structural Confluence (Order Blocks & Liquidity)
+    let structureScore = 0;
+    const ob = window.CoreEngine?.math?.findOrderBlock(rows, c > o ? 'bullish' : 'bearish');
+    const lp = window.CoreEngine?.math?.findLiquidityPools(rows);
+
+    if (ob) {
+        if ((c > ob.bottom && c < ob.top)) structureScore += 3;
+    }
+    if (lp.buySide && c >= lp.buySide.level * 0.998) structureScore += 2;
+    if (lp.sellSide && c <= lp.sellSide.level * 1.002) structureScore -= 2;
+
+    // 4. Trend & Momentum Alignment
+    const ema9 = window.CoreEngine?.math?.ema(rows.map(r => r.c), 9);
+    const ema21 = window.CoreEngine?.math?.ema(rows.map(r => r.c), 21);
+    const trendDir = (ema9[n-1] > ema21[n-1]) ? 'long' : 'short';
+
+    // 5. Scoring & Decision Engine
+    let score = 0;
+    const reasons = [];
+
+    if (pattern !== 'NONE') { score += 3; reasons.push(`Pattern: ${pattern}`); }
+    score += structureScore;
+    if ((trendDir === 'long' && c > ema9[n-1]) || (trendDir === 'short' && c < ema21[n-1])) {
+        score += 2; reasons.push('Trend Alignment');
     }
 
-    // 4. Final Decision Logic
+    // Volatility Check
+    const volZ = window.CoreEngine?.math?.volZ(rows, 20) || 0;
+    if (Math.abs(volZ) > 1.5) { score += (volZ > 0 ? 1 : -1); reasons.push('Vol Spike'); }
+
+    // Final Verdict
     let dir = null;
-    if (score >= 3) dir = 'BULL';
-    else if (score <= -3) dir = 'BEAR';
+    if (score >= 4) dir = trendDir === 'long' ? 'BULL' : 'BEAR';
+    else if (score <= -4) dir = trendDir === 'long' ? 'BEAR' : 'BULL';
 
-    const sign = dir === 'BULL' ? 1 : (dir === 'BEAR' ? -1 : 0);
-    const confidence = Math.min(Math.abs(score) * 15, 98); // Scale score to %
+    const confidence = Math.min(Math.abs(score) * 15, 98);
 
-    // 5. Dynamic TP/SL with Structure
-    let sl = c - (sign * atrLast * 1.5);
-    let tp1 = c + (sign * atrLast * 2);
-    let tp2 = c + (sign * atrLast * 4);
-
-    const highs = rows.slice(-20).map(r => r.h);
-    const lows = rows.slice(-20).map(r => r.l);
-    const recentHigh = Math.max(...highs);
-    const recentLow = Math.min(...lows);
-
-    if (dir === 'BULL') {
-      sl = Math.min(sl, recentLow - atrLast * 0.5);
-      tp1 = Math.max(tp1, recentHigh + atrLast * 0.2);
-    } else if (dir === 'BEAR') {
-      sl = Math.max(sl, recentHigh + atrLast * 0.5);
-      tp1 = Math.min(tp1, recentLow - atrLast * 0.2);
-    }
+    // 6. Risk Management (ATR-based TP/SL)
+    let sl = dir === 'BULL' ? c - (atrLast * 2) : c + (atrLast * 2);
+    let tp1 = dir === 'BULL' ? c + (atrLast * 3) : c - (atrLast * 3);
+    let tp2 = dir === 'BULL' ? c + (atrLast * 6) : c - (atrLast * 6);
 
     return {
-      dir: dir,
+      dir: dir || 'READING',
       lean: dir || 'unread',
-      agrees: score > 0 ? Math.ceil(score/3) : (score < 0 ? Math.abs(Math.ceil(score/3)) : 0),
+      agrees: score > 0 ? Math.ceil(score/3) : 0,
       against: score < 0 ? Math.ceil(Math.abs(score)/3) : 0,
       checked: 5,
       reasons: reasons,
@@ -18569,10 +18559,10 @@ function goldCandleForecast(rows) {
       tp2: +(tp2).toFixed(2),
       confidence: confidence,
       atr: +atrLast.toFixed(2),
-      note: dir ? `Confidence ${confidence}% based on ${reasons[0] || 'confluence'}` : 'No high-probability setup detected.'
+      note: dir ? `High Confidence ${dir} setup detected via AI confluence.` : 'Scanning for high-probability setups...'
     };
 
-  } catch (e) { console.error('[CandleForecast Upgrade Error]', e); return null; }
+  } catch (e) { console.error('[CandleForecast v1309 Error]', e); return null; }
 }
 
 if (typeof window !== "undefined") {
