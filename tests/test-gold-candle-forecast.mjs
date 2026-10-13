@@ -106,6 +106,31 @@ console.log('== candle forecast leans only when reads agree ==');
   noise[29] = { t: 29, o: nc, h: nc + 0.05, l: nc - 0.2, c: nc + 0.02, v: 10 };
   const tiny = forecast(noise);
   ok(tiny && tiny.patterns.indexOf('hammer') < 0, 'a wick smaller than the ATR gate is not a hammer');
+
+  const decline = [];
+  let dp = 2200;
+  for (let i = 0; i < 30; i++) {
+    dp -= 2;
+    decline.push({ t: i, o: dp + 0.5, h: dp + 0.7, l: dp - 0.2, c: dp, v: 10 });
+  }
+  decline[29] = { t: 29, o: dp + 1.2, h: dp + 1.5, l: dp - 4, c: dp + 1.1, v: 10 };
+  const ham = forecast(decline);
+  ok(ham && ham.patterns.indexOf('hammer after a decline') >= 0 && ham.dir === 'BULL',
+    'a hammer after a decline is a long (' + (ham && ham.patterns || []).join(', ') + ' dir=' + (ham && ham.dir) + ')');
+
+  const climb = up(30);
+  const top = climb[29].c;
+  climb[29] = { t: 29, o: top - 0.4, h: top, l: top - 5, c: top - 0.2, v: 10 };
+  const hang = forecast(climb);
+  ok(hang && hang.patterns.indexOf('hanging man') >= 0 && hang.patterns.indexOf('hammer after a decline') < 0,
+    'the same lower wick after a rise is a hanging man, not a hammer (' + (hang && hang.patterns || []).join(', ') + ')');
+
+  const sweep = up(30);
+  const sc = sweep[28].c;
+  sweep[29] = { t: 29, o: sc - 1, h: sc + 0.3, l: sc - 20, c: sc + 0.1, v: 10 };
+  const sw = forecast(sweep);
+  ok(sw && sw.patterns.indexOf('low sweep reclaimed') >= 0,
+    'a wick through the prior lows that closes back is a sweep (' + (sw && sw.patterns || []).join(', ') + ')');
 }
 
 console.log('== the tab does not invent a trade ==');

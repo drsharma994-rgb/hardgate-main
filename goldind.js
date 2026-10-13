@@ -18474,9 +18474,10 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
-/* hg-v1308: named candlestick patterns vote with the other reads.
-   A pattern high or low is the stop only when it sits 0.25 to 2.5 ATR
-   from the close. Otherwise the stop stays one ATR. */
+/* hg-v1311: a candle shape only votes when the prior swing agrees.
+   A hammer after a decline is long. The same shape after a rise is a hanging man.
+   Sweeps, outside bars, belt holds, kickers, meeting lines and three methods
+   vote as their own families. */
 function hgCfPack(row) {
   var o = +row.o, h = +row.h, l = +row.l, c = +row.c;
   var range = h - l;
@@ -18507,14 +18508,35 @@ function hgCfCandlePatterns(rows, atrLast) {
     for (i = 0; i < hits.length; i++) if (hits[i].fam === fam && hits[i].dir === dir) return true;
     return false;
   }
+  var priorClose = +rows[n - 6].c;
+  var fell = b.c <= priorClose - atrLast * 0.35;
+  var rose = b.c >= priorClose + atrLast * 0.35;
+  var swingLo = Infinity, swingHi = -Infinity, k;
+  for (k = Math.max(0, n - 9); k <= n - 2; k++) {
+    swingLo = Math.min(swingLo, +rows[k].l);
+    swingHi = Math.max(swingHi, +rows[k].h);
+  }
+  var atLow = c.l <= swingLo + atrLast * 0.08;
+  var atHigh = c.h >= swingHi - atrLast * 0.08;
 
   if (big(c) && c.range > 0) {
     var loc = (c.c - c.l) / c.range;
-    if (c.body > 0 && c.lower >= c.body * 2 && c.lower >= c.range * 0.5 && c.upper <= c.range * 0.25 && loc >= 0.6)
-      push('reject', 'hammer', 1, c.l);
-    else if (c.body > 0 && c.upper >= c.body * 2 && c.upper >= c.range * 0.5 && c.lower <= c.range * 0.25 && loc <= 0.4)
-      push('reject', 'shooting star', -1, c.h);
-    if (c.body <= c.range * 0.1) {
+    var hammer = c.body > 0 && c.lower >= c.body * 2 && c.lower >= c.range * 0.5 && c.upper <= c.range * 0.25 && loc >= 0.6;
+    var star = c.body > 0 && c.upper >= c.body * 2 && c.upper >= c.range * 0.5 && c.lower <= c.range * 0.25 && loc <= 0.4;
+    if (hammer) {
+      if (fell && !rose) push('reject', 'hammer after a decline', 1, c.l);
+      else if (rose && !fell) push('reject', 'hanging man', -1, c.l);
+      else if (atLow && !atHigh) push('reject', 'hammer at the low', 1, c.l);
+      else if (atHigh && !atLow) push('reject', 'hanging man', -1, c.l);
+      else push('info', 'hammer shape with no context — no vote', 0, null);
+    } else if (star) {
+      if (rose && !fell) push('reject', 'shooting star after a rise', -1, c.h);
+      else if (fell && !rose) push('reject', 'inverted hammer', 1, c.l);
+      else if (atHigh && !atLow) push('reject', 'shooting star', -1, c.h);
+      else if (atLow && !atHigh) push('reject', 'inverted hammer', 1, c.l);
+      else push('info', 'star shape with no context — no vote', 0, null);
+    }
+    if (!hammer && !star && c.body <= c.range * 0.1) {
       if (c.lower >= c.range * 0.65 && c.upper <= c.range * 0.15) push('reject', 'dragonfly doji', 1, c.l);
       else if (c.upper >= c.range * 0.65 && c.lower <= c.range * 0.15) push('reject', 'gravestone doji', -1, c.h);
       else push('info', 'doji — no vote', 0, null);
@@ -18569,6 +18591,44 @@ function hgCfCandlePatterns(rows, atrLast) {
     else if (c.bear && c.c < a.l) push('inside', 'three inside down', -1, Math.max(a.h, b.h, c.h));
   } else if (big(b) && c.h <= b.h && c.l >= b.l && c.range < b.range) {
     push('info', 'inside bar — no vote', 0, null);
+  }
+
+  if (big(c) && c.l < swingLo && c.c > swingLo && c.bull)
+    push('sweep', 'low sweep reclaimed', 1, c.l);
+  if (big(c) && c.h > swingHi && c.c < swingHi && c.bear)
+    push('sweep', 'high sweep reclaimed', -1, c.h);
+  if (big(c) && bodyOk(c, 0.35) && c.h >= b.h && c.l <= b.l && c.range > b.range) {
+    if (c.bull && c.c > b.h) push('outside', 'bullish outside bar', 1, c.l);
+    else if (c.bear && c.c < b.l) push('outside', 'bearish outside bar', -1, c.h);
+  }
+  if (bodyOk(b, 0.45) && bodyOk(c, 0.45) && Math.abs(b.body - c.body) <= Math.max(b.body, c.body) * 0.25) {
+    if (b.bear && c.bull && c.c >= b.o - atrLast * 0.15)
+      push('rail', 'bullish railroad tracks', 1, Math.min(b.l, c.l));
+    else if (b.bull && c.bear && c.c <= b.o + atrLast * 0.15)
+      push('rail', 'bearish railroad tracks', -1, Math.max(b.h, c.h));
+  }
+  if (bodyOk(c, 0.5) && c.body >= c.range * 0.7) {
+    if (c.bull && c.lower <= c.range * 0.1 && fell) push('belt', 'bullish belt hold', 1, c.l);
+    else if (c.bear && c.upper <= c.range * 0.1 && rose) push('belt', 'bearish belt hold', -1, c.h);
+  }
+  if (bodyOk(b, 0.4) && bodyOk(c, 0.4) && Math.abs(b.c - c.c) <= atrLast * 0.08) {
+    if (b.bear && c.bull && c.o < b.c) push('meet', 'bullish meeting lines', 1, Math.min(b.l, c.l));
+    else if (b.bull && c.bear && c.o > b.c) push('meet', 'bearish meeting lines', -1, Math.max(b.h, c.h));
+  }
+  if (bodyOk(b, 0.35) && bodyOk(c, 0.4) && b.bear && c.bull && c.o >= b.o + atrLast * 0.15)
+    push('kick', 'bullish kicker', 1, c.l);
+  if (bodyOk(b, 0.35) && bodyOk(c, 0.4) && b.bull && c.bear && c.o <= b.o - atrLast * 0.15)
+    push('kick', 'bearish kicker', -1, c.h);
+  if (n >= 8) {
+    var w0 = hgCfPack(rows[n - 5]);
+    var w1 = hgCfPack(rows[n - 4]);
+    var w2 = hgCfPack(rows[n - 3]);
+    var inside = w1.h <= w0.h && w1.l >= w0.l && w2.h <= w0.h && w2.l >= w0.l && a.h <= w0.h && a.l >= w0.l
+      && w1.body < w0.body && w2.body < w0.body && a.body < w0.body;
+    if (bodyOk(w0, 0.45) && inside && bodyOk(c, 0.35)) {
+      if (w0.bull && c.bull && c.c > w0.c) push('method', 'rising three methods', 1, Math.min(w0.l, c.l));
+      else if (w0.bear && c.bear && c.c < w0.c) push('method', 'falling three methods', -1, Math.max(w0.h, c.h));
+    }
   }
 
   var by = {}, notes = [], i, h, g, fam;
