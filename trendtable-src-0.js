@@ -428,8 +428,8 @@ function tmValueState(row, dir){
       var rsiSeries = rsi(closes, 14);
       var rsiNow = rsiSeries && rsiSeries.length ? rsiSeries[rsiSeries.length - 1] : NaN;
       if (isFinite(rsiNow)){
-        if (dir === 'long' && rsiNow > 52) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is above the bull floor');
-        if (dir === 'short' && rsiNow < 50) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is below the bear ceiling');
+        if (dir === 'long' && rsiNow < TM_MOM_BULL_FLOOR) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is under the bull floor');
+        if (dir === 'short' && rsiNow > TM_MOM_BEAR_CEIL) out.reasons.push('4h RSI ' + rsiNow.toFixed(0) + ' is over the bear ceiling');
       }
     } catch (eRsi) {}
   }
@@ -3818,19 +3818,21 @@ function trendmxEmaTag(rows4h, dir){
   return { state: 'waiting', ema: name };
 }
 function tmRsiDivergence(rows, dir) {
-  if (!rows || rows.length < 30) return false;
-  const rsi = rsi(rows, 14);
-  if (!rsi) return false;
-  const n = rows.length;
-  for (let i = n - 20; i < n - 1; i++) {
-    if (!isFinite(rows[i].c) || !isFinite(rsi[i])) continue;
-    const prevIdx = i - 5;
+  /* Do not name this series rsi. That shadows the indicator, the call throws
+     before the binding exists, and trendScore's catch then zeros the row. */
+  if (!rows || rows.length < 30 || typeof rsi !== 'function') return false;
+  var rsiSeries = rsi(rows.map(function (bar) { return bar ? bar.c : NaN; }), 14);
+  if (!rsiSeries) return false;
+  var n = rows.length;
+  for (var i = n - 20; i < n - 1; i++) {
+    if (!isFinite(rows[i].c) || !isFinite(rsiSeries[i])) continue;
+    var prevIdx = i - 5;
     if (prevIdx < 5) continue;
 
     if (dir === 'long') {
-      if (rows[i].l < rows[prevIdx].l && rsi[i] > rsi[prevIdx]) return true;
+      if (rows[i].l < rows[prevIdx].l && rsiSeries[i] > rsiSeries[prevIdx]) return true;
     } else if (dir === 'short') {
-      if (rows[i].h > rows[prevIdx].h && rsi[i] < rsi[prevIdx]) return true;
+      if (rows[i].h > rows[prevIdx].h && rsiSeries[i] < rsiSeries[prevIdx]) return true;
     }
   }
   return false;
