@@ -18459,10 +18459,11 @@ if (typeof window !== "undefined") {
   window.goldMacroCorrelation = goldMacroCorrelation;
 }
 })();
-/* hg-v1311: Ultimate AI Candle Forecast Engine. 
+/* hg-v1312: Ultimate AI Candle Forecast Engine. 
    Integrates Advanced Pattern Recognition (Doji, Tweezer, Harami, Stars, Piercing, Dark Cloud, Soldiers/Crows), 
    Full Technical Confluence (EMA Trend, ADX Strength, RSI Extremes, BB Squeeze, VWAP), 
-   Structural Confluence (Order Blocks, Liquidity Sweeps), and Setup Formation Logic. */
+   Structural Confluence (Order Blocks, Liquidity Sweeps), and Setup Formation Logic. 
+   Provides both SCALP and SWING setups for high-confluence signals. */
 function goldCandleForecast(rows) {
   try {
     if (!Array.isArray(rows) || rows.length < 40) return null;
