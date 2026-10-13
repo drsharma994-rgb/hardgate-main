@@ -59,7 +59,7 @@ on every page load since v14-2:
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
           </div>
           <div id="cfResultArea" class="empty">
-            No forecast yet. The scan reads hammer, star, engulfing, harami, marubozu, soldiers, crows, tweezers and three-inside on the last closed 15m gold candles. Those patterns vote with the other reads. The side with more votes is the call. A pattern high or low is the stop when it sits between 0.25 and 2.5 ATR from the close. Otherwise the stop is one ATR. TP1 is one times that risk. TP2 is two.
+            No forecast yet. The scan reads the shape and where it sits. A hammer after a decline is not a hanging man at a high. It also reads sweeps, outside bars, railroad tracks, belt holds, kickers, meeting lines and rising or falling three methods, along with engulfing, stars, soldiers and harami. The side with more votes is the call. A pattern high or low is the stop when it sits between 0.25 and 2.5 ATR from the close.
           </div>
         </div>
       `;
