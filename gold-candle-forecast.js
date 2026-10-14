@@ -322,8 +322,13 @@ on every page load since v1308:
         if (typeof window.hgCfUltimate === 'function') forecast.ultimate = window.hgCfUltimate(forecast.scalp, forecast.swing);
       } catch (eUlt) { forecast.ultimate = null; }
       try {
+        /* hg-v1358: pass the whole forecast to hgCfMeasure so hgCfForwardMark
+           can call hgCfPatternMarks through the ONE home. The record now carries
+           mechanic + ticket + perfect + perfectPlus (writer B's fields) AND the
+           four three-state pattern marks (writer A's reads). One pool
+           ('CANDLE FORECAST', literal space, hg-v950), one writer, one shape. */
         forecast.measure = (typeof window.hgCfMeasure === 'function')
-          ? window.hgCfMeasure(forecast.scalp, forecast.swing, candles, (Array.isArray(c4) ? c4 : null))
+          ? window.hgCfMeasure(forecast.scalp, forecast.swing, candles, (Array.isArray(c4) ? c4 : null), forecast)
           : null;
       } catch (eMeas) { forecast.measure = null; }
       try {
@@ -351,35 +356,16 @@ on every page load since v1308:
         if (conf) this.renderConfluence(resultArea, statusEl, conf);
       } catch (eConf) { /* optional read; the card stands on its own */ }
 
-      /* Record a formed bracket after the card and the tally. A non-formed
-         read is not recorded. Both horizons stay separate. The marks are
-         named, not spread. The ledger does not paint the card. */
-      try {
-        if (typeof window.hgFwdRecordScan === 'function' && typeof window.hgCfPatternMarks === 'function') {
-          var recs = [];
-          var mk = function (bracket, tape, source) {
-            try {
-              if (!bracket || !bracket.formed) return;
-              if (!(isFinite(+bracket.entry) && isFinite(+bracket.stop) && isFinite(+bracket.tp1))) return;
-              var lastBar = (Array.isArray(tape) && tape.length) ? tape[tape.length - 1] : null;
-              recs.push({
-                sym: 'XAUUSD',
-                dir: (bracket.dir === 'BEAR') ? 'short' : 'long',
-                entry: +bracket.entry, stop: +bracket.stop, t1: +bracket.tp1, t2: +bracket.tp2,
-                signalT: (lastBar && isFinite(+lastBar.t)) ? +lastBar.t : undefined,
-                mark: (lastBar && isFinite(+lastBar.c)) ? +lastBar.c : undefined,
-                feed: source || undefined,
-                reads: window.hgCfPatternMarks(forecast, tape)
-              });
-            } catch (eOne) { /* one unreadable bracket must not lose the other */ }
-          };
-          mk(forecast.scalp, candles, forecast.scalp && forecast.scalp.source);
-          mk(forecast.swing, (Array.isArray(c4) ? c4 : null), forecast.swing && forecast.swing.source);
-          if (recs.length && typeof window.hgFwdRecordScan === 'function') {
-            window.hgFwdRecordScan('CANDLEFORECAST', '15m', recs);
-          }
-        }
-      } catch (eRec) { /* the ledger is a measurement, never a reason the card fails */ }
+      /* hg-v1358: Writer A removed. Its old job (writing the four pattern
+         marks to pool 'CANDLEFORECAST' with no mechanic/ticket/perfect) is now
+         done by hgCfForwardMark through hgCfMeasure above, under the ONE pool
+         'CANDLE FORECAST' carrying the UNION of fields. The two-writer, two-pool
+         shape was a hg-v949 one-home violation; the pattern marks it rode were
+         a hg-v955 ornament because nothing on this tab called hgFwdReadSplit on
+         them. The split reader lives in renderIntel below. Legacy records
+         under the old pool stay readable by the aggregate at line 940, which
+         still reads ['CANDLE FORECAST', 'CANDLEFORECAST'] for backward
+         compatibility; new records land under one. */
 
       /* hg-v1357: THE INTELLIGENCE LAYER. Everything below the card that
          makes the setup EXECUTABLE: the execution state, the five-timeframe
@@ -1069,7 +1055,19 @@ on every page load since v1308:
     } else {
       fwdHtml = '<b>FORWARD LEDGER</b> <span class="note">— the ledger is not loaded; nothing was counted</span>';
     }
-    H += '<div class="note" data-cf-record="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">' + perfHtml + (perfHtml ? '<br>' : '') + fwdHtml + '</div>';
+    /* hg-v1358: THE PATTERN-MARK SPLIT. Four three-state marks ride every
+       formed record (hg-v1351: anyFire / bullMajority / bearMajority /
+       withTrend). hgFwdReadSplit asks whether a mark separates winners from
+       losers on settled records. The reader prints nothing while no settled
+       record carries a mark — an empty split is not a clean bill (hg-v955).
+       Reports and never gates. */
+    var splitHtml = '';
+    try {
+      if (typeof window.hgFwdReadSplitHtml === 'function') {
+        splitHtml = window.hgFwdReadSplitHtml('CANDLE FORECAST') || '';
+      }
+    } catch (eSp) { splitHtml = ''; }
+    H += '<div class="note" data-cf-record="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">' + perfHtml + (perfHtml ? '<br>' : '') + fwdHtml + splitHtml + '</div>';
 
     /* the chart */
     H += '<div class="note" data-cf-chart="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'

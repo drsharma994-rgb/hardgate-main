@@ -1,4 +1,4 @@
-/* HARDGATE trendtable loader. hg-v1357. */
+/* HARDGATE trendtable loader. hg-v1358. */
 (function () {
   var n = 12, acc = '', i = 0;
   function step() {

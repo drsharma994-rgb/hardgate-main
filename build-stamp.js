@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1357',
-  pack: 'CANDLE FORECAST intelligence layer - execution card, five-timeframe alignment, structure map, volatility regime, news execution risk, cross-feed quality, in-sample pattern record, forward ledger readout, mini chart, blockers panel, and one alert path.',
-  built: '2026-10-14T22:30:00Z'
+  version: 'hg-v1358',
+  pack: 'CANDLE FORECAST one home, one pool. Writer A (gold-candle-forecast.js writing to pool CANDLEFORECAST with pattern marks only) is removed; hgCfForwardMark now carries the four three-state pattern marks under the one pool CANDLE FORECAST beside mechanic/ticket/perfect/perfectPlus. The intel panel adds hgFwdReadSplitHtml for the forward split so the marks become measurable instead of ornamental.',
+  built: '2026-10-14T23:30:00Z'
 };
 
 function hgBuildLabel(b){

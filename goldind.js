@@ -21288,9 +21288,15 @@ function hgCfWalk(rows, opts) {
   }
 }
 
-function hgCfForwardMark(setup, rows, tf) {
+function hgCfForwardMark(setup, rows, tf, forecastResult) {
   /* Out of sample. Resolve older records first, then record a formed setup.
-     The ledger is the only settler. A missing ledger counts nothing. */
+     The ledger is the only settler. A missing ledger counts nothing.
+     hg-v1358: optional 4th arg carries the full forecast result so the record
+     can carry the hg-v1351 pattern marks (anyFire, bullMajority, bearMajority,
+     withTrend). The marks ride under the pool 'CANDLE FORECAST', the one home
+     for every CF record. The old Writer A in gold-candle-forecast.js wrote the
+     marks to pool 'CANDLEFORECAST' with no mechanic / ticket / perfect; this
+     one home writes both. */
   var out = { recorded: 0, resolved: 0, why: '' };
   try {
     var host = hgCfHost();
@@ -21321,18 +21327,32 @@ function hgCfForwardMark(setup, rows, tf) {
     var bar = (Array.isArray(rows) && rows.length) ? rows[rows.length - 1] : null;
     var signalT = (bar && isFinite(+bar.t)) ? +bar.t : undefined;
     var horizon = frame === '15m' ? 96 : 20;
+    /* hg-v1358: pattern marks ride the record under the ONE pool. A missing
+       helper, a tape that cannot be read, or a forecast with no patterns all
+       leave reads absent (hg-v989 three-state: never a guessed false). */
+    var reads;
+    try {
+      if (forecastResult && typeof hgCfPatternMarks === 'function') {
+        reads = hgCfPatternMarks(forecastResult, rows);
+      }
+    } catch (eMk) { reads = undefined; }
+    var t2 = isFinite(+setup.tp2) ? +setup.tp2 : undefined;
+    var feed = setup.source || undefined;
     out.recorded = +record('CANDLE FORECAST', frame, [{
       sym: 'XAUUSD',
       dir: dir,
       entry: entry,
       stop: stopPx,
       t1: t1,
+      t2: t2,
       mark: entry,
       signalT: signalT,
+      feed: feed,
       mechanic: frame === '4h' ? 'SWING' : 'SCALP',
       ticket: setup.ticket === true,
       perfect: setup.perfect === true ? true : undefined,
-      perfectPlus: setup.perfectPlus === true ? true : undefined
+      perfectPlus: setup.perfectPlus === true ? true : undefined,
+      reads: reads
     }], { horizonBars: horizon }) || 0;
     out.why = out.recorded
       ? ('Recorded ' + out.recorded + ' new setup' + (out.recorded === 1 ? '' : 's') + ' on the forward ledger. Settled ' + out.resolved + ' older record' + (out.resolved === 1 ? '' : 's') + ' on bars that printed after they were logged.')
@@ -21345,9 +21365,12 @@ function hgCfForwardMark(setup, rows, tf) {
   }
 }
 
-function hgCfMeasure(scalp, swing, rows15, rows4) {
+function hgCfMeasure(scalp, swing, rows15, rows4, forecastResult) {
   /* Asks the perfect bar, walks this tape, and marks the forward ledger.
-     None of the three changes a formed flag or a stop. */
+     None of the three changes a formed flag or a stop.
+     hg-v1358: optional 5th arg is the whole forecast result, so the forward
+     mark can read patterns through the ONE home (hgCfPatternMarks reads
+     result.patterns / advancedPatterns / dir / tf at the top level). */
   var out = { scalpAsk: null, swingAsk: null, walk15: null, walk4: null, fwd15: null, fwd4: null, fwdHtml: '' };
   try {
     out.scalpAsk = hgCfPerfectAsk(scalp, scalp && scalp.confluenceView);
@@ -21364,8 +21387,8 @@ function hgCfMeasure(scalp, swing, rows15, rows4) {
     }
     out.walk15 = hgCfWalk(rows15, { tf: '15m', horizonBars: 32 });
     out.walk4 = hgCfWalk(rows4, { tf: '4h', horizonBars: 20 });
-    out.fwd15 = hgCfForwardMark(scalp, rows15, '15m');
-    out.fwd4 = hgCfForwardMark(swing, rows4, '4h');
+    out.fwd15 = hgCfForwardMark(scalp, rows15, '15m', forecastResult);
+    out.fwd4 = hgCfForwardMark(swing, rows4, '4h', forecastResult);
     var host = hgCfHost();
     var panel = host && host.hgFwdPanelHTML;
     if (typeof panel === 'function') {
