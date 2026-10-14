@@ -18888,10 +18888,15 @@ function hgCfAdvancedPatterns(rows, atrLast) {
   if (big(c) && gapUp(d, c)) {
     record('gap up on the last bar (' + gapStage() + ')', null);
     if (gapStage() === 'exhaustion') record('exhaustion gap up — a late move, not a fresh one', null);
+    /* A runaway window is the measuring gap: the leg is already going, and
+       the window is still open. Breakaway and exhaustion stay stage labels
+       with no lean. This lean is disclosure. It does not vote. */
+    if (gapStage() === 'runaway') record('runaway gap up', tag(1, 'runaway gap up'));
   }
   if (big(c) && gapDn(d, c)) {
     record('gap down on the last bar (' + gapStage() + ')', null);
     if (gapStage() === 'exhaustion') record('exhaustion gap down — a late move, not a fresh one', null);
+    if (gapStage() === 'runaway') record('runaway gap down', tag(-1, 'runaway gap down'));
   }
   /* ISLAND REVERSAL: a gap in, one or more bars holding clear of the previous
      range, then a gap back out on the other side. The island is cut off from both
@@ -19164,6 +19169,37 @@ function hgCfAdvancedPatterns(rows, atrLast) {
   if (b.h < a.l && c.body < atrLast * 0.35 && d.body < atrLast * 0.35 && c.h < a.l && d.h < a.l && d.c <= d.o)
     record('low-price gapping play', tag(-1, 'low-price gapping play'));
 
+  /* hg-v1339: three shapes the classic set still does not name.
+     A key reversal takes out one prior extreme and closes back through the
+     prior close. An outside key reversal also takes out the other extreme.
+     A pipe is two wide bars sharing an extreme and closing at the far side
+     of it. Equal closes are a matching high or low, so a pipe requires the
+     closes to differ. Disclosure only. None of these is added to the vote
+     or the stop. */
+  if (big(d) && big(c)) {
+    var tookLow = d.l < c.l;
+    var tookHigh = d.h > c.h;
+    var krName = null, krLean = 0;
+    if (tookLow && d.c > c.c && d.bull) {
+      krName = tookHigh ? 'bullish outside key reversal' : 'bullish key reversal';
+      krLean = 1;
+    } else if (tookHigh && d.c < c.c && d.bear) {
+      krName = tookLow ? 'bearish outside key reversal' : 'bearish key reversal';
+      krLean = -1;
+    }
+    if (krName) record(krName, tag(krLean, krName));
+  }
+  if (big(c) && big(d) && c.range > 0 && d.range > 0
+      && Math.abs(c.l - d.l) <= atrLast * 0.08
+      && (c.c - c.l) / c.range >= 0.65 && (d.c - d.l) / d.range >= 0.65
+      && Math.abs(c.c - d.c) > atrLast * 0.08)
+    record('pipe bottom', tag(1, 'pipe bottom'));
+  if (big(c) && big(d) && c.range > 0 && d.range > 0
+      && Math.abs(c.h - d.h) <= atrLast * 0.08
+      && (c.h - c.c) / c.range >= 0.65 && (d.h - d.c) / d.range >= 0.65
+      && Math.abs(c.c - d.c) > atrLast * 0.08)
+    record('pipe top', tag(-1, 'pipe top'));
+
   /* ---- EXHAUSTION / STRUCTURE ---- */
   /* THREE-BAR CLIMAX: three consecutive expanding ranges with shrinking bodies —
      participation rising into a stall. Location decides what it means, which is
@@ -19198,7 +19234,7 @@ function hgCfAdvancedPatterns(rows, atrLast) {
     for (sk = 0; sk < out.leans.length && senseN < 6; sk++) {
       sName = String(out.leans[sk].name || '');
       sUp = out.leans[sk].lean === 1;
-      if (/three methods|tasuki|side-by-side|mat hold|on-neck|in-neck|separating|two black gapping|identical three crows|thrusting|gapping play|three-line strike/.test(sName)) sRole = 'continuation';
+      if (/three methods|tasuki|side-by-side|mat hold|on-neck|in-neck|separating|two black gapping|identical three crows|thrusting|gapping play|three-line strike|runaway gap/.test(sName)) sRole = 'continuation';
       else if (/three gaps|exhaustion|deliberation|stalled|two crows|advance block|climax/.test(sName)) sRole = 'late';
       else sRole = 'reversal';
       if (sRole === 'continuation') {
@@ -19917,7 +19953,7 @@ function hgCfLocatedSide(adv) {
      clash and names nothing. This does not add a vote. */
   var out = { bull: [], bear: [], clash: false };
   if (!adv || !Array.isArray(adv.leans)) return out;
-  var cont = /tasuki|side-by-side|mat hold|on-neck|in-neck|separating|two black gapping|gap three methods|identical three crows|thrusting/;
+  var cont = /tasuki|side-by-side|mat hold|on-neck|in-neck|separating|two black gapping|gap three methods|identical three crows|thrusting|runaway gap/;
   var i, L, notes, n, sits, agrees;
   for (i = 0; i < adv.leans.length; i++) {
     L = adv.leans[i];
@@ -19991,6 +20027,15 @@ function hgCfFeedBoard(opts) {
     bits.push('fear and greed unread');
     bits.push('headlines unread');
   }
+  /* A fresh sentiment print from the shared reader. A missing cache, a stale
+     print, or the reader's own zero placeholder is unread. Not a side. */
+  try {
+    var sentFn = pick('hgSentimentGet');
+    var sent = sentFn ? sentFn('XAUUSD') : null;
+    if (sent && sent.fresh === true && sent.missing !== true && (+sent.sourceCount) > 0 && isFinite(+sent.score))
+      bits.push('sentiment ' + (+sent.score).toFixed(2) + ' from ' + (+sent.sourceCount) + ' sources — listed, not a side');
+    else bits.push('sentiment unread');
+  } catch (eSent) { bits.push('sentiment unread'); }
   var macro = (opts && opts.macro && typeof opts.macro === 'object') ? opts.macro : null;
   if (!macro) {
     try {
@@ -20019,8 +20064,26 @@ function hgCfFeedBoard(opts) {
       leg('UUP', macro.uupTrend),
       leg('EURUSD', macro.eurusdTrend),
       leg('gold/oil', macro.goldOilTrend),
-      leg('credit', macro.creditTrend)
+      leg('credit', macro.creditTrend),
+      /* hg-v1339: the rest of the same cached free snapshot. Listed, not a
+         second vote. A missing field stays unread. A correlation is the
+         number the cache already measured. No band is applied here. */
+      leg('USDJPY', macro.usdjpyTrend),
+      leg('gold/copper', macro.goldCopperTrend),
+      leg('gold/platinum', macro.goldPlatinumTrend),
+      leg('gold/palladium', macro.goldPalladiumTrend),
+      leg('USDCNY', macro.usdcnyTrend),
+      leg('curve', macro.curveSlopeTrend),
+      leg('GLD volume', macro.gldVolumeState),
+      leg('TLT', macro.tltTrend),
+      leg('AUD', macro.audusdTrend)
     ];
+    function corrBit(label, v) {
+      if (typeof v === 'number' && isFinite(v)) return label + ' ' + (+v).toFixed(2) + ' — listed, not a side';
+      return label + ' unread';
+    }
+    shown.push(corrBit('gold-SPX 20d corr', macro.goldSpxCorr20));
+    shown.push(corrBit('gold-BTC 20d corr', macro.goldBtcCorr20));
     bits.push(shown.join(', '));
   }
   try {

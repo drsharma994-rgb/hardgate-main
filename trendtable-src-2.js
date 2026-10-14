@@ -234,16 +234,16 @@ function trendmxCandleRead(rows){
       if (!list.length && Array.isArray(pat.names)) list = pat.names.filter(Boolean);
       return list.slice();
     }
-    if (bull > 0 && bear > 0) return clash('3-bar voter is on both sides', namesOf(pat.bullNames).concat(namesOf(pat.bearNames)));
-    if (bull > 0 && bear === 0){
-      var bullNames = namesOf(pat.bullNames);
-      if (!bullNames.length) return none('3-bar voter had no name');
-      return { state: 'named', side: 'long', names: bullNames, why: '3-bar voter is long', source: 'voter' };
-    }
-    if (bear > 0 && bull === 0){
-      var bearNames = namesOf(pat.bearNames);
-      if (!bearNames.length) return none('3-bar voter had no name');
-      return { state: 'named', side: 'short', names: bearNames, why: '3-bar voter is short', source: 'voter' };
+    if (bull > 0 || bear > 0) {
+      var dominantSide = bull > bear ? 'long' : (bear > bull ? 'short' : null);
+      // If it's a tie or too close to call, we report a clash. Otherwise, pick the winner.
+      if (!dominantSide || Math.abs(bull - bear) < 1) {
+        return clash('3-bar voter is on both sides', namesOf(pat.bullNames).concat(namesOf(pat.bearNames)));
+      }
+      var side = dominantSide;
+      var names = (side === 'long') ? namesOf(pat.bullNames) : namesOf(pat.bearNames);
+      if (!names.length) return none('3-bar voter had no name');
+      return { state: 'named', side: side, names: names, why: '3-bar voter is ' + (side === 'long' ? 'long' : 'short'), source: 'voter' };
     }
     var advanced = tmCandlePick('hgCfAdvancedPatterns');
     var located = tmCandlePick('hgCfLocatedSide');
