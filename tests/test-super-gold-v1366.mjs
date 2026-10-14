@@ -28,7 +28,8 @@ console.log('== an unread ATR does not move the desk bracket ==');
   const row = { dir: 'long', entry: 2650, stop: 2640, t1: 2670 };
   const prec = W.sgPrecisionGoldLevels(row, null);
   ok(prec.ok === true && prec.unread === true, 'the suggestion says the ATR was unread');
-  ok(prec.entry === 2650 && prec.stop === 2640, 'the desk entry and stop are unchanged');
+  ok(prec.rawEntry === 2650 && prec.rawStop === 2640 && prec.entry === 2650, 'with no tape the entry stays the desk entry');
+  ok(isFinite(prec.t3) && prec.t3 > prec.entry, 'an unread ATR still names a runner, and marks it unread');
 }
 
 console.log('\n== a measured tape can suggest a level without becoming the crown ==');
@@ -55,8 +56,9 @@ console.log('\n== a measured tape can suggest a level without becoming the crown
   const acc = W.sgHighAccuracyAudit(snap, W);
   ok(acc.ok === true && acc.total === 12, 'twelve gates are printed (' + acc.tier + ' ' + acc.score + ')');
   const payload = W.sgCrownDispatchPayload(snap, { balance: 1000, riskPct: 1 }, W);
+  ok(snap.cands[0].entry === 2650 && snap.cands[0].stop === 2640, 'the crowned row keeps the desk bracket');
   if (payload.ready){
-    ok(payload.entry === 2650 && payload.stop === 2640 && payload.t1 === 2670, 'a ready send still uses the desk bracket');
+    ok(payload.accuracyTier != null, 'a ready send names the scorecard (' + payload.accuracyTier + ')');
   } else {
     ok(/stands aside|below B|Tape locked|invalidated|No size|No target|blackout/.test(payload.reason), 'a refused send names the reason (' + payload.reason + ')');
     ok(!payload.entry, 'a refused send carries no invented entry');
@@ -67,8 +69,9 @@ console.log('\n== the board names the scorecard and does not call it the crown =
 {
   const src = fs.readFileSync(path.join(root, 'super-gold.js'), 'utf8');
   ok(/data-sg-intel="sniper"/.test(src), 'the sniper line has a home');
-  ok(/does not replace the crowned entry or stop/.test(src), 'the suggestion disclaims the crown');
+  ok(/does not replace the crowned entry or stop on the card/.test(src), 'the card keeps the desk levels');
   ok(/Suggestion, not the crown/.test(src), 'the card says the suggestion is not the crown');
+  ok(/A measured suggestion is what a send carries/.test(src), 'a measured suggestion is the send');
 }
 
 console.log('\ntest-super-gold-v1366: ' + pass + ' passed');

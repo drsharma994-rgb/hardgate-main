@@ -440,21 +440,8 @@ function sgPrecisionGoldLevels(row, intel, opts){
     ? +intel.volRegime.atrNow
     : sgCalcBarsAtr(rows15, 14);
   var rawRisk = Math.abs(rawEntry - rawStop);
-  var atrMeasured = (intel && intel.volRegime && intel.volRegime.ok && isFinite(+intel.volRegime.atrNow) && +intel.volRegime.atrNow > 0)
-    || (isFinite(sgCalcBarsAtr(rows15, 14)) && sgCalcBarsAtr(rows15, 14) > 0);
-  if (!atrMeasured){
-    return {
-      ok: true, side: side, unread: true,
-      entry: rawEntry, rawEntry: rawEntry, stop: rawStop, rawStop: rawStop,
-      entryZone: [rawEntry, rawEntry], entryReason: 'desk level',
-      t1: rawT1 > 0 ? rawT1 : null, t2: rawT2 > 0 ? rawT2 : null, t3: rawT3 > 0 ? rawT3 : null,
-      riskDist: +rawRisk.toFixed(2), atr: null, stopAtrRatio: null,
-      psychShielded: false, psychMagnet: null, slNote: 'ATR unread',
-      rr1: null, rr2: null, rr3: null, blendedRr: null,
-      vwap: null, ote618: null, ote705: null,
-      why: 'ATR unread. The suggestion is the desk bracket. Nothing was moved.'
-    };
-  }
+  var atrUnread = !(isFinite(atr) && atr > 0);
+  if (atrUnread) atr = Math.max(2, +(rawRisk * 0.65).toFixed(2));
 
   var regime = (intel && intel.volRegime && intel.volRegime.regime) ? String(intel.volRegime.regime) : 'NORMAL';
   var swing = sgImpulseSwing(rows15, side);
@@ -599,6 +586,7 @@ function sgPrecisionGoldLevels(row, intel, opts){
     rr3: rr3,
     blendedRr: blendedRr,
     splits: { t1Pct: 50, t2Pct: 30, t3Pct: 20 },
+    unread: atrUnread === true,
     vwap: swing ? swing.vwap : null,
     ote618: swing ? swing.ote618 : null,
     ote705: swing ? swing.ote705 : null,
@@ -1604,8 +1592,10 @@ function sgCrownLifecycle(snap, win){
     ok: false, stage: 'STANDBY', side: ex.side || '',
     entry: ex.entry, initialStop: ex.stop, activeStop: ex.stop, t1: ex.t1,
     t2: crowned && crowned.row && isFinite(N(crowned.row.t2)) && N(crowned.row.t2) > 0 ? N(crowned.row.t2) : NaN,
+    t3: NaN,
     mark: ex.mark, currentR: null, mfeR: null, maeR: null,
-    t1Touched: false, stoppedOut: false, invalidated: false,
+    t1Touched: false, t2Touched: false, t3Touched: false, scalePct: 0,
+    stoppedOut: false, invalidated: false,
     invalidationReasons: [], why: 'no crowned bracket on the desk'
   };
   if (!crowned || ex.state === 'NO-TRADE') return out;
@@ -1618,6 +1608,12 @@ function sgCrownLifecycle(snap, win){
   }
   out.ok = true;
   out.activeStop = s;
+  var prec = (r.precision && r.precision.ok && isFinite(+r.precision.t3))
+    ? r.precision : sgPrecisionGoldLevels(r, intel);
+  if (prec && prec.ok){
+    if (!(isFinite(out.t2) && out.t2 > 0) && isFinite(+prec.t2)) out.t2 = +prec.t2;
+    if (isFinite(+prec.t3) && +prec.t3 > 0) out.t3 = +prec.t3;
+  }
   var rows15 = (intel && Array.isArray(intel.rows15)) ? intel.rows15 : [];
   var candSec = sgCandSec(r, r);
   var relevant = [];
@@ -1650,6 +1646,13 @@ function sgCrownLifecycle(snap, win){
     out.maeR = +((side === 'long' ? (e - maePx) : (maePx - e)) / riskDist).toFixed(2);
     out.stoppedOut = side === 'long' ? (maePx <= s) : (maePx >= s);
     out.t1Touched = (t1 > 0) && (side === 'long' ? (mfePx >= t1) : (mfePx <= t1));
+    var t2 = isFinite(+out.t2) && +out.t2 > 0 ? +out.t2 : NaN;
+    var t3 = isFinite(+out.t3) && +out.t3 > 0 ? +out.t3 : NaN;
+    out.t2Touched = isFinite(t2) && (side === 'long' ? (mfePx >= t2) : (mfePx <= t2));
+    out.t3Touched = isFinite(t3) && (side === 'long' ? (mfePx >= t3) : (mfePx <= t3));
+    if (out.t3Touched) out.scalePct = 100;
+    else if (out.t2Touched) out.scalePct = 80;
+    else if (out.t1Touched) out.scalePct = 50;
   } else if (candSec === null){
     out.invalidationReasons.push('the crowned row has no bar time, so the path after the signal was not walked');
   }
@@ -1679,6 +1682,9 @@ function sgCrownLifecycle(snap, win){
     out.stage = 'ARMED';
     out.why = 'Armed ' + side + ' at ' + fmt(e, 2) + '. The source stop stays at ' + fmt(s, 2) + '.'
       + (out.invalidationReasons.length ? (' Caution: ' + out.invalidationReasons.join(' · ') + '.') : '');
+  } else if (out.t3Touched){
+    out.stage = 'T3_COMPLETE';
+    out.why = 'TP3 ' + fmt(out.t3, 2) + ' was traded. The source stop stays at ' + fmt(s, 2) + '.';
   } else if (out.t1Touched){
     out.stage = 'T1 TOUCHED';
     out.why = 'T1 ' + fmt(t1, 2) + ' was traded. The source stop stays at ' + fmt(s, 2) + '. This desk does not trail it.';
@@ -1721,7 +1727,9 @@ function sgHighAccuracyAudit(snap, win){
   var intel = (snap && snap.intel) || null;
   var cc = sgCrownChecks(snap);
   var tape = sgTapeDiagnostics(snap, win);
-  var prec = r.precision || sgPrecisionGoldLevels(r, intel);
+  var prec = (intel && (intel.volRegime || (Array.isArray(intel.rows15) && intel.rows15.length)))
+    ? sgPrecisionGoldLevels(r, intel)
+    : (r.precision || sgPrecisionGoldLevels(r, intel));
   out.precision = prec;
 
   function addGate(id, label, passed, detail, critical){
@@ -1849,26 +1857,33 @@ function sgCrownDispatchPayload(snap, riskOpts, win){
   if (acc && acc.hardVeto){
     return { ready: false, reason: 'Sniper scorecard stands aside: ' + (acc.vetoReasons.join('; ') || acc.why) };
   }
-  var rr = effectiveGoldRr(r);
-  if (!(rr > 0) || !(N(r.t1) > 0)) return { ready: false, reason: 'No target on the crowned row' };
+  var prec = (acc && acc.precision && acc.precision.ok && !acc.precision.unread)
+    ? acc.precision
+    : sgPrecisionGoldLevels(r, snap && snap.intel);
+  var usePrec = !!(prec && prec.ok && !prec.unread && prec.entry > 0 && prec.stop > 0 && prec.t1 > 0);
+  var sendEntry = usePrec ? +prec.entry : +r.entry;
+  var sendStop = usePrec ? +prec.stop : +r.stop;
+  var sendT1 = usePrec ? +prec.t1 : +r.t1;
+  var sendT2 = usePrec ? +prec.t2 : (isFinite(+r.t2) && +r.t2 > 0 ? +r.t2 : null);
+  var sendT3 = usePrec ? +prec.t3 : (isFinite(+r.t3) && +r.t3 > 0 ? +r.t3 : null);
+  var rr = (sendEntry > 0 && sendStop > 0 && sendEntry !== sendStop && sendT1 > 0)
+    ? Math.abs(sendT1 - sendEntry) / Math.abs(sendEntry - sendStop)
+    : effectiveGoldRr(r);
+  if (!(rr > 0) || !(sendT1 > 0)) return { ready: false, reason: 'No target on the crowned row' };
+  var sized = goldCalcTrade(riskOpts, { entry: sendEntry, stop: sendStop, t1: sendT1 }, rr);
   var oz = NaN;
-  if (r.positionSize && isFinite(+r.positionSize.positionSizeUnits) && +r.positionSize.positionSizeUnits > 0){
-    oz = +r.positionSize.positionSizeUnits;
-  } else if (isFinite(+r.qty) && +r.qty > 0){
-    oz = +r.qty;
-  } else if (r.calc && isFinite(+r.calc.qty) && +r.calc.qty > 0){
-    oz = +r.calc.qty;
-  }
+  if (sized && isFinite(+sized.qty) && +sized.qty > 0) oz = +sized.qty;
+  else if (!usePrec && r.positionSize && isFinite(+r.positionSize.positionSizeUnits) && +r.positionSize.positionSizeUnits > 0) oz = +r.positionSize.positionSizeUnits;
+  else if (!usePrec && isFinite(+r.qty) && +r.qty > 0) oz = +r.qty;
   if (!(oz > 0)) return { ready: false, reason: 'No size on the crowned row' };
   var barStamp = sgCandSec(r, r);
   if (barStamp === null) return { ready: false, reason: 'The crowned row has no bar time, so no ticket key was invented' };
-  var ticketKey = [r.sym || 'XAUUSD', side, (+r.entry).toFixed(2), (+r.stop).toFixed(2), (+r.t1).toFixed(2), barStamp].join(':');
+  var ticketKey = [r.sym || 'XAUUSD', side, sendEntry.toFixed(2), sendStop.toFixed(2), sendT1.toFixed(2), barStamp].join(':');
   return {
     ready: true, ticketKey: ticketKey, fund: 'gold', scanner: 'super-gold',
     source: r.scanner || 'super-gold', strategy: r.strategy || 'SUPER GOLD CROWN',
     sym: r.sym || 'XAUUSD', dir: side, side: side === 'long' ? 'BUY' : 'SELL',
-    entry: +r.entry, stop: +r.stop, t1: +r.t1,
-    t2: isFinite(+r.t2) && +r.t2 > 0 ? +r.t2 : null,
+    entry: sendEntry, stop: sendStop, t1: sendT1, t2: sendT2, t3: sendT3,
     rr: +(+rr).toFixed(2), qty: +oz.toFixed(4),
     mark: isFinite(N(r.mark)) ? N(r.mark) : null,
     grade: cc.grade, checksPassed: cc.passed, checksTotal: cc.total,
@@ -2409,7 +2424,7 @@ function mount(el){
           + '<span style="font-weight:700">' + esc(acc.tier) + '</span>'
           + ' <span class="hg-note">' + acc.score + '/' + acc.total + '</span>'
           + '<div class="hg-note">' + esc(acc.why) + '</div>'
-          + (acc.precision && acc.precision.why ? ('<div class="hg-note">' + esc(acc.precision.why) + '. This does not replace the crowned entry or stop.</div>') : '')
+          + (acc.precision && acc.precision.why ? ('<div class="hg-note">' + esc(acc.precision.why) + '. This does not replace the crowned entry or stop on the card. A measured suggestion is what a send carries.</div>') : '')
           + '<div class="hg-note" style="margin-top:2px">' + gates + '</div></div>';
       }
     }catch(eSn){ sniperHtml = ''; }
@@ -2592,7 +2607,7 @@ function mount(el){
         + '</div>'
         + '<div class="hg-note" style="margin-top:8px">' + String(r.strategy || '')
         + (r.precision && r.precision.ok && !r.precision.unread
-          ? ('<div class="hg-note">Suggestion, not the crown: ' + String(r.precision.why || '') + '. The send uses the desk entry and stop.</div>')
+          ? ('<div class="hg-note">Suggestion, not the crown: ' + String(r.precision.why || '') + '. A measured suggestion is what a send carries. An unread one is not.</div>')
           : '')
         + '</div></div>';
     }).join('');
