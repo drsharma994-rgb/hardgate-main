@@ -606,10 +606,39 @@ on every page load since v1308:
 
     var dayHtml = (function () {
       var d = forecast.daySwings || { setups: [], why: 'Confirmed swings could not be read. Nothing was invented.' };
-      var items = (d.setups || []).map(function (s, idx) {
-        return '<li><b>' + (idx + 1) + '. ' + String(s.label || '').replace(/</g, '') + '</b> <span class="note">4h swing</span><br>Entry <b>' + mod.fmt(s.entry) + '</b> · <b>Stop:</b> <span class="neg" style="font-weight:700;">' + mod.fmt(s.stop) + '</span> · TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp1) + '</span>' + (s.tp2 == null ? '' : (' · TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp2) + '</span>')) + (s.parts ? ('<div class="note">' + String(s.parts).replace(/</g, '') + '</div>') : '') + '</li>';
+      function esc(x) { return String(x == null ? '' : x).replace(/</g, ''); }
+      function clockOf(s) {
+        var t = +(s && s.barT);
+        if (!(t > 0)) return '<div class="note">time unread</div>';
+        var ms = t < 1e12 ? t * 1000 : t;
+        var when = '';
+        try {
+          var dt = new Date(ms);
+          if (isFinite(dt.getTime())) when = dt.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+        } catch (eClk) { when = ''; }
+        var ses = '';
+        try {
+          if (typeof window.hgCfSessionName === 'function') ses = window.hgCfSessionName([{ t: t }]) || '';
+        } catch (eSes) { ses = ''; }
+        return '<div class="note">' + (when ? ('time ' + esc(when)) : 'time unread') + (ses ? (' · session ' + esc(ses)) : '') + '</div>';
+      }
+      var list = d.setups || [];
+      var items = list.map(function (s, idx) {
+        var same = !!(sw && idx === list.length - 1 && s.dir === sw.dir
+          && isFinite(+s.entry) && isFinite(+sw.entry) && +s.entry === +sw.entry
+          && isFinite(+s.stop) && isFinite(+sw.stop) && +s.stop === +sw.stop);
+        var head = '<li><b>' + (idx + 1) + '. ' + esc(s.label || '') + '</b> <span class="note">4h swing</span>';
+        var parts = s.parts ? ('<div class="note">' + esc(s.parts) + '</div>') : '';
+        if (same) return head + clockOf(s) + '<div class="note">This is the swing above. It is not priced again here.</div>' + parts + '</li>';
+        return head + clockOf(s) + '<br>Entry <b>' + mod.fmt(s.entry) + '</b> · <b>Stop:</b> <span class="neg" style="font-weight:700;">' + mod.fmt(s.stop) + '</span> · TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp1) + '</span>' + (s.tp2 == null ? '' : (' · TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp2) + '</span>')) + parts + '</li>';
       }).join('');
       return '<div class="note" data-cf-day-swings="1" style="margin:8px 0; border:1px solid var(--line); padding:8px;"><b>CONFIRMED SWING SETUPS</b> <span class="note">— two are enough for the day</span><div class="note">' + String(d.why || '').replace(/</g, '') + '</div>' + (items ? ('<ul class="lst">' + items + '</ul>') : '<div class="note">None shown.</div>') + '</div>';
+    })();
+    var fwdFace = (function () {
+      var why = (forecast.measure && forecast.measure.fwd4 && forecast.measure.fwd4.why)
+        ? String(forecast.measure.fwd4.why)
+        : 'The forward ledger was not read this scan. Nothing was counted as a win.';
+      return '<div class="note" data-cf-forward="1" style="margin:8px 0;"><b>Forward ledger, 4h.</b> ' + why.replace(/</g, '') + ' <span class="note">Out of sample. Not a probability.</span></div>';
     })();
     var alwaysHtml = (function () {
       var body;
@@ -631,6 +660,7 @@ on every page load since v1308:
         <div class="omni-side-call">${dirLabel}</div>
         ${alwaysHtml}
         ${dayHtml}
+        ${fwdFace}
         <details data-cf-rest="1" style="margin-top:8px;">
           <summary class="note">The rest of the read</summary>
         <ul class="lst">

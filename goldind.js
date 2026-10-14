@@ -20629,8 +20629,8 @@ function hgCfCachedDeskConfirm(rows, tapes) {
 }
 
 function hgCfSessionName(rows) {
-  /* The session is the shared killzone read. It is named on the location
-     line and nowhere else. It does not vote and it does not move the stop. */
+  /* The session is the shared killzone read. The card names it. It does not
+     vote and it does not move the stop. */
   try {
     var fn = (typeof hgGoldKillzoneRead === 'function') ? hgGoldKillzoneRead : null;
     if (!fn && typeof globalThis !== 'undefined' && typeof globalThis.hgGoldKillzoneRead === 'function') fn = globalThis.hgGoldKillzoneRead;
