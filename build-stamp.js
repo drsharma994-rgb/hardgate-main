@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1361',
-  pack: 'SUPER GOLD desk intelligence - the five-timeframe matrix, the shared candle engine agreement with the crown, volatility regime, session clock and calendar pinned to each scan, composed from the hgCfIntel readers. The intel never crowns and never moves a level.',
-  built: '2026-10-15T01:30:00Z'
+  version: 'hg-v1362',
+  pack: 'SUPER GOLD crown audit and alert - nine printed checks grade the crowned row (feed lock or blackout caps at C), a distance read from the sizing mark to the entry, the desk cross-feed and structure legs, and one alert path through tabalerts that expires with the scan that earned it.',
+  built: '2026-10-15T02:30:00Z'
 };
 
 function hgBuildLabel(b){

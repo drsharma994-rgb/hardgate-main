@@ -951,7 +951,7 @@ function superGoldAfterScan(snap){
    with what was crowned. */
 async function superGoldIntel(win){
   win = win || W;
-  var out = { ok: false, at: Date.now(), fiveTf: null, candle: null, volRegime: null, session: null, news: null, why: '' };
+  var out = { ok: false, at: Date.now(), fiveTf: null, candle: null, volRegime: null, session: null, news: null, feedQuality: null, structure: null, why: '' };
   var I = win.hgCfIntel;
   function pack(tf, n){
     if (typeof win.getGoldCandles !== 'function') return Promise.resolve(null);
@@ -968,6 +968,31 @@ async function superGoldIntel(win){
     }
     if (I && typeof I.volRegime === 'function'){
       try{ out.volRegime = I.volRegime(rows15); }catch(eVr){}
+    }
+    /* hg-v1362: the desk's own cross-feed check and structure map, the same
+       readers Candle Forecast uses — a crowned level the feeds disagree on,
+       or an entry in empty space, is a fact the board should carry. */
+    if (I && typeof I.structure === 'function'){
+      try{ out.structure = I.structure(rows15); }catch(eSt){}
+    }
+    if (I && typeof I.feedQuality === 'function'){
+      try{
+        var legs = [{ name: 'house 15m', rows: rows15 }];
+        if (typeof win.binanceKlines === 'function'){
+          var legs2 = await Promise.all([
+            Promise.race([
+              win.binanceKlines('XAUUSDT', '15m', 5).then(function(r){ return { name: 'binance-xau direct', rows: r }; }).catch(function(){ return { name: 'binance-xau direct', rows: null }; }),
+              new Promise(function(res){ setTimeout(function(){ res({ name: 'binance-xau direct', rows: null }); }, 5000); })
+            ]),
+            Promise.race([
+              win.binanceKlines('PAXGUSDT', '15m', 5).then(function(r){ return { name: 'binance-paxg direct', rows: r }; }).catch(function(){ return { name: 'binance-paxg direct', rows: null }; }),
+              new Promise(function(res){ setTimeout(function(){ res({ name: 'binance-paxg direct', rows: null }); }, 5000); })
+            ])
+          ]);
+          legs = legs.concat(legs2);
+        }
+        out.feedQuality = I.feedQuality(legs, 900);
+      }catch(eFq){}
     }
     /* the candle engine's own read of the 15m tape — the same engine CANDLE
        FORECAST runs, so the desk and the forecast tab can never disagree
@@ -988,7 +1013,7 @@ async function superGoldIntel(win){
        least one leg actually measured something — a row with a direction,
        a candle answer, or a regime that could be computed. */
     var tfRead = !!(out.fiveTf && (out.fiveTf.bull + out.fiveTf.bear) > 0);
-    out.ok = !!(tfRead || out.candle || (out.volRegime && out.volRegime.ok));
+    out.ok = !!(tfRead || out.candle || (out.volRegime && out.volRegime.ok) || (out.feedQuality && out.feedQuality.ok));
     if (!out.ok) out.why = 'the gold tapes could not be read this scan';
   }catch(eAll){
     out.why = 'the desk intel read failed: ' + ((eAll && eAll.message) || eAll);
@@ -1013,6 +1038,121 @@ function sgCandleAgreement(intel, side){
   var pats = intel.candle.patterns && intel.candle.patterns.length
     ? intel.candle.patterns.slice(0, 3).join(', ') : 'no named pattern';
   return { verdict: agree ? 'WITH' : 'AGAINST', why: d.toLowerCase() + ' 15m read · ' + pats };
+}
+
+/* hg-v1362: THE CROWN CHECKS. The desk crowns by the v1358/v1359 rules;
+   this is the printed-checks audit of WHAT was crowned, against the intel
+   the scan pinned. Nine checks, each printed, the grade a count — the same
+   doctrine as Candle Forecast's setup grade, so a reader never has to learn
+   two grading languages. Nothing here uncrowns; a failed check is shown. */
+function sgCrownedRow(snap){
+  if (!snap || !sgSnapFresh(snap)) return null;
+  var rows = Array.isArray(snap.cands) ? snap.cands : [];
+  var side = sgMergeSide(rows);
+  if (!side) return null;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    var d = String(r && r.dir || '').toLowerCase();
+    if (r && r.minimalLossPass && !sgFundBlocked(r)
+        && (d === side || (side === 'long' && d === 'buy') || (side === 'short' && d === 'sell'))){
+      return { row: r, side: side };
+    }
+  }
+  return null;
+}
+
+function sgCrownChecks(snap){
+  var out = { ok: false, grade: 'NONE', passed: 0, total: 0, checks: [], crowned: null, side: '', dist: null, why: '' };
+  snap = snap || superGoldScan();
+  var intel = snap && snap.intel;
+  function check(label, passed, note){
+    out.checks.push({ label: label, passed: passed === true, note: note || '' });
+    out.total++;
+    if (passed === true) out.passed++;
+  }
+  var crowned = sgCrownedRow(snap);
+  if (!crowned){
+    out.why = 'nothing is crowned — a split board, a stale scan or a single desk crowns nothing, so there is nothing to grade';
+    return out;
+  }
+  var r = crowned.row, side = crowned.side;
+  out.crowned = { id: r.id, dir: side, entry: +r.entry, stop: +r.stop, t1: +r.t1, sym: r.sym || 'XAUUSD', scanner: r.scanner || '', mark: N(r.mark) };
+  out.side = side;
+  check('both desks on one side', true, 'scalp and swing agree ' + side);
+  check('the crowned row is GRADE A PASS', r.minimalLossPass === true, r.tier === 'clean' ? 'clean tier' : 'watch tier');
+  var ag = sgCandleAgreement(intel, side);
+  check('the 15m candles travel with the crown', ag.verdict === 'WITH', ag.why);
+  var ft = intel && intel.fiveTf;
+  var ftSide = ft && ft.aligned !== 'NONE' ? (ft.aligned === 'BULL' ? 'long' : 'short') : '';
+  check('four-of-five timeframes on the crowned side', !!(ftSide && ftSide === side), ft ? String(ft.why) : 'matrix unread');
+  var sm = intel && intel.structure;
+  var atLoc = false, locNote = 'structure unread';
+  if (sm && sm.ok){
+    var atr = (intel.volRegime && isFinite(+intel.volRegime.atrNow)) ? +intel.volRegime.atrNow : NaN;
+    var nearPx = isFinite(atr) ? atr * 0.5 : NaN;
+    (sm.items || []).forEach(function(it){
+      if (it && it.px != null && isFinite(+it.px) && isFinite(nearPx) && Math.abs(+it.px - +r.entry) <= nearPx) atLoc = true;
+    });
+    locNote = atLoc ? 'the entry sits on marked structure' : 'no marked structure within half an ATR of the entry';
+  }
+  check('the entry is at marked structure', atLoc, locNote);
+  var vr = intel && intel.volRegime;
+  check('a tradeable volatility regime', !!(vr && vr.ok && (vr.regime === 'NORMAL' || vr.regime === 'EXPANSION')), vr && vr.ok ? vr.regime : 'regime unread');
+  var fq = intel && intel.feedQuality;
+  check('the feeds agree on the price', !!(fq && fq.ok && !fq.lock), fq ? String(fq.why) : 'feeds unread');
+  var nw = intel && intel.news;
+  check('no news blackout', !!(nw && nw.ok && !nw.blackout), nw ? String(nw.note || nw.state) : 'calendar unchecked');
+  check('no fundamental headwind on the row', !sgFundBlocked(r), (r.fund && r.fund.chips && r.fund.chips.length) ? r.fund.chips.join(', ') : 'no verdict chips');
+  var hardFail = !!(fq && fq.lock) || !!(nw && nw.blackout);
+  out.grade = hardFail ? 'C' : (out.passed >= 8 ? 'A' : (out.passed >= 6 ? 'B' : 'C'));
+  /* the distance read: the mark the source desk sized against vs the entry,
+     in dollars and in ATR when the regime measured one */
+  try{
+    var mk = N(r.mark);
+    if (isFinite(mk) && mk > 0 && isFinite(+r.entry)){
+      var dAtr = (vr && vr.ok && isFinite(+vr.atrNow) && +vr.atrNow > 0) ? +vr.atrNow : null;
+      var dlt = +r.entry - mk;
+      out.dist = {
+        mark: mk, toEntry: +dlt.toFixed(2),
+        toEntryAtr: dAtr ? +(dlt / dAtr).toFixed(2) : null,
+        why: 'the sizing mark ' + mk.toFixed(2) + ' sits ' + Math.abs(dlt).toFixed(2)
+          + (dAtr ? (' (' + Math.abs(+(dlt / dAtr).toFixed(2)) + ' ATR)') : '')
+          + ((dlt === 0) ? ' at' : (((side === 'long') === (dlt > 0)) ? ' away from' : ' past')) + ' the entry'
+      };
+    }
+  }catch(eD){ out.dist = null; }
+  out.ok = true;
+  out.why = out.passed + ' of ' + out.total + ' checks passed'
+    + (hardFail ? ' — a feed lock or a blackout caps the grade at C' : '')
+    + '. The grade is a count of printed checks, not a probability. It never uncrowns.';
+  return out;
+}
+
+/* hg-v1362: the desk's one alert candidate. Published after every scan; the
+   collector in tabalerts.js owns dispatch. Alertable means: crowned, GRADE B
+   or better on the printed checks, feeds not locked, no blackout. */
+function sgPublishAlert(snap){
+  try{
+    var cc = sgCrownChecks(snap);
+    W.__sgCrownChecks = cc;
+    var snapAt = (snap && snap.at) || 0;
+    W.superGoldAlertState = function(){
+      /* hg-v1362: freshness is judged at CALL time. A crown published on a
+         fresh scan goes stale twenty minutes later like every other read on
+         this desk — the closure carries the stamp and answers null past it,
+         so the dispatcher can never fire a bracket the desk has stopped
+         standing behind. */
+      if (!snapAt || (Date.now() - snapAt) >= SNAP_MAX_MS) return null;
+      if (!cc || !cc.ok || !cc.crowned) return null;
+      if (cc.grade !== 'A' && cc.grade !== 'B') return null;
+      return {
+        sym: cc.crowned.sym, dir: cc.crowned.dir,
+        entry: cc.crowned.entry, stop: cc.crowned.stop, t1: cc.crowned.t1,
+        clean: true, tier: 'CROWN ' + cc.grade,
+        note: 'super gold crown ' + cc.grade + ' · ' + cc.passed + '/' + cc.total + ' checks'
+      };
+    };
+  }catch(eAl){ /* an alert is a dispatch, never a reason the desk fails */ }
 }
 
 async function superGoldRunScanInner(opts){
@@ -1048,6 +1188,7 @@ async function superGoldRunScanInner(opts){
     try{ snap.intel = await superGoldIntel(W); }catch(eIn){ snap.intel = null; }
     __sg.lastScanAt = snap.scanAt;
     superGoldAfterScan(snap);
+    sgPublishAlert(superGoldScan());
     return snap.cands.length ? ('ok · ' + snap.cands.length + ' setups') : 'ok · 0 setups';
   }catch(e){
     __sg.lastScanMsg = 'Scan error: ' + ((e && e.message) ? e.message : String(e));
@@ -1323,11 +1464,29 @@ function mount(el){
     if (intel.session && intel.session.ok) envBits.push('<b>SESSION</b> ' + esc(intel.session.label) + ' <span class="hg-note">(' + esc(intel.session.why) + ')</span>');
     if (intel.news) envBits.push('<b>NEWS</b> ' + esc(intel.news.state || 'UNCHECKED') + ' <span class="hg-note">(' + esc(intel.news.note || '') + ')</span>');
     if (envBits.length) bits.push('<div class="hg-note" data-sg-intel="env" style="margin-bottom:4px">' + envBits.join('<br>') + '</div>');
+    /* hg-v1362: the crown audit on top — the printed checks against the
+       crowned row, with the distance read beside it. */
+    var crownHtml = '';
+    try{
+      var cc = (typeof W.__sgCrownChecks !== 'undefined' && W.__sgCrownChecks) ? W.__sgCrownChecks : sgCrownChecks(snap);
+      if (cc && cc.ok && cc.crowned){
+        var gColor = cc.grade === 'A' ? '#15803d' : (cc.grade === 'B' ? '#b45309' : '#dc262c');
+        var cRows = cc.checks.map(function(c){
+          return '<li><span style="color:' + (c.passed ? '#15803d' : '#94a3b8') + ';font-weight:700">' + (c.passed ? 'PASS' : '—') + '</span> '
+            + esc(c.label) + (c.note ? (' <span class="hg-note">— ' + esc(c.note) + '</span>') : '') + '</li>';
+        }).join('');
+        crownHtml = '<div class="hg-note" data-sg-intel="crown" style="margin-bottom:6px"><b>CROWN AUDIT</b> '
+          + '<span style="color:' + gColor + ';font-weight:700">GRADE ' + esc(cc.grade) + '</span>'
+          + ' <span class="hg-note">— ' + esc(cc.why) + '</span>'
+          + (cc.dist ? ('<div class="hg-note">' + esc(cc.dist.why) + '.</div>') : '')
+          + '<ul style="margin:4px 0 0;padding-left:18px">' + cRows + '</ul></div>';
+      }
+    }catch(eCc){ crownHtml = ''; }
     if (!bits.length && intel.why) bits.push('<div class="hg-note">Desk intel unread: ' + esc(intel.why) + '</div>');
-    host.innerHTML = bits.length
+    host.innerHTML = (crownHtml || bits.length)
       ? ('<div class="hg-note" data-sg-intel="1" style="margin:8px 0;padding:8px 10px;border:1px solid rgba(166,124,18,.25);border-radius:var(--radius-sm,6px);background:#fffbeb">'
         + '<b>DESK INTELLIGENCE</b> <span class="hg-note">— tape, clock and calendar beside the crown. They do not crown and they do not move a level.</span>'
-        + '<div style="margin-top:6px">' + bits.join('') + '</div></div>')
+        + '<div style="margin-top:6px">' + crownHtml + bits.join('') + '</div></div>')
       : '';
   }
 
@@ -1556,6 +1715,9 @@ W.superGoldWarm = superGoldWarm;
 /* hg-v1361: the intel layer, exported so the guard drives the REAL read. */
 W.superGoldIntel = superGoldIntel;
 W.sgCandleAgreement = sgCandleAgreement;
+/* hg-v1362: the crown audit, exported so the guard drives the REAL checks. */
+W.sgCrownChecks = sgCrownChecks;
+W.sgCrownedRow = sgCrownedRow;
 
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'super-gold', label: 'SUPER GOLD', run: superGoldWarm });

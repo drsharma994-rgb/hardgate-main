@@ -124,6 +124,80 @@ console.log('\n== 5) the strip renders and the source pins the layer ==');
   ok(/They do not crown and they do not move a level/.test(SRC), 'the strip disclaims crowning power');
   ok(/await superGoldIntel/.test(SRC), 'the intel is computed in the scan, not the render');
   ok(/try\{ snap\.intel = await superGoldIntel/.test(SRC), 'a failed intel read cannot fail the scan');
+  ok(/freshness is judged at CALL time/.test(SRC) && /SNAP_MAX_MS\) return null/.test(SRC),
+    'a published alert expires with the scan that earned it');
+}
+
+console.log('\n== 6) hg-v1362: the crown audit grades the crowned row ==');
+{
+  const W = boot();
+  const now = Date.now();
+  W.getGoldCandles = async function (tf) {
+    const sec = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 }[tf] || 900;
+    return { rows: tape(60, 0.5, sec), source: 'test-' + tf };
+  };
+  W.goldscalpScan = function () {
+    return { at: now, cands: [{ id: 'sc', sym: 'XAUUSD', dir: 'long', grade: 'A', entry: 2400, stop: 2390, t1: 2420, rr: 2, tally: 9 }] };
+  };
+  W.goldswingScan = function () {
+    return { at: now, cands: [{ id: 'sw', sym: 'XAUUSD', dir: 'long', grade: 'A', entry: 2410, stop: 2400, t1: 2430, rr: 2, tally: 4 }] };
+  };
+  ok(typeof W.sgCrownChecks === 'function', 'the crown audit is exported');
+  const empty = W.sgCrownChecks({ cands: [], at: now });
+  ok(empty.ok === false && /nothing is crowned/.test(empty.why), 'an empty board grades nothing');
+  await W.superGoldRunScan({ force: true });
+  const snap = W.superGoldScan();
+  const cc = W.sgCrownChecks(snap);
+  ok(cc.ok === true && cc.crowned && cc.crowned.entry === 2400, 'the crowned row is audited');
+  ok(cc.checks.length === 9, 'nine checks are printed');
+  ok(cc.checks.every(function (c) { return typeof c.label === 'string' && typeof c.passed === 'boolean'; }), 'every check is printed with a verdict');
+  ok(/never uncrowns/.test(cc.why), 'the audit disclaims crowning power');
+  ok(cc.grade === 'A' || cc.grade === 'B' || cc.grade === 'C', 'the grade is a letter (' + cc.grade + ')');
+  /* a feed lock caps the grade at C */
+  const locked = Object.assign({}, snap, {
+    intel: Object.assign({}, snap.intel, { feedQuality: { ok: true, lock: true, worst: 'DIVERGED', why: 'diverged', legs: [] } })
+  });
+  ok(W.sgCrownChecks(locked).grade === 'C', 'a feed lock caps the crown audit at C');
+  /* a stale scan crowns nothing and grades nothing */
+  const stale = Object.assign({}, snap, { at: now - 25 * 60 * 1000, sourceAt: now - 25 * 60 * 1000 });
+  ok(W.sgCrownChecks(stale).ok === false, 'a stale scan has no crown to audit');
+}
+
+console.log('\n== 7) hg-v1362: the desk alert path ==');
+{
+  const W = boot();
+  const now = Date.now();
+  W.getGoldCandles = async function (tf) {
+    const sec = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 }[tf] || 900;
+    return { rows: tape(60, 0.5, sec), source: 'test-' + tf };
+  };
+  W.goldscalpScan = function () {
+    return { at: now, cands: [{ id: 'sc', sym: 'XAUUSD', dir: 'long', grade: 'A', entry: 2400, stop: 2390, t1: 2420, rr: 2, tally: 9 }] };
+  };
+  W.goldswingScan = function () {
+    return { at: now, cands: [{ id: 'sw', sym: 'XAUUSD', dir: 'long', grade: 'A', entry: 2410, stop: 2400, t1: 2430, rr: 2, tally: 4 }] };
+  };
+  await W.superGoldRunScan({ force: true });
+  ok(typeof W.superGoldAlertState === 'function', 'the alert state function is published after a scan');
+  const alertState = W.superGoldAlertState();
+  const cc = W.sgCrownChecks(W.superGoldScan());
+  if (cc.grade === 'A' || cc.grade === 'B') {
+    ok(alertState && alertState.dir === 'long' && alertState.entry === 2400 && alertState.stop === 2390,
+      'a gradeable crown publishes its own bracket');
+    ok(/^CROWN [AB]$/.test(alertState.tier), 'the alert tier names the crown grade');
+  } else {
+    ok(alertState === null, 'a C-grade crown stays silent');
+  }
+  /* the collector validates and dispatches */
+  const SRC = fs.readFileSync(path.join(root, 'tabalerts.js'), 'utf8');
+  ok(/function collectSuperGold/.test(SRC), 'tabalerts owns the collector');
+  ok(/collectSuperGold\(out\)/.test(SRC), 'the collector is wired into the batch');
+  /* a split board publishes nothing */
+  W.goldswingScan = function () {
+    return { at: now, cands: [{ id: 'sw', sym: 'XAUUSD', dir: 'short', grade: 'A', entry: 2410, stop: 2420, t1: 2390, rr: 1, tally: 4 }] };
+  };
+  await W.superGoldRunScan({ force: true });
+  ok(W.superGoldAlertState() === null, 'a split board publishes no alert');
 }
 
 console.log('\ntest-super-gold-intel-v1361: ' + pass + ' passed, 0 failed');

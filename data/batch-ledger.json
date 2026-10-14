@@ -275,6 +275,11 @@
       "version": "hg-v1361",
       "built": "2026-10-15T01:30:00Z",
       "note": "SUPER GOLD gains a desk intelligence strip pinned to each scan: the five-timeframe matrix (5m trigger through 1d regime) from the shared hgCfIntel readers, the shared candle engine's 15m read with a WITH/AGAINST/UNREAD verdict against the crowned side (a disagreement is shown, never hidden, and never uncrowns), the volatility regime, the session killzone clock and the news execution state. Computed in the scan's one async window so the render path never fetches; a failed leg is UNREAD, not agreement; a matrix of five unread rows is not a read. The v1358/v1359 crown rules are untouched. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1362",
+      "built": "2026-10-15T02:30:00Z",
+      "note": "SUPER GOLD's intelligence layer becomes an audit: a CROWN AUDIT grades the crowned row on nine printed checks (both desks on one side, GRADE A PASS, candles travelling with the crown, four-of-five timeframes on the crowned side, the entry at marked structure, a tradeable volatility regime, feeds agreeing, no news blackout, no fundamental headwind) with a feed lock or blackout capping the grade at C — the audit never uncrowns and is not a probability; a DISTANCE read names how far the source desk's sizing mark sits from the entry in dollars and ATR; the desk intel gains the cross-feed quality check and the structure map from the shared hgCfIntel readers; and the desk publishes one alert candidate through tabalerts only when crowned at GRADE B or better, expiring with the scan that earned it. All version surfaces move together."
     }
   ]
 }
