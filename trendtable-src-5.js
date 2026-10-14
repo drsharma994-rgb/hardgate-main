@@ -749,7 +749,16 @@ async function trendmxScan(opts){
         // Find all patterns that occurred at this bar index
         for (var patIdx = 0; patIdx < patterns.length; patIdx++) {
           if (patterns[patIdx].i === pIdx) {
-            row.candlePatterns.push(patterns[patIdx].name);
+            var pattern = patterns[patIdx];
+            row.candlePatterns.push(pattern.name);
+            // Boost score if pattern matches row direction
+            if (pattern.dir && pattern.dir === row.dir) {
+              row.score += 1; // Add +1 to confluence score for matching pattern
+              row.confluence = (row.confluence || 0) + 1;
+            } else if (pattern.dir && pattern.dir !== row.dir) {
+              // Pattern against trend - slight penalty or just note it
+              row.score -= 0.5;
+            }
           }
         }
       }

@@ -5,7 +5,7 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1326',
+  version: 'hg-v1327',
   pack: "Ultimate AI Confluence Engine (Candle Forecast) - Advanced Pattern Recognition, Technical & Structural Confluence, Dual Scalp/Swing Setups.",
   built: '2026-10-13T05:00:00Z'
 };

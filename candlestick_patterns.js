@@ -5,7 +5,7 @@ Provides detection of classic and advanced formations for confluence.
 ========================================================================= */
 (function(){
   'use strict';
-  var W = (typeof window !== 'undefined') ? window : globalThis;
+  var W = (typeof window !== 'undefined') ? window : globalthis;
 
   /**
    * Detects candlestick patterns on a series of OHLC bars.
