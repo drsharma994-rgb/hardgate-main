@@ -597,15 +597,23 @@
       "expired": true
     },
     "S": {
-      "at": "2026-10-13T23:30:40.742Z",
+      "at": "2026-10-14T01:21:23.429Z",
       "score": 5,
       "fresh": true,
-      "ago": 1,
+      "ago": 2,
+      "crossDay": "2026-10-11",
+      "expired": true
+    },
+    "SOLV": {
+      "at": "2026-10-14T01:21:34.628Z",
+      "score": 2,
+      "fresh": true,
+      "ago": 2,
       "crossDay": "2026-10-11",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-13T23:31:00.597Z",
+  "lastRunAt": "2026-10-14T01:21:44.424Z",
   "scanned": 504,
   "cards": 0
 }
