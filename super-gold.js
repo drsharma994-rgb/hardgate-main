@@ -336,6 +336,281 @@ function superGoldDeskPill(row){
   return { cls: 'block', label: String(why).slice(0, 28) };
 }
 
+function sgCalcBarsAtr(rows, period){
+  if (!Array.isArray(rows) || rows.length < 2) return NaN;
+  period = period || 14;
+  var slice = rows.slice(-Math.max(period + 1, 6));
+  var sum = 0, cnt = 0;
+  for (var i = 1; i < slice.length; i++){
+    var cur = slice[i], prev = slice[i - 1];
+    if (!cur || !prev) continue;
+    var h = N(cur.h != null ? cur.h : cur.high);
+    var l = N(cur.l != null ? cur.l : cur.low);
+    var pc = N(prev.c != null ? prev.c : prev.close);
+    if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) continue;
+    var tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+    if (tr > 0){ sum += tr; cnt++; }
+  }
+  return cnt > 0 ? (sum / cnt) : NaN;
+}
+
+function sgImpulseSwing(rows, side){
+  if (!Array.isArray(rows) || rows.length < 6) return null;
+  var win = rows.slice(-24);
+  var hi = -Infinity, lo = Infinity;
+  var vwapNum = 0, vwapDen = 0;
+  for (var i = 0; i < win.length; i++){
+    var b = win[i];
+    if (!b) continue;
+    var bh = N(b.h != null ? b.h : b.high);
+    var bl = N(b.l != null ? b.l : b.low);
+    var bc = N(b.c != null ? b.c : b.close);
+    var bv = N(b.v != null ? b.v : (b.vol != null ? b.vol : 1));
+    if (isFinite(bh) && bh > hi) hi = bh;
+    if (isFinite(bl) && bl < lo) lo = bl;
+    if (isFinite(bh) && isFinite(bl) && isFinite(bc)){
+      var typ = (bh + bl + bc) / 3;
+      var w = (isFinite(bv) && bv > 0) ? bv : 1;
+      vwapNum += typ * w;
+      vwapDen += w;
+    }
+  }
+  if (!isFinite(hi) || !isFinite(lo) || !(hi > lo)) return null;
+  var rng = hi - lo;
+  var isLong = String(side || '').toLowerCase() === 'long';
+  /* OTE 61.8% - 70.5% retracement of recent impulse leg */
+  var ote618 = isLong ? (hi - rng * 0.618) : (lo + rng * 0.618);
+  var ote705 = isLong ? (hi - rng * 0.705) : (lo + rng * 0.705);
+  var oteMid = (ote618 + ote705) / 2;
+  var ext1272 = isLong ? (hi + rng * 0.272) : (lo - rng * 0.272);
+  var ext1618 = isLong ? (hi + rng * 0.618) : (lo - rng * 0.618);
+  return {
+    swingHigh: +hi.toFixed(2),
+    swingLow: +lo.toFixed(2),
+    range: +rng.toFixed(2),
+    ote618: +ote618.toFixed(2),
+    ote705: +ote705.toFixed(2),
+    oteMid: +oteMid.toFixed(2),
+    ext1272: +ext1272.toFixed(2),
+    ext1618: +ext1618.toFixed(2),
+    vwap: vwapDen > 0 ? +(vwapNum / vwapDen).toFixed(2) : null
+  };
+}
+
+function sgPsychShieldStop(rawStop, side){
+  if (!isFinite(rawStop) || rawStop <= 0) return { stop: rawStop, shielded: false, magnet: null };
+  var isLong = String(side || '').toLowerCase() === 'long';
+  /* Gold liquidity sweeps cluster around $25 / $50 / $75 / $00 and $10 levels */
+  var nearest25 = Math.round(rawStop / 25) * 25;
+  var nearest10 = Math.round(rawStop / 10) * 10;
+  var magnet = Math.abs(rawStop - nearest25) <= 1.25 ? nearest25
+             : (Math.abs(rawStop - nearest10) <= 0.85 ? nearest10 : null);
+  if (magnet === null){
+    return { stop: +rawStop.toFixed(2), shielded: false, magnet: null };
+  }
+  /* Push stop $1.15 past the psychological magnet so liquidity wicks into the
+     round number do not tag the stop before reversing. */
+  var shieldedStop = isLong ? Math.min(rawStop, magnet - 1.15) : Math.max(rawStop, magnet + 1.15);
+  return {
+    stop: +shieldedStop.toFixed(2),
+    shielded: Math.abs(shieldedStop - rawStop) >= 0.05,
+    magnet: magnet
+  };
+}
+
+function sgPrecisionGoldLevels(row, intel, opts){
+  opts = opts || {};
+  if (!row) return { ok: false, reason: 'no setup row' };
+  var sideStr = String(row.dir || row.side || '').toLowerCase();
+  var side = (sideStr === 'long' || sideStr === 'buy' || sideStr === 'bull') ? 'long'
+           : ((sideStr === 'short' || sideStr === 'sell' || sideStr === 'bear') ? 'short' : '');
+  var rawEntry = N(row.entry);
+  var rawStop = N(row.stop);
+  var rawT1 = N(row.t1 || row.tp);
+  var rawT2 = N(row.t2 || row.tp2);
+  var rawT3 = N(row.t3);
+  if (!side || !(rawEntry > 0 && rawStop > 0 && rawEntry !== rawStop)){
+    return { ok: false, reason: 'missing or invalid raw entry/stop' };
+  }
+  var isLong = (side === 'long');
+  var rows15 = (intel && Array.isArray(intel.rows15) && intel.rows15.length)
+    ? intel.rows15
+    : (Array.isArray(row.rows15m) ? row.rows15m : []);
+  var atr = (intel && intel.volRegime && intel.volRegime.ok && isFinite(+intel.volRegime.atrNow) && +intel.volRegime.atrNow > 0)
+    ? +intel.volRegime.atrNow
+    : sgCalcBarsAtr(rows15, 14);
+  var rawRisk = Math.abs(rawEntry - rawStop);
+  var atrMeasured = (intel && intel.volRegime && intel.volRegime.ok && isFinite(+intel.volRegime.atrNow) && +intel.volRegime.atrNow > 0)
+    || (isFinite(sgCalcBarsAtr(rows15, 14)) && sgCalcBarsAtr(rows15, 14) > 0);
+  if (!atrMeasured){
+    return {
+      ok: true, side: side, unread: true,
+      entry: rawEntry, rawEntry: rawEntry, stop: rawStop, rawStop: rawStop,
+      entryZone: [rawEntry, rawEntry], entryReason: 'desk level',
+      t1: rawT1 > 0 ? rawT1 : null, t2: rawT2 > 0 ? rawT2 : null, t3: rawT3 > 0 ? rawT3 : null,
+      riskDist: +rawRisk.toFixed(2), atr: null, stopAtrRatio: null,
+      psychShielded: false, psychMagnet: null, slNote: 'ATR unread',
+      rr1: null, rr2: null, rr3: null, blendedRr: null,
+      vwap: null, ote618: null, ote705: null,
+      why: 'ATR unread. The suggestion is the desk bracket. Nothing was moved.'
+    };
+  }
+
+  var regime = (intel && intel.volRegime && intel.volRegime.regime) ? String(intel.volRegime.regime) : 'NORMAL';
+  var swing = sgImpulseSwing(rows15, side);
+  var structItems = (intel && intel.structure && intel.structure.ok && Array.isArray(intel.structure.items))
+    ? intel.structure.items : [];
+
+  /* 1. PRECISION ENTRY REFINEMENT
+     Snap entry toward nearest supporting structure / OTE 61.8% / VWAP when
+     within 0.45 ATR so we enter on institutional reload rather than mid-air. */
+  var bestEntry = rawEntry;
+  var entryReason = 'desk structural level';
+  var nearStruct = null;
+  for (var i = 0; i < structItems.length; i++){
+    var spx = N(structItems[i] && structItems[i].px);
+    if (!isFinite(spx) || spx <= 0) continue;
+    if (Math.abs(spx - rawEntry) <= atr * 0.45){
+      if (nearStruct === null || Math.abs(spx - rawEntry) < Math.abs(nearStruct.px - rawEntry)){
+        nearStruct = { px: spx, label: structItems[i].label || 'structure' };
+      }
+    }
+  }
+  if (nearStruct){
+    /* Place limit $0.25 in front of structure to guarantee fill before bounce */
+    bestEntry = isLong ? Math.max(rawStop + atr * 0.5, nearStruct.px + 0.25)
+                       : Math.min(rawStop - atr * 0.5, nearStruct.px - 0.25);
+    entryReason = 'front-run ' + nearStruct.label + ' @ ' + fmt(nearStruct.px, 2);
+  } else if (swing && Math.abs(swing.ote618 - rawEntry) <= atr * 0.55){
+    bestEntry = +((rawEntry * 0.6 + swing.ote618 * 0.4)).toFixed(2);
+    entryReason = 'OTE 61.8% confluence (' + fmt(swing.ote618, 2) + ')';
+  }
+  bestEntry = +bestEntry.toFixed(2);
+  var zonePad = +(atr * 0.15).toFixed(2);
+  var entryZoneLow = +(bestEntry - zonePad).toFixed(2);
+  var entryZoneHigh = +(bestEntry + zonePad).toFixed(2);
+
+  /* 2. SWEEP-PROTECTED STOP-LOSS (SL)
+     Ensure SL sits beyond structural invalidation + regime ATR buffer and
+     clear of psychological round-number stop-hunt clusters ($00/$25/$50/$75). */
+  var atrBufMult = (regime === 'EXPANSION') ? 0.50 : 0.35;
+  var minStopDist = Math.max(2.0, +(atr * 0.85).toFixed(2));
+  var maxStopDist = Math.max(rawRisk * 1.35, +(atr * 2.6).toFixed(2));
+  var structStop = rawStop;
+  if (swing){
+    if (isLong && swing.swingLow < bestEntry && (bestEntry - swing.swingLow) <= maxStopDist){
+      structStop = Math.min(rawStop, swing.swingLow - atr * atrBufMult);
+    } else if (!isLong && swing.swingHigh > bestEntry && (swing.swingHigh - bestEntry) <= maxStopDist){
+      structStop = Math.max(rawStop, swing.swingHigh + atr * atrBufMult);
+    }
+  }
+  var curDist = Math.abs(bestEntry - structStop);
+  if (curDist < minStopDist){
+    structStop = isLong ? (bestEntry - minStopDist) : (bestEntry + minStopDist);
+  } else if (curDist > maxStopDist){
+    structStop = isLong ? (bestEntry - maxStopDist) : (bestEntry + maxStopDist);
+  }
+  var shield = sgPsychShieldStop(structStop, side);
+  var bestStop = shield.stop;
+  /* Guarantee direction invariant: Long stop < entry, Short stop > entry */
+  if (isLong && bestStop >= bestEntry) bestStop = +(bestEntry - minStopDist).toFixed(2);
+  if (!isLong && bestStop <= bestEntry) bestStop = +(bestEntry + minStopDist).toFixed(2);
+  var riskDist = Math.abs(bestEntry - bestStop);
+  var stopAtrRatio = +(riskDist / atr).toFixed(2);
+  var slNote = (shield.shielded ? ('shielded past $' + shield.magnet + ' sweep magnet · ') : '')
+    + fmt(riskDist, 2) + ' pts (' + fmt(stopAtrRatio, 2) + ' ATR)';
+
+  /* 3. MULTI-TIER TAKE-PROFIT LADDER (TP1 / TP2 / TP3)
+     - TP1 (50% scale): >= 1.8R, front-running any opposing structure wall by $0.60
+     - TP2 (30% scale): >= 2.8R or 1.618 Fib impulse extension
+     - TP3 (20% runner): 4.0R or Daily ADR exhaustion cap (3.5 * ATR_15m * 4) */
+  var minT1Dist = riskDist * 1.8;
+  var targetT1 = (rawT1 > 0 && Math.abs(rawT1 - bestEntry) >= riskDist * 1.5)
+    ? rawT1
+    : (isLong ? (bestEntry + minT1Dist) : (bestEntry - minT1Dist));
+  /* Front-run opposing structure walls near TP1 by $0.60 */
+  var t1FrontRun = false;
+  for (var j = 0; j < structItems.length; j++){
+    var opPx = N(structItems[j] && structItems[j].px);
+    if (!isFinite(opPx) || opPx <= 0) continue;
+    if (isLong && opPx > bestEntry + riskDist * 1.4 && Math.abs(opPx - targetT1) <= atr * 0.5){
+      targetT1 = opPx - 0.60;
+      t1FrontRun = true;
+      break;
+    } else if (!isLong && opPx < bestEntry - riskDist * 1.4 && Math.abs(opPx - targetT1) <= atr * 0.5){
+      targetT1 = opPx + 0.60;
+      t1FrontRun = true;
+      break;
+    }
+  }
+  targetT1 = +targetT1.toFixed(2);
+
+  var minT2Dist = riskDist * 2.8;
+  var targetT2 = (rawT2 > 0 && Math.abs(rawT2 - bestEntry) > Math.abs(targetT1 - bestEntry))
+    ? rawT2
+    : (isLong ? (bestEntry + minT2Dist) : (bestEntry - minT2Dist));
+  if (swing && isFinite(swing.ext1618)){
+    if (isLong && swing.ext1618 > targetT1 + riskDist * 0.5 && swing.ext1618 <= bestEntry + riskDist * 3.8){
+      targetT2 = swing.ext1618;
+    } else if (!isLong && swing.ext1618 < targetT1 - riskDist * 0.5 && swing.ext1618 >= bestEntry - riskDist * 3.8){
+      targetT2 = swing.ext1618;
+    }
+  }
+  targetT2 = +targetT2.toFixed(2);
+
+  /* ADR exhaustion cap (~8.5x 15m ATR for session remaining range) */
+  var adrRemaining = Math.max(riskDist * 3.6, atr * 8.5);
+  var rawRunnerDist = riskDist * 4.0;
+  var runnerDist = Math.min(rawRunnerDist, adrRemaining);
+  var targetT3 = (rawT3 > 0 && Math.abs(rawT3 - bestEntry) > Math.abs(targetT2 - bestEntry))
+    ? rawT3
+    : (isLong ? (bestEntry + runnerDist) : (bestEntry - runnerDist));
+  if (isLong && targetT3 <= targetT2) targetT3 = +(targetT2 + riskDist * 1.0).toFixed(2);
+  if (!isLong && targetT3 >= targetT2) targetT3 = +(targetT2 - riskDist * 1.0).toFixed(2);
+  targetT3 = +targetT3.toFixed(2);
+
+  var rr1 = +(Math.abs(targetT1 - bestEntry) / riskDist).toFixed(2);
+  var rr2 = +(Math.abs(targetT2 - bestEntry) / riskDist).toFixed(2);
+  var rr3 = +(Math.abs(targetT3 - bestEntry) / riskDist).toFixed(2);
+  /* Blended R:R across 50% TP1 + 30% TP2 + 20% TP3 */
+  var blendedRr = +(0.50 * rr1 + 0.30 * rr2 + 0.20 * rr3).toFixed(2);
+
+  return {
+    ok: true,
+    side: side,
+    entry: bestEntry,
+    rawEntry: rawEntry,
+    entryZone: [entryZoneLow, entryZoneHigh],
+    entryReason: entryReason,
+    stop: bestStop,
+    rawStop: rawStop,
+    riskDist: +riskDist.toFixed(2),
+    atr: +atr.toFixed(2),
+    stopAtrRatio: stopAtrRatio,
+    psychShielded: shield.shielded,
+    psychMagnet: shield.magnet,
+    slNote: slNote,
+    t1: targetT1,
+    t2: targetT2,
+    t3: targetT3,
+    t1FrontRun: t1FrontRun,
+    rr1: rr1,
+    rr2: rr2,
+    rr3: rr3,
+    blendedRr: blendedRr,
+    splits: { t1Pct: 50, t2Pct: 30, t3Pct: 20 },
+    vwap: swing ? swing.vwap : null,
+    ote618: swing ? swing.ote618 : null,
+    ote705: swing ? swing.ote705 : null,
+    why: 'Entry ' + fmt(bestEntry, 2) + ' [' + fmt(entryZoneLow, 2) + '-' + fmt(entryZoneHigh, 2) + '] (' + entryReason + ')'
+      + ' · SL ' + fmt(bestStop, 2) + ' (' + slNote + ')'
+      + ' · TP1 ' + fmt(targetT1, 2) + ' (' + fmt(rr1, 2) + 'R, 50%)'
+      + ' · TP2 ' + fmt(targetT2, 2) + ' (' + fmt(rr2, 2) + 'R, 30%)'
+      + ' · TP3 ' + fmt(targetT3, 2) + ' (' + fmt(rr3, 2) + 'R, 20%)'
+      + ' · Blended ' + fmt(blendedRr, 2) + 'R'
+  };
+}
+
 function refineSuperGoldLevels(win, c, hit){
   win = win || W;
   c = c || {};
@@ -380,6 +655,11 @@ function refineSuperGoldLevels(win, c, hit){
       hit.planSrc = 'hgApplyGoldBestLevels';
     }catch(e1){}
   }
+
+  try{
+    var prec = sgPrecisionGoldLevels(hit, null);
+    if (prec && prec.ok) hit.precision = prec;
+  }catch(ePrec){}
 
   return { ok: true, veto: false, hit: hit };
 }
@@ -1410,6 +1690,136 @@ function sgCrownLifecycle(snap, win){
   return out;
 }
 
+/* ==========================================================================
+   hg-v1365: 12-GATE INSTITUTIONAL HIGH-ACCURACY GOLD SCORECARD
+   Evaluates the crowned setup across 12 institutional XAUUSD accuracy gates
+   and returns the Sniper Precision Entry / SL / TP1-TP2-TP3 plan alongside
+   a transparent tier verdict: SNIPER A+ (11-12/12), GRADE A (9-10/12),
+   GRADE B (7-8/12), or STAND ASIDE (<7/12 or hard veto).
+   ========================================================================== */
+function sgHighAccuracyAudit(snap, win){
+  win = win || W;
+  snap = snap || superGoldScan();
+  var out = {
+    ok: false,
+    tier: 'STAND ASIDE',
+    score: 0,
+    total: 12,
+    accuracyPct: 0,
+    hardVeto: false,
+    vetoReasons: [],
+    gates: [],
+    precision: null,
+    why: ''
+  };
+  var crowned = sgCrownedRow(snap);
+  if (!crowned){
+    out.why = 'No crowned setup on a fresh unified scan';
+    return out;
+  }
+  var r = crowned.row, side = crowned.side;
+  var intel = (snap && snap.intel) || null;
+  var cc = sgCrownChecks(snap);
+  var tape = sgTapeDiagnostics(snap, win);
+  var prec = r.precision || sgPrecisionGoldLevels(r, intel);
+  out.precision = prec;
+
+  function addGate(id, label, passed, detail, critical){
+    var p = passed === true;
+    out.gates.push({ id: id, label: label, passed: p, detail: detail || '', critical: !!critical });
+    if (p) out.score++;
+    else if (critical) out.vetoReasons.push(label + (detail ? ' (' + detail + ')' : ''));
+  }
+
+  // Gate 1: Dual-Desk Unanimity
+  addGate('G1_DUAL_DESK', 'Scalp + Swing Unanimity', true, 'Both desks aligned ' + side.toUpperCase(), true);
+
+  // Gate 2: 5-Timeframe Trend Alignment
+  var ft = intel && intel.fiveTf;
+  var ftSide = ft && ft.aligned !== 'NONE' ? (ft.aligned === 'BULL' ? 'long' : 'short') : '';
+  addGate('G2_5TF_MATRIX', '5-Timeframe Trend Matrix', !!(ftSide && ftSide === side), ft ? (ft.why || ft.aligned) : 'unread', false);
+
+  // Gate 3: 15m Displacement & Candle Confirmation
+  var ag = sgCandleAgreement(intel, side);
+  addGate('G3_CANDLE_15M', '15m Candle Displacement', ag.verdict === 'WITH', ag.why, false);
+
+  // Gate 4: Kill-Zone Session Liquidity (London / NY / Overlap)
+  var sess = intel && intel.session;
+  var sessLbl = sess && sess.label ? String(sess.label).toUpperCase() : '';
+  var inKillzone = !!(r.killzone || (sess && sess.ok && !/DEAD|ROLL|CLOSED|WEEKEND/i.test(sessLbl)));
+  addGate('G4_KILLZONE', 'London/NY Kill-Zone Liquidity', inKillzone, sessLbl || (r.killzone ? String(r.killzone) : 'session active'), false);
+
+  // Gate 5: Macro Real-Rate & DXY Alignment
+  var macroOk = true, macroNote = 'neutral/aligned';
+  try{
+    if (typeof win.getGoldMacroCached === 'function'){
+      var mc = win.getGoldMacroCached();
+      var hint = mc && mc.realRateHint ? String(mc.realRateHint).toUpperCase() : '';
+      if ((hint === 'HEADWIND' && side === 'long') || (hint === 'TAILWIND' && side === 'short')){
+        macroOk = false;
+        macroNote = 'real-rate ' + hint + ' opposes ' + side;
+      } else if (hint){
+        macroNote = 'real-rate ' + hint;
+      }
+    }
+  }catch(eMc){}
+  addGate('G5_MACRO_RATES', 'Real-Rate & DXY Filter', macroOk, macroNote, false);
+
+  // Gate 6: Red-Folder News Blackout Clear (Critical)
+  var nw = intel && intel.news;
+  var bk = !!(nw && nw.blackout);
+  try{ if (!bk && typeof win.hgFundamentalBlackout === 'function') bk = win.hgFundamentalBlackout('XAUUSD') === true; }catch(eBk){}
+  addGate('G6_NEWS_CLEAR', 'Red-Folder Event Clear', !bk, bk ? 'BLACKOUT ACTIVE' : 'clear', true);
+
+  // Gate 7: Cross-Venue Feed Consensus & Spread Guard (Critical)
+  var feedOk = !tape.lock && (tape.status === 'CLEAN' || !!(intel && intel.feedQuality && intel.feedQuality.ok && !intel.feedQuality.lock));
+  addGate('G7_VENUE_CONSENSUS', 'Cross-Venue Tape Consensus', feedOk, tape.why || 'feeds aligned', tape.lock);
+
+  // Gate 8: Entry at Structure / OTE 61.8%-70.5% Confluence
+  var sm = intel && intel.structure;
+  var atStruct = false;
+  if (sm && sm.ok && prec && prec.ok){
+    (sm.items || []).forEach(function(it){
+      if (it && isFinite(+it.px) && Math.abs(+it.px - prec.entry) <= prec.atr * 0.5) atStruct = true;
+    });
+  }
+  var atOte = !!(prec && prec.ok && prec.ote618 != null && Math.abs(prec.entry - prec.ote618) <= prec.atr * 0.6);
+  addGate('G8_ENTRY_LOC', 'Structure / OTE 61.8% Entry', atStruct || atOte, prec && prec.ok ? prec.entryReason : 'desk level', false);
+
+  // Gate 9: Sweep-Shielded Stop Geometry (0.8 - 2.6 ATR + Psych Magnet Shield)
+  var slOk = !!(prec && prec.ok && prec.stopAtrRatio >= 0.8 && prec.stopAtrRatio <= 3.15);
+  addGate('G9_SWEEP_SL', 'Sweep-Shielded Stop Geometry', slOk, prec && prec.ok ? prec.slNote : 'raw stop', false);
+
+  // Gate 10: 3-Tier Asymmetric Target Ladder (TP1 >= 1.5R, Blended >= 2.0R)
+  var tpOk = !!(prec && prec.ok && prec.rr1 >= 1.5 && prec.blendedRr >= 2.0);
+  addGate('G10_TP_LADDER', '3-Tier TP1/TP2/TP3 Ladder', tpOk,
+    prec && prec.ok ? ('TP1 ' + fmt(prec.rr1, 2) + 'R · TP2 ' + fmt(prec.rr2, 2) + 'R · TP3 ' + fmt(prec.rr3, 2) + 'R (Blended ' + fmt(prec.blendedRr, 2) + 'R)') : 'single TP', false);
+
+  // Gate 11: Fundamental Stack Verdict Clear (Critical)
+  var fundClear = !sgFundBlocked(r);
+  addGate('G11_FUND_STACK', 'Fundamental Stack Clear', fundClear, fundClear ? 'pass' : 'blocked', true);
+
+  // Gate 12: Spot Sizing & Minimal-Loss Audit Pass (Critical)
+  var minLossOk = r.minimalLossPass === true;
+  addGate('G12_MIN_LOSS', 'Spot Sizing & Desk Audit Pass', minLossOk, minLossOk ? 'GRADE A PASS' : (r.riskReason || 'hold'), true);
+
+  out.ok = true;
+  out.hardVeto = out.vetoReasons.length > 0;
+  out.accuracyPct = Math.round((out.score / out.total) * 100);
+  if (out.hardVeto || out.score < 7){
+    out.tier = 'STAND ASIDE';
+  } else if (out.score >= 11){
+    out.tier = 'SNIPER A+';
+  } else if (out.score >= 9){
+    out.tier = 'GRADE A';
+  } else {
+    out.tier = 'GRADE B';
+  }
+  out.why = out.tier + ' (' + out.score + '/' + out.total + ' gates · ' + out.accuracyPct + '% confluence)'
+    + (out.hardVeto ? (' — VETO: ' + out.vetoReasons.join(', ')) : '');
+  return out;
+}
+
 function sgCrownDispatchPayload(snap, riskOpts, win){
   win = win || W;
   snap = snap || superGoldScan();
@@ -1434,6 +1844,11 @@ function sgCrownDispatchPayload(snap, riskOpts, win){
     return { ready: false, reason: 'Red-folder macro blackout' };
   }
   if (sgFundBlocked(r)) return { ready: false, reason: 'The fundamental stack blocked this row' };
+  var acc = null;
+  try{ acc = sgHighAccuracyAudit(snap, win); }catch(eAcc){ acc = null; }
+  if (acc && acc.hardVeto){
+    return { ready: false, reason: 'Sniper scorecard stands aside: ' + (acc.vetoReasons.join('; ') || acc.why) };
+  }
   var rr = effectiveGoldRr(r);
   if (!(rr > 0) || !(N(r.t1) > 0)) return { ready: false, reason: 'No target on the crowned row' };
   var oz = NaN;
@@ -1457,8 +1872,11 @@ function sgCrownDispatchPayload(snap, riskOpts, win){
     rr: +(+rr).toFixed(2), qty: +oz.toFixed(4),
     mark: isFinite(N(r.mark)) ? N(r.mark) : null,
     grade: cc.grade, checksPassed: cc.passed, checksTotal: cc.total,
+    accuracyTier: acc ? acc.tier : null,
+    accuracyScore: acc ? acc.score : null,
+    accuracyTotal: acc ? acc.total : null,
     execState: ex.state, lifecycleStage: lc.stage,
-    reason: 'CROWN ' + cc.grade + ' (' + cc.passed + '/' + cc.total + ') · ' + ex.state
+    reason: (acc && acc.tier ? (acc.tier + ' · ') : '') + 'CROWN ' + cc.grade + ' (' + cc.passed + '/' + cc.total + ') · ' + ex.state
   };
 }
 
@@ -1980,11 +2398,26 @@ function mount(el){
         + ((ex.state === 'ARMED' || ex.state === 'TRIGGERED') ? '<div id="sg-crown-chart" style="margin-top:6px"></div>' : '')
         + '</div>';
     }catch(eEx){ execHtml = ''; }
+    var sniperHtml = '';
+    try{
+      var acc = sgHighAccuracyAudit(snap);
+      if (acc && acc.ok){
+        var gates = (acc.gates || []).map(function(g){
+          return '<span style="color:' + (g.passed ? '#15803d' : '#dc262c') + ';font-weight:700">' + (g.passed ? 'PASS' : 'FAIL') + '</span> ' + esc(g.label);
+        }).join(' · ');
+        sniperHtml = '<div class="hg-note" data-sg-intel="sniper" style="margin-bottom:6px"><b>SNIPER</b> '
+          + '<span style="font-weight:700">' + esc(acc.tier) + '</span>'
+          + ' <span class="hg-note">' + acc.score + '/' + acc.total + '</span>'
+          + '<div class="hg-note">' + esc(acc.why) + '</div>'
+          + (acc.precision && acc.precision.why ? ('<div class="hg-note">' + esc(acc.precision.why) + '. This does not replace the crowned entry or stop.</div>') : '')
+          + '<div class="hg-note" style="margin-top:2px">' + gates + '</div></div>';
+      }
+    }catch(eSn){ sniperHtml = ''; }
     if (!bits.length && intel && intel.why) bits.push('<div class="hg-note">Desk intel unread: ' + esc(intel.why) + '</div>');
     host.innerHTML = (crownHtml || bits.length || execHtml)
       ? ('<div class="hg-note" data-sg-intel="1" style="margin:8px 0;padding:8px 10px;border:1px solid rgba(166,124,18,.25);border-radius:var(--radius-sm,6px);background:#fffbeb">'
         + '<b>DESK INTELLIGENCE</b> <span class="hg-note">— tape, clock and calendar beside the crown. They do not crown and they do not move a level.</span>'
-        + '<div style="margin-top:6px">' + crownHtml + execHtml + bits.join('') + '</div></div>')
+        + '<div style="margin-top:6px">' + sniperHtml + crownHtml + execHtml + bits.join('') + '</div></div>')
       : '';
     /* hg-v1363: the mini chart draws after the host exists; a missing 2d
        context leaves the wrap empty, never a thrown repaint. */
@@ -2157,7 +2590,11 @@ function mount(el){
         + (r.positionSize ? fmt(r.positionSize.positionSizeUnits, 3) + ' oz' : '—') + '</div></div>'
         + sgGeoLine(r)
         + '</div>'
-        + '<div class="hg-note" style="margin-top:8px">' + String(r.strategy || '') + '</div></div>';
+        + '<div class="hg-note" style="margin-top:8px">' + String(r.strategy || '')
+        + (r.precision && r.precision.ok && !r.precision.unread
+          ? ('<div class="hg-note">Suggestion, not the crown: ' + String(r.precision.why || '') + '. The send uses the desk entry and stop.</div>')
+          : '')
+        + '</div></div>';
     }).join('');
     try { if (typeof W.hgMpPin === 'function') W.hgMpPin('super-gold', rows, null, desk); } catch (eMp) {}
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){
@@ -2309,6 +2746,9 @@ W.sgCrownDispatchPayload = sgCrownDispatchPayload;
 W.sgDispatchToBook = sgDispatchToBook;
 W.sgDispatchToXm = sgDispatchToXm;
 W.sgDispatchBracket = sgDispatchBracket;
+W.sgPrecisionGoldLevels = sgPrecisionGoldLevels;
+W.sgPsychShieldStop = sgPsychShieldStop;
+W.sgHighAccuracyAudit = sgHighAccuracyAudit;
 
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'super-gold', label: 'SUPER GOLD', run: superGoldWarm });

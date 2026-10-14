@@ -295,6 +295,11 @@
       "version": "hg-v1365",
       "built": "2026-10-15T05:00:00Z",
       "note": "Super Gold keeps the source bar time on the crowned row. A send uses the size the desk already calculated. It does not invent a size, and a second click of the same crown is a duplicate."
+    },
+    {
+      "version": "hg-v1366",
+      "built": "2026-10-15T05:30:00Z",
+      "note": "Super Gold prints a 12-gate sniper scorecard and a level suggestion from the measured ATR, the OTE, and marked structure. The suggestion does not replace the crowned entry or stop. An unread ATR moves nothing. A hard veto blocks a send."
     }
   ]
 }

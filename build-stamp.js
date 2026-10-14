@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1365',
-  pack: 'hg-v1365: Super Gold keeps the source bar time on the crowned row. A send uses the size the desk already calculated. It does not invent a size, and a second click of the same crown is a duplicate. hg-v1364: Super Gold retries a candle leg that comes back empty, then reads the fallback. A cross-venue gap past 12 USD locks a send. The path after the crowned bar is named and the source stop is not moved. A send needs a real size and a real bar time, and the scan itself does not send. SUPER GOLD crown execution - ARMED/TRIGGERED/NO-TRADE state for the crowned bracket against the sizing mark, the forecast cone and the closed 15m window pinned to the scan, a mini chart of the crowned levels, the crowned-only forward split, and a next-scan countdown.',
-  built: '2026-10-15T05:00:00Z'
+  version: 'hg-v1366',
+  pack: 'hg-v1366: Super Gold prints a 12-gate sniper scorecard and a level suggestion from the measured ATR, the OTE, and marked structure. The suggestion does not replace the crowned entry or stop. An unread ATR moves nothing. A hard veto blocks a send. hg-v1365: Super Gold keeps the source bar time on the crowned row. A send uses the size the desk already calculated. It does not invent a size, and a second click of the same crown is a duplicate. hg-v1364: Super Gold retries a candle leg that comes back empty, then reads the fallback. A cross-venue gap past 12 USD locks a send. The path after the crowned bar is named and the source stop is not moved. A send needs a real size and a real bar time, and the scan itself does not send. SUPER GOLD crown execution - ARMED/TRIGGERED/NO-TRADE state for the crowned bracket against the sizing mark, the forecast cone and the closed 15m window pinned to the scan, a mini chart of the crowned levels, the crowned-only forward split, and a next-scan countdown.',
+  built: '2026-10-15T05:30:00Z'
 };
 
 function hgBuildLabel(b){
