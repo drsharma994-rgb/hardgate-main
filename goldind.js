@@ -19884,6 +19884,7 @@ function hgCfBuildSetup(rows, opts, fc) {
       out.parts = f.setupParts || '';
       out.label = f.setup;                       /* 'LONG SETUP' / 'SHORT SETUP' */
       out.why = f.setup + ' on ' + out.tf + (out.parts ? ' — ' + out.parts : '');
+      out.missing = null;
     } else {
       out.label = (f.dir === 'BULL' ? 'LONG' : (f.dir === 'BEAR' ? 'SHORT' : 'NEUTRAL')) + ' READ';
       out.why = 'no ' + out.tf + ' setup: ' + (f.dir === 'NEUTRAL'
@@ -19891,6 +19892,7 @@ function hgCfBuildSetup(rows, opts, fc) {
         : 'a named pattern plus structure or a desk read must agree — ' + (f.reasons || []).filter(function (r) {
             return /no structure|no candlestick pattern|desk:/i.test(String(r));
           }).join(' · '));
+      out.missing = f.missing || null;
     }
     if (out.formed && isFinite(out.entry) && isFinite(out.stop)) {
       var sign = (out.dir === 'BULL') ? 1 : -1;
@@ -20481,6 +20483,91 @@ function hgCfConfluence(rows, opts, fc) {
     return out;
   }}
 
+function hgCfCachedDeskConfirm() {
+  /* A gold tab that has already been scanned can confirm a named shape.
+     This reads only that tab's last scan in memory. It does not fetch and
+     it does not re-run a mint. A missing engine, a tab that was not
+     scanned, an empty scan, a record-only print, and a split scan are
+     unread. Unread is not agreement. Prices on the cached row are not read. */
+  var bulls = [], bears = [];
+  function hostFn(name) {
+    try {
+      if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name];
+    } catch (eH) {}
+    try {
+      if (typeof W !== 'undefined' && W && typeof W[name] === 'function') return W[name];
+    } catch (eW) {}
+    return null;
+  }
+  function word(v) {
+    var d = String(v || '').toLowerCase();
+    if (d === 'long' || d === 'bull' || d === 'bullish') return 'long';
+    if (d === 'short' || d === 'bear' || d === 'bearish') return 'short';
+    return '';
+  }
+  function oneSide(list) {
+    var lng = 0, sht = 0, i, d;
+    if (!Array.isArray(list)) return '';
+    for (i = 0; i < list.length; i++) {
+      d = word(list[i] && (list[i].dir || list[i].direction));
+      if (d === 'long') lng++;
+      else if (d === 'short') sht++;
+    }
+    if (lng > 0 && sht === 0) return 'long';
+    if (sht > 0 && lng === 0) return 'short';
+    return '';
+  }
+  function keep(label, side) {
+    if (side === 'long') bulls.push(label);
+    else if (side === 'short') bears.push(label);
+  }
+  try {
+    var ogFn = hostFn('optiGoldState');
+    if (ogFn) {
+      var og = ogFn();
+      if (og && Array.isArray(og.setups)) {
+        var live = [], i, s;
+        for (i = 0; i < og.setups.length; i++) {
+          s = og.setups[i];
+          if (s && (s.state === 'waiting' || s.state === 'open') && word(s.dir)) live.push({ dir: s.dir });
+        }
+        keep('OPTI GOLD', oneSide(live));
+      }
+    }
+  } catch (eOg) {}
+  try {
+    var sgFn = hostFn('superGoldScan');
+    if (sgFn) {
+      var sg = sgFn();
+      if (sg && Array.isArray(sg.cands)) keep('SUPER GOLD', oneSide(sg.cands));
+    }
+  } catch (eSg) {}
+  try {
+    var guFn = hostFn('goldUltraState');
+    if (guFn) {
+      var gu = guFn();
+      if (gu && gu.fire === true && gu.recordOnly !== true) keep('GOLD ULTRA', word(gu.dir));
+    }
+  } catch (eGu) {}
+  try {
+    var ggFn = hostFn('ganeshGoldState');
+    if (ggFn) {
+      var gg = ggFn();
+      if (gg && gg.ok !== false) keep('GANESH GOLD', word(gg.pick));
+    }
+  } catch (eGg) {}
+  var line = bulls.concat(bears).join(', ');
+  if (!line) line = 'no scanned gold desk in cache';
+  return {
+    bullVotes: bulls.length ? 1 : 0,
+    bearVotes: bears.length ? 1 : 0,
+    bullNames: bulls,
+    bearNames: bears,
+    notes: line === 'no scanned gold desk in cache' ? [line] : [],
+    line: line
+  };
+}
+
 function goldCandleForecast(rows) {
   var macro = arguments.length > 1 ? arguments[1] : null;
   var tapes = arguments.length > 2 ? arguments[2] : null;
@@ -20586,6 +20673,12 @@ function goldCandleForecast(rows) {
     var struct = hgCfStructure(rows, atrLast);
     var desk = hgCfGoldDesk(rows, macro);
     var tabs = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [], notes: ['gold tabs are named under the call'], line: 'named under the call' };
+    if (tapes && tapes.cachedDesks === true) {
+      try {
+        var cachedTabs = hgCfCachedDeskConfirm();
+        if (cachedTabs && typeof cachedTabs === 'object') tabs = cachedTabs;
+      } catch (eTabs) {}
+    }
     var pi;
     bulls += pat.bullVotes + struct.bullVotes + desk.bullVotes;
     bears += pat.bearVotes + struct.bearVotes + desk.bearVotes;
@@ -20756,6 +20849,15 @@ function goldCandleForecast(rows) {
         htf.bearNames.length ? htf.bearNames : null
       ]);
     }
+    var missing = null;
+    if (!setup && !neutral) {
+      var shapeNow = dir === 'BULL' ? bullShape : bearShape;
+      var blockedNow = dir === 'BULL' ? htfBlocksBull : htfBlocksBear;
+      var confirmNow = dir === 'BULL' ? bullConfirm : bearConfirm;
+      if (!shapeNow.length) missing = 'no named shape';
+      else if (blockedNow) missing = 'higher timeframe against';
+      else if (!confirmNow) missing = 'no structure or desk confirm';
+    }
     return {
       dir: dir,
       lean: dir,
@@ -20777,6 +20879,7 @@ function goldCandleForecast(rows) {
       higher: htf.line,
       setup: setup,
       setupParts: setupParts,
+      missing: missing,
       stopSource: stopSource,
       expectedHigh: +(c + expectedRange).toFixed(2),
       expectedLow: +(c - expectedRange).toFixed(2),

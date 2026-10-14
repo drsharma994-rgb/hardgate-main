@@ -159,6 +159,7 @@ on every page load since v1308:
       }
 
       const tapes = await this.loadTapes();
+      if (tapes && typeof tapes === 'object') tapes.cachedDesks = true;
       const macroLive = await this.loadMacro();
       const forecast = window.goldCandleForecast(candles, macroLive, tapes);
       if (!forecast) {
@@ -242,7 +243,7 @@ on every page load since v1308:
         var loaded4 = await load4;
         var c4 = loaded4 && loaded4.rows;
         if (Array.isArray(c4) && c4.length >= CF_MIN_BARS) {
-          var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d });
+          var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d, cachedDesks: true });
           try {
             if (fc4 && typeof window.hgCfConfluence === 'function') {
               fc4.confluence = window.hgCfConfluence(c4, {
@@ -453,9 +454,10 @@ on every page load since v1308:
     }
     var swHas = swingHasLevels(sw);
     var dirClass = swDir === 'BULL' ? 'long' : (swDir === 'BEAR' ? 'short' : '');
+    var missBit = (sw && sw.formed !== true && sw.missing) ? (' · ' + String(sw.missing)) : '';
     var dirLabel = swHas
-      ? (String((sw.formed === true && sw.label) ? sw.label : (sw.label || (swDir === 'BULL' ? 'LONG READ' : 'SHORT READ'))) + ' · SWING')
-      : 'NO SWING SETUP';
+      ? (String((sw.formed === true && sw.label) ? sw.label : (sw.label || (swDir === 'BULL' ? 'LONG READ' : 'SHORT READ'))) + ' · SWING' + (sw.formed === true ? '' : missBit))
+      : ('NO SWING SETUP' + missBit);
     var reasons = (forecast.reasons || []).map(function(r) {
       return '<li>' + String(r).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
     }).join('');
