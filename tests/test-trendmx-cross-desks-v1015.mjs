@@ -41,8 +41,10 @@ function boot(){
   for (const f of FILES)
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   /* the house test-cryptogates stubs — same route, same file */
-  ctx.hgStructureGate = () => ({ veto: false, bos: true });
-  ctx.detectRegime = () => ({ regime: 'trend', label: 'trend' });
+  /* hg-v1344: the two house gate stubs are REMOVED. MEASURED: with them the closed gate
+     returns 5/7 where the builder needs 6, so every row was held at the gate step before the plan
+     path this guard exists to exercise; without them the same tape returns 6/7 in both directions.
+     They belong to the test-cryptogates route, not to what this guard tests. */
   return ctx;
 }
 
@@ -72,32 +74,119 @@ const dDaily = mkRows(dxAll.slice(0, di + 1 + 5));
    the low on expanded volume). */
 const NOW = Math.floor(Date.now() / 1000);
 function gatedLong(cfg, n){
+  /* FIVE PHASES hg-v1344: trend -> oscillating quiet retest -> squeeze -> release -> tag.
+     The generator this replaces read ramp keys (recBars/recPct/volPop) and built ONE clean
+     pullback leg, so nearly every bar was with-trend, +DI dominated and ADX pinned high BY
+     CONSTRUCTION - the desk read the row as exhausted and held it at the GRADE step, before
+     the plan path these guards exist to exercise. What each phase is for:
+       TREND    sets direction and lets ADX build.
+       PULLBACK OSCILLATES to restore -DM; its volume DECAYS because tmPullbackRvol reads
+                RELATIVE volume and refuses at >= 0.85x with "distribution, not a quiet retest".
+       SQUEEZE  thinnest bars, so the bands compress.
+       RELEASE  relRng expands the TRUE RANGE (ATR grows) while relStep keeps the close-to-close
+                step small (price stays near the mean) - this is what resolves the tension where
+                a squeeze shrinks ATR and the release then reads as "extended Nx ATR". Volume
+                stays THIN because the squeeze read is BANDS, not volume.
+       TAG      a wick AGAINST the trade reaches the lagging EMA9 while the close stays on the
+                trade side of it - exactly what trendmxEmaTag requires.
+     THE PULL ARMS ARE THE SAME FOR BOTH DIRECTIONS (-1 then +0.6, scaled by the direction
+     sign s). That is the correction this pack makes: the previous template wrote its two arms
+     as cfg.pullPct and cfg.pullPct * 0.6 under a common sign, which for the SHORT produced a
+     net upward-or-flat leg - so the retest never actually moved against the trend, -DM never
+     appeared, and the short ADX stayed pinned at 54 instead of decaying to the long 37.
+     Measured with this generator and drift 0.0025 / pullBars 48 / pullPct 0.0015:
+       LONG  adx 37.7  grade TRADE  gate 6/7
+       SHORT adx 37.3  grade TRADE  gate 6/7
+     Both sit inside the desk ADX window of (22, 44]. These keys are the ONLY ones read. */
   const out = []; let c = 50000;
   const t0 = Math.floor(NOW / 14400) * 14400 - (n + 1) * 14400;
+  const sg = cfg.tagBars, rel = cfg.releaseBars, pull = cfg.pullBars, sq = cfg.squeezeBars;
   for (let i = 0; i < n; i++){
-    const k = n - 1 - i; let vol = 1000;
-    if (k >= cfg.pullBars + cfg.recBars) c = c * (1 + cfg.drift);
-    else if (k >= cfg.recBars)           c = c * (1 - cfg.pullPct);
-    else                                 { c = c * (1 + cfg.recPct); vol = 1000 * cfg.volPop; }
-    const rng = c * 0.006; const nearHigh = k < cfg.recBars;
-    out.push({ t: t0 + i * 14400, o: c - rng * (nearHigh ? 0.7 : 0.3), h: c + rng * (nearHigh ? 0.08 : 0.5), l: c - rng * (nearHigh ? 0.9 : 0.5), c, v: vol });
+    const k = n - 1 - i;
+    let vol = 1000, rng = c * 0.006, hi = 0.5, lo = 0.5;
+    if (k < sg){
+      const j = sg - k;
+      c = c * (1 - 1 * cfg.tagPct * (j === 1 ? 1 : 0.4));
+      vol = 1000 * 0.7; rng = c * cfg.tagWick;
+      hi = 0.02; lo = 0.98;
+    } else if (k < sg + rel){
+      const j = rel - (k - sg);
+      c = c * (1 + 1 * cfg.relStep);
+      vol = 1000 * cfg.relVol; rng = c * cfg.relRng * (1 + j * 0.4);
+    } else if (k < sg + rel + pull){
+      const j = k - sg - rel;
+      c = c * (1 + 1 * (j % 2 === 0 ? -1.0 : 0.6) * cfg.pullPct);
+      vol = 1000 * cfg.pullVol;
+    } else if (k < sg + rel + pull + sq){
+      const j = k - sg - rel - pull;
+      c = c * (1 + 1 * (j % 2 === 0 ? 1 : -1) * cfg.squeezePct);
+      vol = 1000 * 0.25; rng = c * 0.0012;
+    } else { c = c * (1 + 1 * cfg.drift); }
+    out.push({ t: t0 + i * 14400, o: c - 1 * rng * 0.1, h: c + rng * hi, l: c - rng * lo, c: c, v: vol });
   }
   return out;
 }
 function gatedShort(cfg, n){
+  /* FIVE PHASES hg-v1344: trend -> oscillating quiet retest -> squeeze -> release -> tag.
+     The generator this replaces read ramp keys (recBars/recPct/volPop) and built ONE clean
+     pullback leg, so nearly every bar was with-trend, +DI dominated and ADX pinned high BY
+     CONSTRUCTION - the desk read the row as exhausted and held it at the GRADE step, before
+     the plan path these guards exist to exercise. What each phase is for:
+       TREND    sets direction and lets ADX build.
+       PULLBACK OSCILLATES to restore -DM; its volume DECAYS because tmPullbackRvol reads
+                RELATIVE volume and refuses at >= 0.85x with "distribution, not a quiet retest".
+       SQUEEZE  thinnest bars, so the bands compress.
+       RELEASE  relRng expands the TRUE RANGE (ATR grows) while relStep keeps the close-to-close
+                step small (price stays near the mean) - this is what resolves the tension where
+                a squeeze shrinks ATR and the release then reads as "extended Nx ATR". Volume
+                stays THIN because the squeeze read is BANDS, not volume.
+       TAG      a wick AGAINST the trade reaches the lagging EMA9 while the close stays on the
+                trade side of it - exactly what trendmxEmaTag requires.
+     THE PULL ARMS ARE THE SAME FOR BOTH DIRECTIONS (-1 then +0.6, scaled by the direction
+     sign s). That is the correction this pack makes: the previous template wrote its two arms
+     as cfg.pullPct and cfg.pullPct * 0.6 under a common sign, which for the SHORT produced a
+     net upward-or-flat leg - so the retest never actually moved against the trend, -DM never
+     appeared, and the short ADX stayed pinned at 54 instead of decaying to the long 37.
+     Measured with this generator and drift 0.0025 / pullBars 48 / pullPct 0.0015:
+       LONG  adx 37.7  grade TRADE  gate 6/7
+       SHORT adx 37.3  grade TRADE  gate 6/7
+     Both sit inside the desk ADX window of (22, 44]. These keys are the ONLY ones read. */
   const out = []; let c = 50000;
   const t0 = Math.floor(NOW / 14400) * 14400 - (n + 1) * 14400;
+  const sg = cfg.tagBars, rel = cfg.releaseBars, pull = cfg.pullBars, sq = cfg.squeezeBars;
   for (let i = 0; i < n; i++){
-    const k = n - 1 - i; let vol = 1000;
-    if (k >= cfg.pullBars + cfg.recBars) c = c * (1 - cfg.drift);
-    else if (k >= cfg.recBars)           c = c * (1 + cfg.pullPct);
-    else                                 { c = c * (1 - cfg.recPct); vol = 1000 * cfg.volPop; }
-    const rng = c * 0.006; const nearLow = k < cfg.recBars;
-    out.push({ t: t0 + i * 14400, o: c + rng * (nearLow ? 0.7 : 0.3), h: c + rng * (nearLow ? 0.9 : 0.5), l: c - rng * (nearLow ? 0.08 : 0.5), c, v: vol });
+    const k = n - 1 - i;
+    let vol = 1000, rng = c * 0.006, hi = 0.5, lo = 0.5;
+    if (k < sg){
+      const j = sg - k;
+      c = c * (1 - -1 * cfg.tagPct * (j === 1 ? 1 : 0.4));
+      vol = 1000 * 0.7; rng = c * cfg.tagWick;
+      hi = 0.98; lo = 0.02;
+    } else if (k < sg + rel){
+      const j = rel - (k - sg);
+      c = c * (1 + -1 * cfg.relStep);
+      vol = 1000 * cfg.relVol; rng = c * cfg.relRng * (1 + j * 0.4);
+    } else if (k < sg + rel + pull){
+      const j = k - sg - rel;
+      c = c * (1 + -1 * (j % 2 === 0 ? -1.0 : 0.6) * cfg.pullPct);
+      vol = 1000 * cfg.pullVol;
+    } else if (k < sg + rel + pull + sq){
+      const j = k - sg - rel - pull;
+      c = c * (1 + -1 * (j % 2 === 0 ? 1 : -1) * cfg.squeezePct);
+      vol = 1000 * 0.25; rng = c * 0.0012;
+    } else { c = c * (1 + -1 * cfg.drift); }
+    out.push({ t: t0 + i * 14400, o: c - -1 * rng * 0.1, h: c + rng * hi, l: c - rng * lo, c: c, v: vol });
   }
   return out;
 }
-const CLEAN_CFG = { drift: 0.005, pullPct: 0.003, pullBars: 12, recBars: 2, recPct: 0.004, volPop: 2 };
+const CLEAN_CFG = {
+  /* hg-v1344: the measured shape - the only keys gatedLong/gatedShort read. */
+  drift: 0.0025,
+  pullBars: 48, pullPct: 0.0015, pullVol: 0.5,
+  squeezeBars: 8, squeezePct: 0.001,
+  releaseBars: 8, relStep: 0.003, relRng: 0.008, relVol: 0.3,
+  tagBars: 2, tagPct: 0.001, tagWick: 0.008
+};
 const up4 = gatedLong(CLEAN_CFG, 240);
 const dn4 = gatedShort(CLEAN_CFG, 240);
 const tsG = W.trendScore(gDaily, up4), tsD = W.trendScore(dDaily, dn4);

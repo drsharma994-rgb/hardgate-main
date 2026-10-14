@@ -557,7 +557,7 @@
       "expired": true
     },
     "OGN": {
-      "at": "2026-10-13T19:49:13.251Z",
+      "at": "2026-10-13T23:30:41.593Z",
       "score": 5,
       "fresh": true,
       "ago": 4,
@@ -597,15 +597,23 @@
       "expired": true
     },
     "S": {
-      "at": "2026-10-13T19:49:12.386Z",
+      "at": "2026-10-14T03:12:04.552Z",
       "score": 5,
       "fresh": true,
-      "ago": 1,
+      "ago": 2,
+      "crossDay": "2026-10-11",
+      "expired": true
+    },
+    "SOLV": {
+      "at": "2026-10-14T03:12:13.097Z",
+      "score": 2,
+      "fresh": true,
+      "ago": 2,
       "crossDay": "2026-10-11",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-13T19:49:33.238Z",
+  "lastRunAt": "2026-10-14T05:03:03.593Z",
   "scanned": 504,
   "cards": 0
 }

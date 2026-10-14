@@ -1,3 +1,4 @@
+    candles: el.querySelector('[data-r="candles"]'),   /* hg-v1337 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -576,9 +577,12 @@ W.trendmxLimitDeskHTML = trendmxLimitDeskHTML;
 W.trendmxSummaryLine = trendmxSummaryLine;
 W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
 W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
+W.trendmxCandleRead = trendmxCandleRead;               /* hg-v1337: shared candlestick engine, read only */
+W.trendmxCandleSetups = trendmxCandleSetups;           /* hg-v1337: trend side must agree; prices are trendmxPlan */
 W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
 W.trendmxGoldenDeskHTML = trendmxGoldenDeskHTML;   /* hg-v1015 */
 W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
+W.trendmxCandleDeskHTML = trendmxCandleDeskHTML; /* hg-v1337 */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
