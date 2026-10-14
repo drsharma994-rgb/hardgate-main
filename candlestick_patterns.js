@@ -10,7 +10,7 @@ Provides detection of classic and advanced formations for confluence.
   /**
    * Detects candlestick patterns on a series of OHLC bars.
    * @param {Array} rows - Array of {o, h, l, c} objects.
-   * @returns {Object} Object with bull/bear votes and names.
+   * @returns {Object} Object with bullVotes, bearVotes, bullNames, bearNames.
    */
   function detectPatterns(rows) {
     var res = {
