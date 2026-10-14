@@ -21282,8 +21282,79 @@ function hgCfDaySwings(rows, opts) {
   }
 }
 
+/* hg-v1351: WHAT THE CANDLE FORECAST TAB COULD NEVER ANSWER — does any of it pay?
+   The tab reads ~103 named shapes, six confluence families, eleven technical reads and
+   five desk votes, and until this pack it RECORDED NONE OF THEM. So the forward ledger
+   could never say whether a hammer on gold separates winners from losers: the tab formed
+   forecasts and the ledger held nothing to measure. That is the hg-v955 shape — a read
+   computed and never carried — and it is the reason this pack exists rather than a 104th
+   pattern. TRENDMX established the shape at hg-v1336 (tmCandleMarks folded through
+   tmRecordReads); these are the same four marks for the candle forecast, on the SAME
+   three-state contract so the ledger can split each of them.
+
+   hg-v989 THREE STATES, per key: true (the read held for this record), false (it did not),
+   ABSENT (not recorded — a quiet bar, a tie, or no direction named). A tie or a quiet bar
+   records NOTHING on the majority or withTrend marks, never a guessed false: the ledger
+   must be able to count "read nothing" and "was never asked" separately.
+
+   Reads `(result, rows)`:
+     result — the goldCandleForecast result (for patterns/dir);
+     rows   — the tape, used only to re-read the vote COUNTS through the one-home pattern
+              engine. A tie is deliberately NOT a majority, so 0/0 and 3/3 both record
+              nothing rather than inventing a side.
+
+   Nothing gates on any of this. The marks ride the ledger row and the ledger's read split
+   reports them; no gate, score or price reads a mark back. */
+function hgCfPatternMarks(result, rows) {
+  var out = {};
+  try {
+    if (!result || typeof result !== 'object') return out;
+    var named = Array.isArray(result.patterns) ? result.patterns.length : 0;
+    var adv = Array.isArray(result.advancedPatterns) ? result.advancedPatterns.length : 0;
+
+    /* the vote counts, re-read through the one-home engine so the majority is the
+       engine's own reading and not a second opinion (hg-v949). */
+    var bv = null, ev = null;
+    try {
+      var atrArr = (typeof atr === 'function' && Array.isArray(rows) && rows.length) ? atr(rows, 14) : null;
+      var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : null;
+      if (typeof hgCfCandlePatterns === 'function' && Array.isArray(rows) && rows.length && atrLast !== null && atrLast > 0) {
+        var pack = hgCfCandlePatterns(rows, atrLast);
+        if (pack && typeof pack === 'object') {
+          if (typeof pack.bullVotes === 'number' && isFinite(pack.bullVotes)) bv = pack.bullVotes;
+          if (typeof pack.bearVotes === 'number' && isFinite(pack.bearVotes)) ev = pack.bearVotes;
+        }
+      }
+    } catch (ePk) { bv = null; ev = null; }
+
+    var fired = (named > 0) || (adv > 0) || ((bv !== null && bv > 0) || (ev !== null && ev > 0));
+    if (fired) out['pattern:anyFire'] = true;
+
+    /* a MAJORITY needs a decided side; a tie records neither key (hg-v989). */
+    if (bv !== null && ev !== null) {
+      if (bv > ev) { out['pattern:bullMajority'] = true; out['pattern:bearMajority'] = false; }
+      else if (ev > bv) { out['pattern:bullMajority'] = false; out['pattern:bearMajority'] = true; }
+    }
+
+    /* withTrend: did the majority agree with the side the engine named? Only a
+       decided majority against a named side records this. */
+    var dir = (result.dir === 'BULL') ? 'long' : ((result.dir === 'BEAR') ? 'short' : null);
+    if (dir && bv !== null && ev !== null && bv !== ev) {
+      out['pattern:withTrend'] = (bv > ev) ? (dir === 'long') : (dir === 'short');
+    }
+
+    /* the horizon, so a scalp and a swing are splittable apart — they are different
+       trades and the ledger must not pool them. */
+    if (result.tf) out['cf:tf'] = String(result.tf).slice(0, 8);
+  } catch (eMk) { return out; }
+  return out;
+}
+
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
+  /* hg-v1351: the four three-state pattern marks, so the tab can carry them onto the
+     forward ledger row. Read by nothing that gates (asserted). */
+  window.hgCfPatternMarks = hgCfPatternMarks;
   /* hg-v1347: the diagnostic reader, exported so the Candle Forecast tab can
      name the specific blocker instead of printing one line for every one of
      the engine's six distinct null returns (hg-v940). */

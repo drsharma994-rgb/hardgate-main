@@ -284,6 +284,50 @@ on every page load since v1308:
         forecast.daySwings = { ok: false, setups: [], why: 'Confirmed swings could not be read. Nothing was invented.' };
       }
       this.renderResult(resultArea, statusEl, forecast);
+
+      /* hg-v1351: RECORD THE FORMED SETUPS, so the ledger can finally measure which
+         reads pay. Until this pack the tab computed ~103 named shapes, six confluence
+         families, eleven technical reads and five desk votes and carried NONE of them
+         onto the forward ledger — so the ledger could never answer "does a hammer on
+         gold separate winners from losers?", which is the hg-v955 shape: a read
+         computed and never carried. This is the same move TRENDMX made at hg-v1336.
+
+         RECORDED ONLY WHEN A BRACKET FORMED. A held row has no entry, stop or target,
+         and the ledger settles levels, not opinions — so a non-formed read is not
+         recorded rather than recorded empty. Both horizons record separately because a
+         scalp and a swing are different trades and must not be pooled.
+
+         Every field is passed EXPLICITLY. The hg-v955 note in goldscalp.js records
+         that a rebuilding map silently dropped a field three separate times in one
+         pass, so the marks are attached to the candidate object and carried by name,
+         never left to a spread that a later edit can quietly trim. */
+      try {
+        if (typeof window.hgFwdRecordScan === 'function' && typeof window.hgCfPatternMarks === 'function') {
+          var recs = [];
+          var mk = function (bracket, tape, source) {
+            try {
+              if (!bracket || !bracket.formed) return;
+              if (!(isFinite(+bracket.entry) && isFinite(+bracket.stop) && isFinite(+bracket.tp1))) return;
+              var lastBar = (Array.isArray(tape) && tape.length) ? tape[tape.length - 1] : null;
+              recs.push({
+                sym: 'XAUUSD',
+                dir: (bracket.dir === 'BEAR') ? 'short' : 'long',
+                entry: +bracket.entry, stop: +bracket.stop, t1: +bracket.tp1, t2: +bracket.tp2,
+                signalT: (lastBar && isFinite(+lastBar.t)) ? +lastBar.t : undefined,
+                mark: (lastBar && isFinite(+lastBar.c)) ? +lastBar.c : undefined,
+                feed: source || undefined,
+                reads: window.hgCfPatternMarks(forecast, tape)
+              });
+            } catch (eOne) { /* one unreadable bracket must not lose the other */ }
+          };
+          mk(forecast.scalp, candles, forecast.scalp && forecast.scalp.source);
+          mk(forecast.swing, (Array.isArray(c4) ? c4 : null), forecast.swing && forecast.swing.source);
+          if (recs.length && typeof window.hgFwdRecordScan === 'function') {
+            window.hgFwdRecordScan('CANDLEFORECAST', '15m', recs);
+          }
+        }
+      } catch (eRec) { /* the ledger is a measurement, never a reason the card fails */ }
+
       /* hg-v1325: the wide tally paints AFTER the card. The earlier call sat
          above renderResult, and the card replaces innerHTML, so the tally
          never stayed on screen. A thin count prints no stop. */
@@ -417,7 +461,29 @@ on every page load since v1308:
     }).join('');
     var namedPats = (forecast.patterns || []).concat(forecast.advancedPatterns || []);
     var patLine = namedPats.length ? namedPats.join(', ') : 'none';
+
+    /* hg-v1351: WHICH FEED PRICED THESE LEVELS. The loader chain is house gold tape →
+       BINANCE XAUUSDT (the metal) → BINANCE PAXGUSDT (a token, IUX-anchored). Those are
+       DIFFERENT INSTRUMENTS, and the swing can be read from a different leg than the
+       scalp on the same scan — so a reader comparing the two horizons, or checking a
+       level against their broker, had no way to know which one they were looking at.
+       The value was already carried on `forecast.source` and `swing.source`; nothing
+       rendered it. Both legs are named when they differ, because that difference is a
+       fact about the read, not a detail. */
+    var feedLine = (function () {
+      var esc = function (x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+      var s15 = String(forecast.source || '').trim();
+      var s4 = String((forecast.swing && forecast.swing.source) || '').trim();
+      if (!s15 && !s4) return '';
+      if (s15 && s4 && s15 !== s4) {
+        return '<li><b>Feed:</b> scalp ' + esc(s15) + ' · swing ' + esc(s4)
+          + ' <span class="note">(different legs — the levels are not from one instrument)</span></li>';
+      }
+      return '<li><b>Feed:</b> ' + esc(s15 || s4) + '</li>';
+    })();
+
     var levels = '<li><b>Published:</b> the 4h swing is shown on every scan. Confirmed swings for the day are still capped at two. A 15m scalp is not a published setup.</li>'
+      + feedLine
       + '<li><b>Gold desk:</b> ' + String(forecast.desk || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
       + '<li><b>Gold tabs:</b> ' + String(forecast.tabs || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
       + '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&').replace(/</g, '<') + '</li>'
