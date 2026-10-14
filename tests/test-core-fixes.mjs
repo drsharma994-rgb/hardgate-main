@@ -241,7 +241,12 @@ assert(html.includes("const HG_TAB_GROUP = {}") && html.includes("HG_TAB_GROUP[t
 assert(/function setHgGroup\(gid, openFirst\)/.test(html), 'setHgGroup(gid, openFirst) group switcher present');
 assert(/localStorage\.setItem\(HG_GROUP_KEY, gid\)/.test(html), 'active group persisted to localStorage');
 assert(/'hg_active_group'/.test(html), 'persistence key hg_active_group');
-assert(html.includes('GATES, NOT SCORES · 23+ TOOLS'), 'brand small-text carries the tool count');
+/* hg-v1346: the brand line no longer carries a tool count. It read 'GATES, NOT SCORES ·
+   23+ TOOLS' when this guard was written, and the shipped header has read
+   'HARDGATE — gates, not scores.' since v4 renamed the strip. Pinning the retired string
+   made this guard fail on a line the app deliberately changed, which is a stale fixture
+   rather than a defect, so it now asserts what the brand DOES carry. */
+assert(/HARDGATE — gates, not scores\./.test(html), 'brand small-text carries the house line');
 
 /* ================= 5. alertBusy auto-wait guard on all 10 scan entry points (v53) ================= */
 const GUARDED = ['runGold', 'runSmcScan', 'runObScan', 'runCoilScan', 'runApexScan',

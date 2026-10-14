@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (v1346)
+HARDGATE — gold-candle-forecast.js (v1356)
 Predictive Candle Forecasting Module. Uses ATR and momentum to forecast
 the next candle's range, direction, TP, and SL.
 
@@ -33,6 +33,13 @@ on every page load since v1308:
    * and momentum-based price action patterns.
    */
   var __cfPane = null;   /* hg-v1336: the pane already painted, by identity - not a boolean, so a fresh root can still build */
+
+  /* hg-v1349: THE ENGINE BAR FLOOR, named once. goldCandleForecast returns null below
+     this count, so every reader here must agree with it. It was 20 in the loader and in
+     this module guard while the engine wanted 30, and a 20-29 bar feed produced "Unread /
+     The candle read failed closed. Nothing was invented." with no way for a reader to
+     tell a thin tape from a broken engine. */
+  const CF_MIN_BARS = 30;
 
   const mod = {
     id: 'candle-forecast',
@@ -143,8 +150,8 @@ on every page load since v1308:
       const loaded = await this.loadGold15m();
       const prepared15 = this.prepareRows(loaded && loaded.rows, '15m');
       const candles = prepared15.rows;
-      if (!Array.isArray(candles) || candles.length < 30) {
-        throw new Error(this.unreadReason(candles, '15m', prepared15));
+      if (!Array.isArray(candles) || candles.length < CF_MIN_BARS) {
+        throw new Error('Gold 15m tape unread. ' + this.unreadReason(candles, '15m', prepared15));
       }
 
       if (typeof window.goldCandleForecast !== 'function') {
@@ -152,11 +159,31 @@ on every page load since v1308:
       }
 
       const tapes = await this.loadTapes();
+      if (tapes && typeof tapes === 'object') {
+        tapes.cachedDesks = true;
+        tapes.tf = '15m';
+      }
       const macroLive = await this.loadMacro();
       const forecast = window.goldCandleForecast(candles, macroLive, tapes);
       if (!forecast) {
-        resultArea.innerHTML = '<span class="note warn">The candle read failed closed: '
-          + mod.esc(this.unreadReason(candles, '15m', prepared15)) + ' Nothing was invented.</span>';
+        /* hg-v1347: name WHICH gate stopped the engine instead of the one
+           line that answered six different causes the same way (hg-v940).
+           goldCandleForecast has six distinct null returns and the module
+           printed the same shrug for all of them, which is why the user
+           saw this message across hg-v1338, v1342 and v1343 and could not
+           tell what to do about it. hgCfDiagnose names the specific cause
+           and lives beside the engine in goldind.js (one home, hg-v949),
+           so the two cannot drift and a re-bake of the engine's null set
+           moves the diagnostic with it. The reader fails open: with the
+           helper absent, the old line is kept. */
+        var diagWhy = (typeof window.hgCfDiagnose === 'function')
+          ? (function(){ try { return window.hgCfDiagnose(candles); } catch (eDg) { return null; } })()
+          : null;
+        var diagText = diagWhy ? String(diagWhy).replace(/</g, '') : '';
+        if (!diagText && prepared15 && prepared15.note) diagText = this.unreadReason(candles, '15m', prepared15);
+        resultArea.innerHTML = diagText
+          ? ('<span class="note warn">' + mod.esc(diagText) + '</span>')
+          : 'The candle read failed closed. Nothing was invented.';
         statusEl.textContent = 'Unread';
         return;
       }
@@ -222,8 +249,8 @@ on every page load since v1308:
         var loaded4 = await load4;
         var prepared4 = this.prepareRows(loaded4 && loaded4.rows, '4h');
         var c4 = prepared4.rows;
-        if (Array.isArray(c4) && c4.length >= 30) {
-          var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d });
+        if (Array.isArray(c4) && c4.length >= CF_MIN_BARS) {
+          var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d, rows15m: candles, tf: '4h', cachedDesks: true });
           try {
             if (fc4 && typeof window.hgCfConfluence === 'function') {
               fc4.confluence = window.hgCfConfluence(c4, {
@@ -265,6 +292,7 @@ on every page load since v1308:
         forecast.daySwings = { ok: false, setups: [], why: 'Confirmed swings could not be read. Nothing was invented.' };
       }
       this.renderResult(resultArea, statusEl, forecast);
+
       /* hg-v1325: the wide tally paints AFTER the card. The earlier call sat
          above renderResult, and the card replaces innerHTML, so the tally
          never stayed on screen. A thin count prints no stop. */
@@ -274,12 +302,42 @@ on every page load since v1308:
         /* The first call is the 15m tally. When the 4h tape was read, ask
            again with that tape so the wide tally can name a swing beside
            the scalp. The house stop is still not this tally's stop. */
-        if (conf && Array.isArray(c4) && c4.length >= 30 && typeof window.hgUltimateConfluence === 'function') {
+        if (conf && Array.isArray(c4) && c4.length >= CF_MIN_BARS && typeof window.hgUltimateConfluence === 'function') {
           var withSwing = window.hgUltimateConfluence(candles, { swingRows: c4 });
           if (withSwing) conf = withSwing;
         }
         if (conf) this.renderConfluence(resultArea, statusEl, conf);
       } catch (eConf) { /* optional read; the card stands on its own */ }
+
+      /* Record a formed bracket after the card and the tally. A non-formed
+         read is not recorded. Both horizons stay separate. The marks are
+         named, not spread. The ledger does not paint the card. */
+      try {
+        if (typeof window.hgFwdRecordScan === 'function' && typeof window.hgCfPatternMarks === 'function') {
+          var recs = [];
+          var mk = function (bracket, tape, source) {
+            try {
+              if (!bracket || !bracket.formed) return;
+              if (!(isFinite(+bracket.entry) && isFinite(+bracket.stop) && isFinite(+bracket.tp1))) return;
+              var lastBar = (Array.isArray(tape) && tape.length) ? tape[tape.length - 1] : null;
+              recs.push({
+                sym: 'XAUUSD',
+                dir: (bracket.dir === 'BEAR') ? 'short' : 'long',
+                entry: +bracket.entry, stop: +bracket.stop, t1: +bracket.tp1, t2: +bracket.tp2,
+                signalT: (lastBar && isFinite(+lastBar.t)) ? +lastBar.t : undefined,
+                mark: (lastBar && isFinite(+lastBar.c)) ? +lastBar.c : undefined,
+                feed: source || undefined,
+                reads: window.hgCfPatternMarks(forecast, tape)
+              });
+            } catch (eOne) { /* one unreadable bracket must not lose the other */ }
+          };
+          mk(forecast.scalp, candles, forecast.scalp && forecast.scalp.source);
+          mk(forecast.swing, (Array.isArray(c4) ? c4 : null), forecast.swing && forecast.swing.source);
+          if (recs.length && typeof window.hgFwdRecordScan === 'function') {
+            window.hgFwdRecordScan('CANDLEFORECAST', '15m', recs);
+          }
+        }
+      } catch (eRec) { /* the ledger is a measurement, never a reason the card fails */ }
 
     } catch (error) {
       console.error('[CandleForecast] Error:', error);
@@ -292,7 +350,7 @@ on every page load since v1308:
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   };
 
-  /* hg-v1346: forecast from CLOSED, VALID bars only. Binance klines include the
+  /* hg-v1356: forecast from CLOSED, VALID bars only. Binance klines include the
      still-forming candle; at the first tick that candle can have high === low,
      and the shared engine correctly refuses it as unmeasurable. Dropping that
      one live bar is not a price invention: the previous closed bar is the last
@@ -305,7 +363,7 @@ on every page load since v1308:
     if (!Array.isArray(rows)) return { rows: out, rawCount: rawCount, dropped: ['no candle array'], note: 'no candle array' };
     var seen = {};
     for (var i = 0; i < rows.length; i++) {
-      var r = rows[i];
+      var r = rows[i] || {};
       var row = { t: +r.t, o: +r.o, h: +r.h, l: +r.l, c: +r.c, v: +r.v };
       if (!isFinite(row.t) || !isFinite(row.o) || !isFinite(row.h) || !isFinite(row.l) || !isFinite(row.c)) {
         dropped.push('non-numeric bar');
@@ -355,15 +413,12 @@ on every page load since v1308:
     var bits = [];
     if (p.note) bits.push(p.note);
     if (!Array.isArray(rows) || !rows.length) bits.push('the feed returned no candles');
-    else if (clean.length < 30) bits.push('only ' + clean.length + ' closed/valid ' + tf + ' bars remain; the forecast needs 30');
+    else if (clean.length < CF_MIN_BARS) bits.push('only ' + clean.length + ' closed/valid ' + tf + ' bars remain; the forecast needs ' + CF_MIN_BARS);
     if (typeof window === 'undefined' || typeof window.atr !== 'function' || typeof window.ema !== 'function') {
       bits.push('the shared ATR/EMA helpers are not loaded');
     }
-    var engineWhy = (typeof window !== 'undefined' && window.goldCandleForecastLastError)
-      ? String(window.goldCandleForecastLastError) : '';
-    if (engineWhy) bits.push('engine: ' + engineWhy);
     if (!bits.length) bits.push('the shared engine could not measure this tape');
-    return bits.join(' · ') + '.';
+    return bits.join(' · ') + ' Nothing was invented.';
   };
 
   /* hg-v1318: ONE loader for every horizon. This was hard-wired to 15m, so the tab
@@ -380,15 +435,15 @@ on every page load since v1308:
       try { pack = await window.getGoldCandles(tf, count); } catch (e) { pack = null; }
     }
     var rows = pack && pack.rows;
-    if (rows && rows.length >= 20) return { rows: rows, source: pack.source || ('gold tape ' + tf) };
+    if (rows && rows.length >= CF_MIN_BARS) return { rows: rows, source: pack.source || ('gold tape ' + tf) };
     if (typeof window.binanceKlines === 'function') {
       try {
         var xau = await window.binanceKlines('XAUUSDT', tf, count);
-        if (xau && xau.length >= 20) return { rows: xau, source: 'BINANCE XAUUSDT ' + tf };
+        if (xau && xau.length >= CF_MIN_BARS) return { rows: xau, source: 'BINANCE XAUUSDT ' + tf };
       } catch (e2) {}
       try {
         var paxg = await window.binanceKlines('PAXGUSDT', tf, count);
-        if (paxg && paxg.length >= 20) {
+        if (paxg && paxg.length >= CF_MIN_BARS) {
           /* hg-v1310: a DIRECT PAXG fallback leaves the shared macro chain, so it
              is anchored here through the one home (gold-iux.js), exactly as
              getGoldCandles and goldscalp.js anchor their own packs — PAXG is a
@@ -468,14 +523,40 @@ on every page load since v1308:
     }
     var swHas = swingHasLevels(sw);
     var dirClass = swDir === 'BULL' ? 'long' : (swDir === 'BEAR' ? 'short' : '');
+    var missBit = (sw && sw.formed !== true && sw.missing) ? (' · ' + String(sw.missing)) : '';
+    var sessionBit = (sw && sw.session) ? (' · session ' + String(sw.session).replace(/</g, '')) : '';
     var dirLabel = swHas
-      ? (String((sw.formed === true && sw.label) ? sw.label : (sw.label || (swDir === 'BULL' ? 'LONG READ' : 'SHORT READ'))) + ' · SWING')
-      : 'NO SWING SETUP';
+      ? (String((sw.formed === true && sw.label) ? sw.label : (sw.label || (swDir === 'BULL' ? 'LONG READ' : 'SHORT READ'))) + ' · SWING' + (sw.formed === true ? '' : missBit) + sessionBit)
+      : ('NO SWING SETUP' + missBit + sessionBit);
     var reasons = (forecast.reasons || []).map(function(r) {
       return '<li>' + String(r).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
     }).join('');
     var namedPats = (forecast.patterns || []).concat(forecast.advancedPatterns || []);
     var patLine = namedPats.length ? namedPats.join(', ') : 'none';
+
+    /* hg-v1351: WHICH FEED PRICED THESE LEVELS. The loader chain is house gold tape →
+       BINANCE XAUUSDT (the metal) → BINANCE PAXGUSDT (a token, IUX-anchored). Those are
+       DIFFERENT INSTRUMENTS, and the swing can be read from a different leg than the
+       scalp on the same scan — so a reader comparing the two horizons, or checking a
+       level against their broker, had no way to know which one they were looking at.
+       The value was already carried on `forecast.source` and `swing.source`; nothing
+       rendered it. Both legs are named when they differ, because that difference is a
+       fact about the read, not a detail. */
+    var feedLine = (function () {
+      var esc = function (x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+      var s15 = String(forecast.source || '').trim();
+      var s4 = String((forecast.swing && forecast.swing.source) || '').trim();
+      if (s15 && forecast.feedNote) s15 += ' · ' + String(forecast.feedNote);
+      if (!s15 && !s4) return '';
+      if (s15 && s4 && s15 !== s4) {
+        return '<li><b>Feed:</b> scalp ' + esc(s15) + ' · swing ' + esc(s4)
+          + ' <span class="note">(different legs — the levels are not from one instrument)</span></li>';
+      }
+      return '<li><b>Feed:</b> ' + esc(s15 || s4) + '</li>';
+    })();
+    var faceFacts = '<div class="note" style="margin-top:4px;"><b>Last close:</b> <span style="font-weight:700;">' + mod.fmt(forecast.close) + '</span></div>'
+      + (feedLine ? feedLine.replace('<li>', '<div class="note" style="margin-top:2px;">').replace('</li>', '</div>') : '');
+
     var levels = '<li><b>Published:</b> the 4h swing is shown on every scan. Confirmed swings for the day are still capped at two. A 15m scalp is not a published setup.</li>'
       + '<li><b>Gold desk:</b> ' + String(forecast.desk || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
       + '<li><b>Gold tabs:</b> ' + String(forecast.tabs || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
@@ -505,7 +586,7 @@ on every page load since v1308:
         var lv = (tag === 'SCALP')
           ? '<div class="note" style="margin-top:4px;">Not published. The 4h swing is shown on every scan.</div>'
           : (showSwing
-            ? ('<div style="margin-top:4px;">' + swingLevelsHtml(bracket) + (bracket.formed === true ? '' : '<div class="note">Shown on every scan. Not a formed setup. These are the 4h call\'s own levels. Nothing new was priced.</div>') + '</div>')
+            ? '<div class="note" style="margin-top:4px;">Levels are on the swing above. They are not priced again here.</div>'
             : ('<div class="note" style="margin-top:4px;">' + String((bracket && bracket.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</div>'));
         var pat = (bracket.patterns && bracket.patterns.length) ? bracket.patterns.join(', ') : 'no named pattern';
         var adv = (bracket.advancedPatterns && bracket.advancedPatterns.length) ? (' · ' + bracket.advancedPatterns.join(', ')) : '';
@@ -605,20 +686,51 @@ on every page load since v1308:
 
     var dayHtml = (function () {
       var d = forecast.daySwings || { setups: [], why: 'Confirmed swings could not be read. Nothing was invented.' };
-      var items = (d.setups || []).map(function (s, idx) {
-        return '<li><b>' + (idx + 1) + '. ' + String(s.label || '').replace(/</g, '') + '</b> <span class="note">4h swing</span><br>Entry <b>' + mod.fmt(s.entry) + '</b> · <b>Stop:</b> <span class="neg" style="font-weight:700;">' + mod.fmt(s.stop) + '</span> · TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp1) + '</span>' + (s.tp2 == null ? '' : (' · TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp2) + '</span>')) + (s.parts ? ('<div class="note">' + String(s.parts).replace(/</g, '') + '</div>') : '') + '</li>';
+      function esc(x) { return String(x == null ? '' : x).replace(/</g, ''); }
+      function clockOf(s) {
+        var t = +(s && s.barT);
+        if (!(t > 0)) return '<div class="note">time unread</div>';
+        var ms = t < 1e12 ? t * 1000 : t;
+        var when = '';
+        try {
+          var dt = new Date(ms);
+          if (isFinite(dt.getTime())) when = dt.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+        } catch (eClk) { when = ''; }
+        var ses = '';
+        try {
+          if (typeof window.hgCfSessionName === 'function') ses = window.hgCfSessionName([{ t: t }]) || '';
+        } catch (eSes) { ses = ''; }
+        return '<div class="note">' + (when ? ('time ' + esc(when)) : 'time unread') + (ses ? (' · session ' + esc(ses)) : '') + '</div>';
+      }
+      var list = d.setups || [];
+      var items = list.map(function (s, idx) {
+        var same = !!(sw && idx === list.length - 1 && s.dir === sw.dir
+          && isFinite(+s.entry) && isFinite(+sw.entry) && +s.entry === +sw.entry
+          && isFinite(+s.stop) && isFinite(+sw.stop) && +s.stop === +sw.stop);
+        var head = '<li><b>' + (idx + 1) + '. ' + esc(s.label || '') + '</b> <span class="note">4h swing</span>';
+        var parts = s.parts ? ('<div class="note">' + esc(s.parts) + '</div>') : '';
+        if (same) return head + clockOf(s) + '<div class="note">This is the swing above. It is not priced again here.</div>' + parts + '</li>';
+        return head + clockOf(s) + '<br>Entry <b>' + mod.fmt(s.entry) + '</b> · <b>Stop:</b> <span class="neg" style="font-weight:700;">' + mod.fmt(s.stop) + '</span> · TP1 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp1) + '</span>' + (s.tp2 == null ? '' : (' · TP2 <span class="pos" style="font-weight:700;">' + mod.fmt(s.tp2) + '</span>')) + parts + '</li>';
       }).join('');
       return '<div class="note" data-cf-day-swings="1" style="margin:8px 0; border:1px solid var(--line); padding:8px;"><b>CONFIRMED SWING SETUPS</b> <span class="note">— two are enough for the day</span><div class="note">' + String(d.why || '').replace(/</g, '') + '</div>' + (items ? ('<ul class="lst">' + items + '</ul>') : '<div class="note">None shown.</div>') + '</div>';
+    })();
+    var fwdFace = (function () {
+      var why = (forecast.measure && forecast.measure.fwd4 && forecast.measure.fwd4.why)
+        ? String(forecast.measure.fwd4.why)
+        : 'The forward ledger was not read this scan. Nothing was counted as a win.';
+      return '<div class="note" data-cf-forward="1" style="margin:8px 0;"><b>Forward ledger, 4h.</b> ' + why.replace(/</g, '') + ' <span class="note">Out of sample. Not a probability.</span></div>';
     })();
     var alwaysHtml = (function () {
       var body;
       if (swHas) {
-        body = '<b class="' + dirClass + '">' + dirLabel + '</b><div style="margin-top:4px;">' + swingLevelsHtml(sw) + '</div>'
+        body = '<div style="margin-top:4px;">' + swingLevelsHtml(sw) + '</div>'
+          + faceFacts
           + (sw.formed === true
             ? '<div class="note">Shown on every scan. The day list does not hide this swing.</div>'
             : '<div class="note">Shown on every scan. Not a formed setup. These are the 4h call\'s own levels. Nothing new was priced.</div>');
       } else {
-        body = '<span class="note">' + String((sw && sw.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</span>';
+        body = '<span class="note">' + String((sw && sw.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</span>'
+          + faceFacts;
       }
       return '<div class="note" data-cf-swing-always="1" style="margin:8px 0; border:1px solid var(--line); padding:8px;"><b>SWING</b> <span class="note">— shown on every scan</span><div style="margin-top:4px;">' + body + '</div></div>';
     })();
@@ -628,11 +740,12 @@ on every page load since v1308:
         <div class="omni-side-call">${dirLabel}</div>
         ${alwaysHtml}
         ${dayHtml}
+        ${fwdFace}
+        <details data-cf-rest="1" style="margin-top:8px;">
+          <summary class="note">The rest of the read</summary>
         <ul class="lst">
-          <li><b>Last close:</b> <span style="font-weight:700;">${this.fmt(forecast.close)}</span></li>
           ${levels}
           <li><b>Reads:</b> ${forecast.agrees} for the call, ${forecast.against} against, of ${forecast.checked}</li>
-          ${forecast.source ? '<li><b>Tape:</b> ' + mod.esc(forecast.source) + (forecast.feedNote ? (' · ' + mod.esc(forecast.feedNote)) : '') + '</li>' : ''}
         </ul>
         <ul class="lst">${reasons}</ul>
         ${ultHtml}
@@ -643,6 +756,7 @@ on every page load since v1308:
         <div class="note" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">
           ${forecast.note || ''}
         </div>
+        </details>
       </div>
     `;
     statusEl.textContent = swHas ? dirLabel : 'No swing setup';

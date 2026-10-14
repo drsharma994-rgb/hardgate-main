@@ -1,4 +1,4 @@
-/* HARDGATE — hg-v1346 CANDLE FORECAST closed-bar guard.
+/* HARDGATE — hg-v1356 CANDLE FORECAST closed-bar guard.
 
    The live Binance kline feed includes the still-forming candle. At the first
    tick that candle can be flat (high === low), and the shared engine correctly
@@ -6,7 +6,7 @@
    live bar and forecast from the newest closed bar instead of painting
    "failed closed". If the engine still refuses, it must say why.
 
-   Run: node tests/test-candle-forecast-v1346.mjs */
+   Run: node tests/test-candle-forecast-v1356.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -29,7 +29,7 @@ function bootTab() {
   };
   const window = {
     HG_tabs: [],
-    HG_BUILD: { version: 'hg-v1346' },
+    HG_BUILD: { version: 'hg-v1356' },
     atr: function () { return [1]; },
     ema: function () { return [1]; }
   };
@@ -112,16 +112,16 @@ console.log('\n== 3) the tab scans the closed window, not the live bar ==');
 
   console.log('\n== 4) an engine refusal now says why ==');
   const boot = bootTab();
-  boot.window.goldCandleForecast = function () {
-    boot.window.goldCandleForecastLastError = 'the latest bar has no measurable range';
-    return null;
+  boot.window.goldCandleForecast = function () { return null; };
+  boot.window.hgCfDiagnose = function () {
+    return 'The last 15m bar has no range (high 4140.00 is not above low 4140.00), so the engine had no volatility to estimate.';
   };
   boot.mod.loadGold15m = async () => ({ rows: tape(35, Math.floor(Date.now() / 1000) - 900), source: 'test-feed' });
   boot.mod.loadTapes = async () => ({});
   boot.mod.loadMacro = async () => null;
   await boot.mod.runForecast();
-  ok(/failed closed/.test(boot.els.cfResultArea.innerHTML), 'the unread state is still honest');
-  ok(/latest bar has no measurable range/.test(boot.els.cfResultArea.innerHTML), 'the engine reason is printed');
+  ok(/no range/.test(boot.els.cfResultArea.innerHTML), 'the unread state is still honest');
+  ok(/no volatility to estimate/.test(boot.els.cfResultArea.innerHTML), 'the engine reason is printed');
   ok(boot.els.cfStatus.textContent === 'Unread', 'status remains Unread');
 }
 
@@ -129,8 +129,9 @@ console.log('\n== 5) the source pins the fix ==');
 {
   ok(/prepareRows[\s\S]*still-forming/.test(TAB), 'gold-candle-forecast.js owns the closed-bar preparation');
   ok(!/var __cfPane = null;[\s\S]{0,120}var __cfPane = null;/.test(TAB), 'the duplicate pane guard declaration is gone');
-  ok(/goldCandleForecastLastError/.test(ENGINE), 'the shared engine records the refusal reason');
-  ok(/latest bar has no measurable range/.test(ENGINE), 'the flat-bar refusal has a named reason');
+  ok(/function hgCfDiagnose/.test(ENGINE), 'the shared engine owns the refusal diagnostic');
+  ok(/goldCandleForecast\.lastError/.test(ENGINE), 'the shared engine records an internal refusal');
+  ok(/has no range/.test(ENGINE), 'the flat-bar refusal has a named reason');
 }
 
-console.log('\ntest-candle-forecast-v1346: ' + pass + ' passed, 0 failed');
+console.log('\ntest-candle-forecast-v1356: ' + pass + ' passed, 0 failed');

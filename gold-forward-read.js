@@ -271,6 +271,18 @@
         if (rdParts) rdHtml = '<div class="note" style="margin:6px 0;font-size:11px"><b>FREE-FEED LEGS &amp; INDICATOR STACK</b> — the free internet feeds this desk\u2019s ranker scores by (<code>free:</code>) and the bar-computed indicator reads it marks beside them (<code>ind:</code>, hg-v1158), each marked WITH / AGAINST or by its named state on every record at fire time; the split below counts them on settled records and gates nothing.</div>' + rdParts;
       }
     }catch(eRd){ rdHtml = ''; }
+    /* hg-v1298: PROFITABILITY AUDIT panel on the four desks the user named
+       (goldscalp, goldswing, goldpine, omnigold, ganeshgold). Returns '' for
+       other callers (optigold, goldpro, newgold, goldultra, super-gold), so
+       those desks' notes are unchanged. Appended LAST because this is
+       standing disclosure, not news; a reader scans the live verdict,
+       calendar, fill, evidence and read splits above it first. */
+    var auditHtml = '';
+    try{
+      if (typeof W.hgGoldAuditPanelHtml === 'function'){
+        auditHtml = W.hgGoldAuditPanelHtml(tabId) || '';
+      }
+    }catch(eA){ auditHtml = ''; }
     return '<div class="note" style="margin:6px 0;padding:6px 9px;border-left:3px solid #94A3B8;font-size:11px">'
       + '<b>' + head + '</b> — ' + body
       + ' <span style="opacity:.7">(pool: ' + esc(r.pools.join(', ')) + ')</span></div>' + cal
@@ -278,7 +290,8 @@
       + evHtml
       + rdHtml
       + hgGoldFwdIuxHtml(hgGoldFwdPools(tabId))
-      + heldHtml;
+      + heldHtml
+      + auditHtml;
   }
 
   W.HG_GOLD_FWD_MIN_JUDGE = FWD_MIN_JUDGE;

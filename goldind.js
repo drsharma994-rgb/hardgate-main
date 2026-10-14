@@ -19825,6 +19825,8 @@ function hgCfBuildSetup(rows, opts, fc) {
     out.structure = f.structure || null;
     out.desk = f.desk || null;
     out.higher = f.higher || null;
+    out.missing = null;
+    out.session = (typeof f.session === 'string') ? f.session : '';
     out.confluenceWhy = (f.confluence && f.confluence.why) || '';
     out.ticket = !!(f.confluence && f.confluence.ticket);
     out.confluenceView = null;
@@ -19884,6 +19886,7 @@ function hgCfBuildSetup(rows, opts, fc) {
       out.parts = f.setupParts || '';
       out.label = f.setup;                       /* 'LONG SETUP' / 'SHORT SETUP' */
       out.why = f.setup + ' on ' + out.tf + (out.parts ? ' — ' + out.parts : '');
+      out.missing = null;
     } else {
       out.label = (f.dir === 'BULL' ? 'LONG' : (f.dir === 'BEAR' ? 'SHORT' : 'NEUTRAL')) + ' READ';
       out.why = 'no ' + out.tf + ' setup: ' + (f.dir === 'NEUTRAL'
@@ -19891,6 +19894,7 @@ function hgCfBuildSetup(rows, opts, fc) {
         : 'a named pattern plus structure or a desk read must agree — ' + (f.reasons || []).filter(function (r) {
             return /no structure|no candlestick pattern|desk:/i.test(String(r));
           }).join(' · '));
+      out.missing = f.missing || null;
     }
     if (out.formed && isFinite(out.entry) && isFinite(out.stop)) {
       var sign = (out.dir === 'BULL') ? 1 : -1;
@@ -20481,35 +20485,186 @@ function hgCfConfluence(rows, opts, fc) {
     return out;
   }}
 
+function hgCfCachedDeskConfirm(rows, tapes) {
+  /* A gold tab that has already been scanned can confirm a named shape.
+     This reads only that tab's last scan in memory. It does not fetch and
+     it does not re-run a mint. A missing engine, a tab that was not
+     scanned, an empty scan, a record-only print, and a split scan are
+     unread. Unread is not agreement. Prices on the cached row are not read. */
+  var bulls = [], bears = [];
+  function hostFn(name) {
+    try {
+      if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name];
+    } catch (eH) {}
+    try {
+      if (typeof W !== 'undefined' && W && typeof W[name] === 'function') return W[name];
+    } catch (eW) {}
+    return null;
+  }
+  function word(v) {
+    var d = String(v || '').toLowerCase();
+    if (d === 'long' || d === 'bull' || d === 'bullish') return 'long';
+    if (d === 'short' || d === 'bear' || d === 'bearish') return 'short';
+    return '';
+  }
+  function oneSide(list) {
+    var lng = 0, sht = 0, i, d;
+    if (!Array.isArray(list)) return '';
+    for (i = 0; i < list.length; i++) {
+      d = word(list[i] && (list[i].dir || list[i].direction));
+      if (d === 'long') lng++;
+      else if (d === 'short') sht++;
+    }
+    if (lng > 0 && sht === 0) return 'long';
+    if (sht > 0 && lng === 0) return 'short';
+    return '';
+  }
+  function keep(label, side) {
+    if (side === 'long') bulls.push(label);
+    else if (side === 'short') bears.push(label);
+  }
+  try {
+    var ogFn = hostFn('optiGoldState');
+    if (ogFn) {
+      var og = ogFn();
+      if (og && Array.isArray(og.setups)) {
+        var live = [], i, s;
+        for (i = 0; i < og.setups.length; i++) {
+          s = og.setups[i];
+          if (s && (s.state === 'waiting' || s.state === 'open') && word(s.dir)) live.push({ dir: s.dir });
+        }
+        keep('OPTI GOLD', oneSide(live));
+      }
+    }
+  } catch (eOg) {}
+  try {
+    var sgFn = hostFn('superGoldScan');
+    if (sgFn) {
+      var sg = sgFn();
+      if (sg && Array.isArray(sg.cands)) keep('SUPER GOLD', oneSide(sg.cands));
+    }
+  } catch (eSg) {}
+  try {
+    var guFn = hostFn('goldUltraState');
+    if (guFn) {
+      var gu = guFn();
+      if (gu && gu.fire === true && gu.recordOnly !== true) keep('GOLD ULTRA', word(gu.dir));
+    }
+  } catch (eGu) {}
+  try {
+    var ggFn = hostFn('ganeshGoldState');
+    if (ggFn) {
+      var gg = ggFn();
+      if (gg && gg.ok !== false) keep('GANESH GOLD', word(gg.pick));
+    }
+  } catch (eGg) {}
+  var swingTape = !!(tapes && (tapes.tf === '4h' || tapes.horizon === 'swing'));
+  var nowMs = null;
+  if (Array.isArray(rows) && rows.length) {
+    var barT = +rows[rows.length - 1].t;
+    if (isFinite(barT)) nowMs = barT < 1e12 ? barT * 1000 : barT;
+  }
+  function listOf(r) {
+    if (Array.isArray(r)) return r;
+    if (r && Array.isArray(r.ranked)) return r.ranked;
+    if (r && r.dir) return [r];
+    return [];
+  }
+  function drive(label, fn, arg) {
+    if (typeof fn !== 'function') return;
+    try { keep(label, oneSide(listOf(fn(arg)))); } catch (eDrv) {}
+  }
+  /* The 15m mint is not run on 4h bars. That would invent a scalp the desk
+     did not form. A swing mint runs only on a 4h tape already in hand. */
+  if (!swingTape && Array.isArray(rows) && rows.length >= 30) {
+    drive('GOLD SCALP', hostFn('goldScalpSetups'), {
+      rows15m: rows,
+      rows1h: tapes && tapes.rows1h,
+      rows4h: tapes && tapes.rows4h,
+      now: nowMs,
+      news: null
+    });
+  }
+  var swingRows = swingTape ? rows : (tapes && tapes.rows4h);
+  if (Array.isArray(swingRows) && swingRows.length >= 30) {
+    drive('GOLD SWING', hostFn('goldSwingSetups'), {
+      rows4h: swingRows,
+      rows15m: swingTape ? (tapes && tapes.rows15m) : rows,
+      rows1d: tapes && tapes.rows1d,
+      now: nowMs,
+      news: null
+    });
+  }
+  if (Array.isArray(rows) && rows.length >= 30) {
+    var ngFn = hostFn('ngAssess');
+    if (typeof ngFn === 'function') {
+      try {
+        var ng = ngFn(rows);
+        if (ng && ng.dir) keep('NEW GOLD', word(ng.dir));
+      } catch (eNg) {}
+    }
+  }
+  try {
+    var pineFn = hostFn('goldPineScan');
+    if (typeof pineFn === 'function') {
+      var snap = pineFn();
+      if (snap) {
+        var bag = [];
+        if (Array.isArray(snap.scalp)) bag = bag.concat(snap.scalp);
+        if (Array.isArray(snap.swing)) bag = bag.concat(snap.swing);
+        keep('GOLD PINE', oneSide(bag));
+      }
+    }
+  } catch (ePi) {}
+  var line = bulls.concat(bears).join(', ');
+  if (!line) line = 'no scanned gold desk in cache';
+  return {
+    bullVotes: bulls.length ? 1 : 0,
+    bearVotes: bears.length ? 1 : 0,
+    bullNames: bulls,
+    bearNames: bears,
+    notes: line === 'no scanned gold desk in cache' ? [line] : [],
+    line: line
+  };
+}
+
+function hgCfSessionName(rows) {
+  /* The session is the shared killzone read. The card names it. It does not
+     vote and it does not move the stop. */
+  try {
+    var fn = (typeof hgGoldKillzoneRead === 'function') ? hgGoldKillzoneRead : null;
+    if (!fn && typeof globalThis !== 'undefined' && typeof globalThis.hgGoldKillzoneRead === 'function') fn = globalThis.hgGoldKillzoneRead;
+    if (typeof fn !== 'function' || !Array.isArray(rows) || !rows.length) return '';
+    var t = +rows[rows.length - 1].t;
+    if (!isFinite(t)) return '';
+    var read = fn(t < 1e12 ? t * 1000 : t);
+    if (!read || !read.zone) return '';
+    if (read.zone === 'OVERLAP') return 'London and New York';
+    if (read.zone === 'LONDON') return 'London';
+    if (read.zone === 'NY_AM') return 'New York';
+    if (read.zone === 'ASIAN') return 'Asia';
+    if (read.zone === 'OFF') return 'off session';
+    return '';
+  } catch (eSes) { return ''; }
+}
+
 function goldCandleForecast(rows) {
   var macro = arguments.length > 1 ? arguments[1] : null;
   var tapes = arguments.length > 2 ? arguments[2] : null;
-  function hgCfForecastNote(why) {
-    try {
-      var host = (typeof window !== 'undefined' && window)
-        ? window
-        : ((typeof globalThis !== 'undefined' && globalThis) ? globalThis : null);
-      if (host) host.goldCandleForecastLastError = String(why || '');
-    } catch (eNote) {}
-  }
-  function hgCfForecastFail(why) {
-    hgCfForecastNote(why);
-    return null;
-  }
-  hgCfForecastNote('');
   try {
+    try { goldCandleForecast.lastError = null; } catch (eClr) {}
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
        its standard error to mean anything and the empirical range needs a
        hundred-bar lookback to have a population to take a percentile of; at
        twenty bars the 60th percentile of nineteen true ranges is noise dressed
        as an estimate. Below the floor this returns null rather than projecting a
        band from a tape too short to support one. */
-    if (!Array.isArray(rows) || rows.length < 30) return hgCfForecastFail('fewer than 30 closed/valid bars');
-    if (typeof atr !== 'function' || typeof ema !== 'function') return hgCfForecastFail('the shared ATR/EMA helpers are not loaded');
+    if (!Array.isArray(rows) || rows.length < 30) return null;
+    if (typeof atr !== 'function' || typeof ema !== 'function') return null;
     var n = rows.length;
     var last = rows[n - 1];
     var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
-    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return hgCfForecastFail('the latest bar has a non-numeric price');
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
     /* hg-v1309: a bar with no range means NO VOLATILITY COULD BE ESTIMATED, so
        this is an honest null — the same "cannot forecast" as a thin tape, not a
        verdict. It used to return a partial object carrying dir:null, which put
@@ -20518,7 +20673,7 @@ function goldCandleForecast(rows) {
        two states are now separate at the top level: null means unreadable,
        NEUTRAL (a real, readable tape whose drift is inside the noise band)
        means read-and-declined. The guard pins both. */
-    if (!(h > l)) return hgCfForecastFail('the latest bar has no measurable range');
+    if (!(h > l)) return null;
     var atrArr = atr(rows, 14);
     var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
     var atrSource = 'ATR 14';
@@ -20530,11 +20685,11 @@ function goldCandleForecast(rows) {
        conflating the two would make this function claim to have read a tape it
        could not measure. The guard pins both: `tape(40, () => 0, 0)` is null and
        a flat tape with a real 2.0 range is NEUTRAL. */
-    if (!(atrLast > 0)) return hgCfForecastFail('volatility could not be measured');
+    if (!(atrLast > 0)) return null;
 
     var closes = [], i;
     for (i = 0; i < n; i++) {
-      if (!isFinite(+rows[i].c)) return hgCfForecastFail('a candle close is non-numeric');
+      if (!isFinite(+rows[i].c)) return null;
       closes.push(+rows[i].c);
     }
     var ema9 = ema(closes, 9);
@@ -20585,9 +20740,25 @@ function goldCandleForecast(rows) {
     else reasons.push('drift t ' + driftT.toFixed(2) + ' is inside the noise band — no vote');
 
     var pat = hgCfCandlePatterns(rows, atrLast);
+    /* A reader that forgot .names used to throw here, and the catch turned
+       a readable tape into a null. Missing fields are an empty pattern, not
+       a failed read. */
+    if (!pat || typeof pat !== 'object') pat = {};
+    if (!Array.isArray(pat.names)) pat.names = [];
+    if (!Array.isArray(pat.notes)) pat.notes = [];
+    if (!Array.isArray(pat.bullNames)) pat.bullNames = [];
+    if (!Array.isArray(pat.bearNames)) pat.bearNames = [];
+    if (!(pat.bullVotes > 0)) pat.bullVotes = 0;
+    if (!(pat.bearVotes > 0)) pat.bearVotes = 0;
     var struct = hgCfStructure(rows, atrLast);
     var desk = hgCfGoldDesk(rows, macro);
     var tabs = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [], notes: ['gold tabs are named under the call'], line: 'named under the call' };
+    if (tapes && tapes.cachedDesks === true) {
+      try {
+        var cachedTabs = hgCfCachedDeskConfirm(rows, tapes);
+        if (cachedTabs && typeof cachedTabs === 'object') tabs = cachedTabs;
+      } catch (eTabs) {}
+    }
     var pi;
     bulls += pat.bullVotes + struct.bullVotes + desk.bullVotes;
     bears += pat.bearVotes + struct.bearVotes + desk.bearVotes;
@@ -20607,9 +20778,20 @@ function goldCandleForecast(rows) {
        three-bar pattern the voter above already counted. It rides the result so
        the card can name it and the forward ledger can measure it. */
     var adv = hgCfAdvancedPatterns(rows, atrLast);
+    if (!adv || typeof adv !== 'object') adv = {};
+    if (!Array.isArray(adv.names)) adv.names = [];
+    if (!Array.isArray(adv.notes)) adv.notes = [];
+    if (!Array.isArray(adv.leans)) adv.leans = [];
     if (adv.names.length) reasons.push('advanced patterns: ' + adv.names.join(', '));
-    if (adv.where) reasons.push('pattern location: ' + adv.where
-      + (adv.aligned ? ' · the 20-bar drift is ' + adv.aligned : ''));
+    var sessionName = '';
+    try {
+      if (typeof hgCfSessionName === 'function') sessionName = hgCfSessionName(rows) || '';
+    } catch (eSes) { sessionName = ''; }
+    var locLine = adv.where
+      ? ('pattern location: ' + adv.where + (adv.aligned ? (' · the 20-bar drift is ' + adv.aligned) : ''))
+      : '';
+    if (sessionName) locLine = locLine ? (locLine + ' · session ' + sessionName) : ('pattern location: session ' + sessionName);
+    if (locLine) reasons.push(locLine);
     for (pi = 0; pi < adv.notes.length; pi++) reasons.push(adv.notes[pi]);
 
     var dir = null;
@@ -20754,6 +20936,15 @@ function goldCandleForecast(rows) {
         htf.bearNames.length ? htf.bearNames : null
       ]);
     }
+    var missing = null;
+    if (!setup && !neutral) {
+      var shapeNow = dir === 'BULL' ? bullShape : bearShape;
+      var blockedNow = dir === 'BULL' ? htfBlocksBull : htfBlocksBear;
+      var confirmNow = dir === 'BULL' ? bullConfirm : bearConfirm;
+      if (!shapeNow.length) missing = 'no named shape';
+      else if (blockedNow) missing = 'higher timeframe against';
+      else if (!confirmNow) missing = 'no structure or desk confirm';
+    }
     return {
       dir: dir,
       lean: dir,
@@ -20775,6 +20966,8 @@ function goldCandleForecast(rows) {
       higher: htf.line,
       setup: setup,
       setupParts: setupParts,
+      missing: missing,
+      session: sessionName || '',
       stopSource: stopSource,
       expectedHigh: +(c + expectedRange).toFixed(2),
       expectedLow: +(c - expectedRange).toFixed(2),
@@ -20797,7 +20990,63 @@ function goldCandleForecast(rows) {
             : 'No pattern stop in range, so the stop is one ATR. TP1 is one ATR. TP2 is two.'))
     };
   } catch (e) {
-    return hgCfForecastFail('internal read error: ' + String((e && e.message) || e));
+    try { goldCandleForecast.lastError = (e && e.message) ? String(e.message) : String(e); } catch (eSet) {}
+    return null;
+  }
+}
+
+/* hg-v1347: say WHICH gate stopped the candle read, not that it did.
+   goldCandleForecast has six distinct null returns (thin tape, atr/ema not
+   loaded, non-finite OHLC on the last bar, flat last bar h<=l, atr unread,
+   a non-finite close inside the window) and the module above printed ONE
+   message for all six — the hg-v940 trap, one message for N causes, which
+   left the user asking the same question across hg-v1338, v1342 and v1343.
+   This names the specific blocker without duplicating the engine's rule
+   (hg-v949): each check mirrors a line in goldCandleForecast above and
+   returns the same honest string the tab can render instead of the shrug.
+   Null only when a diagnoser cannot even check — never a guessed cause.
+   Fail OPEN at every seam: an unreadable row set still returns a message,
+   never an exception into the module's catch block above. */
+function hgCfDiagnose(rows) {
+  try {
+    if (!Array.isArray(rows)) return 'The 15m tape was not an array of bars, so no read was attempted.';
+    if (rows.length === 0) return 'The 15m tape was empty, so no read was attempted.';
+    if (rows.length < 30) {
+      return 'The 15m tape is too short — ' + rows.length + ' bars, the engine needs 30 for its ATR and drift reads to mean anything.';
+    }
+    if (typeof atr !== 'function' || typeof ema !== 'function') {
+      return 'The ATR or EMA readers were not loaded, so the engine stood aside.';
+    }
+    var last = rows[rows.length - 1];
+    if (!last || typeof last !== 'object') {
+      return 'The last 15m bar was not readable, so the engine stood aside.';
+    }
+    var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) {
+      return 'The last 15m bar has a missing open, high, low or close, so no read was attempted.';
+    }
+    if (!(h > l)) {
+      return 'The last 15m bar has no range (high ' + h.toFixed(2) + ' is not above low ' + l.toFixed(2) + '), so the engine had no volatility to estimate.';
+    }
+    var atrArr = null;
+    try { atrArr = atr(rows, 14); } catch (eA) { atrArr = null; }
+    var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
+    if (!(atrLast > 0)) atrLast = h - l;
+    if (!(atrLast > 0)) {
+      return 'The 15m tape carries no measurable range (ATR 14 unread and last bar flat), so the engine had nothing to project.';
+    }
+    for (var i = 0; i < rows.length; i++) {
+      var ci = +rows[i].c;
+      if (!isFinite(ci)) {
+        return 'The 15m tape has a non-finite close at bar ' + (i + 1) + ' of ' + rows.length + ', so the engine stood aside rather than invent one.';
+      }
+    }
+    var thrown = null;
+    try { thrown = (typeof goldCandleForecast === 'function') ? goldCandleForecast.lastError : null; } catch (eL) { thrown = null; }
+    if (thrown) return 'The 15m tape passed every read gate, but the engine threw: ' + String(thrown) + '. Nothing was invented.';
+    return 'The 15m tape read every gate in the forecast engine but the engine still returned no verdict. Re-run after the next closed bar.';
+  } catch (e) {
+    return 'The diagnostic could not read the 15m tape (' + ((e && e.message) || e) + '), so the engine stood aside.';
   }
 }
 
@@ -21190,9 +21439,11 @@ function hgCfDaySwings(rows, opts) {
       }
     }
     var canWalk = timesOk && out.day && typeof goldCandleForecast === 'function' && typeof hgCfBuildSetup === 'function';
+    var walked = 0;
     if (canWalk) {
       for (i = 30; i < rows.length; i++) {
         if (dayKey(rows[i].t) !== out.day) continue;
+        walked++;
         if (i === rows.length - 1 && live) {
           take(live, +rows[i].t, found);
           continue;
@@ -21212,10 +21463,24 @@ function hgCfDaySwings(rows, opts) {
     }
     out.setups = found;
     out.ok = true;
-    out.why = found.length
-      ? (found.length + ' confirmed swing setup' + (found.length === 1 ? '' : 's') + ' for ' + (out.day || 'this day') + '. Two are enough for the day.'
-        + (out.stoodDown ? (' ' + out.stoodDown + ' earlier confirmed swing' + (out.stoodDown === 1 ? ' was' : 's were') + ' stood down.') : ''))
-      : 'No confirmed swing setup for this day. An unconfirmed read is not shown. Nothing was invented.';
+    out.walked = walked;
+    if (found.length) {
+      out.why = found.length + ' confirmed swing setup' + (found.length === 1 ? '' : 's') + ' for ' + (out.day || 'this day') + '. Two are enough for the day.'
+        + (out.stoodDown ? (' ' + out.stoodDown + ' earlier confirmed swing' + (out.stoodDown === 1 ? ' was' : 's were') + ' stood down.') : '');
+    } else {
+      var knownMiss = '';
+      if (live && live.formed !== true && (live.missing === 'no named shape' || live.missing === 'higher timeframe against' || live.missing === 'no structure or desk confirm')) knownMiss = live.missing;
+      var walkedBit = canWalk
+        ? (walked + ' bar' + (walked === 1 ? ' of this day was walked. ' : 's of this day were walked. '))
+        : 'This day could not be walked. ';
+      var missBit = '';
+      if (knownMiss) missBit = 'The last 4h bar stopped on ' + knownMiss + '. ';
+      else if (live && live.formed === true && live.confluenceView && live.confluenceView.familiesAgainst > 0) missBit = 'The last 4h bar formed, then a family net against, so it is not shown. ';
+      else if (live && live.ok === false) missBit = 'The last 4h bar could not be read. ';
+      else if (live && (!live.dir || live.dir === 'NEUTRAL')) missBit = 'The last 4h bar named no side. ';
+      out.lastMissing = knownMiss || null;
+      out.why = 'No confirmed swing setup for this day. ' + walkedBit + missBit + 'An unconfirmed read is not shown. Nothing was invented.';
+    }
     return out;
   } catch (eDay) {
     out.setups = [];
@@ -21224,9 +21489,92 @@ function hgCfDaySwings(rows, opts) {
   }
 }
 
+/* hg-v1351: WHAT THE CANDLE FORECAST TAB COULD NEVER ANSWER — does any of it pay?
+   The tab reads ~103 named shapes, six confluence families, eleven technical reads and
+   five desk votes, and until this pack it RECORDED NONE OF THEM. So the forward ledger
+   could never say whether a hammer on gold separates winners from losers: the tab formed
+   forecasts and the ledger held nothing to measure. That is the hg-v955 shape — a read
+   computed and never carried — and it is the reason this pack exists rather than a 104th
+   pattern. TRENDMX established the shape at hg-v1336 (tmCandleMarks folded through
+   tmRecordReads); these are the same four marks for the candle forecast, on the SAME
+   three-state contract so the ledger can split each of them.
+
+   hg-v989 THREE STATES, per key: true (the read held for this record), false (it did not),
+   ABSENT (not recorded — a quiet bar, a tie, or no direction named). A tie or a quiet bar
+   records NOTHING on the majority or withTrend marks, never a guessed false: the ledger
+   must be able to count "read nothing" and "was never asked" separately.
+
+   Reads `(result, rows)`:
+     result — the goldCandleForecast result (for patterns/dir);
+     rows   — the tape, used only to re-read the vote COUNTS through the one-home pattern
+              engine. A tie is deliberately NOT a majority, so 0/0 and 3/3 both record
+              nothing rather than inventing a side.
+
+   Nothing gates on any of this. The marks ride the ledger row and the ledger's read split
+   reports them; no gate, score or price reads a mark back. */
+function hgCfPatternMarks(result, rows) {
+  var out = {};
+  try {
+    if (!result || typeof result !== 'object') return out;
+    var named = Array.isArray(result.patterns) ? result.patterns.length : 0;
+    var adv = Array.isArray(result.advancedPatterns) ? result.advancedPatterns.length : 0;
+
+    /* the vote counts, re-read through the one-home engine so the majority is the
+       engine's own reading and not a second opinion (hg-v949). */
+    var bv = null, ev = null;
+    try {
+      var atrArr = (typeof atr === 'function' && Array.isArray(rows) && rows.length) ? atr(rows, 14) : null;
+      var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : null;
+      if (typeof hgCfCandlePatterns === 'function' && Array.isArray(rows) && rows.length && atrLast !== null && atrLast > 0) {
+        var pack = hgCfCandlePatterns(rows, atrLast);
+        if (pack && typeof pack === 'object') {
+          if (typeof pack.bullVotes === 'number' && isFinite(pack.bullVotes)) bv = pack.bullVotes;
+          if (typeof pack.bearVotes === 'number' && isFinite(pack.bearVotes)) ev = pack.bearVotes;
+        }
+      }
+    } catch (ePk) { bv = null; ev = null; }
+
+    var fired = (named > 0) || (adv > 0) || ((bv !== null && bv > 0) || (ev !== null && ev > 0));
+    if (fired) out['pattern:anyFire'] = true;
+
+    /* a MAJORITY needs a decided side; a tie records neither key (hg-v989). */
+    if (bv !== null && ev !== null) {
+      if (bv > ev) { out['pattern:bullMajority'] = true; out['pattern:bearMajority'] = false; }
+      else if (ev > bv) { out['pattern:bullMajority'] = false; out['pattern:bearMajority'] = true; }
+    }
+
+    /* withTrend: did the majority agree with the side the engine named? Only a
+       decided majority against a named side records this. */
+    var dir = (result.dir === 'BULL') ? 'long' : ((result.dir === 'BEAR') ? 'short' : null);
+    if (dir && bv !== null && ev !== null && bv !== ev) {
+      out['pattern:withTrend'] = (bv > ev) ? (dir === 'long') : (dir === 'short');
+    }
+
+    /* the horizon, so a scalp and a swing are splittable apart — they are different
+       trades and the ledger must not pool them. */
+    if (result.tf) out['cf:tf'] = String(result.tf).slice(0, 8);
+  } catch (eMk) { return out; }
+  return out;
+}
+
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
+  /* hg-v1351: the four three-state pattern marks, so the tab can carry them onto the
+     forward ledger row. Read by nothing that gates (asserted). */
+  window.hgCfPatternMarks = hgCfPatternMarks;
+  /* hg-v1347: the diagnostic reader, exported so the Candle Forecast tab can
+     name the specific blocker instead of printing one line for every one of
+     the engine's six distinct null returns (hg-v940). */
+  window.hgCfDiagnose = hgCfDiagnose;
   window.hgCfConfluence = hgCfConfluence;
+  /* hg-v1336: the one-home candle pattern engine, exported so TREND MATRIX
+     (and any later caller) reads the same ATR-gated hammer/engulfing/
+     piercing/star/marubozu rules the gold candle forecast reads, rather
+     than a second copy (hg-v949). Reads `(rows, atrLast)` and returns
+     { bullVotes, bearVotes, names, bullNames, bearNames, notes,
+       longStop, shortStop } — three-state by construction: a pattern that
+     fires names its direction, a tie or no fire leaves the names empty. */
+  window.hgCfCandlePatterns = hgCfCandlePatterns;
   /* hg-v1317: the per-desk vote, exported so a guard can drive it directly and the
      tab can show which OTHER gold desks formed a side on the same tape. */
   window.hgCfDeskVotes = hgCfDeskVotes;

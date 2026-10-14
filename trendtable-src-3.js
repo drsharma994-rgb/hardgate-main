@@ -261,13 +261,20 @@ async function trendmxScanCore(hooks){
         var r1hc = tmClosedRows(r1h, 3600);
         if (!r4c.length || !r1c.length) return tmUnreadRow(item);
         var ts = trendScore(r1c, r4c);
+        /* hg-v1336: the candlestick pattern read, stamped on the row at scan
+           time off the SAME 4h closed-bar snapshot every other witness reads,
+           so the card renderer and the ledger see the exact same read. The
+           engine lives in goldind.js (hgCfCandlePatterns) — one home, hg-v949;
+           absent / under 6 bars / unreadable ATR all record null, hg-v989. */
+        var candleReads = tmCandleRead(r4c);
         var row = {
           sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
           xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
           rsi: ts.rsi,
           volDiv: ts.volDiv, volConf: ts.volConf,
           price: r4c[r4c.length - 1].c, rows4h: r4c, rows1d: r1c, rows1h: r1hc.length ? r1hc : null,
-          fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
+          fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark,
+          candleReads: candleReads
         };
         var dir = tmDirOf(row);
         if (!dir){ row.gate = null; return row; }

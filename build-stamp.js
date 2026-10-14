@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1346',
-  pack: 'CANDLE FORECAST closed-bar fix - the tab excludes the still-forming Binance candle, filters invalid bars without repairing prices, and prints the shared engine refusal reason instead of a bare failed-closed read.',
-  built: '2026-10-14T11:23:57Z'
+  version: 'hg-v1356',
+  pack: 'CANDLE FORECAST closed-bar fix - the tab excludes the still-forming Binance candle before the forecast, filters invalid bars without repairing prices, and keeps the shared diagnostic as the failure reason.',
+  built: '2026-10-14T21:30:00Z'
 };
 
 function hgBuildLabel(b){
@@ -197,6 +197,14 @@ G.hgBuildParseVersion = hgBuildParseVersion;
 G.hgBuildCompare = hgBuildCompare;
 G.hgBuildDistance = hgBuildDistance;
 G.hgBuildChipState = hgBuildChipState;
+/* hg-v1347: RESTORED. This export was lost resolving the merge conflict on this file,
+   and its absence is a real defect rather than a test nit: the freshness poll reads this
+   constant to choose its interval, and test-build-freshness-poll boots the REAL file and
+   asserts the clock is exposed. A constant the poll depends on must reach the window. */
+G.HG_BUILD_POLL_MS = HG_BUILD_POLL_MS;
+/* hg-v1347: RESTORED as well. The merge dropped this export too, and the freshness poll
+   calls it to decide whether the user is mid-edit before it reloads the tab. */
+G.hgBuildEditingNow = hgBuildEditingNow;
 G.hgBuildFreshness = hgBuildFreshness;
 G.hgBuildSwWaiting = hgBuildSwWaiting;
 G.hgRenderBuildChip = hgRenderBuildChip;
