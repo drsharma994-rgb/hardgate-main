@@ -35,6 +35,13 @@ on every page load since v1308:
   var __cfPane = null;   /* hg-v1336: the pane already painted, by identity - not a boolean, so a fresh root can still build */
   var __cfPane = null;
 
+  /* hg-v1349: THE ENGINE BAR FLOOR, named once. goldCandleForecast returns null below
+     this count, so every reader here must agree with it. It was 20 in the loader and in
+     this module guard while the engine wanted 30, and a 20-29 bar feed produced "Unread /
+     The candle read failed closed. Nothing was invented." with no way for a reader to
+     tell a thin tape from a broken engine. */
+  const CF_MIN_BARS = 30;
+
   const mod = {
     id: 'candle-forecast',
     label: 'CANDLE FORECAST',
@@ -143,7 +150,7 @@ on every page load since v1308:
     try {
       const loaded = await this.loadGold15m();
       const candles = loaded && loaded.rows;
-      if (!Array.isArray(candles) || candles.length < 20) {
+      if (!Array.isArray(candles) || candles.length < CF_MIN_BARS) {
         throw new Error('Gold 15m tape unread. No prices were invented.');
       }
 
@@ -314,15 +321,15 @@ on every page load since v1308:
       try { pack = await window.getGoldCandles(tf, count); } catch (e) { pack = null; }
     }
     var rows = pack && pack.rows;
-    if (rows && rows.length >= 20) return { rows: rows, source: pack.source || ('gold tape ' + tf) };
+    if (rows && rows.length >= CF_MIN_BARS) return { rows: rows, source: pack.source || ('gold tape ' + tf) };
     if (typeof window.binanceKlines === 'function') {
       try {
         var xau = await window.binanceKlines('XAUUSDT', tf, count);
-        if (xau && xau.length >= 20) return { rows: xau, source: 'BINANCE XAUUSDT ' + tf };
+        if (xau && xau.length >= CF_MIN_BARS) return { rows: xau, source: 'BINANCE XAUUSDT ' + tf };
       } catch (e2) {}
       try {
         var paxg = await window.binanceKlines('PAXGUSDT', tf, count);
-        if (paxg && paxg.length >= 20) {
+        if (paxg && paxg.length >= CF_MIN_BARS) {
           /* hg-v1310: a DIRECT PAXG fallback leaves the shared macro chain, so it
              is anchored here through the one home (gold-iux.js), exactly as
              getGoldCandles and goldscalp.js anchor their own packs — PAXG is a
