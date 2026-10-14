@@ -19825,6 +19825,8 @@ function hgCfBuildSetup(rows, opts, fc) {
     out.structure = f.structure || null;
     out.desk = f.desk || null;
     out.higher = f.higher || null;
+    out.missing = null;
+    out.session = (typeof f.session === 'string') ? f.session : '';
     out.confluenceWhy = (f.confluence && f.confluence.why) || '';
     out.ticket = !!(f.confluence && f.confluence.ticket);
     out.confluenceView = null;
@@ -20965,6 +20967,7 @@ function goldCandleForecast(rows) {
       setup: setup,
       setupParts: setupParts,
       missing: missing,
+      session: sessionName || '',
       stopSource: stopSource,
       expectedHigh: +(c + expectedRange).toFixed(2),
       expectedLow: +(c - expectedRange).toFixed(2),
@@ -21436,9 +21439,11 @@ function hgCfDaySwings(rows, opts) {
       }
     }
     var canWalk = timesOk && out.day && typeof goldCandleForecast === 'function' && typeof hgCfBuildSetup === 'function';
+    var walked = 0;
     if (canWalk) {
       for (i = 30; i < rows.length; i++) {
         if (dayKey(rows[i].t) !== out.day) continue;
+        walked++;
         if (i === rows.length - 1 && live) {
           take(live, +rows[i].t, found);
           continue;
@@ -21458,10 +21463,24 @@ function hgCfDaySwings(rows, opts) {
     }
     out.setups = found;
     out.ok = true;
-    out.why = found.length
-      ? (found.length + ' confirmed swing setup' + (found.length === 1 ? '' : 's') + ' for ' + (out.day || 'this day') + '. Two are enough for the day.'
-        + (out.stoodDown ? (' ' + out.stoodDown + ' earlier confirmed swing' + (out.stoodDown === 1 ? ' was' : 's were') + ' stood down.') : ''))
-      : 'No confirmed swing setup for this day. An unconfirmed read is not shown. Nothing was invented.';
+    out.walked = walked;
+    if (found.length) {
+      out.why = found.length + ' confirmed swing setup' + (found.length === 1 ? '' : 's') + ' for ' + (out.day || 'this day') + '. Two are enough for the day.'
+        + (out.stoodDown ? (' ' + out.stoodDown + ' earlier confirmed swing' + (out.stoodDown === 1 ? ' was' : 's were') + ' stood down.') : '');
+    } else {
+      var knownMiss = '';
+      if (live && live.formed !== true && (live.missing === 'no named shape' || live.missing === 'higher timeframe against' || live.missing === 'no structure or desk confirm')) knownMiss = live.missing;
+      var walkedBit = canWalk
+        ? (walked + ' bar' + (walked === 1 ? ' of this day was walked. ' : 's of this day were walked. '))
+        : 'This day could not be walked. ';
+      var missBit = '';
+      if (knownMiss) missBit = 'The last 4h bar stopped on ' + knownMiss + '. ';
+      else if (live && live.formed === true && live.confluenceView && live.confluenceView.familiesAgainst > 0) missBit = 'The last 4h bar formed, then a family net against, so it is not shown. ';
+      else if (live && live.ok === false) missBit = 'The last 4h bar could not be read. ';
+      else if (live && (!live.dir || live.dir === 'NEUTRAL')) missBit = 'The last 4h bar named no side. ';
+      out.lastMissing = knownMiss || null;
+      out.why = 'No confirmed swing setup for this day. ' + walkedBit + missBit + 'An unconfirmed read is not shown. Nothing was invented.';
+    }
     return out;
   } catch (eDay) {
     out.setups = [];

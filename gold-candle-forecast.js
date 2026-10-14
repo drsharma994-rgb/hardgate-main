@@ -445,9 +445,10 @@ on every page load since v1308:
     var swHas = swingHasLevels(sw);
     var dirClass = swDir === 'BULL' ? 'long' : (swDir === 'BEAR' ? 'short' : '');
     var missBit = (sw && sw.formed !== true && sw.missing) ? (' · ' + String(sw.missing)) : '';
+    var sessionBit = (sw && sw.session) ? (' · session ' + String(sw.session).replace(/</g, '')) : '';
     var dirLabel = swHas
-      ? (String((sw.formed === true && sw.label) ? sw.label : (sw.label || (swDir === 'BULL' ? 'LONG READ' : 'SHORT READ'))) + ' · SWING' + (sw.formed === true ? '' : missBit))
-      : ('NO SWING SETUP' + missBit);
+      ? (String((sw.formed === true && sw.label) ? sw.label : (sw.label || (swDir === 'BULL' ? 'LONG READ' : 'SHORT READ'))) + ' · SWING' + (sw.formed === true ? '' : missBit) + sessionBit)
+      : ('NO SWING SETUP' + missBit + sessionBit);
     var reasons = (forecast.reasons || []).map(function(r) {
       return '<li>' + String(r).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
     }).join('');
@@ -473,9 +474,10 @@ on every page load since v1308:
       }
       return '<li><b>Feed:</b> ' + esc(s15 || s4) + '</li>';
     })();
+    var faceFacts = '<div class="note" style="margin-top:4px;"><b>Last close:</b> <span style="font-weight:700;">' + mod.fmt(forecast.close) + '</span></div>'
+      + (feedLine ? feedLine.replace('<li>', '<div class="note" style="margin-top:2px;">').replace('</li>', '</div>') : '');
 
     var levels = '<li><b>Published:</b> the 4h swing is shown on every scan. Confirmed swings for the day are still capped at two. A 15m scalp is not a published setup.</li>'
-      + feedLine
       + '<li><b>Gold desk:</b> ' + String(forecast.desk || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
       + '<li><b>Gold tabs:</b> ' + String(forecast.tabs || 'unread').replace(/&/g, '&').replace(/</g, '<') + '</li>'
       + '<li><b>Patterns:</b> ' + patLine.replace(/&/g, '&').replace(/</g, '<') + '</li>'
@@ -504,7 +506,7 @@ on every page load since v1308:
         var lv = (tag === 'SCALP')
           ? '<div class="note" style="margin-top:4px;">Not published. The 4h swing is shown on every scan.</div>'
           : (showSwing
-            ? ('<div style="margin-top:4px;">' + swingLevelsHtml(bracket) + (bracket.formed === true ? '' : '<div class="note">Shown on every scan. Not a formed setup. These are the 4h call\'s own levels. Nothing new was priced.</div>') + '</div>')
+            ? '<div class="note" style="margin-top:4px;">Levels are on the swing above. They are not priced again here.</div>'
             : ('<div class="note" style="margin-top:4px;">' + String((bracket && bracket.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</div>'));
         var pat = (bracket.patterns && bracket.patterns.length) ? bracket.patterns.join(', ') : 'no named pattern';
         var adv = (bracket.advancedPatterns && bracket.advancedPatterns.length) ? (' · ' + bracket.advancedPatterns.join(', ')) : '';
@@ -612,12 +614,14 @@ on every page load since v1308:
     var alwaysHtml = (function () {
       var body;
       if (swHas) {
-        body = '<b class="' + dirClass + '">' + dirLabel + '</b><div style="margin-top:4px;">' + swingLevelsHtml(sw) + '</div>'
+        body = '<div style="margin-top:4px;">' + swingLevelsHtml(sw) + '</div>'
+          + faceFacts
           + (sw.formed === true
             ? '<div class="note">Shown on every scan. The day list does not hide this swing.</div>'
             : '<div class="note">Shown on every scan. Not a formed setup. These are the 4h call\'s own levels. Nothing new was priced.</div>');
       } else {
-        body = '<span class="note">' + String((sw && sw.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</span>';
+        body = '<span class="note">' + String((sw && sw.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</span>'
+          + faceFacts;
       }
       return '<div class="note" data-cf-swing-always="1" style="margin:8px 0; border:1px solid var(--line); padding:8px;"><b>SWING</b> <span class="note">— shown on every scan</span><div style="margin-top:4px;">' + body + '</div></div>';
     })();
@@ -630,10 +634,8 @@ on every page load since v1308:
         <details data-cf-rest="1" style="margin-top:8px;">
           <summary class="note">The rest of the read</summary>
         <ul class="lst">
-          <li><b>Last close:</b> <span style="font-weight:700;">${this.fmt(forecast.close)}</span></li>
           ${levels}
           <li><b>Reads:</b> ${forecast.agrees} for the call, ${forecast.against} against, of ${forecast.checked}</li>
-          ${forecast.source ? '<li><b>Tape:</b> ' + String(forecast.source).replace(/</g, '') + '</li>' : ''}
         </ul>
         <ul class="lst">${reasons}</ul>
         ${ultHtml}
