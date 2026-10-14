@@ -265,6 +265,11 @@
       "version": "hg-v1359",
       "built": "2026-10-15T00:00:00Z",
       "note": "Super Gold crowns a pick only when GOLD SCALP and GOLD SWING are on the same side. A missing desk is unread and is not agreement. A desk that stood aside is not a merged pick. Only the crowned row is a forward ticket."
+    },
+    {
+      "version": "hg-v1360",
+      "built": "2026-10-15T00:30:00Z",
+      "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR — a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
     }
   ]
 }

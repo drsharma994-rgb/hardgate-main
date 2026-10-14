@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — candle-forecast-intel.js (hg-v1357)
+HARDGATE — candle-forecast-intel.js (hg-v1360)
 The Candle Forecast intelligence layer. PURE COMPUTATION ONLY: this module
 owns no DOM, no timers and no network. gold-candle-forecast.js hands it
 closed, prepared bars and renders what it returns.
@@ -403,7 +403,7 @@ Surface (window.hgCfIntel):
      test. */
   function patternPerf(rows, opts) {
     opts = opts || {};
-    var out = { ok: false, label: 'in-sample on this tape only. Not a forward result and not a probability.', windows: 0, calls: 0, correct: 0, byPattern: {}, why: '' };
+    var out = { ok: false, label: 'in-sample on this tape only. Not a forward result and not a probability.', windows: 0, calls: 0, correct: 0, follow3: 0, follow3N: 0, byPattern: {}, why: '' };
     rows = _arr(rows);
     if (rows.length < 45) {
       out.why = 'the tape is too thin to walk (' + rows.length + ' bars). Nothing was counted.';
@@ -439,6 +439,17 @@ Surface (window.hgCfIntel):
       var right = (dir === 'BULL' && move > 0) || (dir === 'BEAR' && move < 0);
       out.calls++;
       if (right) out.correct++;
+      /* hg-v1358: the three-bar follow-through beside the next-bar read. A
+         one-bar settle answers "was the next candle the called colour"; the
+         three-bar settle answers "did the call travel". Only counted when
+         three further closed bars exist. */
+      if (i + 3 < rows.length) {
+        var m3 = _f(rows[i + 3].c) - _f(slice[slice.length - 1].c);
+        if (isFinite(m3)) {
+          out.follow3N++;
+          if ((dir === 'BULL' && m3 > 0) || (dir === 'BEAR' && m3 < 0)) out.follow3++;
+        }
+      }
       var names = _arr(fc.patterns).concat(_arr(fc.advancedPatterns));
       if (!names.length) names = ['(no named pattern)'];
       names.forEach(function (nm) {
@@ -451,7 +462,9 @@ Surface (window.hgCfIntel):
     }
     out.ok = true;
     out.why = out.calls
-      ? (out.calls + ' directional calls across ' + out.windows + ' windows, ' + out.correct + ' settled right on the next bar. ' + out.label)
+      ? (out.calls + ' directional calls across ' + out.windows + ' windows, ' + out.correct + ' settled right on the next bar'
+        + (out.follow3N ? (', ' + out.follow3 + ' of ' + out.follow3N + ' still with the call three bars later') : '')
+        + '. ' + out.label)
       : ('the engine named no directional call inside this window. Nothing was counted. ' + out.label);
     return out;
   }
@@ -546,8 +559,164 @@ Surface (window.hgCfIntel):
     return list;
   }
 
+  /* ---------- session context (hg-v1358) ----------
+     The gold killzone clock from gold-session.js, read AT CALL TIME (that
+     module loads after this one). Context for the reader, never a vote and
+     never a stop-mover — the same doctrine the card already prints. */
+  function sessionOverlay(nowMs) {
+    var out = { ok: false, zone: 'UNREAD', label: '', weight: NaN, scalp: '', why: '' };
+    try {
+      if (typeof G.hgGoldKillzoneRead !== 'function') {
+        out.why = 'the shared session clock is not loaded';
+        return out;
+      }
+      var kz = G.hgGoldKillzoneRead(isFinite(_f(nowMs)) ? +nowMs : Date.now());
+      out.ok = true;
+      out.zone = String(kz.zone || 'OFF');
+      out.label = String(kz.label || 'OFF-HOURS');
+      out.weight = _f(kz.weight);
+      try {
+        if (typeof G.hgGoldScalpSession === 'function') {
+          var sc = G.hgGoldScalpSession(isFinite(_f(nowMs)) ? +nowMs : Date.now());
+          out.scalp = String((sc && (sc.label || sc.zone)) || '');
+        }
+      } catch (eSc) { out.scalp = ''; }
+      out.why = out.weight >= 2
+        ? 'gold\'s high-liquidity window — moves here travel furthest'
+        : (out.weight === 1
+          ? 'a working session, not the killzone'
+          : (out.zone === 'ASIAN' ? 'the Asian range — breakouts here fail more often' : 'off-hours — thin tape, wider spreads'));
+      return out;
+    } catch (e) {
+      out.why = 'session read failed: ' + (e && e.message);
+      return out;
+    }
+  }
+
+  /* ---------- the forecast cone (hg-v1358) ----------
+     NOT a target: the band the next N closed bars would statistically stay
+     inside if volatility holds at the measured ATR, widened by sqrt(h) and
+     tilted by the EMA slope. A cone is a range with a lean; it prints no
+     entry and no stop. */
+  function forecastCone(rows, opts) {
+    opts = opts || {};
+    var bars = isFinite(+opts.bars) ? Math.max(1, Math.min(6, +opts.bars)) : 3;
+    var out = { ok: false, bars: bars, steps: [], drift: 0, why: '' };
+    rows = _arr(rows);
+    if (rows.length < CF_INTEL_MIN_BARS) {
+      out.why = rows.length + ' closed bars — the cone needs ' + CF_INTEL_MIN_BARS;
+      return out;
+    }
+    var atr = _atr(rows, 14);
+    var close = _f(rows[rows.length - 1].c);
+    if (!isFinite(atr) || !(atr > 0) || !isFinite(close)) {
+      out.why = 'the last close or ATR could not be measured';
+      return out;
+    }
+    var closes = rows.map(function (r) { return _f(r.c); }).filter(isFinite);
+    var e9 = _ema(closes, 9);
+    var fN = e9[e9.length - 1], fP = e9[e9.length - 4];
+    /* drift per bar: a third of the three-bar EMA9 move, capped at half an
+       ATR so a trend tilt can never outrun the volatility that carries it */
+    var drift = (isFinite(fN) && isFinite(fP)) ? (fN - fP) / 9 : 0;
+    var cap = atr * 0.5;
+    if (drift > cap) drift = cap;
+    if (drift < -cap) drift = -cap;
+    for (var h = 1; h <= bars; h++) {
+      var half = atr * Math.sqrt(h);
+      out.steps.push({
+        bar: h,
+        mid: +(close + drift * h).toFixed(2),
+        low: +(close + drift * h - half).toFixed(2),
+        high: +(close + drift * h + half).toFixed(2)
+      });
+    }
+    out.ok = true;
+    out.drift = +drift.toFixed(3);
+    out.why = 'one ATR (' + atr.toFixed(2) + ') widened by sqrt(bars)'
+      + (Math.abs(drift) > 0.001 ? (', tilted ' + (drift > 0 ? 'up' : 'down') + ' ' + Math.abs(drift).toFixed(2) + '/bar by the EMA9 slope (capped at half an ATR)') : ', no tilt')
+      + '. A range with a lean — not a target and not a stop.';
+    return out;
+  }
+
+  /* ---------- the setup grade (hg-v1358) ----------
+     A COUNT, not a score with hidden weights: every check is printed, the
+     grade is how many passed. A = 6+, B = 4-5, C = fewer or any hard fail
+     (feed lock, blackout). Unread checks fail open to "not counted" and say
+     so — they are never counted as passes. */
+  function setupGrade(forecast, intel) {
+    var out = { ok: false, grade: 'NONE', passed: 0, total: 0, checks: [], why: '' };
+    forecast = forecast || {};
+    intel = intel || {};
+    function check(label, passed, note) {
+      out.checks.push({ label: label, passed: passed === true, note: note || '' });
+      out.total++;
+      if (passed === true) out.passed++;
+    }
+    var dir = forecast.dir === 'BULL' || forecast.dir === 'BEAR';
+    check('the engine named a side', dir, dir ? String(forecast.dir) : 'no side');
+    var named = _arr(forecast.patterns).concat(_arr(forecast.advancedPatterns));
+    check('a named candlestick pattern', named.length > 0, named.length ? named.slice(0, 3).join(', ') : 'none named');
+    var cfl = forecast.confluence;
+    check('the confluence ticket', !!(cfl && cfl.ok && cfl.ticket), (cfl && cfl.why) ? String(cfl.why) : 'confluence unread');
+    var sm = intel.structure;
+    var atLoc = !!(sm && sm.ok && _arr(sm.items).some(function (it) { return it.near; }));
+    check('price at marked structure', atLoc, sm && sm.ok ? (atLoc ? 'structure within 2 ATR' : 'no marked structure at price') : 'structure unread');
+    var ft = intel.fiveTf;
+    check('four-of-five timeframes', !!(ft && ft.aligned !== 'NONE'), ft ? String(ft.why) : 'matrix unread');
+    var vr = intel.volRegime;
+    check('a tradeable volatility regime', !!(vr && vr.ok && (vr.regime === 'NORMAL' || vr.regime === 'EXPANSION')), vr && vr.ok ? vr.regime : 'regime unread');
+    var fq = intel.feedQuality;
+    check('the feeds agree', !!(fq && fq.ok && !fq.lock), fq ? String(fq.why) : 'feeds unread');
+    var nw = intel.news;
+    check('no news blackout', !!(nw && nw.ok && !nw.blackout), nw ? String(nw.note || nw.state) : 'calendar unchecked');
+    var hardFail = !!(fq && fq.lock) || !!(nw && nw.blackout);
+    out.grade = !dir ? 'NONE' : (hardFail ? 'C' : (out.passed >= 6 ? 'A' : (out.passed >= 4 ? 'B' : 'C')));
+    out.ok = true;
+    out.why = out.passed + ' of ' + out.total + ' checks passed'
+      + (hardFail ? ' — a feed lock or a blackout caps any grade at C' : '')
+      + '. The grade is a count of printed checks, not a probability.';
+    return out;
+  }
+
+  /* ---------- distance to the bracket (hg-v1358) ----------
+     How far the last close sits from the entry and the stop, in dollars and
+     in ATR — the two numbers a reader needs to know if an ARMED setup is
+     reachable this candle or already gone. Quoted from the bracket, never
+     re-priced. */
+  function distanceCard(forecast, execCard) {
+    var out = { ok: false, why: '' };
+    forecast = forecast || {};
+    if (!execCard || !isFinite(_f(execCard.entry))) {
+      out.why = 'no bracket on the card';
+      return out;
+    }
+    var close = _f(forecast.close);
+    var atr = _f(forecast.atr);
+    if (!isFinite(close)) { out.why = 'the last close is unread'; return out; }
+    if (!isFinite(atr) || !(atr > 0)) {
+      var rows = _arr(forecast.rows);
+      atr = rows.length ? _atr(rows, 14) : NaN;
+    }
+    var toEntry = _f(execCard.entry) - close;
+    var toStop = _f(execCard.stop) - close;
+    var toTp1 = isFinite(_f(execCard.tp1)) ? _f(execCard.tp1) - close : NaN;
+    out.ok = true;
+    out.close = close;
+    out.toEntry = +toEntry.toFixed(2);
+    out.toStop = +toStop.toFixed(2);
+    out.toTp1 = isFinite(toTp1) ? +toTp1.toFixed(2) : null;
+    out.atr = isFinite(atr) && atr > 0 ? +atr.toFixed(2) : null;
+    out.toEntryAtr = (out.atr != null) ? +(toEntry / atr).toFixed(2) : null;
+    out.why = 'last close ' + close.toFixed(2)
+      + ' sits ' + Math.abs(toEntry).toFixed(2) + (out.atr != null ? (' (' + Math.abs(out.toEntryAtr) + ' ATR)') : '')
+      + (toEntry === 0 ? ' at' : (((execCard.dir === 'BULL') === (toEntry > 0)) ? ' away from' : ' past'))
+      + ' the ' + String(execCard.horizon || '').toLowerCase() + ' entry';
+    return out;
+  }
+
   G.hgCfIntel = {
-    version: 'hg-v1357',
+    version: 'hg-v1360',
     MIN_BARS: CF_INTEL_MIN_BARS,
     tfDir: tfDir,
     fiveTf: fiveTf,
@@ -557,6 +726,10 @@ Surface (window.hgCfIntel):
     feedQuality: feedQuality,
     patternPerf: patternPerf,
     executionCard: executionCard,
-    blockers: blockers
+    blockers: blockers,
+    sessionOverlay: sessionOverlay,
+    forecastCone: forecastCone,
+    setupGrade: setupGrade,
+    distanceCard: distanceCard
   };
 })();

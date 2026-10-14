@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1359',
-  pack: 'hg-v1359: Super Gold crowns a pick only when GOLD SCALP and GOLD SWING are on the same side. A missing desk is unread and is not agreement. A desk that stood aside is not a merged pick. Only the crowned row is a forward ticket. hg-v1358: Super Gold does not invent a target the source row never had. A long and a short on the board are not crowned and no price is blended. A source scan older than 20 minutes is shown and not crowned. The weekend line uses the bar time. CANDLE FORECAST intelligence layer - execution card, five-timeframe alignment, structure map, volatility regime, news execution risk, cross-feed quality, in-sample pattern record, forward ledger readout, mini chart, blockers panel, and one alert path.',
-  built: '2026-10-15T00:00:00Z'
+  version: 'hg-v1360',
+  pack: 'CANDLE FORECAST v1360 - setup grade with printed checks, forecast cone for the next three closed bars, session killzone context, distance-to-bracket in dollars and ATR, and three-bar follow-through on the pattern record. Includes hg-v1359 Super Gold desk-agreement crowning.',
+  built: '2026-10-15T00:30:00Z'
 };
 
 function hgBuildLabel(b){
