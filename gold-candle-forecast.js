@@ -155,7 +155,22 @@ on every page load since v1308:
       const macroLive = await this.loadMacro();
       const forecast = window.goldCandleForecast(candles, macroLive, tapes);
       if (!forecast) {
-        resultArea.innerHTML = 'The candle read failed closed. Nothing was invented.';
+        /* hg-v1347: name WHICH gate stopped the engine instead of the one
+           line that answered six different causes the same way (hg-v940).
+           goldCandleForecast has six distinct null returns and the module
+           printed the same shrug for all of them, which is why the user
+           saw this message across hg-v1338, v1342 and v1343 and could not
+           tell what to do about it. hgCfDiagnose names the specific cause
+           and lives beside the engine in goldind.js (one home, hg-v949),
+           so the two cannot drift and a re-bake of the engine's null set
+           moves the diagnostic with it. The reader fails open: with the
+           helper absent, the old line is kept. */
+        var diagWhy = (typeof window.hgCfDiagnose === 'function')
+          ? (function(){ try { return window.hgCfDiagnose(candles); } catch (eDg) { return null; } })()
+          : null;
+        resultArea.innerHTML = diagWhy
+          ? ('<span class="note warn">' + String(diagWhy).replace(/</g, '') + '</span>')
+          : 'The candle read failed closed. Nothing was invented.';
         statusEl.textContent = 'Unread';
         return;
       }

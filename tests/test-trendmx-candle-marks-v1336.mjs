@@ -266,12 +266,15 @@ console.log('hg-v1336 — TREND MATRIX candlestick pattern confluence');
   ok(gateReads === 0, 'no gate module names any pattern:* key or calls hgCfCandlePatterns (hg-v966)');
 }
 
-/* 10. ship stamps */
+/* 10. ship stamps — ask the shared helper (hg-v956); a hardcoded version
+   number here goes stale on every bump, which is the fragility
+   tests/helpers/build-version.mjs exists to remove. */
 {
-  ok(HG_VER === 'hg-v1336', 'build-stamp.js is hg-v1336');
-  ok(read('sw.js').includes("HG_CACHE = 'hg-v1336'"), 'sw.js HG_CACHE is hg-v1336');
-  ok(read('trendtable.js').includes('v=1336'), 'trendtable.js cache-buster is 1336');
-  ok(read('hg-api-base.js').includes("'1336'"), 'hg-api-base.js data-v is 1336');
+  const num = (HG_VER.match(/(\d+)\s*$/) || [,'0'])[1];
+  ok(/^hg-v\d+$/.test(HG_VER), 'build-stamp.js version has the expected shape (' + HG_VER + ')');
+  ok(read('sw.js').includes("HG_CACHE = '" + HG_VER + "'"), 'sw.js HG_CACHE matches build-stamp (' + HG_VER + ')');
+  ok(read('trendtable.js').includes('v=' + num), 'trendtable.js cache-buster matches build-stamp (' + num + ')');
+  ok(read('hg-api-base.js').includes("'" + num + "'"), 'hg-api-base.js data-v matches build-stamp (' + num + ')');
 }
 
 console.log(`\n${passed} passed · ${failed} failed`);

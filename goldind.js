@@ -20786,6 +20786,58 @@ function goldCandleForecast(rows) {
   } catch (e) { return null; }
 }
 
+/* hg-v1347: say WHICH gate stopped the candle read, not that it did.
+   goldCandleForecast has six distinct null returns (thin tape, atr/ema not
+   loaded, non-finite OHLC on the last bar, flat last bar h<=l, atr unread,
+   a non-finite close inside the window) and the module above printed ONE
+   message for all six — the hg-v940 trap, one message for N causes, which
+   left the user asking the same question across hg-v1338, v1342 and v1343.
+   This names the specific blocker without duplicating the engine's rule
+   (hg-v949): each check mirrors a line in goldCandleForecast above and
+   returns the same honest string the tab can render instead of the shrug.
+   Null only when a diagnoser cannot even check — never a guessed cause.
+   Fail OPEN at every seam: an unreadable row set still returns a message,
+   never an exception into the module's catch block above. */
+function hgCfDiagnose(rows) {
+  try {
+    if (!Array.isArray(rows)) return 'The 15m tape was not an array of bars, so no read was attempted.';
+    if (rows.length === 0) return 'The 15m tape was empty, so no read was attempted.';
+    if (rows.length < 30) {
+      return 'The 15m tape is too short — ' + rows.length + ' bars, the engine needs 30 for its ATR and drift reads to mean anything.';
+    }
+    if (typeof atr !== 'function' || typeof ema !== 'function') {
+      return 'The ATR or EMA readers were not loaded, so the engine stood aside.';
+    }
+    var last = rows[rows.length - 1];
+    if (!last || typeof last !== 'object') {
+      return 'The last 15m bar was not readable, so the engine stood aside.';
+    }
+    var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) {
+      return 'The last 15m bar has a missing open, high, low or close, so no read was attempted.';
+    }
+    if (!(h > l)) {
+      return 'The last 15m bar has no range (high ' + h.toFixed(2) + ' is not above low ' + l.toFixed(2) + '), so the engine had no volatility to estimate.';
+    }
+    var atrArr = null;
+    try { atrArr = atr(rows, 14); } catch (eA) { atrArr = null; }
+    var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
+    if (!(atrLast > 0)) atrLast = h - l;
+    if (!(atrLast > 0)) {
+      return 'The 15m tape carries no measurable range (ATR 14 unread and last bar flat), so the engine had nothing to project.';
+    }
+    for (var i = 0; i < rows.length; i++) {
+      var ci = +rows[i].c;
+      if (!isFinite(ci)) {
+        return 'The 15m tape has a non-finite close at bar ' + (i + 1) + ' of ' + rows.length + ', so the engine stood aside rather than invent one.';
+      }
+    }
+    return 'The 15m tape read every gate in the forecast engine but the engine still returned no verdict. Re-run after the next closed bar.';
+  } catch (e) {
+    return 'The diagnostic could not read the 15m tape (' + ((e && e.message) || e) + '), so the engine stood aside.';
+  }
+}
+
 function hgCfUltimate(scalp, swing) {
   /* hg-v1323: ULTIMATE AI CONFLUENCE.
      The scalp and the swing are already built. This only asks whether those two
@@ -21211,6 +21263,10 @@ function hgCfDaySwings(rows, opts) {
 
 if (typeof window !== "undefined") {
   window.goldCandleForecast = goldCandleForecast;
+  /* hg-v1347: the diagnostic reader, exported so the Candle Forecast tab can
+     name the specific blocker instead of printing one line for every one of
+     the engine's six distinct null returns (hg-v940). */
+  window.hgCfDiagnose = hgCfDiagnose;
   window.hgCfConfluence = hgCfConfluence;
   /* hg-v1336: the one-home candle pattern engine, exported so TREND MATRIX
      (and any later caller) reads the same ATR-gated hammer/engulfing/
