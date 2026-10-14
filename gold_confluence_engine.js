@@ -9,7 +9,7 @@ Combines candlestick patterns, indicators, macro, and multi-timeframe setups.
   /**
    * Builds a setup (entry, stop, TP) based on confluence of multiple factors.
    */
-  window.hgCfBuildSetup = function(candles, options, forecast) {
+  if (typeof window.hgCfBuildSetup !== 'function') window.hgCfBuildSetup = function(candles, options, forecast) {
     if (!candles || candles.length < 20) return null;
     const tf = options.tf || '15m';
     const dir = forecast.dir === 'BULL' ? 'long' : (forecast.dir === 'BEAR' ? 'short' : null);
@@ -83,7 +83,7 @@ Combines candlestick patterns, indicators, macro, and multi-timeframe setups.
     };
   };
 
-  window.hgCfMeasure = function(scalp, swing, candles) {
+  if (typeof window.hgCfMeasure !== 'function') window.hgCfMeasure = function(scalp, swing, candles) {
     if (!scalp || !swing) return null;
     return {
       volatility: calculateATR(candles, 14),
@@ -91,7 +91,7 @@ Combines candlestick patterns, indicators, macro, and multi-timeframe setups.
     };
   };
 
-  window.hgCfDaySwings = function(c4, options) {
+  if (typeof window.hgCfDaySwings !== 'function') window.hgCfDaySwings = function(c4, options) {
     if (!c4 || c4.length < 30) return { ok: false, setups: [], why: 'Insufficient data' };
     return { ok: true, setups: [] }; // Placeholder for day swings logic
   };

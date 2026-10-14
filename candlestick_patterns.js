@@ -114,8 +114,13 @@ Provides detection of classic and advanced formations for confluence.
     return res;
   }
 
-  // Expose to global scope for the shared engine
-  W.hgCfCandlePatterns = detectPatterns;
-  W.hgCfAdvancedPatterns = detectPatterns;
+  /* The gold candle forecast already owns these two names (goldind.js).
+     This reader does not return .names, so replacing them made every
+     readable tape throw and the tab report that no verdict came back.
+     Install only when that engine is absent. The newest-triad reader
+     stays available as hgCandleDeskPatterns either way. */
+  W.hgCandleDeskPatterns = detectPatterns;
+  if (typeof W.hgCfCandlePatterns !== 'function') W.hgCfCandlePatterns = detectPatterns;
+  if (typeof W.hgCfAdvancedPatterns !== 'function') W.hgCfAdvancedPatterns = detectPatterns;
 
 })();

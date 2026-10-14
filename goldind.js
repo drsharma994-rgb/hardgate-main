@@ -20485,6 +20485,7 @@ function goldCandleForecast(rows) {
   var macro = arguments.length > 1 ? arguments[1] : null;
   var tapes = arguments.length > 2 ? arguments[2] : null;
   try {
+    try { goldCandleForecast.lastError = null; } catch (eClr) {}
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
        its standard error to mean anything and the empirical range needs a
        hundred-bar lookback to have a population to take a percentile of; at
@@ -20572,6 +20573,16 @@ function goldCandleForecast(rows) {
     else reasons.push('drift t ' + driftT.toFixed(2) + ' is inside the noise band — no vote');
 
     var pat = hgCfCandlePatterns(rows, atrLast);
+    /* A reader that forgot .names used to throw here, and the catch turned
+       a readable tape into a null. Missing fields are an empty pattern, not
+       a failed read. */
+    if (!pat || typeof pat !== 'object') pat = {};
+    if (!Array.isArray(pat.names)) pat.names = [];
+    if (!Array.isArray(pat.notes)) pat.notes = [];
+    if (!Array.isArray(pat.bullNames)) pat.bullNames = [];
+    if (!Array.isArray(pat.bearNames)) pat.bearNames = [];
+    if (!(pat.bullVotes > 0)) pat.bullVotes = 0;
+    if (!(pat.bearVotes > 0)) pat.bearVotes = 0;
     var struct = hgCfStructure(rows, atrLast);
     var desk = hgCfGoldDesk(rows, macro);
     var tabs = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [], notes: ['gold tabs are named under the call'], line: 'named under the call' };
@@ -20594,6 +20605,10 @@ function goldCandleForecast(rows) {
        three-bar pattern the voter above already counted. It rides the result so
        the card can name it and the forward ledger can measure it. */
     var adv = hgCfAdvancedPatterns(rows, atrLast);
+    if (!adv || typeof adv !== 'object') adv = {};
+    if (!Array.isArray(adv.names)) adv.names = [];
+    if (!Array.isArray(adv.notes)) adv.notes = [];
+    if (!Array.isArray(adv.leans)) adv.leans = [];
     if (adv.names.length) reasons.push('advanced patterns: ' + adv.names.join(', '));
     if (adv.where) reasons.push('pattern location: ' + adv.where
       + (adv.aligned ? ' · the 20-bar drift is ' + adv.aligned : ''));
@@ -20783,7 +20798,10 @@ function goldCandleForecast(rows) {
             ? 'Stop is the pattern high or low. TP1 is one times that risk. TP2 is two.'
             : 'No pattern stop in range, so the stop is one ATR. TP1 is one ATR. TP2 is two.'))
     };
-  } catch (e) { return null; }
+  } catch (e) {
+    try { goldCandleForecast.lastError = (e && e.message) ? String(e.message) : String(e); } catch (eSet) {}
+    return null;
+  }
 }
 
 /* hg-v1347: say WHICH gate stopped the candle read, not that it did.
@@ -20832,6 +20850,9 @@ function hgCfDiagnose(rows) {
         return 'The 15m tape has a non-finite close at bar ' + (i + 1) + ' of ' + rows.length + ', so the engine stood aside rather than invent one.';
       }
     }
+    var thrown = null;
+    try { thrown = (typeof goldCandleForecast === 'function') ? goldCandleForecast.lastError : null; } catch (eL) { thrown = null; }
+    if (thrown) return 'The 15m tape passed every read gate, but the engine threw: ' + String(thrown) + '. Nothing was invented.';
     return 'The 15m tape read every gate in the forecast engine but the engine still returned no verdict. Re-run after the next closed bar.';
   } catch (e) {
     return 'The diagnostic could not read the 15m tape (' + ((e && e.message) || e) + '), so the engine stood aside.';

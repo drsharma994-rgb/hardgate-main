@@ -210,6 +210,11 @@
       "version": "hg-v1347",
       "built": "2026-10-14T13:00:00Z",
       "note": "TWO REAL DEFECTS FOUND IN MY OWN MERGE RESOLUTION, both in build-stamp.js, both fixed here. Resolving the conflict by taking my side of that file dropped two exports the freshness poll depends on: G.HG_BUILD_POLL_MS (the interval constant the poll reads) and G.hgBuildEditingNow (the mid-edit check the poll calls before it reloads a tab). Measured rather than assumed - the export lists were compared across the merged file, my pre-merge line, the pre-merge HEAD and upstream, and exactly those two were lost. test-build-freshness-poll boots the REAL file and caught it: it reported HG_BUILD_POLL_MS as undefined and then hgBuildEditingNow as not a function. Restoring both turns it green at 63 assertions. THIS IS WHY THE MERGE SHOULD HAVE BEEN CHECKED BY THE SUITE BEFORE COMMITTING, and the entry records that the guard did its job. ONE STALE ASSERTION REPOINTED: test-core-fixes pinned the brand line as GATES, NOT SCORES with a tool count, a string the shipped header retired when v4 renamed the strip. It now asserts the house line the app actually carries. That is a fixture drift, not a defect. ALSO VERIFIED AFTER THE MERGE: all ten candle-forecast functions survived (hgCfPack, hgCfCandlePatterns, hgCfAdvancedPatterns, hgCfStructure, hgCfGoldDesk, hgCfBuildSetup, hgCfDeskVotes, hgCfConfluence, hgCfUltimate, goldCandleForecast) and goldind.js parses. The triad was moved to a number above BOTH lines because this merge spans two divergent histories. SUITE: 8 failed -> 6. discipline guard 220 passed."
+    },
+    {
+      "version": "hg-v1348",
+      "built": "2026-10-14T14:00:00Z",
+      "note": "CANDLE FORECAST returns a verdict again. A later script replaced the candle pattern reader and the setup builder. The replacement reader had no pattern names, so the engine threw and the tab said every gate had passed. The gold engine is the one home again. A readable tape is a read. Nothing is invented."
     }
   ]
 }
