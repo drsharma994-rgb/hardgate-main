@@ -52,6 +52,10 @@ function quiet(ctx, shape) {
   ctx.hgCfHigherFrame = function () {
     return { bullNames: [], bearNames: [], notes: ['higher timeframes unread'], line: 'higher timeframes unread' };
   };
+  ctx.goldScalpSetups = function () { return []; };
+  ctx.goldSwingSetups = function () { return { ranked: [] }; };
+  ctx.ngAssess = function () { return null; };
+  ctx.goldPineScan = function () { return null; };
 }
 function opti(dir) {
   return function () {

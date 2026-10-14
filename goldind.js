@@ -20483,7 +20483,7 @@ function hgCfConfluence(rows, opts, fc) {
     return out;
   }}
 
-function hgCfCachedDeskConfirm() {
+function hgCfCachedDeskConfirm(rows, tapes) {
   /* A gold tab that has already been scanned can confirm a named shape.
      This reads only that tab's last scan in memory. It does not fetch and
      it does not re-run a mint. A missing engine, a tab that was not
@@ -20556,6 +20556,64 @@ function hgCfCachedDeskConfirm() {
       if (gg && gg.ok !== false) keep('GANESH GOLD', word(gg.pick));
     }
   } catch (eGg) {}
+  var swingTape = !!(tapes && (tapes.tf === '4h' || tapes.horizon === 'swing'));
+  var nowMs = null;
+  if (Array.isArray(rows) && rows.length) {
+    var barT = +rows[rows.length - 1].t;
+    if (isFinite(barT)) nowMs = barT < 1e12 ? barT * 1000 : barT;
+  }
+  function listOf(r) {
+    if (Array.isArray(r)) return r;
+    if (r && Array.isArray(r.ranked)) return r.ranked;
+    if (r && r.dir) return [r];
+    return [];
+  }
+  function drive(label, fn, arg) {
+    if (typeof fn !== 'function') return;
+    try { keep(label, oneSide(listOf(fn(arg)))); } catch (eDrv) {}
+  }
+  /* The 15m mint is not run on 4h bars. That would invent a scalp the desk
+     did not form. A swing mint runs only on a 4h tape already in hand. */
+  if (!swingTape && Array.isArray(rows) && rows.length >= 30) {
+    drive('GOLD SCALP', hostFn('goldScalpSetups'), {
+      rows15m: rows,
+      rows1h: tapes && tapes.rows1h,
+      rows4h: tapes && tapes.rows4h,
+      now: nowMs,
+      news: null
+    });
+  }
+  var swingRows = swingTape ? rows : (tapes && tapes.rows4h);
+  if (Array.isArray(swingRows) && swingRows.length >= 30) {
+    drive('GOLD SWING', hostFn('goldSwingSetups'), {
+      rows4h: swingRows,
+      rows15m: swingTape ? (tapes && tapes.rows15m) : rows,
+      rows1d: tapes && tapes.rows1d,
+      now: nowMs,
+      news: null
+    });
+  }
+  if (Array.isArray(rows) && rows.length >= 30) {
+    var ngFn = hostFn('ngAssess');
+    if (typeof ngFn === 'function') {
+      try {
+        var ng = ngFn(rows);
+        if (ng && ng.dir) keep('NEW GOLD', word(ng.dir));
+      } catch (eNg) {}
+    }
+  }
+  try {
+    var pineFn = hostFn('goldPineScan');
+    if (typeof pineFn === 'function') {
+      var snap = pineFn();
+      if (snap) {
+        var bag = [];
+        if (Array.isArray(snap.scalp)) bag = bag.concat(snap.scalp);
+        if (Array.isArray(snap.swing)) bag = bag.concat(snap.swing);
+        keep('GOLD PINE', oneSide(bag));
+      }
+    }
+  } catch (ePi) {}
   var line = bulls.concat(bears).join(', ');
   if (!line) line = 'no scanned gold desk in cache';
   return {
@@ -20566,6 +20624,26 @@ function hgCfCachedDeskConfirm() {
     notes: line === 'no scanned gold desk in cache' ? [line] : [],
     line: line
   };
+}
+
+function hgCfSessionName(rows) {
+  /* The session is the shared killzone read. It is named on the location
+     line and nowhere else. It does not vote and it does not move the stop. */
+  try {
+    var fn = (typeof hgGoldKillzoneRead === 'function') ? hgGoldKillzoneRead : null;
+    if (!fn && typeof globalThis !== 'undefined' && typeof globalThis.hgGoldKillzoneRead === 'function') fn = globalThis.hgGoldKillzoneRead;
+    if (typeof fn !== 'function' || !Array.isArray(rows) || !rows.length) return '';
+    var t = +rows[rows.length - 1].t;
+    if (!isFinite(t)) return '';
+    var read = fn(t < 1e12 ? t * 1000 : t);
+    if (!read || !read.zone) return '';
+    if (read.zone === 'OVERLAP') return 'London and New York';
+    if (read.zone === 'LONDON') return 'London';
+    if (read.zone === 'NY_AM') return 'New York';
+    if (read.zone === 'ASIAN') return 'Asia';
+    if (read.zone === 'OFF') return 'off session';
+    return '';
+  } catch (eSes) { return ''; }
 }
 
 function goldCandleForecast(rows) {
@@ -20675,7 +20753,7 @@ function goldCandleForecast(rows) {
     var tabs = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [], notes: ['gold tabs are named under the call'], line: 'named under the call' };
     if (tapes && tapes.cachedDesks === true) {
       try {
-        var cachedTabs = hgCfCachedDeskConfirm();
+        var cachedTabs = hgCfCachedDeskConfirm(rows, tapes);
         if (cachedTabs && typeof cachedTabs === 'object') tabs = cachedTabs;
       } catch (eTabs) {}
     }
@@ -20703,8 +20781,15 @@ function goldCandleForecast(rows) {
     if (!Array.isArray(adv.notes)) adv.notes = [];
     if (!Array.isArray(adv.leans)) adv.leans = [];
     if (adv.names.length) reasons.push('advanced patterns: ' + adv.names.join(', '));
-    if (adv.where) reasons.push('pattern location: ' + adv.where
-      + (adv.aligned ? ' · the 20-bar drift is ' + adv.aligned : ''));
+    var sessionName = '';
+    try {
+      if (typeof hgCfSessionName === 'function') sessionName = hgCfSessionName(rows) || '';
+    } catch (eSes) { sessionName = ''; }
+    var locLine = adv.where
+      ? ('pattern location: ' + adv.where + (adv.aligned ? (' · the 20-bar drift is ' + adv.aligned) : ''))
+      : '';
+    if (sessionName) locLine = locLine ? (locLine + ' · session ' + sessionName) : ('pattern location: session ' + sessionName);
+    if (locLine) reasons.push(locLine);
     for (pi = 0; pi < adv.notes.length; pi++) reasons.push(adv.notes[pi]);
 
     var dir = null;

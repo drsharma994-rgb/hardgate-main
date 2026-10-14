@@ -159,7 +159,10 @@ on every page load since v1308:
       }
 
       const tapes = await this.loadTapes();
-      if (tapes && typeof tapes === 'object') tapes.cachedDesks = true;
+      if (tapes && typeof tapes === 'object') {
+        tapes.cachedDesks = true;
+        tapes.tf = '15m';
+      }
       const macroLive = await this.loadMacro();
       const forecast = window.goldCandleForecast(candles, macroLive, tapes);
       if (!forecast) {
@@ -243,7 +246,7 @@ on every page load since v1308:
         var loaded4 = await load4;
         var c4 = loaded4 && loaded4.rows;
         if (Array.isArray(c4) && c4.length >= CF_MIN_BARS) {
-          var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d, cachedDesks: true });
+          var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d, rows15m: candles, tf: '4h', cachedDesks: true });
           try {
             if (fc4 && typeof window.hgCfConfluence === 'function') {
               fc4.confluence = window.hgCfConfluence(c4, {
@@ -286,22 +289,25 @@ on every page load since v1308:
       }
       this.renderResult(resultArea, statusEl, forecast);
 
-      /* hg-v1351: RECORD THE FORMED SETUPS, so the ledger can finally measure which
-         reads pay. Until this pack the tab computed ~103 named shapes, six confluence
-         families, eleven technical reads and five desk votes and carried NONE of them
-         onto the forward ledger — so the ledger could never answer "does a hammer on
-         gold separate winners from losers?", which is the hg-v955 shape: a read
-         computed and never carried. This is the same move TRENDMX made at hg-v1336.
+      /* hg-v1325: the wide tally paints AFTER the card. The earlier call sat
+         above renderResult, and the card replaces innerHTML, so the tally
+         never stayed on screen. A thin count prints no stop. */
+      try {
+        var conf = (typeof window.hgUltimateConfluence === 'function')
+          ? window.hgUltimateConfluence(candles) : null;
+        /* The first call is the 15m tally. When the 4h tape was read, ask
+           again with that tape so the wide tally can name a swing beside
+           the scalp. The house stop is still not this tally's stop. */
+        if (conf && Array.isArray(c4) && c4.length >= CF_MIN_BARS && typeof window.hgUltimateConfluence === 'function') {
+          var withSwing = window.hgUltimateConfluence(candles, { swingRows: c4 });
+          if (withSwing) conf = withSwing;
+        }
+        if (conf) this.renderConfluence(resultArea, statusEl, conf);
+      } catch (eConf) { /* optional read; the card stands on its own */ }
 
-         RECORDED ONLY WHEN A BRACKET FORMED. A held row has no entry, stop or target,
-         and the ledger settles levels, not opinions — so a non-formed read is not
-         recorded rather than recorded empty. Both horizons record separately because a
-         scalp and a swing are different trades and must not be pooled.
-
-         Every field is passed EXPLICITLY. The hg-v955 note in goldscalp.js records
-         that a rebuilding map silently dropped a field three separate times in one
-         pass, so the marks are attached to the candidate object and carried by name,
-         never left to a spread that a later edit can quietly trim. */
+      /* Record a formed bracket after the card and the tally. A non-formed
+         read is not recorded. Both horizons stay separate. The marks are
+         named, not spread. The ledger does not paint the card. */
       try {
         if (typeof window.hgFwdRecordScan === 'function' && typeof window.hgCfPatternMarks === 'function') {
           var recs = [];
@@ -328,22 +334,6 @@ on every page load since v1308:
           }
         }
       } catch (eRec) { /* the ledger is a measurement, never a reason the card fails */ }
-
-      /* hg-v1325: the wide tally paints AFTER the card. The earlier call sat
-         above renderResult, and the card replaces innerHTML, so the tally
-         never stayed on screen. A thin count prints no stop. */
-      try {
-        var conf = (typeof window.hgUltimateConfluence === 'function')
-          ? window.hgUltimateConfluence(candles) : null;
-        /* The first call is the 15m tally. When the 4h tape was read, ask
-           again with that tape so the wide tally can name a swing beside
-           the scalp. The house stop is still not this tally's stop. */
-        if (conf && Array.isArray(c4) && c4.length >= CF_MIN_BARS && typeof window.hgUltimateConfluence === 'function') {
-          var withSwing = window.hgUltimateConfluence(candles, { swingRows: c4 });
-          if (withSwing) conf = withSwing;
-        }
-        if (conf) this.renderConfluence(resultArea, statusEl, conf);
-      } catch (eConf) { /* optional read; the card stands on its own */ }
 
     } catch (error) {
       console.error('[CandleForecast] Error:', error);
@@ -637,6 +627,8 @@ on every page load since v1308:
         <div class="omni-side-call">${dirLabel}</div>
         ${alwaysHtml}
         ${dayHtml}
+        <details data-cf-rest="1" style="margin-top:8px;">
+          <summary class="note">The rest of the read</summary>
         <ul class="lst">
           <li><b>Last close:</b> <span style="font-weight:700;">${this.fmt(forecast.close)}</span></li>
           ${levels}
@@ -652,6 +644,7 @@ on every page load since v1308:
         <div class="note" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;">
           ${forecast.note || ''}
         </div>
+        </details>
       </div>
     `;
     statusEl.textContent = swHas ? dirLabel : 'No swing setup';
