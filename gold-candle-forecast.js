@@ -322,13 +322,15 @@ on every page load since v1308:
         if (typeof window.hgCfUltimate === 'function') forecast.ultimate = window.hgCfUltimate(forecast.scalp, forecast.swing);
       } catch (eUlt) { forecast.ultimate = null; }
       try {
-        /* hg-v1358: pass the whole forecast to hgCfMeasure so hgCfForwardMark
-           can call hgCfPatternMarks through the ONE home. The record now carries
-           mechanic + ticket + perfect + perfectPlus (writer B's fields) AND the
-           four three-state pattern marks (writer A's reads). One pool
-           ('CANDLE FORECAST', literal space, hg-v950), one writer, one shape. */
+        /* hg-v1361: hgCfMeasure takes four args (scalp, swing, rows15, rows4).
+           hg-v1358 added a 5th arg (the composite forecast wrapper) and passed
+           it to hgCfPatternMarks, which reads result.patterns / dir / tf at the
+           TOP LEVEL — fields the wrapper has none of. pattern:withTrend and
+           cf:tf never fired on any record since hg-v1358 shipped. The engine
+           now reads patterns directly from each tape's `setup` (which IS the
+           forecast result for that tape), one pool, one writer, one shape. */
         forecast.measure = (typeof window.hgCfMeasure === 'function')
-          ? window.hgCfMeasure(forecast.scalp, forecast.swing, candles, (Array.isArray(c4) ? c4 : null), forecast)
+          ? window.hgCfMeasure(forecast.scalp, forecast.swing, candles, (Array.isArray(c4) ? c4 : null))
           : null;
       } catch (eMeas) { forecast.measure = null; }
       try {

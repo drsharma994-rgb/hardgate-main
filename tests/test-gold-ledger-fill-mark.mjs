@@ -270,7 +270,11 @@ console.log('== 3) the other desks ==');
   assert(/if \(typeof sel\.pick\.mark === 'number' && isFinite\(sel\.pick\.mark\) && sel\.pick\.mark > 0\) guRow\.mark = sel\.pick\.mark;/.test(S('goldultra.js')), 'GOLD ULTRA forwards the pick\'s mark (textual, inside the scan closure: the whole guarded statement, after a bare-assignment match let an if (false) survive)');
   assert(/mark: \(lvRows && lvRows\.length && isFinite\(\+lvRows\[lvRows\.length - 1\]\.c\)/.test(S('goldpro.js')), 'GOLD PRO records the last close of the series its plan was composed on (its own note: the bars ARE the mark)');
   assert(/mark: \(r\.setup && typeof r\.setup\.mark === 'number'/.test(S('newgold.js')), 'NEW GOLD forwards the setup\'s mark');
-  assert(/feed: c\.feed,\s*mark: c\.mark \}/.test(S('super-gold.js')), 'SUPER GOLD forwards the source desk\'s mark');
+  /* hg-v1361: the record was extended with the mark set absorbSnap now carries
+     (perfect, perfectPlus, chased, chaseCode, reads, fundingPct); the mark
+     field itself is unchanged. Match the mark assignment regardless of what
+     follows it, instead of pinning the literal's close-brace. */
+  assert(/feed: c\.feed,\s*(?:\/\*[\s\S]*?\*\/\s*)?mark: c\.mark[,}]/.test(S('super-gold.js')), 'SUPER GOLD forwards the source desk\'s mark');
   assert(/feed: c\.feed,\s*mark: c\.mark,/.test(S('goldscalp.js')) && /feed: c\.feed,\s*mark: c\.mark,/.test(S('goldswing.js')), 'the two home desks forward the snapshot mark across the record map');
   assert(/mark: \(function\(\)\{/.test(S('omnigold.js')), 'OMNIGOLD already stamped a mark, and still does');
 }

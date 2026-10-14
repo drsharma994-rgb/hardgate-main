@@ -31,14 +31,19 @@ const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log('FAIL:', msg); } };
 
-/* §1 - hgCfForwardMark gained the 4th arg and uses it. */
+/* §1 - hgCfForwardMark reads patterns from `setup` directly.
+   hg-v1358 took a 4th arg (forecastResult) and passed the composite forecast
+   wrapper, which has no top-level patterns / dir / tf — so pattern:withTrend
+   and cf:tf never fired. hg-v1361 fixed my own pack: `setup` IS the per-tape
+   forecast result (passed to hgCfForwardMark via hgCfMeasure's scalp/swing
+   args), so hgCfPatternMarks reads it directly. The 4th arg is gone. */
 const goldind = read('goldind.js');
-ok(/function hgCfForwardMark\(setup, rows, tf, forecastResult\)/.test(goldind),
-   'hgCfForwardMark carries the 4th arg forecastResult');
-ok(/reads = hgCfPatternMarks\(forecastResult, rows\)/.test(goldind),
-   'hgCfForwardMark calls the ONE home hgCfPatternMarks with the forecast + rows');
-ok(/if \(forecastResult && typeof hgCfPatternMarks === 'function'\)/.test(goldind),
-   'the call is guarded; a missing helper or absent forecast leaves reads undefined');
+ok(/function hgCfForwardMark\(setup, rows, tf\)/.test(goldind),
+   'hgCfForwardMark takes 3 args (hg-v1361: 4th arg dropped — defect fix)');
+ok(/reads = hgCfPatternMarks\(setup, rows\)/.test(goldind),
+   'hgCfForwardMark calls hgCfPatternMarks(setup, rows) — reads per-tape result');
+ok(/if \(setup && typeof hgCfPatternMarks === 'function'\)/.test(goldind),
+   'the call is guarded on setup presence; failed read leaves reads undefined');
 ok(/record\('CANDLE FORECAST', frame,/.test(goldind),
    'the ONE pool is CANDLE FORECAST (literal space)');
 
@@ -57,18 +62,18 @@ if (recBlock) {
   ok(/feed: feed/.test(r), 'carries feed (hg-v1358 — Writer A had it)');
 }
 
-/* §3 - hgCfMeasure takes the 5th arg and passes it through. */
-ok(/function hgCfMeasure\(scalp, swing, rows15, rows4, forecastResult\)/.test(goldind),
-   'hgCfMeasure carries the 5th arg');
-ok(/hgCfForwardMark\(scalp, rows15, '15m', forecastResult\)/.test(goldind),
-   'hgCfMeasure passes forecastResult to the scalp mark call');
-ok(/hgCfForwardMark\(swing, rows4, '4h', forecastResult\)/.test(goldind),
-   'hgCfMeasure passes forecastResult to the swing mark call');
+/* §3 - hgCfMeasure takes 4 args (hg-v1361: 5th arg dropped). */
+ok(/function hgCfMeasure\(scalp, swing, rows15, rows4\)/.test(goldind),
+   'hgCfMeasure takes 4 args (hg-v1361 defect fix)');
+ok(/hgCfForwardMark\(scalp, rows15, '15m'\)/.test(goldind),
+   'hgCfMeasure calls hgCfForwardMark with 3 args on scalp');
+ok(/hgCfForwardMark\(swing, rows4, '4h'\)/.test(goldind),
+   'hgCfMeasure calls hgCfForwardMark with 3 args on swing');
 
-/* §4 - the tab passes the forecast as the 5th arg. */
+/* §4 - the tab call matches. */
 const tab = read('gold-candle-forecast.js');
-ok(/hgCfMeasure\(forecast\.scalp, forecast\.swing, candles, \(Array\.isArray\(c4\) \? c4 : null\), forecast\)/.test(tab),
-   'tab call passes forecast as the 5th arg');
+ok(/hgCfMeasure\(forecast\.scalp, forecast\.swing, candles, \(Array\.isArray\(c4\) \? c4 : null\)\)/.test(tab),
+   'tab call passes 4 args to hgCfMeasure (hg-v1361)');
 
 /* §5 - Writer A is REMOVED. No reference to pool CANDLEFORECAST as a WRITE
    target. (Aggregate at line 940 still reads both pools for backward compat.) */
@@ -164,17 +169,23 @@ ok(r2 && r2.recorded === 1, 'swing BEAR forecast records');
 ok(lastRecord && lastRecord.frame === '4h' && lastRecord.rec.mechanic === 'SWING', 'frame 4h, mechanic SWING');
 ok(lastRecord && lastRecord.rec.reads['pattern:bearMajority'] === true, 'bearMajority rides on bear swing');
 
-/* §9 - fail open: missing forecast means no reads bag, record still writes. */
+/* §9 - fail open: a setup with no patterns/dir still writes (hg-v1361:
+   setup IS the forecast result, so a per-tape result that happens to carry
+   no patterns reads vote-only marks). */
 lastRecord = null;
-const r3 = sandbox.hgCfForwardMark(scalp, rows, '15m', null);
-ok(r3 && r3.recorded === 1, 'null forecast still writes the record');
-ok(lastRecord && lastRecord.rec && lastRecord.rec.reads === undefined,
-   'no forecast → reads is undefined (hg-v989: absent, never a guessed false)');
+const barePattern = { formed: true, dir: 'BULL', entry: 2600, stop: 2585, tp1: 2635, tf: '15m' };
+sandbox.hgCfCandlePatterns = () => null;
+const r3 = sandbox.hgCfForwardMark(barePattern, rows, '15m');
+ok(r3 && r3.recorded === 1, 'setup with no named patterns still writes the record');
+ok(lastRecord && lastRecord.rec && lastRecord.rec.reads &&
+   !('pattern:anyFire' in lastRecord.rec.reads),
+   'no fire → anyFire absent (hg-v989: absent, never a guessed false)');
 
 /* §10 - fail open: throwing hgCfPatternMarks does not break the write. */
 sandbox.hgCfPatternMarks = () => { throw new Error('boom'); };
+sandbox.hgCfCandlePatterns = () => ({ bullVotes: 3, bearVotes: 1 });
 lastRecord = null;
-const r4 = sandbox.hgCfForwardMark(scalp, rows, '15m', forecast);
+const r4 = sandbox.hgCfForwardMark(scalp, rows, '15m');
 ok(r4 && r4.recorded === 1, 'throwing hgCfPatternMarks does not break the write');
 ok(lastRecord && lastRecord.rec && lastRecord.rec.reads === undefined, 'throw → reads undefined');
 

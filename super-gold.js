@@ -161,6 +161,24 @@ function hitFromGoldCand(c, meta){
       ? { refuse: !!c.fund.refuse, demote: !!c.fund.demote,
           chips: Array.isArray(c.fund.chips) ? c.fund.chips.slice() : [] }
       : null,
+    /* hg-v1361: the mark set the source desk already published travels on the
+       candidate so publishSuperGoldSnap can carry it onto the SUPER:GOLD ledger
+       record. Without this seam the SUPER:GOLD pool records sym/dir/entry/stop/
+       t1 only, and every reader split (hgFwdReadSplit, perfect/chased/calendar
+       splits, fundingPct cohort) reads a dark board — the ledger pool whose
+       comment says it measures the FILTER can only answer "did this one setup
+       win". Each field opts in with the source desk's own shape guard, so a
+       cand with none of them is unchanged. Reads NOTHING (hg-v966 refused);
+       the ledger consumers already exist, so this is not an ornament
+       (hg-v955 held). */
+    perfect: (c.perfect === true) ? true : undefined,
+    perfectPlus: (c.perfectPlus === true) ? true : undefined,
+    chased: (c.chased === true) ? true : undefined,
+    chaseCode: c.chaseCode || undefined,
+    freeReads: (c.freeReads && typeof c.freeReads === 'object') ? c.freeReads : undefined,
+    indReads: (c.indReads && typeof c.indReads === 'object' && c.indReads.ok === true) ? c.indReads : undefined,
+    pineStates: (c.pineStates && typeof c.pineStates === 'object' && c.pineStates.ok === true) ? c.pineStates : undefined,
+    fundingPct: (typeof c.fundingPct === 'number' && isFinite(c.fundingPct)) ? c.fundingPct : undefined,
     scanner: meta.scanner || meta.source
   };
 }
@@ -861,7 +879,23 @@ function publishSuperGoldSnap(snap){
                  feed: c.feed,
                  /* hg-v980: the mark the source desk sized it against, so the
                     fill model can tell a resting order from a market one */
-                 mark: c.mark };
+                 mark: c.mark,
+                 /* hg-v1361: the mark set absorbSnap carried forward from the
+                    source cand. Each field opts in with the source desk's own
+                    shape guard; a cand with none of them records nothing new
+                    (hg-v989 three-state). The ledger consumers (hgFwdReadSplit,
+                    hgFwdPerfectSplit, hgFwdPanelHTML) already exist on other
+                    pools — this fills them for SUPER:GOLD, so the pool's own
+                    comment (above) finally has the data it needs to answer
+                    "does the conviction FILTER resolve better than the pool
+                    it picked from". No gate reads any of these on SUPER:GOLD
+                    (asserted). */
+                 perfect: c.perfect,
+                 perfectPlus: c.perfectPlus,
+                 chased: c.chased,
+                 chaseCode: c.chaseCode,
+                 reads: c.freeReads,
+                 fundingPct: c.fundingPct };
       }), { horizonBars: 20 });
     }
   } catch (eFwd) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('super-gold', eFwd); } catch (eW) {} }
@@ -1249,8 +1283,19 @@ function mount(el){
         : ('<div class="hg-note" style="margin-bottom:10px">No GRADE A PASS yet — WATCH rows show levels only</div>'));
     /* hg-v913: this desk reads the records it writes. SUPER:GOLD is pooled
        into OMNIGOLD's gate, so its records were consulted — by a different
-       desk, for a different board. This is the one that wrote them. */
-    desk.innerHTML = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('super-gold') : '') + sgFundPanel + hint + rows.map(function(r){
+       desk, for a different board. This is the one that wrote them.
+       hg-v1361: the primary panel ships beside the gold-fwd note so the
+       hg-v1358 reader expectations (samples, wins, avgRr, fill, perfect,
+       calendar split, read split) finally paint for this pool. Prints
+       nothing until a settled record exists; marks ride the record set
+       propagated through absorbSnap. */
+    var superGoldFwdPanel = '';
+    try {
+      if (typeof W.hgFwdPanelHTML === 'function') {
+        superGoldFwdPanel = W.hgFwdPanelHTML('SUPER:GOLD', { title: 'FORWARD — SUPER:GOLD conviction pool' }) || '';
+      }
+    } catch (eSgPanel) { superGoldFwdPanel = ''; }
+    desk.innerHTML = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('super-gold') : '') + superGoldFwdPanel + sgFundPanel + hint + rows.map(function(r){
       var tierLbl = r.tier === 'clean' ? ('GRADE ' + String(r.grade || 'A').toUpperCase()) : 'WATCH';
       var pill = superGoldDeskPill(r);
       var sel = (__sg.selectedId === r.id) ? ' sel' : '';

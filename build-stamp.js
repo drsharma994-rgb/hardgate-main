@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1360',
-  pack: 'CANDLE FORECAST v1360 - setup grade with printed checks, forecast cone for the next three closed bars, session killzone context, distance-to-bracket in dollars and ATR, and three-bar follow-through on the pattern record. Includes hg-v1359 Super Gold desk-agreement crowning.',
-  built: '2026-10-15T00:30:00Z'
+  version: 'hg-v1361',
+  pack: 'CANDLE FORECAST + SUPER GOLD v1361 - fix hg-v1358 own defect (hgCfPatternMarks was handed the composite forecast wrapper where it expects the per-tape result, so pattern:withTrend and cf:tf never fired since v1358 shipped). SUPER GOLD now carries the mark set the source desks already publish (perfect/perfectPlus/chased/freeReads/indReads/pineStates/fundingPct) through absorbSnap and into the SUPER:GOLD ledger pool, and paints hgFwdPanelHTML(SUPER:GOLD) beside hgGoldFwdNote so the pool whose comment claims to measure the FILTER finally has the mark reads its sibling panels consume. Re-applies the hg-v1358 sw.js shell fix (candle-forecast-intel.js) wiped by the merge.',
+  built: '2026-10-15T06:00:00Z'
 };
 
 function hgBuildLabel(b){

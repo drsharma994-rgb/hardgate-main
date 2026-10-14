@@ -21288,15 +21288,19 @@ function hgCfWalk(rows, opts) {
   }
 }
 
-function hgCfForwardMark(setup, rows, tf, forecastResult) {
+function hgCfForwardMark(setup, rows, tf) {
   /* Out of sample. Resolve older records first, then record a formed setup.
      The ledger is the only settler. A missing ledger counts nothing.
-     hg-v1358: optional 4th arg carries the full forecast result so the record
-     can carry the hg-v1351 pattern marks (anyFire, bullMajority, bearMajority,
-     withTrend). The marks ride under the pool 'CANDLE FORECAST', the one home
-     for every CF record. The old Writer A in gold-candle-forecast.js wrote the
-     marks to pool 'CANDLEFORECAST' with no mechanic / ticket / perfect; this
-     one home writes both. */
+     hg-v1361: fix hg-v1358's own defect. The pack took a 4th arg (forecastResult)
+     and passed it to hgCfPatternMarks, which reads result.patterns /
+     advancedPatterns / dir / tf at the TOP LEVEL. The caller (hgCfMeasure)
+     passed the composite forecast wrapper ({scalp, swing, ultimate, measure,
+     daySwings}), which has no top-level patterns / dir / tf — so pattern:withTrend
+     and cf:tf never fired on any record since hg-v1358 shipped. The hg-v955 shape
+     in my own pack. The fix: `setup` IS already the forecast result for THIS tape
+     (goldCandleForecast(rows, {mode}) is passed to hgCfForwardMark via hgCfMeasure's
+     scalp/swing args), so hgCfPatternMarks reads it directly. The 4th arg is gone;
+     the caller passes nothing extra. */
   var out = { recorded: 0, resolved: 0, why: '' };
   try {
     var host = hgCfHost();
@@ -21327,13 +21331,15 @@ function hgCfForwardMark(setup, rows, tf, forecastResult) {
     var bar = (Array.isArray(rows) && rows.length) ? rows[rows.length - 1] : null;
     var signalT = (bar && isFinite(+bar.t)) ? +bar.t : undefined;
     var horizon = frame === '15m' ? 96 : 20;
-    /* hg-v1358: pattern marks ride the record under the ONE pool. A missing
+    /* hg-v1361: pattern marks ride the record under the ONE pool. `setup` IS
+       the forecast result for THIS tape (hg-v1358 fix), so hgCfPatternMarks
+       reads setup.patterns / advancedPatterns / dir / tf directly. A missing
        helper, a tape that cannot be read, or a forecast with no patterns all
        leave reads absent (hg-v989 three-state: never a guessed false). */
     var reads;
     try {
-      if (forecastResult && typeof hgCfPatternMarks === 'function') {
-        reads = hgCfPatternMarks(forecastResult, rows);
+      if (setup && typeof hgCfPatternMarks === 'function') {
+        reads = hgCfPatternMarks(setup, rows);
       }
     } catch (eMk) { reads = undefined; }
     var t2 = isFinite(+setup.tp2) ? +setup.tp2 : undefined;
@@ -21365,12 +21371,15 @@ function hgCfForwardMark(setup, rows, tf, forecastResult) {
   }
 }
 
-function hgCfMeasure(scalp, swing, rows15, rows4, forecastResult) {
+function hgCfMeasure(scalp, swing, rows15, rows4) {
   /* Asks the perfect bar, walks this tape, and marks the forward ledger.
      None of the three changes a formed flag or a stop.
-     hg-v1358: optional 5th arg is the whole forecast result, so the forward
-     mark can read patterns through the ONE home (hgCfPatternMarks reads
-     result.patterns / advancedPatterns / dir / tf at the top level). */
+     hg-v1361: drop hg-v1358's 5th arg. hgCfForwardMark now reads patterns
+     from `setup` (the per-tape forecast result) directly, so passing a
+     composite wrapper as a 5th arg was both unnecessary and WRONG — the
+     wrapper has no top-level patterns / dir / tf, so pattern:withTrend
+     and cf:tf never fired. The caller is unchanged in shape (5th arg is
+     silently ignored); the pack bumps hgCfMeasure's declared arity to 4. */
   var out = { scalpAsk: null, swingAsk: null, walk15: null, walk4: null, fwd15: null, fwd4: null, fwdHtml: '' };
   try {
     out.scalpAsk = hgCfPerfectAsk(scalp, scalp && scalp.confluenceView);
@@ -21387,8 +21396,8 @@ function hgCfMeasure(scalp, swing, rows15, rows4, forecastResult) {
     }
     out.walk15 = hgCfWalk(rows15, { tf: '15m', horizonBars: 32 });
     out.walk4 = hgCfWalk(rows4, { tf: '4h', horizonBars: 20 });
-    out.fwd15 = hgCfForwardMark(scalp, rows15, '15m', forecastResult);
-    out.fwd4 = hgCfForwardMark(swing, rows4, '4h', forecastResult);
+    out.fwd15 = hgCfForwardMark(scalp, rows15, '15m');
+    out.fwd4 = hgCfForwardMark(swing, rows4, '4h');
     var host = hgCfHost();
     var panel = host && host.hgFwdPanelHTML;
     if (typeof panel === 'function') {
