@@ -587,6 +587,7 @@ function sgPrecisionGoldLevels(row, intel, opts){
     blendedRr: blendedRr,
     splits: { t1Pct: 50, t2Pct: 30, t3Pct: 20 },
     unread: atrUnread === true,
+    ordered: false,
     vwap: swing ? swing.vwap : null,
     ote618: swing ? swing.ote618 : null,
     ote705: swing ? swing.ote705 : null,
@@ -597,6 +598,47 @@ function sgPrecisionGoldLevels(row, intel, opts){
       + ' · TP3 ' + fmt(targetT3, 2) + ' (' + fmt(rr3, 2) + 'R, 20%)'
       + ' · Blended ' + fmt(blendedRr, 2) + 'R'
   };
+}
+
+/* A suggestion is sendable only when the side, the stop, and the three
+   targets are in order. A long is stop, entry, TP1, TP2, TP3. A short is
+   the reverse. Anything else is not a bracket. */
+function sgPrecisionOrdered(prec){
+  if (!prec || prec.ok !== true || prec.unread === true) return false;
+  var e = +prec.entry, s = +prec.stop, t1 = +prec.t1, t2 = +prec.t2, t3 = +prec.t3;
+  if (!(e > 0 && s > 0 && t1 > 0 && e !== s)) return false;
+  if (!(isFinite(+prec.rr1) && +prec.rr1 >= 1.2)) return false;
+  if (prec.side === 'long'){
+    if (!(s < e && e < t1)) return false;
+    if (isFinite(t2) && t2 > 0 && !(t2 > t1)) return false;
+    if (isFinite(t3) && t3 > 0 && !(t3 > t2)) return false;
+    return true;
+  }
+  if (prec.side === 'short'){
+    if (!(s > e && e > t1)) return false;
+    if (isFinite(t2) && t2 > 0 && !(t2 < t1)) return false;
+    if (isFinite(t3) && t3 > 0 && !(t3 < t2)) return false;
+    return true;
+  }
+  return false;
+}
+
+/* One suggestion per row, computed from the intel pinned on this snap.
+   Replaces the copy made before the tape existed. Does not touch entry,
+   stop, or t1 on the row. */
+function sgStampPrecision(snap){
+  if (!snap || !Array.isArray(snap.cands)) return snap;
+  snap.cands.forEach(function(row){
+    if (!row) return;
+    try{
+      var prec = sgPrecisionGoldLevels(row, snap.intel || null);
+      if (prec && prec.ok){
+        prec.ordered = sgPrecisionOrdered(prec);
+        row.precision = prec;
+      }
+    }catch(eSt){}
+  });
+  return snap;
 }
 
 function refineSuperGoldLevels(win, c, hit){
@@ -1857,10 +1899,11 @@ function sgCrownDispatchPayload(snap, riskOpts, win){
   if (acc && acc.hardVeto){
     return { ready: false, reason: 'Sniper scorecard stands aside: ' + (acc.vetoReasons.join('; ') || acc.why) };
   }
-  var prec = (acc && acc.precision && acc.precision.ok && !acc.precision.unread)
-    ? acc.precision
+  var prec = (r.precision && r.precision.ok && r.precision.ordered === true && !r.precision.unread)
+    ? r.precision
     : sgPrecisionGoldLevels(r, snap && snap.intel);
-  var usePrec = !!(prec && prec.ok && !prec.unread && prec.entry > 0 && prec.stop > 0 && prec.t1 > 0);
+  if (prec && prec.ok && prec.ordered !== true) prec.ordered = sgPrecisionOrdered(prec);
+  var usePrec = !!(prec && prec.ok && !prec.unread && prec.ordered);
   var sendEntry = usePrec ? +prec.entry : +r.entry;
   var sendStop = usePrec ? +prec.stop : +r.stop;
   var sendT1 = usePrec ? +prec.t1 : +r.t1;
@@ -2053,6 +2096,7 @@ async function superGoldRunScanInner(opts){
     /* hg-v1361: pin the desk intel to the snap. Computed here because this
        is the desk's one async window; the render path below never fetches. */
     try{ snap.intel = await superGoldIntel(W); }catch(eIn){ snap.intel = null; }
+    sgStampPrecision(snap);
     __sg.lastScanAt = snap.scanAt;
     superGoldAfterScan(snap);
     sgPublishAlert(superGoldScan());
@@ -2607,7 +2651,14 @@ function mount(el){
         + '</div>'
         + '<div class="hg-note" style="margin-top:8px">' + String(r.strategy || '')
         + (r.precision && r.precision.ok && !r.precision.unread
-          ? ('<div class="hg-note">Suggestion, not the crown: ' + String(r.precision.why || '') + '. A measured suggestion is what a send carries. An unread one is not.</div>')
+          ? ('<div class="hg-note" data-sg-send="1">SEND '
+            + fmt(r.precision.entry, 2) + ' / stop ' + fmt(r.precision.stop, 2)
+            + ' / TP1 ' + fmt(r.precision.t1, 2)
+            + ' / TP2 ' + fmt(r.precision.t2, 2)
+            + ' / TP3 ' + fmt(r.precision.t3, 2)
+            + '. Desk was ' + fmt(r.entry, 2) + ' / ' + fmt(r.stop, 2) + ' / ' + fmt(r.tp || r.t1, 2)
+            + '. Suggestion, not the crown: ' + String(r.precision.why || '')
+            + '. A measured suggestion is what a send carries. An unread one is not.</div>')
           : '')
         + '</div></div>';
     }).join('');
@@ -2685,6 +2736,9 @@ function mount(el){
   __sg.syncTimer = setInterval(function(){
     try{
       var snap = buildSnapFromGoldScans(W, readRiskOpts(), { allowStale: true });
+      var prevSnap = superGoldScan();
+      if (prevSnap && prevSnap.intel && !snap.intel) snap.intel = prevSnap.intel;
+      sgStampPrecision(snap);
       snap.scanAt = (__sg.lastScanAt || (superGoldScan() && superGoldScan().scanAt) || snap.at);
       mergePublishSuperGoldSnap(snap);
       if (__sg.mounted && typeof __sg.paintDesk === 'function') __sg.paintDesk(superGoldScan());
@@ -2762,6 +2816,8 @@ W.sgDispatchToBook = sgDispatchToBook;
 W.sgDispatchToXm = sgDispatchToXm;
 W.sgDispatchBracket = sgDispatchBracket;
 W.sgPrecisionGoldLevels = sgPrecisionGoldLevels;
+W.sgPrecisionOrdered = sgPrecisionOrdered;
+W.sgStampPrecision = sgStampPrecision;
 W.sgPsychShieldStop = sgPsychShieldStop;
 W.sgHighAccuracyAudit = sgHighAccuracyAudit;
 

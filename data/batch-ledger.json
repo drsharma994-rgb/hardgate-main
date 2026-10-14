@@ -305,6 +305,11 @@
       "version": "hg-v1367",
       "built": "2026-10-15T06:00:00Z",
       "note": "A measured sniper suggestion is what Super Gold sends: entry in front of structure, stop past the round number, and the three targets. Twelve of twelve gates is SNIPER A+. A blackout stands aside. An unread ATR is not sent. The card still shows the desk levels."
+    },
+    {
+      "version": "hg-v1368",
+      "built": "2026-10-15T06:30:00Z",
+      "note": "Super Gold stamps the measured sniper bracket onto the row after the tape is read. The card and the send use that same bracket. A ladder out of order is not sent. A refresh keeps the tape. The desk entry and stop on the row stay as published."
     }
   ]
 }
