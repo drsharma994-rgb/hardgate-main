@@ -600,6 +600,34 @@ function sgBoardSplit(hits){
   return long && short;
 }
 
+function sgMergeSide(rows){
+  /* A merged pick needs GOLD SCALP and GOLD SWING on the same side.
+     One desk, or a split, is not a conviction. */
+  var scalp = { long: false, short: false }, swing = { long: false, short: false };
+  (Array.isArray(rows) ? rows : []).forEach(function(h){
+    if (!h) return;
+    if (!(N(h.entry) > 0 && N(h.stop) > 0 && N(h.entry) !== N(h.stop))) return;
+    var d = String(h.dir || '').toLowerCase();
+    var side = (d === 'long' || d === 'buy') ? 'long' : ((d === 'short' || d === 'sell') ? 'short' : '');
+    if (!side) return;
+    var sc = String(h.scanner || h.source || '').toLowerCase();
+    var box = sc.indexOf('scalp') >= 0 ? scalp : (sc.indexOf('swing') >= 0 ? swing : null);
+    if (box) box[side] = true;
+  });
+  if (scalp.long && swing.long && !scalp.short && !swing.short) return 'long';
+  if (scalp.short && swing.short && !scalp.long && !swing.long) return 'short';
+  return '';
+}
+
+function sgDeskGap(snap){
+  var venues = snap && snap.audit && Array.isArray(snap.audit.venues) ? snap.audit.venues : null;
+  if (!venues) return [];
+  var miss = [];
+  if (venues.indexOf('gold-scalp') < 0) miss.push('GOLD SCALP');
+  if (venues.indexOf('gold-swing') < 0) miss.push('GOLD SWING');
+  return miss;
+}
+
 function superGoldBoardNote(snap){
   snap = snap || {};
   var rows = Array.isArray(snap.cands) ? snap.cands : [];
@@ -609,6 +637,10 @@ function superGoldBoardNote(snap){
   }
   if (sgBoardSplit(rows)){
     bits.push('Scalp and swing do not agree, so nothing is crowned. Both rows stay on the board. No price was blended.');
+  } else if (rows.length && !sgMergeSide(rows)){
+    var gap = sgDeskGap(snap);
+    if (gap.length === 1) bits.push(gap[0] + ' has no fresh scan, so nothing is crowned. Unread is not agreement.');
+    else bits.push('Only one desk has a setup, so nothing is crowned. A single desk is not a merged pick.');
   }
   return bits.join(' ');
 }
@@ -693,9 +725,14 @@ function superGoldEvaluate(win, opts){
         reason: 'SOURCE SCAN STALE. The GOLD SCALP and GOLD SWING scan this desk is reading is older than 20 minutes, so nothing is crowned. The rows on the board are the last scan, not a fresh pick.' };
     }
   }
-  if (!opts.selectedId && sgBoardSplit(hits)){
+  if (!opts.selectedId && hits.length && !sgMergeSide(hits)){
+    var gapSnap = null;
+    try { gapSnap = (typeof win.superGoldScan === 'function') ? win.superGoldScan() : null; } catch (eGap) { gapSnap = null; }
+    if (!(gapSnap && sgSnapFresh(gapSnap))){
+      gapSnap = buildSnapFromGoldScans(win, defaultRiskOpts(win));
+    }
     return { ready: false, idle: true,
-      reason: 'SCALP AND SWING DO NOT AGREE. One desk is long and the other is short, so nothing is crowned and no price is blended.' };
+      reason: superGoldBoardNote(gapSnap) || 'No merged SUPER GOLD pick. Nothing was blended.' };
   }
   var hit = null, i;
   if (opts.selectedId){
@@ -761,15 +798,6 @@ function buildSnapFromGoldScans(win, riskOpts, opts){
     }
   });
 
-  var gsFn = win.goldscalpScan;
-  if (typeof gsFn === 'function' && audit.venues.indexOf('gold-scalp') < 0){
-    try{ audit.venues.push('gold-scalp'); }catch(e0){}
-  }
-  var gwFn = win.goldswingScan;
-  if (typeof gwFn === 'function' && audit.venues.indexOf('gold-swing') < 0){
-    try{ audit.venues.push('gold-swing'); }catch(e1){}
-  }
-
   var seen = {};
   merged = merged.filter(function(r){
     if (!r || !r.id) return false;
@@ -812,8 +840,21 @@ function publishSuperGoldSnap(snap){
             && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1)
             && +c.entry !== +c.stop;
       }).map(function(c){
+        var side = sgSnapFresh(snap) ? sgMergeSide(snap.cands) : '';
+        var crowned = false;
+        if (side){
+          var i, row, d;
+          for (i = 0; i < snap.cands.length; i++){
+            row = snap.cands[i];
+            d = String(row && row.dir || '').toLowerCase();
+            if (row && row.minimalLossPass && !sgFundBlocked(row) && (d === side || (side === 'long' && d === 'buy') || (side === 'short' && d === 'sell'))){
+              crowned = row.id === c.id;
+              break;
+            }
+          }
+        }
         return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
-                 mechanic: 'CONVICTION-PICK', ticket: true,
+                 mechanic: 'CONVICTION-PICK', ticket: crowned,
                  /* hg-v978: the bar the source desk judged it on */
                  barT: c.barT, signalT: c.signalT,
                  /* hg-v979: the feed the source desk priced the levels on */
@@ -870,7 +911,7 @@ function autoSelectFirstSetup(snap){
       if (snap.cands[i] && snap.cands[i].id === __sg.selectedId){ hit = snap.cands[i]; break; }
     }
   }
-  var holdCrown = !sgSnapFresh(snap) || sgBoardSplit(snap.cands);
+  var holdCrown = !sgSnapFresh(snap) || !sgMergeSide(snap.cands);
   if (!hit && !fundBlackout && !holdCrown){
     for (i = 0; i < snap.cands.length; i++){
       if (snap.cands[i] && snap.cands[i].minimalLossPass && !sgFundBlocked(snap.cands[i])){ hit = snap.cands[i]; break; }

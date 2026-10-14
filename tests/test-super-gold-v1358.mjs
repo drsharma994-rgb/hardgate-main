@@ -45,7 +45,7 @@ console.log('\n== opposite desks are not crowned ==');
   ok(snap.cands.length === 2, 'both rows stay on the board');
   ok(/do not agree/.test(W.superGoldBoardNote(snap)) && /No price was blended/.test(W.superGoldBoardNote(snap)), 'the board says the desks do not agree');
   const ev = W.superGoldEvaluate(W, {});
-  ok(ev.ready === false && /DO NOT AGREE/.test(ev.reason), 'nothing is crowned (' + ev.reason + ')');
+  ok(ev.ready === false && /do not agree/i.test(ev.reason), 'nothing is crowned (' + ev.reason + ')');
   ok(ev.entry == null && ev.stop == null, 'a split invents no blended price');
   const picked = W.superGoldEvaluate(W, { selectedId: 'sc' });
   ok(picked.ready === true && picked.entry === 2400, 'an opened card can still be read');

@@ -260,6 +260,11 @@
       "version": "hg-v1358",
       "built": "2026-10-14T23:00:00Z",
       "note": "Super Gold does not invent a target the source row never had. A long and a short on the board are not crowned and no price is blended. A source scan older than 20 minutes is shown and not crowned. The weekend line uses the bar time."
+    },
+    {
+      "version": "hg-v1359",
+      "built": "2026-10-15T00:00:00Z",
+      "note": "Super Gold crowns a pick only when GOLD SCALP and GOLD SWING are on the same side. A missing desk is unread and is not agreement. A desk that stood aside is not a merged pick. Only the crowned row is a forward ticket."
     }
   ]
 }
