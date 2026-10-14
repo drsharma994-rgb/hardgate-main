@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1356',
-  pack: 'CANDLE FORECAST closed-bar fix - the tab excludes the still-forming Binance candle before the forecast, filters invalid bars without repairing prices, and keeps the shared diagnostic as the failure reason.',
-  built: '2026-10-14T21:30:00Z'
+  version: 'hg-v1357',
+  pack: 'CANDLE FORECAST intelligence layer - execution card, five-timeframe alignment, structure map, volatility regime, news execution risk, cross-feed quality, in-sample pattern record, forward ledger readout, mini chart, blockers panel, and one alert path.',
+  built: '2026-10-14T22:30:00Z'
 };
 
 function hgBuildLabel(b){

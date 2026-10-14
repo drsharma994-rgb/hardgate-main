@@ -422,9 +422,15 @@ async function __goldApiPrice(symbol){ // 'XAU' | 'XAG' -> {price, updatedAt} | 
   }catch(e){ return null; }
 }
 
-const GOLD_RES_BINANCE = { '15m': '15m', '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1d' };
-const GOLD_RES_TD      = { '15m': '15min', '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1day' };
+/* hg-v1357: '5m' joins every leg of the chain. Candle Forecast's
+   five-timeframe matrix reads a 5m TRIGGER row; before this the request fell
+   through every provider to an empty pack and the row read UNREAD on a tape
+   the feeds always had. Binance and Twelve Data carry 5m natively; Yahoo's
+   native 5m is range-limited, so the entry stays honest about its window. */
+const GOLD_RES_BINANCE = { '5m': '5m', '15m': '15m', '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1d' };
+const GOLD_RES_TD      = { '5m': '5min', '15m': '15min', '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1day' };
 const GOLD_RES_YAHOO   = {
+  '5m':  { i: '5m',  r: '5d',  agg: 0 },
   '15m': { i: '15m', r: '1mo', agg: 0 },
   '1h':  { i: '1h',  r: '3mo', agg: 0 },
   '2h':  { i: '1h',  r: '3mo', agg: 7200 },
@@ -451,7 +457,7 @@ async function __goldIuxApply(pack){
 /* Gold candles, ordered fallback:
      Binance XAUUSDT TradFi perp -> Binance PAXGUSDT -> Twelve Data XAU/USD
      -> Yahoo GC=F via /api/proxy.
-   res in {'15m','1h','2h','4h','1d'}; returns {rows, source} (source null when all fail). */
+   res in {'5m','15m','1h','2h','4h','1d'}; returns {rows, source} (source null when all fail). */
 async function getGoldCandles(res, count){
   try{
     res = res || '1h';

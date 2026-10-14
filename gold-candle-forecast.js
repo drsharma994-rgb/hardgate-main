@@ -34,6 +34,15 @@ on every page load since v1308:
    */
   var __cfPane = null;   /* hg-v1336: the pane already painted, by identity - not a boolean, so a fresh root can still build */
 
+  /* hg-v1357: the auto-scan clock. Armed from mount(), never at module load:
+     a module-scope timer would run on every page that loads the script,
+     including test harnesses that never mount the tab. One interval for the
+     module; a remount into a fresh pane re-points the lookup without arming
+     a second clock. */
+  var __cfTimer = null;
+  var __cfLastAutoBar = 0;  /* the 15m bar open time the auto-scan last fired on */
+  var __cfAutoBusy = false;
+
   /* hg-v1349: THE ENGINE BAR FLOOR, named once. goldCandleForecast returns null below
      this count, so every reader here must agree with it. It was 20 in the loader and in
      this module guard while the engine wanted 30, and a 20-29 bar feed produced "Unread /
@@ -70,6 +79,7 @@ on every page load since v1308:
           <div class="row" style="margin-bottom: 16px;">
             <button class="btn" id="cfRunBtn">SCAN NEXT CANDLE</button>
             <span class="note" id="cfStatus" style="margin-left: 8px; font-weight:700;">Ready</span>
+            <span class="note" id="cfNextClose" style="margin-left: 12px;"></span>
           </div>
           <div id="cfResultArea" class="empty">
             No forecast yet. A scalp is the 15m tape and a swing is the 4h tape. Ultimate AI Confluence names a side only when those two reads agree. It does not invent a third stop. News, headlines, fear and greed, COT and the cached macro feeds are listed on each tape and do not cast a second vote. A wide tally of fifteen reads sits under the card and prints a stop only when that count names a side. Each horizon still prints its own confluence: every named candle shape, what that shape means, the shared indicator values, every catalog read, every fundamental leg, higher-timeframe structure, and every gold tab. A setup prints only when a named candlestick pattern is confirmed, and no higher timeframe is against it. Unread is not agreement. The stop is still the pattern extreme, or one ATR. A formed setup is asked against the shared perfect bar. That bar does not invent a grade. An in-sample walk counts what formed on this tape only. The forward ledger records a formed setup and settles it on later bars. The 4h swing is shown on every scan. A formed swing stays up even when a family nets against. A neutral tape prints no stop. Confirmed swings for the day are still capped at two.
@@ -96,6 +106,38 @@ on every page load since v1308:
       var verEl = container.querySelector('#cfVersion');
       var ver = (window.HG_BUILD && window.HG_BUILD.version) || '';
       if (verEl && ver) verEl.textContent = ver;
+      this.armAutoScan();
+    },
+
+    /* hg-v1357: the countdown to the next closed 15m candle. The forecast is
+       only ever read from closed bars (hg-v1356), so the honest moment to
+       scan is the moment a bar closes — not a wall-clock poll. Two seconds
+       after the close the auto-scan fires once per bar; a manual SCAN is
+       always allowed. Guarded so a harness without setInterval simply has no
+       countdown and the tab still scans by hand. */
+    armAutoScan: function() {
+      if (__cfTimer || typeof setInterval !== 'function') return;
+      var self = this;
+      __cfTimer = setInterval(function() {
+        try {
+          var el = null;
+          if (__cfPane && __cfPane.querySelector) el = __cfPane.querySelector('#cfNextClose');
+          if (!el && typeof document !== 'undefined' && document.getElementById) el = document.getElementById('cfNextClose');
+          var nowSec = Date.now() / 1000;
+          var into = nowSec % 900;
+          var remain = Math.max(0, Math.ceil(900 - into));
+          if (el) {
+            var mm = Math.floor(remain / 60), ss = remain % 60;
+            el.textContent = 'next 15m close in ' + mm + 'm ' + (ss < 10 ? '0' : '') + ss + 's';
+          }
+          var barOpen = Math.floor(nowSec / 900) * 900;
+          if (into >= 2 && into < 20 && __cfLastAutoBar !== barOpen && !__cfAutoBusy) {
+            __cfLastAutoBar = barOpen;
+            __cfAutoBusy = true;
+            Promise.resolve(self.runForecast()).catch(function() {}).then(function() { __cfAutoBusy = false; });
+          }
+        } catch (eTick) { /* a countdown tick must never break the tab */ }
+      }, 1000);
     },
     refresh: async function() {
       await this.runForecast();
@@ -339,6 +381,22 @@ on every page load since v1308:
         }
       } catch (eRec) { /* the ledger is a measurement, never a reason the card fails */ }
 
+      /* hg-v1357: THE INTELLIGENCE LAYER. Everything below the card that
+         makes the setup EXECUTABLE: the execution state, the five-timeframe
+         matrix, the structure map, the volatility regime, the news execution
+         risk, the cross-feed check, the in-sample pattern record, the
+         forward ledger's own numbers, the chart, and the exact blockers when
+         nothing formed. Every piece is computed by candle-forecast-intel.js
+         (one home, pure computation) and rendered here. A failure in any leg
+         degrades that leg, never the card above. */
+      try {
+        await this.renderIntel(resultArea, forecast, candles, tapes, (Array.isArray(c4) ? c4 : null), loaded);
+      } catch (eIntel) {
+        try {
+          this.appendHtml(resultArea, '<div class="note warn" data-cf-intel="failed" style="margin-top:10px;">The intelligence layer failed closed: ' + this.esc(String((eIntel && eIntel.message) || eIntel)) + '. The card above is unaffected.</div>');
+        } catch (eInt2) {}
+      }
+
     } catch (error) {
       console.error('[CandleForecast] Error:', error);
       resultArea.innerHTML = '<span class="note warn">Error: ' + String(error && error.message || error) + '</span>';
@@ -383,7 +441,7 @@ on every page load since v1308:
     }
     out.sort(function(a, b) { return a.t - b.t; });
 
-    var tfSec = ({ '15m': 900, '1h': 3600, '2h': 7200, '4h': 14400, '1d': 86400 })[tf] || 0;
+    var tfSec = ({ '5m': 300, '15m': 900, '1h': 3600, '2h': 7200, '4h': 14400, '1d': 86400 })[tf] || 0;
     var nowSec = isFinite(+nowMs) ? (+nowMs / 1000) : (Date.now() / 1000);
     if (out.length && tfSec > 0) {
       var live = out[out.length - 1];
@@ -800,6 +858,294 @@ on every page load since v1308:
       + '<ul class="lst" style="max-height:260px; overflow:auto;">' + rows + '</ul>'
       + '<div class="note" style="margin-top:8px; border-top:1px solid var(--line); padding-top:8px;">'
       + String(c.note).replace(/</g, '') + '</div></div>');
+  };
+
+  /* hg-v1357: insertAdjacentHTML with an innerHTML fallback. The card's own
+     renderer replaces innerHTML wholesale, so intel goes in AFTER it; a
+     harness whose stub has no insertAdjacentHTML still gets the panel by
+     concatenation. */
+  mod.appendHtml = function(container, html) {
+    if (!container) return;
+    if (typeof container.insertAdjacentHTML === 'function') {
+      container.insertAdjacentHTML('beforeend', html);
+    } else {
+      container.innerHTML = String(container.innerHTML || '') + html;
+    }
+  };
+
+  /* hg-v1357: one direct feed leg for the cross-feed check, with a timeout so
+     a dead venue degrades to an UNREAD leg instead of stalling the scan. */
+  mod.feedLeg = async function(symbol, tf, count, name) {
+    if (typeof window.binanceKlines !== 'function') return { name: name, rows: null };
+    try {
+      var rows = await Promise.race([
+        window.binanceKlines(symbol, tf, count),
+        new Promise(function(resolve) { setTimeout(function() { resolve(null); }, 5000); })
+      ]);
+      return { name: name, rows: (rows && rows.length) ? rows : null };
+    } catch (eLeg) { return { name: name, rows: null }; }
+  };
+
+  /* hg-v1357: THE INTELLIGENCE PANEL. Renders what candle-forecast-intel.js
+     computed. Nothing here re-derives a level or a vote: the panel reads the
+     forecast the card already made, the tapes the loaders already fetched,
+     and the intel module's own measurements. */
+  mod.renderIntel = async function(container, forecast, candles, tapes, c4, loaded) {
+    var I = (typeof window !== 'undefined') ? window.hgCfIntel : null;
+    if (!I) {
+      this.appendHtml(container, '<div class="note warn" data-cf-intel="absent" style="margin-top:10px;">candle-forecast-intel.js is not loaded — the intelligence layer is unavailable. The card above is unaffected.</div>');
+      return;
+    }
+    var esc = this.esc;
+    var fmt = this.fmt;
+
+    /* the 5m trigger tape, through the same loader chain as every horizon */
+    var c5 = null;
+    try {
+      var loaded5 = await this.loadGold('5m', 80);
+      var prepared5 = this.prepareRows(loaded5 && loaded5.rows, '5m');
+      if (prepared5.rows.length >= CF_MIN_BARS) c5 = prepared5.rows;
+    } catch (e5) { c5 = null; }
+
+    var intel = {};
+    try { intel.fiveTf = I.fiveTf({ rows5m: c5, rows15m: candles, rows1h: tapes && tapes.rows1h, rows4h: (c4 || (tapes && tapes.rows4h)), rows1d: tapes && tapes.rows1d }); } catch (eFt) { intel.fiveTf = null; }
+    try { intel.structure = I.structure(candles); } catch (eSt) { intel.structure = null; }
+    try { intel.volRegime = I.volRegime(candles); } catch (eVr) { intel.volRegime = null; }
+    try { intel.news = I.news(); } catch (eNw) { intel.news = null; }
+
+    /* cross-feed check: the prepared house tape is the reference; two direct
+       venue legs beside it. Each leg names itself; nothing is merged into a
+       price. */
+    try {
+      var legs = [{ name: 'house 15m (' + String((loaded && loaded.source) || 'chain') + ')', rows: candles }];
+      var direct = await Promise.all([
+        this.feedLeg('XAUUSDT', '15m', 5, 'binance-xau direct'),
+        this.feedLeg('PAXGUSDT', '15m', 5, 'binance-paxg direct')
+      ]);
+      direct.forEach(function (leg) {
+        if (leg && leg.rows && leg.rows.length) {
+          var p = mod.prepareRows(leg.rows, '15m');
+          legs.push({ name: leg.name, rows: p.rows.length ? p.rows : null });
+        } else {
+          legs.push({ name: (leg && leg.name) || 'feed', rows: null });
+        }
+      });
+      intel.feedQuality = I.feedQuality(legs, 900);
+    } catch (eFq) { intel.feedQuality = null; }
+
+    try { intel.execCard = I.executionCard(forecast); } catch (eEx) { intel.execCard = null; }
+    try { intel.patternPerf = I.patternPerf(candles, { windows: 40 }); } catch (ePp) { intel.patternPerf = null; }
+    try {
+      intel.fwd = (typeof window.hgFwdStats === 'function')
+        ? window.hgFwdStats(['CANDLE FORECAST', 'CANDLEFORECAST']) : null;
+    } catch (eFw) { intel.fwd = null; }
+    try { intel.blockers = I.blockers(forecast, intel); } catch (eBl) { intel.blockers = ['the blocker list itself failed closed']; }
+
+    /* the alert candidate: only when the execution state, the confluence
+       ticket, the feeds and the calendar all pass. Published as a state
+       function; tabalerts.js owns collection and dispatch (one home). */
+    try {
+      var ex = intel.execCard, fq = intel.feedQuality, nw = intel.news;
+      var alertable = !!(ex && (ex.state === 'ARMED' || ex.state === 'TRIGGERED')
+        && !(fq && fq.lock) && !(nw && nw.blackout));
+      window.hgCandleForecastAlertState = function () {
+        if (!alertable) return null;
+        return {
+          sym: 'XAUUSD',
+          dir: ex.dir === 'BULL' ? 'long' : 'short',
+          entry: ex.entry, stop: ex.stop, t1: ex.tp1, t2: isFinite(ex.tp2) ? ex.tp2 : null,
+          rr: ex.rr, horizon: ex.horizon, state: ex.state,
+          note: 'candle forecast ' + String(ex.horizon || '').toLowerCase() + ' ' + String(ex.state || '').toLowerCase()
+        };
+      };
+    } catch (eAl) { /* alerts are a dispatch, never a reason the panel fails */ }
+
+    /* ---- paint ---- */
+    var H = '';
+    H += '<div class="panel" data-cf-intel="1" style="margin-top:12px; border-left:4px solid #64748b;">'
+      + '<h3 style="margin:0 0 6px;">CANDLE INTELLIGENCE <span class="note">— execution state, timeframes, structure, feeds, record</span></h3>';
+
+    /* execution card */
+    if (intel.execCard) {
+      var e = intel.execCard;
+      var stColor = e.state === 'TRIGGERED' ? '#15803d' : (e.state === 'ARMED' ? '#b45309' : (e.state === 'WAIT' ? '#64748b' : '#94a3b8'));
+      H += '<div class="note" data-cf-exec="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
+        + '<b>EXECUTION</b> <span style="color:' + stColor + '; font-weight:700;">' + esc(e.state) + '</span>'
+        + (e.horizon ? (' <span class="note">' + esc(e.horizon) + ' ' + esc(e.dir) + '</span>') : '')
+        + '<div class="note">' + esc(e.why) + '</div>';
+      if (isFinite(e.entry)) {
+        H += '<div class="note" style="margin-top:4px;">Entry <b>' + fmt(e.entry) + '</b> · <b>Stop:</b> <span class="neg" style="font-weight:700;">' + fmt(e.stop) + '</span>'
+          + ' · TP1 <span class="pos" style="font-weight:700;">' + fmt(e.tp1) + '</span>'
+          + (isFinite(e.tp2) ? (' · TP2 <span class="pos" style="font-weight:700;">' + fmt(e.tp2) + '</span>') : '')
+          + (e.rr != null ? (' <span class="note">(' + e.rr + 'R to TP1)</span>') : '')
+          + '</div><div class="note">These are the bracket\'s own levels, quoted, not re-priced. The scalp and the swing keep separate stops.</div>';
+      }
+      H += '</div>';
+    }
+
+    /* five-timeframe alignment */
+    if (intel.fiveTf) {
+      var ft = intel.fiveTf;
+      var tfRows = ft.rows.map(function (r) {
+        var cls = r.dir === 'BULL' ? 'pos' : (r.dir === 'BEAR' ? 'neg' : 'note');
+        return '<tr><td style="padding:2px 8px 2px 0;"><b>' + esc(r.tf) + '</b> <span class="note">' + esc(r.role) + '</span></td>'
+          + '<td><span class="' + cls + '" style="font-weight:700;">' + esc(r.dir) + '</span></td>'
+          + '<td class="note">' + esc(r.why) + '</td></tr>';
+      }).join('');
+      H += '<div class="note" data-cf-fivetf="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
+        + '<b>FIVE-TIMEFRAME ALIGNMENT</b> <span class="note">— ' + esc(ft.why) + '</span>'
+        + '<table style="width:100%; border-collapse:collapse; margin-top:4px;">' + tfRows + '</table></div>';
+    }
+
+    /* structure and liquidity map */
+    if (intel.structure) {
+      var sm = intel.structure;
+      var sItems = (sm.items || []).map(function (it) {
+        var px = (it.px != null && isFinite(it.px)) ? fmt(it.px) : '—';
+        var nearTag = it.near ? ' <span class="pos" style="font-weight:700;">AT PRICE</span>' : '';
+        var dist = (it.dist != null && isFinite(it.dist)) ? (' <span class="note">(' + (it.dist > 0 ? '+' : '') + it.dist.toFixed(2) + ')</span>') : '';
+        return '<li><b>' + esc(it.label) + '</b> ' + px + dist + nearTag + (it.extra ? (' <span class="note">' + esc(it.extra) + '</span>') : '') + '</li>';
+      }).join('');
+      H += '<div class="note" data-cf-structure="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
+        + '<b>STRUCTURE &amp; LIQUIDITY</b> <span class="note">— ' + esc(sm.why || '') + '</span>'
+        + (sItems ? ('<ul class="lst">' + sItems + '</ul>') : '')
+        + '<div class="note">A pattern at marked structure is a location; a pattern in empty space is not. "AT PRICE" means within 2 ATR of the last close.</div></div>';
+    }
+
+    /* volatility regime + news execution risk, side by side */
+    var regimeHtml = '';
+    if (intel.volRegime) {
+      var vr = intel.volRegime;
+      regimeHtml = '<b>VOLATILITY</b> ' + (vr.ok
+        ? ('<span style="font-weight:700;">' + esc(vr.regime) + '</span> <span class="note">— ' + esc(vr.why) + '</span>')
+        : ('<span class="note">' + esc(vr.why || 'unread') + '</span>'));
+    }
+    var newsHtml = '';
+    if (intel.news) {
+      var nw2 = intel.news;
+      var nColor = nw2.state === 'BLACKOUT' ? '#dc262c' : (nw2.state === 'CAUTION' ? '#b45309' : (nw2.ok ? '#15803d' : '#64748b'));
+      newsHtml = '<b>NEWS RISK</b> <span style="color:' + nColor + '; font-weight:700;">' + esc(nw2.state) + '</span> <span class="note">— ' + esc(nw2.note || '') + '</span>'
+        + '<div class="note">The calendar gates execution only. It never votes on direction.</div>';
+    }
+    H += '<div class="note" data-cf-regime-news="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
+      + regimeHtml + (regimeHtml && newsHtml ? '<br>' : '') + newsHtml + '</div>';
+
+    /* feed quality */
+    if (intel.feedQuality) {
+      var fqd = intel.feedQuality;
+      var fRows = (fqd.legs || []).map(function (leg) {
+        var cls = leg.state === 'OK' ? 'pos' : (leg.state === 'CAUTION' ? 'note' : 'neg');
+        return '<li><span class="' + cls + '" style="font-weight:700;">' + esc(leg.state) + '</span> <b>' + esc(leg.name) + '</b>'
+          + ' <span class="note">' + leg.bars + ' bars' + (isFinite(leg.lastClose) ? (' · last ' + fmt(leg.lastClose)) : '')
+          + (leg.note ? (' · ' + esc(leg.note)) : '') + '</span></li>';
+      }).join('');
+      H += '<div class="note" data-cf-feedq="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
+        + '<b>FEED QUALITY</b> <span class="note">— ' + esc(fqd.why || '') + '</span>'
+        + '<ul class="lst">' + fRows + '</ul>'
+        + (fqd.lock ? '<div class="note warn">Execution locked: the feeds disagree beyond tolerance. The reads stay on screen; the alert does not fire.</div>' : '')
+        + '</div>';
+    }
+
+    /* pattern performance + forward ledger */
+    var perfHtml = '';
+    if (intel.patternPerf) {
+      var pp = intel.patternPerf;
+      var names = Object.keys(pp.byPattern || {}).sort(function (a, b) { return pp.byPattern[b].n - pp.byPattern[a].n; }).slice(0, 8);
+      var pRows = names.map(function (nm) {
+        var b = pp.byPattern[nm];
+        return '<li><b>' + esc(nm) + '</b> <span class="note">' + b.n + 'x · next bar settled with the call ' + b.right + 'x · average move ' + (b.n ? (b.totMove / b.n).toFixed(2) : '—') + '</span></li>';
+      }).join('');
+      perfHtml = '<b>PATTERN RECORD ON THIS TAPE</b> <span class="note">— ' + esc(pp.why || '') + '</span>' + (pRows ? ('<ul class="lst">' + pRows + '</ul>') : '');
+    }
+    var fwdHtml = '';
+    if (intel.fwd) {
+      var fs = intel.fwd;
+      var hit = isFinite(+fs.hit) ? (+(+fs.hit).toFixed(1)) + '%' : '—';
+      var expR = isFinite(+fs.expR) ? (+fs.expR).toFixed(2) + 'R' : '—';
+      fwdHtml = '<b>FORWARD LEDGER</b> <span class="note">— out of sample, the only counted record</span><div class="note">'
+        + (fs.samples || 0) + ' recorded · ' + (fs.wins || 0) + ' wins · ' + (fs.losses || 0) + ' losses · ' + (fs.expired || 0) + ' expired · ' + (fs.open || 0) + ' open'
+        + ' · hit rate ' + hit + ' · expectancy ' + expR + '</div>'
+        + '<div class="note">A thin ledger says thin, not zero. Nothing here is a probability of the next trade.</div>';
+    } else {
+      fwdHtml = '<b>FORWARD LEDGER</b> <span class="note">— the ledger is not loaded; nothing was counted</span>';
+    }
+    H += '<div class="note" data-cf-record="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">' + perfHtml + (perfHtml ? '<br>' : '') + fwdHtml + '</div>';
+
+    /* the chart */
+    H += '<div class="note" data-cf-chart="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
+      + '<b>LAST 60 CLOSED CANDLES</b> <span class="note">— entry, stop and targets as level lines</span>'
+      + '<div id="cfChartWrap" style="margin-top:6px;"></div></div>';
+
+    /* blockers */
+    if (intel.blockers && intel.blockers.length) {
+      var bRows = intel.blockers.map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('');
+      var bTitle = (intel.execCard && intel.execCard.state === 'NO-TRADE') ? 'WHY NOTHING FORMED' : 'CAUTIONS ON THIS READ';
+      H += '<div class="note" data-cf-blockers="1" style="border:1px solid var(--line); padding:8px;">'
+        + '<b>' + bTitle + '</b><ul class="lst">' + bRows + '</ul></div>';
+    }
+
+    H += '</div>';
+    this.appendHtml(container, H);
+
+    /* draw after the panel exists in the DOM; a stub container simply skips it */
+    try { this.drawChart(container, candles, intel.execCard); } catch (eCh) {}
+  };
+
+  /* hg-v1357: the mini candlestick chart. Plain canvas, no dependency. Last
+     60 closed candles, the bracket's entry/stop/TPs as horizontal lines when
+     the execution card carries them. A missing 2d context leaves the wrap
+     empty with a note, never a thrown render. */
+  mod.drawChart = function(container, rows, execCard) {
+    if (typeof document === 'undefined' || !document.createElement) return;
+    var wrap = (container && container.querySelector) ? container.querySelector('#cfChartWrap') : null;
+    if (!wrap && document.getElementById) wrap = document.getElementById('cfChartWrap');
+    if (!wrap) return;
+    rows = Array.isArray(rows) ? rows.slice(-60) : [];
+    if (rows.length < 2) { wrap.textContent = 'not enough closed bars to draw.'; return; }
+    var cv = document.createElement('canvas');
+    cv.width = 720; cv.height = 240;
+    cv.style.width = '100%'; cv.style.height = 'auto';
+    var ctx = cv.getContext && cv.getContext('2d');
+    if (!ctx) { wrap.textContent = 'this browser cannot draw the chart.'; return; }
+    var i, lo = Infinity, hi = -Infinity;
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].l < lo) lo = rows[i].l;
+      if (rows[i].h > hi) hi = rows[i].h;
+    }
+    var lvls = [];
+    if (execCard && isFinite(execCard.entry)) {
+      lvls.push({ px: execCard.entry, color: '#2563eb', label: 'entry' });
+      lvls.push({ px: execCard.stop, color: '#dc262c', label: 'stop' });
+      lvls.push({ px: execCard.tp1, color: '#15803d', label: 'tp1' });
+      if (isFinite(execCard.tp2)) lvls.push({ px: execCard.tp2, color: '#15803d', label: 'tp2' });
+    }
+    lvls.forEach(function (l) { if (l.px < lo) lo = l.px; if (l.px > hi) hi = l.px; });
+    if (!(hi > lo)) { wrap.textContent = 'the tape has no range to draw.'; return; }
+    var pad = 8, W = cv.width - pad * 2, Hh = cv.height - pad * 2;
+    var y = function (px) { return pad + (hi - px) / (hi - lo) * Hh; };
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    var bw = Math.max(2, Math.floor(W / rows.length) - 1);
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var x = pad + i * (W / rows.length);
+      var up = r.c >= r.o;
+      ctx.strokeStyle = up ? '#15803d' : '#dc262c';
+      ctx.fillStyle = up ? '#15803d' : '#dc262c';
+      ctx.beginPath(); ctx.moveTo(x + bw / 2, y(r.h)); ctx.lineTo(x + bw / 2, y(r.l)); ctx.stroke();
+      var top = y(Math.max(r.o, r.c)), bot = y(Math.min(r.o, r.c));
+      ctx.fillRect(x, top, bw, Math.max(1, bot - top));
+    }
+    lvls.forEach(function (l) {
+      ctx.strokeStyle = l.color;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(pad, y(l.px)); ctx.lineTo(cv.width - pad, y(l.px)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = l.color;
+      if (ctx.fillText) ctx.fillText(l.label + ' ' + Number(l.px).toFixed(2), pad + 4, y(l.px) - 3);
+    });
+    wrap.innerHTML = '';
+    if (wrap.appendChild) wrap.appendChild(cv);
   };
 
   mod.fmt = function(n) { return Number(n).toFixed(2); };

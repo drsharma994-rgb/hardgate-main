@@ -942,6 +942,25 @@ function collectTrendmxCrown(out){
   }catch(e){ /* never breaks the batch */ }
 }
 
+/* hg-v1357: CANDLE FORECAST's one alert. The tab decides WHETHER a setup is
+   alertable (execution state ARMED/TRIGGERED, feeds not locked, no news
+   blackout) and publishes it as a state function; this collector only
+   validates the bracket and hands it to the shared dispatch — one home each
+   side, mirroring the trendmx crown pattern. A missing or null state is
+   silence, not an error. */
+function collectCandleForecast(out){
+  try{
+    if (typeof W.hgCandleForecastAlertState !== 'function') return;
+    var s = W.hgCandleForecastAlertState();
+    if (!s || typeof s !== 'object') return;
+    if (!s.dir || !fin(+s.entry) || !fin(+s.stop) || !fin(+s.t1)) return;
+    pushSetup(out, 'CANDLE FORECAST', {
+      sym: s.sym || 'XAUUSD', dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
+      rr: s.rr, clean: false
+    }, { note: s.note || null });
+  }catch(e){ /* never breaks the batch */ }
+}
+
 function hgTabAlertsCollect(win){
   var out = [];
   var root = win || W;
@@ -950,6 +969,7 @@ function hgTabAlertsCollect(win){
   try{
     collectOmnibtc(out);   /* hg-v1053: the desk's one crown, first - it is the most selective read */
     collectTrendmxCrown(out);   /* hg-v1068: the matrix's one crown, right after */
+    collectCandleForecast(out);   /* hg-v1357: the forecast tab's one armed setup */
     collectGaneshGold(out);   /* hg-v1072: the firm's one crown */
     collectCrypto(out, 'swing', 'SWING');
     collectCrypto(out, 'scalp', 'SCALP');
