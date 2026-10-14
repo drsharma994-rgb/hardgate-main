@@ -468,9 +468,29 @@ function sgPrecisionGoldLevels(row, intel, opts){
     bestEntry = isLong ? Math.max(rawStop + atr * 0.5, nearStruct.px + 0.25)
                        : Math.min(rawStop - atr * 0.5, nearStruct.px - 0.25);
     entryReason = 'front-run ' + nearStruct.label + ' @ ' + fmt(nearStruct.px, 2);
-  } else if (swing && Math.abs(swing.ote618 - rawEntry) <= atr * 0.55){
-    bestEntry = +((rawEntry * 0.6 + swing.ote618 * 0.4)).toFixed(2);
-    entryReason = 'OTE 61.8% confluence (' + fmt(swing.ote618, 2) + ')';
+  } else if (swing && isFinite(swing.ote618) && isFinite(swing.ote705)){
+    var oteLo = Math.min(swing.ote618, swing.ote705);
+    var oteHi = Math.max(swing.ote618, swing.ote705);
+    var bandPad = atr * 0.55;
+    var nearOte = rawEntry >= (oteLo - bandPad) && rawEntry <= (oteHi + bandPad);
+    var vwap = (swing.vwap != null && isFinite(+swing.vwap)) ? +swing.vwap : NaN;
+    if (nearOte){
+      var snapped = Math.min(oteHi, Math.max(oteLo, rawEntry));
+      if (isFinite(vwap) && vwap >= oteLo && vwap <= oteHi && Math.abs(vwap - rawEntry) <= bandPad){
+        bestEntry = +(((snapped + vwap) / 2)).toFixed(2);
+        entryReason = 'OTE 61.8-70.5 with VWAP (' + fmt(vwap, 2) + ')';
+      } else {
+        bestEntry = +snapped.toFixed(2);
+        entryReason = 'OTE 61.8-70.5 (' + fmt(oteLo, 2) + '-' + fmt(oteHi, 2) + ')';
+      }
+    } else if (isFinite(vwap) && Math.abs(vwap - rawEntry) <= atr * 0.45){
+      bestEntry = +((rawEntry * 0.6 + vwap * 0.4)).toFixed(2);
+      entryReason = 'VWAP confluence (' + fmt(vwap, 2) + ')';
+    }
+  }
+  if ((isLong && bestEntry <= rawStop) || (!isLong && bestEntry >= rawStop)){
+    bestEntry = rawEntry;
+    entryReason = 'desk structural level';
   }
   bestEntry = +bestEntry.toFixed(2);
   var zonePad = +(atr * 0.15).toFixed(2);

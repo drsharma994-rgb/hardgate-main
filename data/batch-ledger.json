@@ -310,6 +310,11 @@
       "version": "hg-v1368",
       "built": "2026-10-15T06:30:00Z",
       "note": "Super Gold stamps the measured sniper bracket onto the row after the tape is read. The card and the send use that same bracket. A ladder out of order is not sent. A refresh keeps the tape. The desk entry and stop on the row stay as published."
+    },
+    {
+      "version": "hg-v1369",
+      "built": "2026-10-15T07:00:00Z",
+      "note": "When no structure is close, the sniper entry uses the 61.8 to 70.5 percent band. If VWAP sits inside that band it pulls the entry to the midpoint. A close structure level still wins. An unread ATR is still not sent."
     }
   ]
 }
