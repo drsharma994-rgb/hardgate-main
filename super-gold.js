@@ -24,7 +24,8 @@ var __hgSuperGoldSnap = null;
 var __sg = {
   mounted: false, syncTimer: null, scanTimer: null, root: null,
   lastKey: '', selectedId: null, scanBusy: false, lastScanAt: 0,
-  scanPromise: null, lastScanMsg: '', selectedHit: null
+  scanPromise: null, lastScanMsg: '', selectedHit: null,
+  dispatchedKeys: {}, lastDispatch: null
 };
 
 function N(v){ return Number(v); }
@@ -949,20 +950,63 @@ function superGoldAfterScan(snap){
    moves a crown, a level, or a stop — v1358/v1359 own the crowning rules;
    this layer only says whether the tape, the clock and the calendar agree
    with what was crowned. */
-async function superGoldIntel(win){
+async function superGoldIntel(win, opts){
   win = win || W;
-  var out = { ok: false, at: Date.now(), fiveTf: null, candle: null, volRegime: null, session: null, news: null, feedQuality: null, structure: null, why: '' };
+  opts = opts || {};
+  var maxRetries = (opts.retries != null && isFinite(+opts.retries)) ? Math.max(0, +opts.retries) : 1;
+  var timeoutMs = (opts.timeoutMs != null && isFinite(+opts.timeoutMs)) ? Math.max(500, +opts.timeoutMs) : 5000;
+  var out = {
+    ok: false, at: Date.now(), fiveTf: null, candle: null, volRegime: null,
+    session: null, news: null, feedQuality: null, structure: null, why: '',
+    diagnostics: { legsRead: 0, legsTotal: 5, healedLegs: [], missingLegs: [], retriesUsed: 0 }
+  };
   var I = win.hgCfIntel;
-  function pack(tf, n){
-    if (typeof win.getGoldCandles !== 'function') return Promise.resolve(null);
+  function normalizeRows(res){
+    if (!res) return null;
+    if (Array.isArray(res) && res.length) return res;
+    if (res.rows && Array.isArray(res.rows) && res.rows.length) return res.rows;
+    if (res.candles && Array.isArray(res.candles) && res.candles.length) return res.candles;
+    return null;
+  }
+  function raceRows(work){
     return Promise.race([
-      win.getGoldCandles(tf, n).then(function(p){ return p && p.rows && p.rows.length ? p.rows : null; }).catch(function(){ return null; }),
-      new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, 5000); })
+      Promise.resolve().then(work).then(normalizeRows).catch(function(){ return null; }),
+      new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, timeoutMs); })
     ]);
+  }
+  function fetchOnce(tf, n){
+    if (typeof win.getGoldCandles !== 'function') return Promise.resolve(null);
+    return raceRows(function(){ return win.getGoldCandles(tf, n); });
+  }
+  function fetchFallback(tf, n){
+    if (typeof win.getXAUCandles === 'function'){
+      return raceRows(function(){ return win.getXAUCandles(tf, n); });
+    }
+    if (typeof win.binanceKlines === 'function'){
+      return raceRows(function(){ return win.binanceKlines('XAUUSDT', tf, n); });
+    }
+    return Promise.resolve(null);
+  }
+  async function pack(tf, n){
+    var rows = await fetchOnce(tf, n);
+    if (rows && rows.length) return rows;
+    var attempt;
+    for (attempt = 0; attempt < maxRetries; attempt++){
+      out.diagnostics.retriesUsed++;
+      rows = await fetchOnce(tf, n);
+      if (!rows || !rows.length) rows = await fetchFallback(tf, n);
+      if (rows && rows.length){
+        out.diagnostics.healedLegs.push(tf);
+        return rows;
+      }
+    }
+    out.diagnostics.missingLegs.push(tf);
+    return null;
   }
   try{
     var got = await Promise.all([pack('5m', 80), pack('15m', 80), pack('1h', 80), pack('4h', 80), pack('1d', 120)]);
     var rows5 = got[0], rows15 = got[1], rows1h = got[2], rows4h = got[3], rows1d = got[4];
+    out.diagnostics.legsRead = [rows5, rows15, rows1h, rows4h, rows1d].filter(function(r){ return Array.isArray(r) && r.length > 0; }).length;
     if (I && typeof I.fiveTf === 'function'){
       try{ out.fiveTf = I.fiveTf({ rows5m: rows5, rows15m: rows15, rows1h: rows1h, rows4h: rows4h, rows1d: rows1d }); }catch(eFt){}
     }
@@ -998,6 +1042,7 @@ async function superGoldIntel(win){
           ]);
           legs = legs.concat(legs2);
         }
+        out.feedLegs = legs;
         out.feedQuality = I.feedQuality(legs, 900);
       }catch(eFq){}
     }
@@ -1168,6 +1213,342 @@ function sgCrownExecution(snap){
     ? 'the mark ' + mk.toFixed(2) + ' has traded at the crowned entry — the bracket is live on its own stop'
     : 'crowned ' + side + ' at ' + e.toFixed(2) + ' — the mark ' + mk.toFixed(2) + ' has not reached it; the order waits';
   return out;
+}
+
+
+/* hg-v1364: the cross-venue tape beside the crown. A display and a dispatch
+   gate. It does not move the crowned stop and it does not uncrown. */
+function sgTapeDiagnostics(snap, win){
+  win = win || W;
+  snap = snap || superGoldScan();
+  var intel = (snap && snap.intel) || null;
+  var crowned = sgCrownedRow(snap);
+  var r = crowned && crowned.row;
+  var side = crowned ? crowned.side : '';
+  var out = {
+    ok: false, status: 'UNREAD', lock: false, venues: [],
+    maxSpreadUsd: null, spreadBps: null, slippagePts: null, slippageAtr: null,
+    healedLegs: (intel && intel.diagnostics && Array.isArray(intel.diagnostics.healedLegs)) ? intel.diagnostics.healedLegs.slice() : [],
+    missingLegs: (intel && intel.diagnostics && Array.isArray(intel.diagnostics.missingLegs)) ? intel.diagnostics.missingLegs.slice() : [],
+    legsRead: (intel && intel.diagnostics && isFinite(+intel.diagnostics.legsRead)) ? +intel.diagnostics.legsRead : 0,
+    why: 'tape diagnostics unread'
+  };
+  function barClose(b){
+    if (!b) return NaN;
+    var v = (b.c != null) ? b.c : ((b.close != null) ? b.close : (Array.isArray(b) ? b[4] : NaN));
+    return N(v);
+  }
+  var prices = [];
+  if (intel && Array.isArray(intel.rows15) && intel.rows15.length){
+    var c15 = barClose(intel.rows15[intel.rows15.length - 1]);
+    if (isFinite(c15) && c15 > 0) prices.push({ name: '15m-close', px: c15 });
+  }
+  if (intel && Array.isArray(intel.feedLegs)){
+    intel.feedLegs.forEach(function(leg){
+      if (!leg || !Array.isArray(leg.rows) || !leg.rows.length) return;
+      var px = barClose(leg.rows[leg.rows.length - 1]);
+      if (isFinite(px) && px > 0 && leg.name !== 'house 15m') prices.push({ name: leg.name, px: px });
+    });
+  }
+  try{
+    if (typeof win.goldspotState === 'function'){
+      var sp = win.goldspotState();
+      if (sp){
+        if (isFinite(N(sp.spot)) && N(sp.spot) > 0) prices.push({ name: 'spot', px: N(sp.spot) });
+        if (isFinite(N(sp.paxg)) && N(sp.paxg) > 0) prices.push({ name: 'paxg', px: N(sp.paxg) });
+        if (isFinite(N(sp.xaut)) && N(sp.xaut) > 0) prices.push({ name: 'xaut', px: N(sp.xaut) });
+      }
+    }
+  }catch(eSp){}
+  out.venues = prices;
+  var fqLock = !!(intel && intel.feedQuality && intel.feedQuality.lock === true);
+  if (prices.length >= 2){
+    var pxs = prices.map(function(p){ return p.px; });
+    var hi = Math.max.apply(null, pxs), lo = Math.min.apply(null, pxs);
+    var ref = pxs[0];
+    out.maxSpreadUsd = +(hi - lo).toFixed(2);
+    out.spreadBps = ref > 0 ? +(((hi - lo) / ref) * 10000).toFixed(1) : null;
+  }
+  var atr = (intel && intel.volRegime && intel.volRegime.ok && isFinite(+intel.volRegime.atrNow) && +intel.volRegime.atrNow > 0)
+    ? +intel.volRegime.atrNow : null;
+  var livePx = prices.length ? prices[0].px : NaN;
+  if (r && isFinite(N(r.mark)) && N(r.mark) > 0 && isFinite(livePx) && livePx > 0){
+    var rawSlip = livePx - N(r.mark);
+    var signedSlip = side === 'short' ? -rawSlip : rawSlip;
+    out.slippagePts = +signedSlip.toFixed(2);
+    out.slippageAtr = atr ? +(signedSlip / atr).toFixed(2) : null;
+  }
+  var spreadVeto = (out.maxSpreadUsd != null && out.maxSpreadUsd > 12) || (out.spreadBps != null && out.spreadBps > 45);
+  var slipCaution = (out.slippageAtr != null && Math.abs(out.slippageAtr) > 0.75);
+  out.lock = fqLock || spreadVeto;
+  out.ok = prices.length > 0 || !!(intel && intel.feedQuality && intel.feedQuality.ok);
+  if (!out.ok){
+    out.status = 'UNREAD';
+    out.why = 'no live venue prices on this scan';
+  } else if (out.lock){
+    out.status = 'LOCKED';
+    out.why = fqLock
+      ? ('feed quality lock: ' + ((intel.feedQuality && intel.feedQuality.why) || 'cross-feed divergence'))
+      : ('cross-venue spread ' + fmt(out.maxSpreadUsd, 2) + ' USD (' + fmt(out.spreadBps, 1) + ' bps) is past the 12 USD / 45 bps guard');
+  } else if (slipCaution || out.missingLegs.length || (out.maxSpreadUsd != null && out.maxSpreadUsd > 6)){
+    out.status = 'CAUTION';
+    var notes = [];
+    if (out.maxSpreadUsd != null) notes.push('venue spread $' + fmt(out.maxSpreadUsd, 2));
+    if (slipCaution) notes.push('mark-to-tape drift ' + fmt(out.slippagePts, 2) + ' (' + fmt(out.slippageAtr, 2) + ' ATR)');
+    if (out.missingLegs.length) notes.push('missing legs: ' + out.missingLegs.join(', '));
+    out.why = notes.join(' · ') || 'minor tape caution';
+  } else {
+    out.status = 'CLEAN';
+    var okNotes = [];
+    if (out.maxSpreadUsd != null) okNotes.push('venue spread $' + fmt(out.maxSpreadUsd, 2));
+    if (out.healedLegs.length) okNotes.push('healed ' + out.healedLegs.join(','));
+    out.why = okNotes.join(' · ') || 'feeds aligned';
+  }
+  return out;
+}
+
+/* hg-v1364: what the crowned bracket has done since its own bar.
+   The source stop is not moved. A touch of T1 or of the stop is named.
+   Bars with no time, and bars from before the signal, are not used. */
+function sgCrownLifecycle(snap, win){
+  win = win || W;
+  snap = snap || superGoldScan();
+  var ex = sgCrownExecution(snap);
+  var crowned = sgCrownedRow(snap);
+  var intel = (snap && snap.intel) || null;
+  var out = {
+    ok: false, stage: 'STANDBY', side: ex.side || '',
+    entry: ex.entry, initialStop: ex.stop, activeStop: ex.stop, t1: ex.t1,
+    t2: crowned && crowned.row && isFinite(N(crowned.row.t2)) && N(crowned.row.t2) > 0 ? N(crowned.row.t2) : NaN,
+    mark: ex.mark, currentR: null, mfeR: null, maeR: null,
+    t1Touched: false, stoppedOut: false, invalidated: false,
+    invalidationReasons: [], why: 'no crowned bracket on the desk'
+  };
+  if (!crowned || ex.state === 'NO-TRADE') return out;
+  var r = crowned.row, side = crowned.side;
+  var e = +r.entry, s = +r.stop, t1 = +r.t1;
+  var riskDist = Math.abs(e - s);
+  if (!(e > 0 && s > 0 && riskDist > 0)){
+    out.why = 'the crowned row has no settleable bracket';
+    return out;
+  }
+  out.ok = true;
+  out.activeStop = s;
+  var rows15 = (intel && Array.isArray(intel.rows15)) ? intel.rows15 : [];
+  var candSec = sgCandSec(r, r);
+  var relevant = [];
+  if (candSec !== null){
+    rows15.forEach(function(b){
+      if (!b) return;
+      var bt = b.t != null ? +b.t : (b.time != null ? +b.time : (Array.isArray(b) ? +b[0] : NaN));
+      if (!isFinite(bt) || bt <= 0) return;
+      var bSec = Math.floor(Math.abs(bt) > 1e12 ? bt / 1000 : bt);
+      if (bSec >= candSec) relevant.push(b);
+    });
+  }
+  var latestPx = isFinite(ex.mark) && ex.mark > 0 ? ex.mark : NaN;
+  if (ex.state === 'TRIGGERED' && relevant.length){
+    var mfePx = isFinite(latestPx) ? latestPx : e;
+    var maePx = isFinite(latestPx) ? latestPx : e;
+    relevant.forEach(function(b){
+      var bh = N(b.h != null ? b.h : b.high);
+      var bl = N(b.l != null ? b.l : b.low);
+      if (side === 'long'){
+        if (isFinite(bh) && bh > mfePx) mfePx = bh;
+        if (isFinite(bl) && bl < maePx) maePx = bl;
+      } else {
+        if (isFinite(bl) && bl < mfePx) mfePx = bl;
+        if (isFinite(bh) && bh > maePx) maePx = bh;
+      }
+    });
+    if (isFinite(latestPx)) out.currentR = +((side === 'long' ? (latestPx - e) : (e - latestPx)) / riskDist).toFixed(2);
+    out.mfeR = +((side === 'long' ? (mfePx - e) : (e - mfePx)) / riskDist).toFixed(2);
+    out.maeR = +((side === 'long' ? (e - maePx) : (maePx - e)) / riskDist).toFixed(2);
+    out.stoppedOut = side === 'long' ? (maePx <= s) : (maePx >= s);
+    out.t1Touched = (t1 > 0) && (side === 'long' ? (mfePx >= t1) : (mfePx <= t1));
+  } else if (candSec === null){
+    out.invalidationReasons.push('the crowned row has no bar time, so the path after the signal was not walked');
+  }
+  var ag = sgCandleAgreement(intel, side);
+  if (ag.verdict === 'AGAINST') out.invalidationReasons.push('15m candles are against the crown');
+  var blackoutNow = !!(intel && intel.news && intel.news.blackout);
+  try{
+    if (!blackoutNow && typeof win.hgFundamentalBlackout === 'function') blackoutNow = win.hgFundamentalBlackout('XAUUSD') === true;
+  }catch(eBk){}
+  if (blackoutNow){
+    out.invalidated = true;
+    out.invalidationReasons.push('red-folder macro blackout');
+  }
+  var tape = sgTapeDiagnostics(snap, win);
+  if (tape.lock){
+    out.invalidated = true;
+    out.invalidationReasons.push('tape locked: ' + tape.why);
+  }
+  if (out.stoppedOut){
+    out.invalidated = true;
+    out.invalidationReasons.push('the source stop ' + fmt(s, 2) + ' was traded');
+  }
+  if (out.invalidated){
+    out.stage = 'INVALIDATED';
+    out.why = 'The source stop stays at ' + fmt(out.activeStop, 2) + '. ' + out.invalidationReasons.join(' · ');
+  } else if (ex.state === 'ARMED'){
+    out.stage = 'ARMED';
+    out.why = 'Armed ' + side + ' at ' + fmt(e, 2) + '. The source stop stays at ' + fmt(s, 2) + '.'
+      + (out.invalidationReasons.length ? (' Caution: ' + out.invalidationReasons.join(' · ') + '.') : '');
+  } else if (out.t1Touched){
+    out.stage = 'T1 TOUCHED';
+    out.why = 'T1 ' + fmt(t1, 2) + ' was traded. The source stop stays at ' + fmt(s, 2) + '. This desk does not trail it.';
+  } else {
+    out.stage = 'IN POSITION';
+    out.why = 'In the crowned bracket. The source stop stays at ' + fmt(s, 2) + '.'
+      + (out.currentR != null ? (' Live ' + (out.currentR >= 0 ? '+' : '') + fmt(out.currentR, 2) + 'R.') : ' The path after the signal was not walked.');
+  }
+  return out;
+}
+
+function sgCrownDispatchPayload(snap, riskOpts, win){
+  win = win || W;
+  snap = snap || superGoldScan();
+  riskOpts = riskOpts || defaultRiskOpts(win);
+  var crowned = sgCrownedRow(snap);
+  if (!crowned) return { ready: false, reason: 'No crowned setup on a fresh scan' };
+  var r = crowned.row, side = crowned.side;
+  var cc = sgCrownChecks(snap);
+  var ex = sgCrownExecution(snap);
+  var lc = sgCrownLifecycle(snap, win);
+  var tape = sgTapeDiagnostics(snap, win);
+  if (!cc.ok || (cc.grade !== 'A' && cc.grade !== 'B')){
+    return { ready: false, reason: 'Crown audit grade ' + (cc.grade || 'NONE') + ' is below B, so nothing is sent' };
+  }
+  if (tape.lock) return { ready: false, reason: 'Tape locked: ' + tape.why };
+  if (lc.invalidated || lc.stoppedOut) return { ready: false, reason: lc.why || 'The crown is invalidated' };
+  var blackout = false;
+  try{
+    if (typeof win.hgFundamentalBlackout === 'function') blackout = win.hgFundamentalBlackout('XAUUSD') === true;
+  }catch(eB){}
+  if (blackout || (snap && snap.intel && snap.intel.news && snap.intel.news.blackout)){
+    return { ready: false, reason: 'Red-folder macro blackout' };
+  }
+  if (sgFundBlocked(r)) return { ready: false, reason: 'The fundamental stack blocked this row' };
+  var rr = effectiveGoldRr(r);
+  if (!(rr > 0) || !(N(r.t1) > 0)) return { ready: false, reason: 'No target on the crowned row' };
+  var oz = (r.positionSize && isFinite(+r.positionSize.positionSizeUnits)) ? +r.positionSize.positionSizeUnits : NaN;
+  if (!(oz > 0)) return { ready: false, reason: 'No size on the crowned row' };
+  var barStamp = sgCandSec(r, r);
+  if (barStamp === null) return { ready: false, reason: 'The crowned row has no bar time, so no ticket key was invented' };
+  var ticketKey = [r.sym || 'XAUUSD', side, (+r.entry).toFixed(2), (+r.stop).toFixed(2), (+r.t1).toFixed(2), barStamp].join(':');
+  return {
+    ready: true, ticketKey: ticketKey, fund: 'gold', scanner: 'super-gold',
+    source: r.scanner || 'super-gold', strategy: r.strategy || 'SUPER GOLD CROWN',
+    sym: r.sym || 'XAUUSD', dir: side, side: side === 'long' ? 'BUY' : 'SELL',
+    entry: +r.entry, stop: +r.stop, t1: +r.t1,
+    t2: isFinite(+r.t2) && +r.t2 > 0 ? +r.t2 : null,
+    rr: +(+rr).toFixed(2), qty: +oz.toFixed(4),
+    mark: isFinite(N(r.mark)) ? N(r.mark) : null,
+    grade: cc.grade, checksPassed: cc.passed, checksTotal: cc.total,
+    execState: ex.state, lifecycleStage: lc.stage,
+    reason: 'CROWN ' + cc.grade + ' (' + cc.passed + '/' + cc.total + ') · ' + ex.state
+  };
+}
+
+async function sgPostJson(win, url, body){
+  win = win || W;
+  if (typeof win.fetch !== 'function') return { ok: false, dryRun: true, reason: 'fetch unavailable', payload: body };
+  try{
+    var res = await win.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    var data = null;
+    try{ data = await res.json(); }catch(eJ){ data = { status: res.status }; }
+    return { ok: !!(res && res.ok), status: res ? res.status : 0, data: data, payload: body };
+  }catch(eNet){
+    return { ok: false, error: (eNet && eNet.message) || String(eNet), payload: body };
+  }
+}
+
+async function sgDispatchToBook(snap, opts){
+  opts = opts || {};
+  var win = opts.win || W;
+  var payload = sgCrownDispatchPayload(snap, opts.riskOpts, win);
+  if (!payload.ready) return { ok: false, action: 'book', reason: payload.reason };
+  var dedupKey = 'book:' + payload.ticketKey;
+  if (!opts.force && __sg.dispatchedKeys[dedupKey]){
+    return { ok: false, duplicate: true, action: 'book', ticketKey: payload.ticketKey, reason: 'This crown was already sent to the book' };
+  }
+  __sg.dispatchedKeys[dedupKey] = Date.now();
+  var res;
+  if (typeof win.hgBookAddPosition === 'function'){
+    try{ res = { ok: true, action: 'book', via: 'hgBookAddPosition', ticketKey: payload.ticketKey, result: await Promise.resolve(win.hgBookAddPosition(payload)), payload: payload }; }
+    catch(eB){ delete __sg.dispatchedKeys[dedupKey]; res = { ok: false, action: 'book', reason: (eB && eB.message) || String(eB) }; }
+  } else if (typeof win.bookAdd === 'function'){
+    try{ res = { ok: true, action: 'book', via: 'bookAdd', ticketKey: payload.ticketKey, result: await Promise.resolve(win.bookAdd('gold', payload)), payload: payload }; }
+    catch(eB2){ delete __sg.dispatchedKeys[dedupKey]; res = { ok: false, action: 'book', reason: (eB2 && eB2.message) || String(eB2) }; }
+  } else {
+    var post = await sgPostJson(win, '/api/book', { action: 'add', fund: 'gold', plan: payload });
+    if (!post.ok && !post.dryRun) delete __sg.dispatchedKeys[dedupKey];
+    res = Object.assign({ action: 'book', via: '/api/book', ticketKey: payload.ticketKey }, post);
+  }
+  __sg.lastDispatch = res;
+  return res;
+}
+
+async function sgDispatchToXm(snap, opts){
+  opts = opts || {};
+  var win = opts.win || W;
+  if (win.XM_OMNIGOLD_BOT === 0 || win.XM_OMNIGOLD_BOT === '0' || win.XM_OMNIGOLD_BOT === false){
+    return { ok: false, action: 'xm', reason: 'XM bridge disabled' };
+  }
+  var payload = sgCrownDispatchPayload(snap, opts.riskOpts, win);
+  if (!payload.ready) return { ok: false, action: 'xm', reason: payload.reason };
+  var dedupKey = 'xm:' + payload.ticketKey;
+  if (!opts.force && __sg.dispatchedKeys[dedupKey]){
+    return { ok: false, duplicate: true, action: 'xm', ticketKey: payload.ticketKey, reason: 'This crown was already sent to XM' };
+  }
+  __sg.dispatchedKeys[dedupKey] = Date.now();
+  var xmOrder = {
+    symbol: 'XAUUSD', side: payload.side, dir: payload.dir, lots: payload.qty,
+    entry: payload.entry, stop: payload.stop, tp1: payload.t1, tp2: payload.t2,
+    ticket: true, live: win.XM_OMNIGOLD_LIVE === 1 || win.XM_OMNIGOLD_LIVE === '1' || win.XM_OMNIGOLD_LIVE === true,
+    source: 'super-gold', comment: 'HG-SG-' + payload.grade + ' ' + payload.execState
+  };
+  var res;
+  if (typeof win.xmSendOrder === 'function'){
+    try{ res = { ok: true, action: 'xm', via: 'xmSendOrder', ticketKey: payload.ticketKey, result: await Promise.resolve(win.xmSendOrder(xmOrder)), order: xmOrder }; }
+    catch(eX){ delete __sg.dispatchedKeys[dedupKey]; res = { ok: false, action: 'xm', reason: (eX && eX.message) || String(eX) }; }
+  } else {
+    var post = await sgPostJson(win, '/api/xm/order', xmOrder);
+    if (!post.ok && !post.dryRun) delete __sg.dispatchedKeys[dedupKey];
+    res = Object.assign({ action: 'xm', via: '/api/xm/order', ticketKey: payload.ticketKey, order: xmOrder }, post);
+  }
+  __sg.lastDispatch = res;
+  return res;
+}
+
+async function sgDispatchBracket(snap, opts){
+  opts = opts || {};
+  var win = opts.win || W;
+  var payload = sgCrownDispatchPayload(snap, opts.riskOpts, win);
+  if (!payload.ready) return { ok: false, action: 'execute', reason: payload.reason };
+  var dedupKey = 'exec:' + payload.ticketKey;
+  if (!opts.force && __sg.dispatchedKeys[dedupKey]){
+    return { ok: false, duplicate: true, action: 'execute', ticketKey: payload.ticketKey, reason: 'This crown was already sent' };
+  }
+  __sg.dispatchedKeys[dedupKey] = Date.now();
+  var bracket = {
+    sym: payload.sym, dir: payload.dir, side: payload.side, entry: payload.entry,
+    stopLoss: payload.stop, takeProfit: payload.t1, takeProfit2: payload.t2,
+    qty: payload.qty, fund: 'gold', scanner: 'super-gold', plan: payload
+  };
+  var res;
+  var fn = win.hgExecuteBracket || win.executeBracket;
+  if (typeof fn === 'function'){
+    try{ res = { ok: true, action: 'execute', via: 'executeBracket', ticketKey: payload.ticketKey, result: await Promise.resolve(fn(bracket)), bracket: bracket }; }
+    catch(eE){ delete __sg.dispatchedKeys[dedupKey]; res = { ok: false, action: 'execute', reason: (eE && eE.message) || String(eE) }; }
+  } else {
+    var post = await sgPostJson(win, '/api/execute', bracket);
+    if (!post.ok && !post.dryRun) delete __sg.dispatchedKeys[dedupKey];
+    res = Object.assign({ action: 'execute', via: '/api/execute', ticketKey: payload.ticketKey, bracket: bracket }, post);
+  }
+  __sg.lastDispatch = res;
+  return res;
 }
 
 /* hg-v1362: the desk's one alert candidate. Published after every scan; the
@@ -1559,11 +1940,32 @@ function mount(el){
             + ' <span class="hg-note">— out of sample. The crowned split is the filter\'s own record.</span></div>';
         }
       }catch(eFw){ fwdBits = ''; }
+      var tapeLife = '';
+      try{
+        var tape = sgTapeDiagnostics(snap);
+        var life = sgCrownLifecycle(snap);
+        var tColor = tape.status === 'LOCKED' ? '#dc262c' : (tape.status === 'CLEAN' ? '#15803d' : '#b45309');
+        tapeLife = '<div class="hg-note" data-sg-intel="tape" style="margin-top:4px"><b>TAPE</b> '
+          + '<span style="color:' + tColor + ';font-weight:700">' + esc(tape.status) + '</span>'
+          + ' <span class="hg-note">- ' + esc(tape.why) + '</span></div>'
+          + '<div class="hg-note" data-sg-intel="life" style="margin-top:4px"><b>LIFECYCLE</b> '
+          + esc(life.stage) + ' <span class="hg-note">- ' + esc(life.why) + '</span></div>';
+        var payload = sgCrownDispatchPayload(snap, readRiskOpts());
+        if (payload.ready){
+          tapeLife += '<div style="margin-top:6px">'
+            + '<button type="button" class="hg-btn" data-sg-dispatch="book">Send to book</button> '
+            + '<button type="button" class="hg-btn" data-sg-dispatch="xm">Send to XM</button> '
+            + '<button type="button" class="hg-btn" data-sg-dispatch="execute">Execute bracket</button>'
+            + '<div class="hg-note" data-sg-intel="dispatch-result"></div></div>';
+        } else if (ex.state !== 'NO-TRADE'){
+          tapeLife += '<div class="hg-note" data-sg-intel="dispatch" style="margin-top:4px">Not sent: ' + esc(payload.reason) + '</div>';
+        }
+      }catch(eTl){ tapeLife = ''; }
       execHtml = '<div class="hg-note" data-sg-intel="exec" style="margin-bottom:6px"><b>CROWN EXECUTION</b> '
         + '<span style="color:' + exColor + ';font-weight:700">' + esc(ex.state) + '</span>'
         + (ex.side ? (' <span class="hg-note">' + esc(ex.side.toUpperCase()) + '</span>') : '')
         + '<div class="hg-note">' + esc(ex.why) + '</div>'
-        + coneBits + fwdBits
+        + coneBits + fwdBits + tapeLife
         + ((ex.state === 'ARMED' || ex.state === 'TRIGGERED') ? '<div id="sg-crown-chart" style="margin-top:6px"></div>' : '')
         + '</div>';
     }catch(eEx){ execHtml = ''; }
@@ -1575,6 +1977,20 @@ function mount(el){
       : '';
     /* hg-v1363: the mini chart draws after the host exists; a missing 2d
        context leaves the wrap empty, never a thrown repaint. */
+    try{
+      host.querySelectorAll('[data-sg-dispatch]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var kind = btn.getAttribute('data-sg-dispatch');
+          var fn = kind === 'book' ? sgDispatchToBook : (kind === 'xm' ? sgDispatchToXm : sgDispatchBracket);
+          btn.disabled = true;
+          Promise.resolve(fn(snap, { riskOpts: readRiskOpts() })).then(function(res){
+            btn.disabled = false;
+            var note = host.querySelector('[data-sg-intel="dispatch-result"]');
+            if (note) note.textContent = (res && (res.reason || (res.ok ? ('sent ' + (res.via || '')) : 'not sent'))) || '';
+          });
+        });
+      });
+    }catch(eDp){}
     try{
       var exNow = sgCrownExecution(snap);
       if ((exNow.state === 'ARMED' || exNow.state === 'TRIGGERED') && intel && Array.isArray(intel.rows15)){
@@ -1876,6 +2292,12 @@ W.sgCrownedRow = sgCrownedRow;
 /* hg-v1363: the crown execution state, exported so the guard drives the
    REAL state machine. */
 W.sgCrownExecution = sgCrownExecution;
+W.sgTapeDiagnostics = sgTapeDiagnostics;
+W.sgCrownLifecycle = sgCrownLifecycle;
+W.sgCrownDispatchPayload = sgCrownDispatchPayload;
+W.sgDispatchToBook = sgDispatchToBook;
+W.sgDispatchToXm = sgDispatchToXm;
+W.sgDispatchBracket = sgDispatchBracket;
 
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'super-gold', label: 'SUPER GOLD', run: superGoldWarm });

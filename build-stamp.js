@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1363',
-  pack: 'SUPER GOLD crown execution - ARMED/TRIGGERED/NO-TRADE state for the crowned bracket against the sizing mark, the forecast cone and the closed 15m window pinned to the scan, a mini chart of the crowned levels, the crowned-only forward split, and a next-scan countdown.',
-  built: '2026-10-15T03:30:00Z'
+  version: 'hg-v1364',
+  pack: 'hg-v1364: Super Gold retries a candle leg that comes back empty, then reads the fallback. A cross-venue gap past 12 USD locks a send. The path after the crowned bar is named and the source stop is not moved. A send needs a real size and a real bar time, and the scan itself does not send. SUPER GOLD crown execution - ARMED/TRIGGERED/NO-TRADE state for the crowned bracket against the sizing mark, the forecast cone and the closed 15m window pinned to the scan, a mini chart of the crowned levels, the crowned-only forward split, and a next-scan countdown.',
+  built: '2026-10-15T04:30:00Z'
 };
 
 function hgBuildLabel(b){

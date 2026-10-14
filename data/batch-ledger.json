@@ -285,6 +285,11 @@
       "version": "hg-v1363",
       "built": "2026-10-15T03:30:00Z",
       "note": "SUPER GOLD gains the crown execution layer: an ARMED/TRIGGERED/NO-TRADE state machine for the crowned bracket judged against the source desk's sizing mark (a crown with no mark is ARMED with the trigger unread, never a fabricated fill); the forecast cone and the closed 15m window pinned to the scan so the render path never fetches; a mini candlestick chart of the crowned entry/stop/T1 on the tape; the desk's forward record split into pool-wide and crowned-only so the reader can see whether the crown earns its place; a next-scan countdown repainted by the desk's own sync timer; and the execution state now renders even when the tape legs of the intel read failed. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1364",
+      "built": "2026-10-15T04:30:00Z",
+      "note": "Super Gold retries a candle leg that comes back empty, then reads the fallback. A cross-venue gap past 12 USD locks a send. The path after the crowned bar is named and the source stop is not moved. A send needs a real size and a real bar time, and the scan itself does not send."
     }
   ]
 }
