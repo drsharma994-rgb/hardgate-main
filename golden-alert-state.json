@@ -611,9 +611,17 @@
       "ago": 2,
       "crossDay": "2026-10-11",
       "expired": true
+    },
+    "BAT": {
+      "at": "2026-10-14T16:06:45.746Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 1,
+      "crossDay": "2026-10-12",
+      "expired": true
     }
   },
-  "lastRunAt": "2026-10-14T12:25:43.829Z",
+  "lastRunAt": "2026-10-14T16:07:00.708Z",
   "scanned": 504,
   "cards": 0
 }
