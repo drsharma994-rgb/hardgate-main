@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1341',
-  pack: "Ultimate AI Confluence Engine (Candle Forecast) - Advanced Pattern Recognition, Technical & Structural Confluence, Dual Scalp/Swing Setups.",
-  built: '2026-10-13T05:00:00Z'
+  version: 'hg-v1342',
+  pack: 'FIXES THE CANDLE FORECAST TAB - the tab that sat on Waiting for data forever had a truncated module. A v1327-era bot commit (Bump version to v1327 and re-commit all updates) replaced gold-candle-forecast.js with a 175-line stub that ends in a literal placeholder comment - // ... (rest of the module implementation, including renderResult and loadGold etc.) - cutting off renderResult, loadGold15m, loadTapes, loadMacro, loadGold and the HG_tabs.push. A module that never registers is invisible to bootHgTabs, so the static pane (the v14-3 headline and the Waiting for data placeholder) was never replaced - the exact failure mode the v14-3 header comment documents from the v14-2 era. The complete 626-line module is restored from the last complete commit (the Ultimate AI Confluence upgrade): the tab registers, mounts, and SCAN NEXT CANDLE runs the real pipeline again - the 15m and 4h tapes, the confluence read, the day-swings cap of two, and the measured edge. Also fixes the two precache and triad defects the same bot commits left behind: candlestick_patterns.js and gold_confluence_engine.js are loaded by index.html but were missing from the sw.js HG_SHELL precache (check-production was red naming both - they are precached now), and the v1341 bump moved build-stamp.js to 1341 while sw.js HG_CACHE stayed at 1339 - a half-bumped triad; everything now stamps to 1342 and check-cache-bump is green. Carries the v1341 and v1340 packs: the Ultimate AI Confluence Engine with advanced pattern recognition, the candlestick pattern detection mismatch fix in the Trend Matrix confluence, the candle forecast naming the key reversal, the pipe and the runaway gap.',
+  built: '2026-10-14T08:05:00Z'
 };
 
 function hgBuildLabel(b){
