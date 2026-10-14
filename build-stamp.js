@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1362',
-  pack: 'SUPER GOLD crown audit and alert - nine printed checks grade the crowned row (feed lock or blackout caps at C), a distance read from the sizing mark to the entry, the desk cross-feed and structure legs, and one alert path through tabalerts that expires with the scan that earned it.',
-  built: '2026-10-15T02:30:00Z'
+  version: 'hg-v1363',
+  pack: 'SUPER GOLD crown execution - ARMED/TRIGGERED/NO-TRADE state for the crowned bracket against the sizing mark, the forecast cone and the closed 15m window pinned to the scan, a mini chart of the crowned levels, the crowned-only forward split, and a next-scan countdown.',
+  built: '2026-10-15T03:30:00Z'
 };
 
 function hgBuildLabel(b){

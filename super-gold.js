@@ -969,6 +969,13 @@ async function superGoldIntel(win){
     if (I && typeof I.volRegime === 'function'){
       try{ out.volRegime = I.volRegime(rows15); }catch(eVr){}
     }
+    /* hg-v1363: the cone and the closed 15m window, pinned for the render
+       path — the crown execution block and the mini chart read these instead
+       of fetching. Closed bars only, exactly as the scan received them. */
+    if (I && typeof I.forecastCone === 'function'){
+      try{ out.cone = I.forecastCone(rows15, { bars: 3 }); }catch(eCn){}
+    }
+    out.rows15 = Array.isArray(rows15) ? rows15.slice(-60) : null;
     /* hg-v1362: the desk's own cross-feed check and structure map, the same
        readers Candle Forecast uses — a crowned level the feeds disagree on,
        or an entry in empty space, is a fact the board should carry. */
@@ -1125,6 +1132,41 @@ function sgCrownChecks(snap){
   out.why = out.passed + ' of ' + out.total + ' checks passed'
     + (hardFail ? ' — a feed lock or a blackout caps the grade at C' : '')
     + '. The grade is a count of printed checks, not a probability. It never uncrowns.';
+  return out;
+}
+
+/* hg-v1363: THE CROWN EXECUTION STATE. Where the crowned bracket stands
+   against the sizing mark RIGHT NOW: ARMED while the mark has not reached
+   the entry, TRIGGERED once it trades at or through it, NO-TRADE when
+   nothing is crowned. The levels are the crowned row's own; the mark is the
+   price the source desk sized against. A crown with no mark is ARMED with
+   the trigger unread — never a fabricated fill. */
+function sgCrownExecution(snap){
+  var out = { state: 'NO-TRADE', side: '', entry: NaN, stop: NaN, t1: NaN, mark: NaN, why: '' };
+  var crowned = sgCrownedRow(snap);
+  if (!crowned){
+    out.why = 'nothing is crowned, so there is nothing to execute';
+    return out;
+  }
+  var r = crowned.row, side = crowned.side;
+  var e = +r.entry, s = +r.stop, t1 = +r.t1, mk = N(r.mark);
+  out.side = side;
+  out.entry = e; out.stop = s; out.t1 = t1;
+  if (!(e > 0 && s > 0 && e !== s)){
+    out.why = 'the crowned row has no settleable bracket';
+    return out;
+  }
+  if (!isFinite(mk) || !(mk > 0)){
+    out.state = 'ARMED';
+    out.why = 'crowned ' + side + ' — the sizing mark is unread, so the trigger is unchecked; the bracket waits';
+    return out;
+  }
+  out.mark = mk;
+  var through = side === 'long' ? mk <= e : mk >= e;
+  out.state = through ? 'TRIGGERED' : 'ARMED';
+  out.why = through
+    ? 'the mark ' + mk.toFixed(2) + ' has traded at the crowned entry — the bracket is live on its own stop'
+    : 'crowned ' + side + ' at ' + e.toFixed(2) + ' — the mark ' + mk.toFixed(2) + ' has not reached it; the order waits';
   return out;
 }
 
@@ -1430,11 +1472,14 @@ function mount(el){
   function paintIntel(snap){
     var host = $('#sg-intel');
     if (!host) return;
-    var intel = snap && snap.intel;
-    if (!intel) { host.innerHTML = ''; return; }
+    /* hg-v1363: NO early return on a missing intel read — the crown
+       execution state and the crown audit answer from the board's own rows
+       and must still render when the tape legs failed. Every intel leg below
+       is guarded on its own. */
+    var intel = (snap && snap.intel) || null;
     function esc(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
     var bits = [];
-    if (intel.fiveTf){
+    if (intel && intel.fiveTf){
       var ft = intel.fiveTf;
       var aColor = ft.aligned === 'NONE' ? '#64748b' : '#15803d';
       var rowTxt = (ft.rows || []).map(function(r){
@@ -1450,7 +1495,7 @@ function mount(el){
       var rows = snap && Array.isArray(snap.cands) ? snap.cands : [];
       if (rows.length && sgSnapFresh(snap)) crownedSide = sgMergeSide(rows) || '';
     }catch(eCr){ crownedSide = ''; }
-    if (intel.candle){
+    if (intel && intel.candle){
       var ag = crownedSide ? sgCandleAgreement(intel, crownedSide) : null;
       var cColor = !ag ? '#64748b' : (ag.verdict === 'WITH' ? '#15803d' : (ag.verdict === 'AGAINST' ? '#dc262c' : '#94a3b8'));
       bits.push('<div class="hg-note" data-sg-intel="candle" style="margin-bottom:4px"><b>CANDLES 15m</b> '
@@ -1460,9 +1505,9 @@ function mount(el){
         + '</div>');
     }
     var envBits = [];
-    if (intel.volRegime && intel.volRegime.ok) envBits.push('<b>VOLATILITY</b> ' + esc(intel.volRegime.regime) + ' <span class="hg-note">(' + esc(intel.volRegime.why) + ')</span>');
-    if (intel.session && intel.session.ok) envBits.push('<b>SESSION</b> ' + esc(intel.session.label) + ' <span class="hg-note">(' + esc(intel.session.why) + ')</span>');
-    if (intel.news) envBits.push('<b>NEWS</b> ' + esc(intel.news.state || 'UNCHECKED') + ' <span class="hg-note">(' + esc(intel.news.note || '') + ')</span>');
+    if (intel && intel.volRegime && intel.volRegime.ok) envBits.push('<b>VOLATILITY</b> ' + esc(intel.volRegime.regime) + ' <span class="hg-note">(' + esc(intel.volRegime.why) + ')</span>');
+    if (intel && intel.session && intel.session.ok) envBits.push('<b>SESSION</b> ' + esc(intel.session.label) + ' <span class="hg-note">(' + esc(intel.session.why) + ')</span>');
+    if (intel && intel.news) envBits.push('<b>NEWS</b> ' + esc(intel.news.state || 'UNCHECKED') + ' <span class="hg-note">(' + esc(intel.news.note || '') + ')</span>');
     if (envBits.length) bits.push('<div class="hg-note" data-sg-intel="env" style="margin-bottom:4px">' + envBits.join('<br>') + '</div>');
     /* hg-v1362: the crown audit on top — the printed checks against the
        crowned row, with the distance read beside it. */
@@ -1482,12 +1527,110 @@ function mount(el){
           + '<ul style="margin:4px 0 0;padding-left:18px">' + cRows + '</ul></div>';
       }
     }catch(eCc){ crownHtml = ''; }
-    if (!bits.length && intel.why) bits.push('<div class="hg-note">Desk intel unread: ' + esc(intel.why) + '</div>');
-    host.innerHTML = (crownHtml || bits.length)
+    /* hg-v1363: the crown execution block — the state machine, the cone for
+       the crowned side, and the desk's own forward record, split into all
+       records and crowned-only tickets so the reader can see whether the
+       crown earns its place over the pool it picks from. */
+    var execHtml = '';
+    try{
+      var ex = sgCrownExecution(snap);
+      var exColor = ex.state === 'TRIGGERED' ? '#15803d' : (ex.state === 'ARMED' ? '#b45309' : '#94a3b8');
+      var coneBits = '';
+      if (intel && intel.cone && intel.cone.ok && (intel.cone.steps || []).length){
+        coneBits = '<div class="hg-note" data-sg-intel="cone" style="margin-top:4px"><b>CONE</b> '
+          + intel.cone.steps.map(function(st){
+            return '+' + st.bar + ' ' + Number(st.low).toFixed(2) + '–' + Number(st.high).toFixed(2);
+          }).join(' · ')
+          + ' <span class="hg-note">(' + esc(intel.cone.why) + ')</span></div>';
+      }
+      var fwdBits = '';
+      try{
+        if (typeof W.hgFwdStats === 'function'){
+          var all = W.hgFwdStats('SUPER:GOLD');
+          var crownedOnly = W.hgFwdStats('SUPER:GOLD', null, true);
+          var fmtStat = function(st){
+            if (!st || !isFinite(+st.samples) || +st.samples === 0) return 'no records';
+            return (+st.samples) + ' recorded · ' + (st.wins || 0) + ' wins · ' + (st.losses || 0) + ' losses'
+              + ' · hit ' + (isFinite(+st.hit) ? (+st.hit).toFixed(1) + '%' : '—')
+              + ' · expectancy ' + (isFinite(+st.expR) ? (+st.expR).toFixed(2) + 'R' : '—');
+          };
+          fwdBits = '<div class="hg-note" data-sg-intel="fwd" style="margin-top:4px"><b>FORWARD</b> pool: ' + esc(fmtStat(all))
+            + '<br>crowned only: ' + esc(fmtStat(crownedOnly))
+            + ' <span class="hg-note">— out of sample. The crowned split is the filter\'s own record.</span></div>';
+        }
+      }catch(eFw){ fwdBits = ''; }
+      execHtml = '<div class="hg-note" data-sg-intel="exec" style="margin-bottom:6px"><b>CROWN EXECUTION</b> '
+        + '<span style="color:' + exColor + ';font-weight:700">' + esc(ex.state) + '</span>'
+        + (ex.side ? (' <span class="hg-note">' + esc(ex.side.toUpperCase()) + '</span>') : '')
+        + '<div class="hg-note">' + esc(ex.why) + '</div>'
+        + coneBits + fwdBits
+        + ((ex.state === 'ARMED' || ex.state === 'TRIGGERED') ? '<div id="sg-crown-chart" style="margin-top:6px"></div>' : '')
+        + '</div>';
+    }catch(eEx){ execHtml = ''; }
+    if (!bits.length && intel && intel.why) bits.push('<div class="hg-note">Desk intel unread: ' + esc(intel.why) + '</div>');
+    host.innerHTML = (crownHtml || bits.length || execHtml)
       ? ('<div class="hg-note" data-sg-intel="1" style="margin:8px 0;padding:8px 10px;border:1px solid rgba(166,124,18,.25);border-radius:var(--radius-sm,6px);background:#fffbeb">'
         + '<b>DESK INTELLIGENCE</b> <span class="hg-note">— tape, clock and calendar beside the crown. They do not crown and they do not move a level.</span>'
-        + '<div style="margin-top:6px">' + crownHtml + bits.join('') + '</div></div>')
+        + '<div style="margin-top:6px">' + crownHtml + execHtml + bits.join('') + '</div></div>')
       : '';
+    /* hg-v1363: the mini chart draws after the host exists; a missing 2d
+       context leaves the wrap empty, never a thrown repaint. */
+    try{
+      var exNow = sgCrownExecution(snap);
+      if ((exNow.state === 'ARMED' || exNow.state === 'TRIGGERED') && intel && Array.isArray(intel.rows15)){
+        sgDrawChart(host, intel.rows15, exNow);
+      }
+    }catch(eCh){}
+  }
+
+  /* hg-v1363: the crowned bracket on the tape — last 60 closed 15m candles
+     with entry / stop / T1 as level lines. Plain canvas, no dependency. */
+  function sgDrawChart(host, rows, ex){
+    var wrap = host && host.querySelector ? host.querySelector('#sg-crown-chart') : null;
+    if (!wrap || typeof document === 'undefined' || !document.createElement) return;
+    rows = Array.isArray(rows) ? rows.slice(-60) : [];
+    if (rows.length < 2) return;
+    var cv = document.createElement('canvas');
+    cv.width = 720; cv.height = 220;
+    cv.style.width = '100%'; cv.style.height = 'auto';
+    var ctx = cv.getContext && cv.getContext('2d');
+    if (!ctx) return;
+    var i, lo = Infinity, hi = -Infinity;
+    for (i = 0; i < rows.length; i++){
+      if (rows[i].l < lo) lo = rows[i].l;
+      if (rows[i].h > hi) hi = rows[i].h;
+    }
+    var lvls = [];
+    if (isFinite(ex.entry)) lvls.push({ px: ex.entry, color: '#2563eb', label: 'entry' });
+    if (isFinite(ex.stop)) lvls.push({ px: ex.stop, color: '#dc262c', label: 'stop' });
+    if (isFinite(ex.t1)) lvls.push({ px: ex.t1, color: '#15803d', label: 't1' });
+    lvls.forEach(function(l){ if (l.px < lo) lo = l.px; if (l.px > hi) hi = l.px; });
+    if (!(hi > lo)) return;
+    var pad = 8, Wd = cv.width - pad * 2, Ht = cv.height - pad * 2;
+    var y = function(px){ return pad + (hi - px) / (hi - lo) * Ht; };
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    var bw = Math.max(2, Math.floor(Wd / rows.length) - 1);
+    for (i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var x = pad + i * (Wd / rows.length);
+      var up = r.c >= r.o;
+      ctx.strokeStyle = up ? '#15803d' : '#dc262c';
+      ctx.fillStyle = up ? '#15803d' : '#dc262c';
+      ctx.beginPath(); ctx.moveTo(x + bw / 2, y(r.h)); ctx.lineTo(x + bw / 2, y(r.l)); ctx.stroke();
+      var top = y(Math.max(r.o, r.c)), bot = y(Math.min(r.o, r.c));
+      ctx.fillRect(x, top, bw, Math.max(1, bot - top));
+    }
+    lvls.forEach(function(l){
+      ctx.strokeStyle = l.color;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(pad, y(l.px)); ctx.lineTo(cv.width - pad, y(l.px)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = l.color;
+      if (ctx.fillText) ctx.fillText(l.label + ' ' + Number(l.px).toFixed(2), pad + 4, y(l.px) - 3);
+    });
+    wrap.innerHTML = '';
+    if (wrap.appendChild) wrap.appendChild(cv);
   }
 
   function paintDesk(snap){
@@ -1499,7 +1642,19 @@ function mount(el){
     var statEl = $('#sg-scan-stat');
     if (statEl){
       var when = snap && snap.scanAt ? new Date(snap.scanAt).toLocaleTimeString() : '—';
-      statEl.textContent = (snap && snap.stat ? snap.stat : 'No scan yet') + ' · last ' + when;
+      /* hg-v1363: the countdown to the next scan, repainted by the desk's
+         own 2.5s sync — no new timer. */
+      var nextBit = '';
+      if (__sg.lastScanAt){
+        var leftMs = SCAN_INTERVAL_MS - (Date.now() - __sg.lastScanAt);
+        if (leftMs > 0){
+          var lm = Math.floor(leftMs / 60000), ls = Math.floor((leftMs % 60000) / 1000);
+          nextBit = ' · next scan in ' + lm + 'm ' + (ls < 10 ? '0' : '') + ls + 's';
+        } else {
+          nextBit = ' · scan due';
+        }
+      }
+      statEl.textContent = (snap && snap.stat ? snap.stat : 'No scan yet') + ' · last ' + when + nextBit;
     }
     var armedEl = $('#sg-armed');
     if (armedEl){
@@ -1718,6 +1873,9 @@ W.sgCandleAgreement = sgCandleAgreement;
 /* hg-v1362: the crown audit, exported so the guard drives the REAL checks. */
 W.sgCrownChecks = sgCrownChecks;
 W.sgCrownedRow = sgCrownedRow;
+/* hg-v1363: the crown execution state, exported so the guard drives the
+   REAL state machine. */
+W.sgCrownExecution = sgCrownExecution;
 
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'super-gold', label: 'SUPER GOLD', run: superGoldWarm });

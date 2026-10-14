@@ -280,6 +280,11 @@
       "version": "hg-v1362",
       "built": "2026-10-15T02:30:00Z",
       "note": "SUPER GOLD's intelligence layer becomes an audit: a CROWN AUDIT grades the crowned row on nine printed checks (both desks on one side, GRADE A PASS, candles travelling with the crown, four-of-five timeframes on the crowned side, the entry at marked structure, a tradeable volatility regime, feeds agreeing, no news blackout, no fundamental headwind) with a feed lock or blackout capping the grade at C — the audit never uncrowns and is not a probability; a DISTANCE read names how far the source desk's sizing mark sits from the entry in dollars and ATR; the desk intel gains the cross-feed quality check and the structure map from the shared hgCfIntel readers; and the desk publishes one alert candidate through tabalerts only when crowned at GRADE B or better, expiring with the scan that earned it. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1363",
+      "built": "2026-10-15T03:30:00Z",
+      "note": "SUPER GOLD gains the crown execution layer: an ARMED/TRIGGERED/NO-TRADE state machine for the crowned bracket judged against the source desk's sizing mark (a crown with no mark is ARMED with the trigger unread, never a fabricated fill); the forecast cone and the closed 15m window pinned to the scan so the render path never fetches; a mini candlestick chart of the crowned entry/stop/T1 on the tape; the desk's forward record split into pool-wide and crowned-only so the reader can see whether the crown earns its place; a next-scan countdown repainted by the desk's own sync timer; and the execution state now renders even when the tape legs of the intel read failed. All version surfaces move together."
     }
   ]
 }

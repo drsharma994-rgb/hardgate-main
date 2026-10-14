@@ -200,4 +200,75 @@ console.log('\n== 7) hg-v1362: the desk alert path ==');
   ok(W.superGoldAlertState() === null, 'a split board publishes no alert');
 }
 
+console.log('\n== 8) hg-v1363: the crown execution state machine ==');
+{
+  const W = boot();
+  const now = Date.now();
+  ok(typeof W.sgCrownExecution === 'function', 'the execution read is exported');
+  ok(W.sgCrownExecution({ cands: [], at: now }).state === 'NO-TRADE', 'an empty board is NO-TRADE');
+  const mkRow = function (id, scanner, mark) {
+    return { id: id, sym: 'XAUUSD', dir: 'long', scanner: scanner, grade: 'A', entry: 2400, stop: 2390, t1: 2420, rr: 2, tally: 9, minimalLossPass: true, mark: mark };
+  };
+  const snapArmed = {
+    at: now, sourceAt: now,
+    audit: { venues: ['gold-scalp', 'gold-swing'] },
+    cands: [mkRow('a', 'gold-scalp', 2410), mkRow('b', 'gold-swing', 2410)]
+  };
+  const exA = W.sgCrownExecution(snapArmed);
+  ok(exA.state === 'ARMED' && exA.entry === 2400, 'a long crown with the mark above the entry waits (ARMED)');
+  const snapTrig = {
+    at: now, sourceAt: now,
+    audit: { venues: ['gold-scalp', 'gold-swing'] },
+    cands: [mkRow('a', 'gold-scalp', 2399), mkRow('b', 'gold-swing', 2399)]
+  };
+  const exT = W.sgCrownExecution(snapTrig);
+  ok(exT.state === 'TRIGGERED' && exT.mark === 2399, 'the mark at the entry is TRIGGERED');
+  const snapNoMark = {
+    at: now, sourceAt: now,
+    audit: { venues: ['gold-scalp', 'gold-swing'] },
+    cands: [mkRow('a', 'gold-scalp', null), mkRow('b', 'gold-swing', null)]
+  };
+  const exN = W.sgCrownExecution(snapNoMark);
+  ok(exN.state === 'ARMED' && /trigger is unchecked/.test(exN.why), 'a missing mark is ARMED with the trigger unread, never a fabricated fill');
+  const stale = Object.assign({}, snapArmed, { at: now - 25 * 60 * 1000, sourceAt: now - 25 * 60 * 1000 });
+  ok(W.sgCrownExecution(stale).state === 'NO-TRADE', 'a stale scan has nothing to execute');
+}
+
+console.log('\n== 9) hg-v1363: the cone and the tape pin to the snap ==');
+{
+  const W = boot();
+  const now = Date.now();
+  W.getGoldCandles = async function (tf) {
+    const sec = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 }[tf] || 900;
+    return { rows: tape(70, 0.5, sec), source: 'test-' + tf };
+  };
+  W.goldscalpScan = function () {
+    return { at: now, cands: [{ id: 'sc', sym: 'XAUUSD', dir: 'long', grade: 'A', entry: 2400, stop: 2390, t1: 2420, rr: 2, tally: 9, mark: 2410 }] };
+  };
+  W.goldswingScan = function () {
+    return { at: now, cands: [{ id: 'sw', sym: 'XAUUSD', dir: 'long', grade: 'A', entry: 2410, stop: 2400, t1: 2430, rr: 2, tally: 4, mark: 2410 }] };
+  };
+  await W.superGoldRunScan({ force: true });
+  const snap = W.superGoldScan();
+  ok(snap.intel && snap.intel.cone && snap.intel.cone.ok && snap.intel.cone.steps.length === 3,
+    'the forecast cone is pinned to the snap');
+  ok(/not a target and not a stop/.test(snap.intel.cone.why), 'the desk cone carries the same disclaimer');
+  ok(Array.isArray(snap.intel.rows15) && snap.intel.rows15.length === 60,
+    'the closed 15m window is pinned for the chart');
+  const ex = W.sgCrownExecution(snap);
+  ok(ex.state === 'ARMED' || ex.state === 'TRIGGERED', 'the crowned scan answers an execution state (' + ex.state + ')');
+}
+
+console.log('\n== 10) hg-v1363: the render contract and the countdown ==');
+{
+  const SRC = fs.readFileSync(path.join(root, 'super-gold.js'), 'utf8');
+  ok(/data-sg-intel="exec"/.test(SRC), 'the execution block renders');
+  ok(/data-sg-intel="cone"/.test(SRC), 'the cone row renders');
+  ok(/data-sg-intel="fwd"/.test(SRC), 'the forward split renders');
+  ok(/crowned only/.test(SRC), 'the crowned-only split is named');
+  ok(/function sgDrawChart/.test(SRC) && /sg-crown-chart/.test(SRC), 'the mini chart exists and has a host');
+  ok(/next scan in/.test(SRC), 'the next-scan countdown renders');
+  ok(/NO early return on a missing intel read/.test(SRC), 'the execution state survives a failed intel read');
+}
+
 console.log('\ntest-super-gold-intel-v1361: ' + pass + ' passed, 0 failed');
