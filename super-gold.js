@@ -54,7 +54,7 @@ function normalizeSide(raw){
 
 function pickRR(hit){
   var rr = N(hit && (hit.rr != null ? hit.rr : hit.rR));
-  return (Number.isFinite(rr) && rr > 0) ? rr : 2;
+  return (Number.isFinite(rr) && rr > 0) ? rr : null;
 }
 
 function calcTradeLocal(opts){
@@ -98,12 +98,11 @@ function goldCalcTrade(riskOpts, hit, rrForCalc){
 }
 
 function effectiveGoldRr(hit){
-  var rr = pickRR(hit);
-  if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
+  if (hit && N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
     var riskDist = Math.abs(hit.entry - hit.stop);
-    if (riskDist > 0) rr = Math.abs(hit.t1 - hit.entry) / riskDist;
+    if (riskDist > 0) return Math.abs(hit.t1 - hit.entry) / riskDist;
   }
-  return rr;
+  return pickRR(hit);
 }
 
 function defaultRiskOpts(win){
@@ -419,8 +418,10 @@ function enrichSuperGoldRow(c, tier, riskOpts, meta){
 
   riskOpts = riskOpts || defaultRiskOpts();
   var rrForCalc = effectiveGoldRr(hit);
-  hit.rr = rrForCalc;
-  var calc = goldCalcTrade(riskOpts, hit, rrForCalc);
+  hit.rr = (rrForCalc > 0) ? rrForCalc : null;
+  var calc = (rrForCalc > 0)
+    ? goldCalcTrade(riskOpts, hit, rrForCalc)
+    : { ok: false, reason: 'No target on the source row' };
 
   hit.id = hit.id || c.id || [hit.sym, hit.dir, hit.entry, hit.stop, tier, meta.scanner].join('|');
   hit.scanner = meta.scanner || meta.source || 'gold-swing';
@@ -434,13 +435,13 @@ function enrichSuperGoldRow(c, tier, riskOpts, meta){
         hit.sizingPass = false;
         hit.goldAudit.pass = false;
         hit.goldAudit.reasons = (hit.goldAudit.reasons || []).concat([hit.positionSize.error]);
-      } else if (hit.positionSize && !hit.positionSize.error){
+      } else if (hit.positionSize && !hit.positionSize.error && N(hit.t1) > 0){
         hit.sizingPass = true;
       }
     }catch(eSz){}
   }
 
-  hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass && hit.goldAudit.pass && !hit.demoted;
+  hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass && hit.goldAudit.pass && !hit.demoted && N(hit.t1) > 0;
   hit.riskPass = hit.sizingPass && hit.goldAudit.pass;
   hit.nearWatch = hit.tier === 'near' && hit.sizingPass && N(hit.entry) > 0 && hit.entry !== hit.stop;
   hit.riskReason = hit.minimalLossPass ? 'PASS'
@@ -448,7 +449,7 @@ function enrichSuperGoldRow(c, tier, riskOpts, meta){
       : ((hit.goldAudit.reasons && hit.goldAudit.reasons.length)
         ? hit.goldAudit.reasons[0] : (calc.reason || 'blocked')));
   hit.calc = calc;
-  hit.tp = N(hit.t1) > 0 ? hit.t1 : calc.tp;
+  hit.tp = N(hit.t1) > 0 ? N(hit.t1) : null;
   hit.tp2 = N(hit.t2);
   hit.qty = hit.positionSize && hit.positionSize.positionSizeUnits != null
     ? hit.positionSize.positionSizeUnits : calc.qty;
@@ -581,6 +582,62 @@ function collectRawGoldDeskCands(win, opts){
   return { raw: raw, armed: armed, rejected: rejected, whySilent: whySilent, scanned: scanned, venues: venues };
 }
 
+function sgSnapFresh(sg){
+  if (!sg) return false;
+  var t = (sg.sourceAt != null) ? sg.sourceAt : (sg.at || sg.scanAt);
+  return isFreshAt(t, SNAP_MAX_MS);
+}
+
+function sgBoardSplit(hits){
+  var long = false, short = false;
+  (Array.isArray(hits) ? hits : []).forEach(function(h){
+    if (!h) return;
+    if (!(N(h.entry) > 0 && N(h.stop) > 0 && N(h.entry) !== N(h.stop))) return;
+    var d = String(h.dir || '').toLowerCase();
+    if (d === 'long' || d === 'buy') long = true;
+    else if (d === 'short' || d === 'sell') short = true;
+  });
+  return long && short;
+}
+
+function superGoldBoardNote(snap){
+  snap = snap || {};
+  var rows = Array.isArray(snap.cands) ? snap.cands : [];
+  var bits = [];
+  if (rows.length && !sgSnapFresh(snap)){
+    bits.push('Source scan is older than 20 minutes, so nothing is crowned. These rows are the last scan, not a fresh pick.');
+  }
+  if (sgBoardSplit(rows)){
+    bits.push('Scalp and swing do not agree, so nothing is crowned. Both rows stay on the board. No price was blended.');
+  }
+  return bits.join(' ');
+}
+
+function sgWeekendBannerText(snap){
+  var sec = null;
+  var rows = snap && Array.isArray(snap.cands) ? snap.cands : [];
+  rows.forEach(function(c){
+    var t = sgCandSec(c, c);
+    if (t !== null && (sec === null || t > sec)) sec = t;
+  });
+  var clock = false;
+  if (sec === null){
+    sec = Math.floor(Date.now() / 1000);
+    clock = true;
+  }
+  var txt = '';
+  try{
+    if (typeof W.hgGoldWeekendReadout === 'function'){
+      var rd = W.hgGoldWeekendReadout(sec);
+      if (rd && rd.line) txt = String(rd.line);
+    } else if (typeof W.hgInGoldWeekend === 'function' && W.hgInGoldWeekend(sec)){
+      txt = 'Gold weekend closure — WATCH rows only; GRADE A needs session open + audit pass';
+    }
+  }catch(eWk){ txt = ''; }
+  if (txt && clock) txt += ' (wall clock, no bar time on the board)';
+  return txt;
+}
+
 function collectSuperGoldScanHits(win){
   win = win || W;
   var hits = [];
@@ -588,14 +645,13 @@ function collectSuperGoldScanHits(win){
   if (typeof sgFn === 'function'){
     try{
       var sg = sgFn();
-      if (sg && Array.isArray(sg.cands) && sg.cands.length
-          && (sg.hydrated || isFreshAt(sg.at || sg.scanAt, SNAP_MAX_MS))){
+      if (sg && Array.isArray(sg.cands) && sg.cands.length && sgSnapFresh(sg)){
         sg.cands.forEach(function(c){ if (c) hits.push(c); });
       }
     }catch(e0){}
   }
   if (!hits.length){
-    var snap = buildSnapFromGoldScans(win, defaultRiskOpts(win), { allowStale: true });
+    var snap = buildSnapFromGoldScans(win, defaultRiskOpts(win));
     if (snap && Array.isArray(snap.cands)) hits = snap.cands.slice();
   }
   return hits;
@@ -629,6 +685,18 @@ function superGoldEvaluate(win, opts){
       reason: 'EVENT BLACKOUT — a red-folder macro print is inside its window; no fresh setup forms into it' };
   }
   var hits = collectSuperGoldScanHits(win);
+  if (!hits.length){
+    var shown = null;
+    try { shown = (typeof win.superGoldScan === 'function') ? win.superGoldScan() : null; } catch (eShown) { shown = null; }
+    if (shown && Array.isArray(shown.cands) && shown.cands.length && !sgSnapFresh(shown)){
+      return { ready: false, idle: true,
+        reason: 'SOURCE SCAN STALE. The GOLD SCALP and GOLD SWING scan this desk is reading is older than 20 minutes, so nothing is crowned. The rows on the board are the last scan, not a fresh pick.' };
+    }
+  }
+  if (!opts.selectedId && sgBoardSplit(hits)){
+    return { ready: false, idle: true,
+      reason: 'SCALP AND SWING DO NOT AGREE. One desk is long and the other is short, so nothing is crowned and no price is blended.' };
+  }
   var hit = null, i;
   if (opts.selectedId){
     for (i = 0; i < hits.length; i++){
@@ -719,6 +787,7 @@ function buildSnapFromGoldScans(win, riskOpts, opts){
     rejected: rejected,
     whySilent: whySilent,
     audit: audit,
+    sourceAt: scanned || null,
     stat: merged.length
       ? (merged.length + ' gold setups · ' + audit.clean + ' GRADE A · ' + audit.near + ' WATCH · '
         + audit.minLoss + ' trade-ready · ' + audit.armedCount + ' forming')
@@ -801,17 +870,18 @@ function autoSelectFirstSetup(snap){
       if (snap.cands[i] && snap.cands[i].id === __sg.selectedId){ hit = snap.cands[i]; break; }
     }
   }
-  if (!hit && !fundBlackout){
+  var holdCrown = !sgSnapFresh(snap) || sgBoardSplit(snap.cands);
+  if (!hit && !fundBlackout && !holdCrown){
     for (i = 0; i < snap.cands.length; i++){
       if (snap.cands[i] && snap.cands[i].minimalLossPass && !sgFundBlocked(snap.cands[i])){ hit = snap.cands[i]; break; }
     }
   }
-  if (!hit && !fundBlackout){
+  if (!hit && !fundBlackout && !holdCrown){
     for (i = 0; i < snap.cands.length; i++){
       if (snap.cands[i] && snap.cands[i].tier === 'clean' && !sgFundBlocked(snap.cands[i])){ hit = snap.cands[i]; break; }
     }
   }
-  if (!hit && !fundBlackout){
+  if (!hit && !fundBlackout && !holdCrown){
     for (i = 0; i < snap.cands.length; i++){
       if (snap.cands[i] && !sgFundBlocked(snap.cands[i])){ hit = snap.cands[i]; break; }
     }
@@ -917,11 +987,7 @@ function injectStyles(){
 function hitToEvaluation(hit){
   if (!hit || !(N(hit.entry) > 0 && N(hit.stop) > 0)) return { ready: false, idle: true, reason: 'No qualifying gold setup' };
   var tierLabel = hit.tier === 'clean' ? 'GRADE A' : 'WATCH';
-  var rr = pickRR(hit);
-  if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
-    var rd = Math.abs(hit.entry - hit.stop);
-    if (rd > 0) rr = Math.abs(hit.t1 - hit.entry) / rd;
-  }
+  var rr = effectiveGoldRr(hit);
   return {
     ready: true, idle: false, mode: 'scanner',
     trigger: hit.trigger || hit.tier,
@@ -1091,15 +1157,7 @@ function mount(el){
   function paintWeekendBanner(){
     var el = $('#sg-weekend');
     if (!el) return;
-    var txt = '';
-    if (typeof W.hgGoldWeekendReadout === 'function'){
-      try{
-        var rd = W.hgGoldWeekendReadout(Math.floor(Date.now() / 1000));
-        if (rd && rd.line) txt = rd.line;
-      }catch(e0){}
-    } else if (typeof W.hgInGoldWeekend === 'function' && W.hgInGoldWeekend(Math.floor(Date.now() / 1000))){
-      txt = 'Gold weekend closure — WATCH rows only; GRADE A needs session open + audit pass';
-    }
+    var txt = sgWeekendBannerText(superGoldScan());
     el.textContent = txt || '';
     el.style.display = txt ? 'block' : 'none';
   }
@@ -1142,9 +1200,12 @@ function mount(el){
       return;
     }
     var minPass = rows.filter(function(r){ return r.minimalLossPass; }).length;
-    var hint = minPass
-      ? ('<div class="hg-note" style="margin-bottom:10px">' + minPass + ' GRADE A PASS · trade-ready</div>')
-      : ('<div class="hg-note" style="margin-bottom:10px">No GRADE A PASS yet — WATCH rows show levels only</div>');
+    var boardNote = superGoldBoardNote(snap);
+    var hint = boardNote
+      ? ('<div class="hg-note" style="margin-bottom:10px">' + boardNote + '</div>')
+      : (minPass
+        ? ('<div class="hg-note" style="margin-bottom:10px">' + minPass + ' GRADE A PASS · trade-ready</div>')
+        : ('<div class="hg-note" style="margin-bottom:10px">No GRADE A PASS yet — WATCH rows show levels only</div>'));
     /* hg-v913: this desk reads the records it writes. SUPER:GOLD is pooled
        into OMNIGOLD's gate, so its records were consulted — by a different
        desk, for a different board. This is the one that wrote them. */
@@ -1308,6 +1369,8 @@ W.sgRankInstant = sgRankInstant;   /* hg-v977 */
 W.rankRawGoldCands = rankRawGoldCands;
 W.collectRawGoldDeskCands = collectRawGoldDeskCands;
 W.collectSuperGoldScanHits = collectSuperGoldScanHits;
+W.superGoldBoardNote = superGoldBoardNote;
+W.superGoldWeekendLine = sgWeekendBannerText;
 W.superGoldEvaluate = superGoldEvaluate;
 W.refineSuperGoldLevels = refineSuperGoldLevels;
 W.superGoldSortCands = superGoldSortCands;

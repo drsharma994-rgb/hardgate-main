@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1357',
-  pack: 'CANDLE FORECAST intelligence layer - execution card, five-timeframe alignment, structure map, volatility regime, news execution risk, cross-feed quality, in-sample pattern record, forward ledger readout, mini chart, blockers panel, and one alert path.',
-  built: '2026-10-14T22:30:00Z'
+  version: 'hg-v1358',
+  pack: 'hg-v1358: Super Gold does not invent a target the source row never had. A long and a short on the board are not crowned and no price is blended. A source scan older than 20 minutes is shown and not crowned. The weekend line uses the bar time. CANDLE FORECAST intelligence layer - execution card, five-timeframe alignment, structure map, volatility regime, news execution risk, cross-feed quality, in-sample pattern record, forward ledger readout, mini chart, blockers panel, and one alert path.',
+  built: '2026-10-14T23:00:00Z'
 };
 
 function hgBuildLabel(b){
