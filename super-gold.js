@@ -139,6 +139,9 @@ function hitFromGoldCand(c, meta){
        now carry it, and without forwarding it here super-gold cannot ask
        whether price already walked through the plan it is about to show. */
     mark: N(c.mark),
+    barT: (c.barT != null && c.barT !== '') ? c.barT : null,
+    signalT: (c.signalT != null && c.signalT !== '') ? c.signalT : null,
+    t: (c.t != null && c.t !== '') ? c.t : null,
     venueTag: c.venue || meta.venueTag || null,
     id: c.id || null,
     at: meta.at || null,
@@ -1255,6 +1258,7 @@ function sgTapeDiagnostics(snap, win){
       var sp = win.goldspotState();
       if (sp){
         if (isFinite(N(sp.spot)) && N(sp.spot) > 0) prices.push({ name: 'spot', px: N(sp.spot) });
+        if (isFinite(N(sp.xm)) && N(sp.xm) > 0) prices.push({ name: 'xm', px: N(sp.xm) });
         if (isFinite(N(sp.paxg)) && N(sp.paxg) > 0) prices.push({ name: 'paxg', px: N(sp.paxg) });
         if (isFinite(N(sp.xaut)) && N(sp.xaut) > 0) prices.push({ name: 'xaut', px: N(sp.xaut) });
       }
@@ -1432,7 +1436,14 @@ function sgCrownDispatchPayload(snap, riskOpts, win){
   if (sgFundBlocked(r)) return { ready: false, reason: 'The fundamental stack blocked this row' };
   var rr = effectiveGoldRr(r);
   if (!(rr > 0) || !(N(r.t1) > 0)) return { ready: false, reason: 'No target on the crowned row' };
-  var oz = (r.positionSize && isFinite(+r.positionSize.positionSizeUnits)) ? +r.positionSize.positionSizeUnits : NaN;
+  var oz = NaN;
+  if (r.positionSize && isFinite(+r.positionSize.positionSizeUnits) && +r.positionSize.positionSizeUnits > 0){
+    oz = +r.positionSize.positionSizeUnits;
+  } else if (isFinite(+r.qty) && +r.qty > 0){
+    oz = +r.qty;
+  } else if (r.calc && isFinite(+r.calc.qty) && +r.calc.qty > 0){
+    oz = +r.calc.qty;
+  }
   if (!(oz > 0)) return { ready: false, reason: 'No size on the crowned row' };
   var barStamp = sgCandSec(r, r);
   if (barStamp === null) return { ready: false, reason: 'The crowned row has no bar time, so no ticket key was invented' };

@@ -290,6 +290,11 @@
       "version": "hg-v1364",
       "built": "2026-10-15T04:30:00Z",
       "note": "Super Gold retries a candle leg that comes back empty, then reads the fallback. A cross-venue gap past 12 USD locks a send. The path after the crowned bar is named and the source stop is not moved. A send needs a real size and a real bar time, and the scan itself does not send."
+    },
+    {
+      "version": "hg-v1365",
+      "built": "2026-10-15T05:00:00Z",
+      "note": "Super Gold keeps the source bar time on the crowned row. A send uses the size the desk already calculated. It does not invent a size, and a second click of the same crown is a duplicate."
     }
   ]
 }
