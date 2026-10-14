@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (v1307)
+HARDGATE — gold-candle-forecast.js (v1346)
 Predictive Candle Forecasting Module. Uses ATR and momentum to forecast
 the next candle's range, direction, TP, and SL.
 
@@ -33,7 +33,6 @@ on every page load since v1308:
    * and momentum-based price action patterns.
    */
   var __cfPane = null;   /* hg-v1336: the pane already painted, by identity - not a boolean, so a fresh root can still build */
-  var __cfPane = null;
 
   const mod = {
     id: 'candle-forecast',
@@ -142,9 +141,10 @@ on every page load since v1308:
 
     try {
       const loaded = await this.loadGold15m();
-      const candles = loaded && loaded.rows;
-      if (!Array.isArray(candles) || candles.length < 20) {
-        throw new Error('Gold 15m tape unread. No prices were invented.');
+      const prepared15 = this.prepareRows(loaded && loaded.rows, '15m');
+      const candles = prepared15.rows;
+      if (!Array.isArray(candles) || candles.length < 30) {
+        throw new Error(this.unreadReason(candles, '15m', prepared15));
       }
 
       if (typeof window.goldCandleForecast !== 'function') {
@@ -155,11 +155,13 @@ on every page load since v1308:
       const macroLive = await this.loadMacro();
       const forecast = window.goldCandleForecast(candles, macroLive, tapes);
       if (!forecast) {
-        resultArea.innerHTML = 'The candle read failed closed. Nothing was invented.';
+        resultArea.innerHTML = '<span class="note warn">The candle read failed closed: '
+          + mod.esc(this.unreadReason(candles, '15m', prepared15)) + ' Nothing was invented.</span>';
         statusEl.textContent = 'Unread';
         return;
       }
       forecast.source = loaded.source || '';
+      forecast.feedNote = prepared15.note || '';
 
       /* hg-v1315: hand the confluence the HOUSE MACRO SNAPSHOT.
          The first cut passed an empty options bag, so `hgFundamentalRegime('GOLD')`
@@ -218,7 +220,8 @@ on every page load since v1308:
       try {
         var load4 = this.loadGold('4h', 120);
         var loaded4 = await load4;
-        var c4 = loaded4 && loaded4.rows;
+        var prepared4 = this.prepareRows(loaded4 && loaded4.rows, '4h');
+        var c4 = prepared4.rows;
         if (Array.isArray(c4) && c4.length >= 30) {
           var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d });
           try {
@@ -241,7 +244,7 @@ on every page load since v1308:
             ? window.hgCfBuildSetup(c4, { tf: '4h' }, fc4) : null;
           if (forecast.swing) forecast.swing.source = loaded4.source || '';
         } else {
-          forecast.swing = { ok: false, tf: '4h', formed: false, why: 'the 4h gold tape could not be read, so no swing bracket is shown' };
+          forecast.swing = { ok: false, tf: '4h', formed: false, why: 'the 4h gold tape could not be read: ' + this.unreadReason(c4, '4h', prepared4) + ' No swing bracket is shown.' };
         }
       } catch (eSw) {
         forecast.swing = { ok: false, tf: '4h', formed: false, why: 'the 4h tape failed: ' + String((eSw && eSw.message) || eSw) };
@@ -283,6 +286,84 @@ on every page load since v1308:
       resultArea.innerHTML = '<span class="note warn">Error: ' + String(error && error.message || error) + '</span>';
       statusEl.textContent = 'Failed';
     }
+  };
+
+  mod.esc = function(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  };
+
+  /* hg-v1346: forecast from CLOSED, VALID bars only. Binance klines include the
+     still-forming candle; at the first tick that candle can have high === low,
+     and the shared engine correctly refuses it as unmeasurable. Dropping that
+     one live bar is not a price invention: the previous closed bar is the last
+     bar a next-candle forecast is allowed to know. Invalid rows are filtered,
+     never repaired. */
+  mod.prepareRows = function(rows, tf, nowMs) {
+    var out = [];
+    var dropped = [];
+    var rawCount = Array.isArray(rows) ? rows.length : 0;
+    if (!Array.isArray(rows)) return { rows: out, rawCount: rawCount, dropped: ['no candle array'], note: 'no candle array' };
+    var seen = {};
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var row = { t: +r.t, o: +r.o, h: +r.h, l: +r.l, c: +r.c, v: +r.v };
+      if (!isFinite(row.t) || !isFinite(row.o) || !isFinite(row.h) || !isFinite(row.l) || !isFinite(row.c)) {
+        dropped.push('non-numeric bar');
+        continue;
+      }
+      if (!(row.h >= row.l)) {
+        dropped.push('high below low');
+        continue;
+      }
+      var key = String(row.t);
+      if (seen[key]) {
+        dropped.push('duplicate bar time');
+        continue;
+      }
+      seen[key] = true;
+      out.push(row);
+    }
+    out.sort(function(a, b) { return a.t - b.t; });
+
+    var tfSec = ({ '15m': 900, '1h': 3600, '2h': 7200, '4h': 14400, '1d': 86400 })[tf] || 0;
+    var nowSec = isFinite(+nowMs) ? (+nowMs / 1000) : (Date.now() / 1000);
+    if (out.length && tfSec > 0) {
+      var live = out[out.length - 1];
+      if ((live.t + tfSec) > (nowSec + 30)) {
+        out.pop();
+        dropped.push('still-forming ' + tf + ' bar excluded');
+      }
+    }
+    if (out.length) {
+      var last = out[out.length - 1];
+      if (!(last.h > last.l)) {
+        out.pop();
+        dropped.push('zero-range latest bar excluded');
+      }
+    }
+    return {
+      rows: out,
+      rawCount: rawCount,
+      dropped: dropped,
+      note: dropped.length ? ('feed hygiene: ' + dropped.join(', ')) : ''
+    };
+  };
+
+  mod.unreadReason = function(rows, tf, prepared) {
+    var p = prepared || this.prepareRows(rows, tf);
+    var clean = p.rows || [];
+    var bits = [];
+    if (p.note) bits.push(p.note);
+    if (!Array.isArray(rows) || !rows.length) bits.push('the feed returned no candles');
+    else if (clean.length < 30) bits.push('only ' + clean.length + ' closed/valid ' + tf + ' bars remain; the forecast needs 30');
+    if (typeof window === 'undefined' || typeof window.atr !== 'function' || typeof window.ema !== 'function') {
+      bits.push('the shared ATR/EMA helpers are not loaded');
+    }
+    var engineWhy = (typeof window !== 'undefined' && window.goldCandleForecastLastError)
+      ? String(window.goldCandleForecastLastError) : '';
+    if (engineWhy) bits.push('engine: ' + engineWhy);
+    if (!bits.length) bits.push('the shared engine could not measure this tape');
+    return bits.join(' · ') + '.';
   };
 
   /* hg-v1318: ONE loader for every horizon. This was hard-wired to 15m, so the tab
@@ -551,7 +632,7 @@ on every page load since v1308:
           <li><b>Last close:</b> <span style="font-weight:700;">${this.fmt(forecast.close)}</span></li>
           ${levels}
           <li><b>Reads:</b> ${forecast.agrees} for the call, ${forecast.against} against, of ${forecast.checked}</li>
-          ${forecast.source ? '<li><b>Tape:</b> ' + String(forecast.source).replace(/</g, '') + '</li>' : ''}
+          ${forecast.source ? '<li><b>Tape:</b> ' + mod.esc(forecast.source) + (forecast.feedNote ? (' · ' + mod.esc(forecast.feedNote)) : '') + '</li>' : ''}
         </ul>
         <ul class="lst">${reasons}</ul>
         ${ultHtml}

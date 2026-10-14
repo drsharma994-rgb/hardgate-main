@@ -20484,6 +20484,19 @@ function hgCfConfluence(rows, opts, fc) {
 function goldCandleForecast(rows) {
   var macro = arguments.length > 1 ? arguments[1] : null;
   var tapes = arguments.length > 2 ? arguments[2] : null;
+  function hgCfForecastNote(why) {
+    try {
+      var host = (typeof window !== 'undefined' && window)
+        ? window
+        : ((typeof globalThis !== 'undefined' && globalThis) ? globalThis : null);
+      if (host) host.goldCandleForecastLastError = String(why || '');
+    } catch (eNote) {}
+  }
+  function hgCfForecastFail(why) {
+    hgCfForecastNote(why);
+    return null;
+  }
+  hgCfForecastNote('');
   try {
     /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
        its standard error to mean anything and the empirical range needs a
@@ -20491,12 +20504,12 @@ function goldCandleForecast(rows) {
        twenty bars the 60th percentile of nineteen true ranges is noise dressed
        as an estimate. Below the floor this returns null rather than projecting a
        band from a tape too short to support one. */
-    if (!Array.isArray(rows) || rows.length < 30) return null;
-    if (typeof atr !== 'function' || typeof ema !== 'function') return null;
+    if (!Array.isArray(rows) || rows.length < 30) return hgCfForecastFail('fewer than 30 closed/valid bars');
+    if (typeof atr !== 'function' || typeof ema !== 'function') return hgCfForecastFail('the shared ATR/EMA helpers are not loaded');
     var n = rows.length;
     var last = rows[n - 1];
     var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
-    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return hgCfForecastFail('the latest bar has a non-numeric price');
     /* hg-v1309: a bar with no range means NO VOLATILITY COULD BE ESTIMATED, so
        this is an honest null — the same "cannot forecast" as a thin tape, not a
        verdict. It used to return a partial object carrying dir:null, which put
@@ -20505,7 +20518,7 @@ function goldCandleForecast(rows) {
        two states are now separate at the top level: null means unreadable,
        NEUTRAL (a real, readable tape whose drift is inside the noise band)
        means read-and-declined. The guard pins both. */
-    if (!(h > l)) return null;
+    if (!(h > l)) return hgCfForecastFail('the latest bar has no measurable range');
     var atrArr = atr(rows, 14);
     var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
     var atrSource = 'ATR 14';
@@ -20517,11 +20530,11 @@ function goldCandleForecast(rows) {
        conflating the two would make this function claim to have read a tape it
        could not measure. The guard pins both: `tape(40, () => 0, 0)` is null and
        a flat tape with a real 2.0 range is NEUTRAL. */
-    if (!(atrLast > 0)) return null;
+    if (!(atrLast > 0)) return hgCfForecastFail('volatility could not be measured');
 
     var closes = [], i;
     for (i = 0; i < n; i++) {
-      if (!isFinite(+rows[i].c)) return null;
+      if (!isFinite(+rows[i].c)) return hgCfForecastFail('a candle close is non-numeric');
       closes.push(+rows[i].c);
     }
     var ema9 = ema(closes, 9);
@@ -20783,7 +20796,9 @@ function goldCandleForecast(rows) {
             ? 'Stop is the pattern high or low. TP1 is one times that risk. TP2 is two.'
             : 'No pattern stop in range, so the stop is one ATR. TP1 is one ATR. TP2 is two.'))
     };
-  } catch (e) { return null; }
+  } catch (e) {
+    return hgCfForecastFail('internal read error: ' + String((e && e.message) || e));
+  }
 }
 
 function hgCfUltimate(scalp, swing) {
