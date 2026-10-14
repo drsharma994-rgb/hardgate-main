@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1360',
-  pack: 'CANDLE FORECAST v1360 - setup grade with printed checks, forecast cone for the next three closed bars, session killzone context, distance-to-bracket in dollars and ATR, and three-bar follow-through on the pattern record. Includes hg-v1359 Super Gold desk-agreement crowning.',
-  built: '2026-10-15T00:30:00Z'
+  version: 'hg-v1361',
+  pack: 'SUPER GOLD desk intelligence - the five-timeframe matrix, the shared candle engine agreement with the crown, volatility regime, session clock and calendar pinned to each scan, composed from the hgCfIntel readers. The intel never crowns and never moves a level.',
+  built: '2026-10-15T01:30:00Z'
 };
 
 function hgBuildLabel(b){

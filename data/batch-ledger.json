@@ -270,6 +270,11 @@
       "version": "hg-v1360",
       "built": "2026-10-15T00:30:00Z",
       "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR — a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1361",
+      "built": "2026-10-15T01:30:00Z",
+      "note": "SUPER GOLD gains a desk intelligence strip pinned to each scan: the five-timeframe matrix (5m trigger through 1d regime) from the shared hgCfIntel readers, the shared candle engine's 15m read with a WITH/AGAINST/UNREAD verdict against the crowned side (a disagreement is shown, never hidden, and never uncrowns), the volatility regime, the session killzone clock and the news execution state. Computed in the scan's one async window so the render path never fetches; a failed leg is UNREAD, not agreement; a matrix of five unread rows is not a read. The v1358/v1359 crown rules are untouched. All version surfaces move together."
     }
   ]
 }

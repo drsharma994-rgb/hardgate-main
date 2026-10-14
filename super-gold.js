@@ -941,6 +941,80 @@ function superGoldAfterScan(snap){
   if (__sg.mounted && typeof __sg.applyFirstSetup === 'function') __sg.applyFirstSetup(false);
 }
 
+/* hg-v1361: THE DESK INTELLIGENCE READ. One composed snapshot of what the
+   wider stack knows about gold right now, computed at scan time (the only
+   place this desk already awaits the network) and pinned to the snap so the
+   render path never fetches. Every leg composes a shared reader and fails
+   closed: a missing engine is UNREAD, never agreement, and nothing here
+   moves a crown, a level, or a stop — v1358/v1359 own the crowning rules;
+   this layer only says whether the tape, the clock and the calendar agree
+   with what was crowned. */
+async function superGoldIntel(win){
+  win = win || W;
+  var out = { ok: false, at: Date.now(), fiveTf: null, candle: null, volRegime: null, session: null, news: null, why: '' };
+  var I = win.hgCfIntel;
+  function pack(tf, n){
+    if (typeof win.getGoldCandles !== 'function') return Promise.resolve(null);
+    return Promise.race([
+      win.getGoldCandles(tf, n).then(function(p){ return p && p.rows && p.rows.length ? p.rows : null; }).catch(function(){ return null; }),
+      new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, 5000); })
+    ]);
+  }
+  try{
+    var got = await Promise.all([pack('5m', 80), pack('15m', 80), pack('1h', 80), pack('4h', 80), pack('1d', 120)]);
+    var rows5 = got[0], rows15 = got[1], rows1h = got[2], rows4h = got[3], rows1d = got[4];
+    if (I && typeof I.fiveTf === 'function'){
+      try{ out.fiveTf = I.fiveTf({ rows5m: rows5, rows15m: rows15, rows1h: rows1h, rows4h: rows4h, rows1d: rows1d }); }catch(eFt){}
+    }
+    if (I && typeof I.volRegime === 'function'){
+      try{ out.volRegime = I.volRegime(rows15); }catch(eVr){}
+    }
+    /* the candle engine's own read of the 15m tape — the same engine CANDLE
+       FORECAST runs, so the desk and the forecast tab can never disagree
+       about what the candles said */
+    if (Array.isArray(rows15) && rows15.length >= 30 && typeof win.goldCandleForecast === 'function'){
+      try{
+        var fc = win.goldCandleForecast(rows15, null, { tf: '15m', cachedDesks: true });
+        if (fc){
+          out.candle = {
+            dir: (fc.dir === 'BULL' || fc.dir === 'BEAR') ? fc.dir : 'NEUTRAL',
+            patterns: (Array.isArray(fc.patterns) ? fc.patterns : []).concat(Array.isArray(fc.advancedPatterns) ? fc.advancedPatterns : []),
+            close: +fc.close
+          };
+        }
+      }catch(eCf){}
+    }
+    /* hg-v1361: a matrix of five UNREAD rows is not a read. ok means at
+       least one leg actually measured something — a row with a direction,
+       a candle answer, or a regime that could be computed. */
+    var tfRead = !!(out.fiveTf && (out.fiveTf.bull + out.fiveTf.bear) > 0);
+    out.ok = !!(tfRead || out.candle || (out.volRegime && out.volRegime.ok));
+    if (!out.ok) out.why = 'the gold tapes could not be read this scan';
+  }catch(eAll){
+    out.why = 'the desk intel read failed: ' + ((eAll && eAll.message) || eAll);
+  }
+  /* the clock and the calendar need no tape — read them even when the
+     feeds failed, and never let them throw the layer */
+  try{ if (I && typeof I.sessionOverlay === 'function') out.session = I.sessionOverlay(); }catch(eSe){}
+  try{ if (I && typeof I.news === 'function') out.news = I.news(); }catch(eNw){}
+  return out;
+}
+
+/* hg-v1361: does the candle engine agree with a crowned side? WITH / AGAINST
+   / UNREAD — a display verdict only. A desk that crowned a split is already
+   impossible (v1359); this answers the different question of whether the
+   15m candles are travelling the crowned way. */
+function sgCandleAgreement(intel, side){
+  var d = intel && intel.candle && intel.candle.dir;
+  if (d !== 'BULL' && d !== 'BEAR') return { verdict: 'UNREAD', why: 'the candle engine named no side' };
+  var want = String(side || '').toLowerCase();
+  var bull = (want === 'long' || want === 'buy');
+  var agree = (bull && d === 'BULL') || (!bull && d === 'BEAR');
+  var pats = intel.candle.patterns && intel.candle.patterns.length
+    ? intel.candle.patterns.slice(0, 3).join(', ') : 'no named pattern';
+  return { verdict: agree ? 'WITH' : 'AGAINST', why: d.toLowerCase() + ' 15m read · ' + pats };
+}
+
 async function superGoldRunScanInner(opts){
   opts = opts || {};
   __sg.scanBusy = true;
@@ -969,6 +1043,9 @@ async function superGoldRunScanInner(opts){
     var snap = buildSnapFromGoldScans(W, riskOpts);
     snap.scanAt = Date.now();
     snap.at = snap.scanAt;
+    /* hg-v1361: pin the desk intel to the snap. Computed here because this
+       is the desk's one async window; the render path below never fetches. */
+    try{ snap.intel = await superGoldIntel(W); }catch(eIn){ snap.intel = null; }
     __sg.lastScanAt = snap.scanAt;
     superGoldAfterScan(snap);
     return snap.cands.length ? ('ok · ' + snap.cands.length + ' setups') : 'ok · 0 setups';
@@ -1083,6 +1160,7 @@ function mount(el){
     '    <div class="hg-super-badge">Super Gold · GRADE desk</div>',
     '  </div>',
     '  <div id="sg-validation"></div>',
+    '  <div id="sg-intel"></div>',
     '  <div class="hg-weekend" id="sg-weekend" style="display:none"></div>',
     '  <div class="hg-super-grid">',
     '    <div class="hg-card"><h3>Gold Universe Desk</h3>',
@@ -1203,9 +1281,60 @@ function mount(el){
     el.style.display = txt ? 'block' : 'none';
   }
 
+  /* hg-v1361: the desk intel strip. Renders the snapshot pinned at scan
+     time — the five-timeframe matrix, the candle engine's agreement with
+     the crowned side, the volatility regime, the session clock and the
+     calendar. A display layer: nothing here crowns, uncrowns, or moves a
+     level. Empty when the scan never computed it. */
+  function paintIntel(snap){
+    var host = $('#sg-intel');
+    if (!host) return;
+    var intel = snap && snap.intel;
+    if (!intel) { host.innerHTML = ''; return; }
+    function esc(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    var bits = [];
+    if (intel.fiveTf){
+      var ft = intel.fiveTf;
+      var aColor = ft.aligned === 'NONE' ? '#64748b' : '#15803d';
+      var rowTxt = (ft.rows || []).map(function(r){
+        var cls = r.dir === 'BULL' ? 'color:#15803d' : (r.dir === 'BEAR' ? 'color:#dc262c' : 'color:#94a3b8');
+        return '<span style="' + cls + ';font-weight:700">' + esc(r.tf) + ' ' + esc(r.dir) + '</span>';
+      }).join(' · ');
+      bits.push('<div class="hg-note" data-sg-intel="fivetf" style="margin-bottom:4px"><b>FIVE-TIMEFRAME</b> '
+        + '<span style="color:' + aColor + ';font-weight:700">' + esc(ft.aligned) + '</span>'
+        + ' <span class="hg-note">— ' + esc(ft.why || '') + '</span><br>' + rowTxt + '</div>');
+    }
+    var crownedSide = '';
+    try{
+      var rows = snap && Array.isArray(snap.cands) ? snap.cands : [];
+      if (rows.length && sgSnapFresh(snap)) crownedSide = sgMergeSide(rows) || '';
+    }catch(eCr){ crownedSide = ''; }
+    if (intel.candle){
+      var ag = crownedSide ? sgCandleAgreement(intel, crownedSide) : null;
+      var cColor = !ag ? '#64748b' : (ag.verdict === 'WITH' ? '#15803d' : (ag.verdict === 'AGAINST' ? '#dc262c' : '#94a3b8'));
+      bits.push('<div class="hg-note" data-sg-intel="candle" style="margin-bottom:4px"><b>CANDLES 15m</b> '
+        + '<span style="font-weight:700">' + esc(intel.candle.dir) + '</span>'
+        + (ag ? (' — <span style="color:' + cColor + ';font-weight:700">' + esc(ag.verdict) + ' the crown</span> <span class="hg-note">(' + esc(ag.why) + ')</span>') : (' <span class="hg-note">(' + esc(intel.candle.patterns && intel.candle.patterns.length ? intel.candle.patterns.slice(0, 3).join(', ') : 'no named pattern') + ')</span>'))
+        + (ag && ag.verdict === 'AGAINST' ? '<div class="hg-note" style="color:#b45309">The crowned desk and the 15m candles disagree. The crown stands — the disagreement is shown, not hidden.</div>' : '')
+        + '</div>');
+    }
+    var envBits = [];
+    if (intel.volRegime && intel.volRegime.ok) envBits.push('<b>VOLATILITY</b> ' + esc(intel.volRegime.regime) + ' <span class="hg-note">(' + esc(intel.volRegime.why) + ')</span>');
+    if (intel.session && intel.session.ok) envBits.push('<b>SESSION</b> ' + esc(intel.session.label) + ' <span class="hg-note">(' + esc(intel.session.why) + ')</span>');
+    if (intel.news) envBits.push('<b>NEWS</b> ' + esc(intel.news.state || 'UNCHECKED') + ' <span class="hg-note">(' + esc(intel.news.note || '') + ')</span>');
+    if (envBits.length) bits.push('<div class="hg-note" data-sg-intel="env" style="margin-bottom:4px">' + envBits.join('<br>') + '</div>');
+    if (!bits.length && intel.why) bits.push('<div class="hg-note">Desk intel unread: ' + esc(intel.why) + '</div>');
+    host.innerHTML = bits.length
+      ? ('<div class="hg-note" data-sg-intel="1" style="margin:8px 0;padding:8px 10px;border:1px solid rgba(166,124,18,.25);border-radius:var(--radius-sm,6px);background:#fffbeb">'
+        + '<b>DESK INTELLIGENCE</b> <span class="hg-note">— tape, clock and calendar beside the crown. They do not crown and they do not move a level.</span>'
+        + '<div style="margin-top:6px">' + bits.join('') + '</div></div>')
+      : '';
+  }
+
   function paintDesk(snap){
     paintValidation();
     paintWeekendBanner();
+    paintIntel(snap || superGoldScan());
     snap = snap || superGoldScan();
     var desk = $('#sg-desk');
     var statEl = $('#sg-scan-stat');
@@ -1424,6 +1553,9 @@ W.superGoldRepaint = superGoldRepaint;
 W.superGoldScan = superGoldScan;
 W.superGoldRunScan = superGoldRunScan;
 W.superGoldWarm = superGoldWarm;
+/* hg-v1361: the intel layer, exported so the guard drives the REAL read. */
+W.superGoldIntel = superGoldIntel;
+W.sgCandleAgreement = sgCandleAgreement;
 
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'super-gold', label: 'SUPER GOLD', run: superGoldWarm });
