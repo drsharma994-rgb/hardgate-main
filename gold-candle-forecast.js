@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — gold-candle-forecast.js (v1356)
+HARDGATE — gold-candle-forecast.js (v1360)
 Predictive Candle Forecasting Module. Uses ATR and momentum to forecast
 the next candle's range, direction, TP, and SL.
 
@@ -920,6 +920,17 @@ on every page load since v1308:
     } catch (eFq) { intel.feedQuality = null; }
 
     try { intel.execCard = I.executionCard(forecast); } catch (eEx) { intel.execCard = null; }
+    /* hg-v1358: the four reads that make an ARMED card actionable — the
+       session clock, the next-bars cone, the printed-checks grade, and the
+       distance from the last close to the bracket. Each composes what is
+       already computed above; none of them re-prices anything. */
+    try { intel.session = (typeof I.sessionOverlay === 'function') ? I.sessionOverlay() : null; } catch (eSes) { intel.session = null; }
+    try { intel.cone = (typeof I.forecastCone === 'function') ? I.forecastCone(candles, { bars: 3 }) : null; } catch (eCone) { intel.cone = null; }
+    try { intel.grade = (typeof I.setupGrade === 'function') ? I.setupGrade(forecast, intel) : null; } catch (eGr) { intel.grade = null; }
+    try {
+      intel.distance = (typeof I.distanceCard === 'function')
+        ? I.distanceCard({ close: forecast.close, rows: candles }, intel.execCard) : null;
+    } catch (eDi) { intel.distance = null; }
     try { intel.patternPerf = I.patternPerf(candles, { windows: 40 }); } catch (ePp) { intel.patternPerf = null; }
     try {
       intel.fwd = (typeof window.hgFwdStats === 'function')
@@ -951,6 +962,22 @@ on every page load since v1308:
     H += '<div class="panel" data-cf-intel="1" style="margin-top:12px; border-left:4px solid #64748b;">'
       + '<h3 style="margin:0 0 6px;">CANDLE INTELLIGENCE <span class="note">— execution state, timeframes, structure, feeds, record</span></h3>';
 
+    /* hg-v1358: the setup grade sits ABOVE the execution card — it is the
+       count of printed checks that tells the reader how much of the stack
+       agrees before they read a single level. */
+    if (intel.grade && intel.grade.ok) {
+      var g = intel.grade;
+      var gColor = g.grade === 'A' ? '#15803d' : (g.grade === 'B' ? '#b45309' : (g.grade === 'C' ? '#dc262c' : '#94a3b8'));
+      var gRows = g.checks.map(function (c) {
+        return '<li><span class="' + (c.passed ? 'pos' : 'neg') + '" style="font-weight:700;">' + (c.passed ? 'PASS' : '—') + '</span> '
+          + esc(c.label) + (c.note ? (' <span class="note">— ' + esc(c.note) + '</span>') : '') + '</li>';
+      }).join('');
+      H += '<div class="note" data-cf-grade="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
+        + '<b>SETUP GRADE</b> <span style="color:' + gColor + '; font-weight:700;">' + esc(g.grade) + '</span>'
+        + ' <span class="note">— ' + esc(g.why) + '</span>'
+        + '<ul class="lst">' + gRows + '</ul></div>';
+    }
+
     /* execution card */
     if (intel.execCard) {
       var e = intel.execCard;
@@ -958,7 +985,8 @@ on every page load since v1308:
       H += '<div class="note" data-cf-exec="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
         + '<b>EXECUTION</b> <span style="color:' + stColor + '; font-weight:700;">' + esc(e.state) + '</span>'
         + (e.horizon ? (' <span class="note">' + esc(e.horizon) + ' ' + esc(e.dir) + '</span>') : '')
-        + '<div class="note">' + esc(e.why) + '</div>';
+        + '<div class="note">' + esc(e.why) + '</div>'
+        + ((intel.distance && intel.distance.ok) ? ('<div class="note">' + esc(intel.distance.why) + '.</div>') : '');
       if (isFinite(e.entry)) {
         H += '<div class="note" style="margin-top:4px;">Entry <b>' + fmt(e.entry) + '</b> · <b>Stop:</b> <span class="neg" style="font-weight:700;">' + fmt(e.stop) + '</span>'
           + ' · TP1 <span class="pos" style="font-weight:700;">' + fmt(e.tp1) + '</span>'
@@ -998,6 +1026,21 @@ on every page load since v1308:
         + '<div class="note">A pattern at marked structure is a location; a pattern in empty space is not. "AT PRICE" means within 2 ATR of the last close.</div></div>';
     }
 
+    /* hg-v1358: the forecast cone, beside the matrix — the matrix says WHO
+       agrees, the cone says HOW FAR the next closed bars would statistically
+       travel. A range with a lean, never a target. */
+    if (intel.cone) {
+      var cn = intel.cone;
+      var coneRows = (cn.steps || []).map(function (s) {
+        return '<li><b>+' + s.bar + ' bar' + (s.bar === 1 ? '' : 's') + ':</b> ' + fmt(s.low) + ' – ' + fmt(s.high)
+          + ' <span class="note">(lean ' + fmt(s.mid) + ')</span></li>';
+      }).join('');
+      H += '<div class="note" data-cf-cone="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
+        + '<b>FORECAST CONE</b> <span class="note">— ' + esc(cn.why || 'unread') + '</span>'
+        + (coneRows ? ('<ul class="lst">' + coneRows + '</ul>') : '')
+        + '</div>';
+    }
+
     /* volatility regime + news execution risk, side by side */
     var regimeHtml = '';
     if (intel.volRegime) {
@@ -1013,8 +1056,17 @@ on every page load since v1308:
       newsHtml = '<b>NEWS RISK</b> <span style="color:' + nColor + '; font-weight:700;">' + esc(nw2.state) + '</span> <span class="note">— ' + esc(nw2.note || '') + '</span>'
         + '<div class="note">The calendar gates execution only. It never votes on direction.</div>';
     }
+    /* hg-v1358: the session clock on the same row — context for when the
+       read is happening, never a vote. */
+    var sesHtml = '';
+    if (intel.session) {
+      var se = intel.session;
+      sesHtml = '<b>SESSION</b> ' + (se.ok
+        ? ('<span style="font-weight:700;">' + esc(se.label) + '</span> <span class="note">— ' + esc(se.why) + (se.scalp ? (' · scalp clock: ' + esc(se.scalp)) : '') + '</span>')
+        : ('<span class="note">' + esc(se.why || 'unread') + '</span>'));
+    }
     H += '<div class="note" data-cf-regime-news="1" style="border:1px solid var(--line); padding:8px; margin-bottom:8px;">'
-      + regimeHtml + (regimeHtml && newsHtml ? '<br>' : '') + newsHtml + '</div>';
+      + [regimeHtml, newsHtml, sesHtml].filter(Boolean).join('<br>') + '</div>';
 
     /* feed quality */
     if (intel.feedQuality) {

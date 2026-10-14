@@ -255,6 +255,21 @@
       "version": "hg-v1357",
       "built": "2026-10-14T22:30:00Z",
       "note": "CANDLE FORECAST gains the intelligence layer (candle-forecast-intel.js, one home, pure computation): an execution card with WAIT/ARMED/TRIGGERED/NO-TRADE state from the formed brackets; a five-timeframe matrix (5m trigger, 15m setup, 1h confirm, 4h direction, 1d regime) with 5m added to every leg of the gold feed chain; a structure and liquidity map from the shared SMC reader at call time; a volatility regime from ATR against its own tape median; the news calendar as an execution-risk state that never votes; a cross-feed quality check that locks alerts when feeds diverge; an in-sample per-pattern next-candle record labelled in-sample; the forward ledger's own out-of-sample numbers; a mini candlestick chart with the bracket's levels; a blockers panel that names exactly what refused a setup; a candle-close countdown that auto-scans on the closed bar; and one alert path through tabalerts. Closed bars only, no invented prices, scalp and swing stops stay separate. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1358",
+      "built": "2026-10-14T23:00:00Z",
+      "note": "Super Gold does not invent a target the source row never had. A long and a short on the board are not crowned and no price is blended. A source scan older than 20 minutes is shown and not crowned. The weekend line uses the bar time."
+    },
+    {
+      "version": "hg-v1359",
+      "built": "2026-10-15T00:00:00Z",
+      "note": "Super Gold crowns a pick only when GOLD SCALP and GOLD SWING are on the same side. A missing desk is unread and is not agreement. A desk that stood aside is not a merged pick. Only the crowned row is a forward ticket."
+    },
+    {
+      "version": "hg-v1360",
+      "built": "2026-10-15T00:30:00Z",
+      "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR — a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
     }
   ]
 }

@@ -250,4 +250,69 @@ console.log('\n== 11) the alert path exists and stays silent without a state =='
     'no scan means no alert state — silence, not a stale candidate');
 }
 
+console.log('\n== 12) hg-v1358: the forecast cone is a band, not a target ==');
+{
+  const { I } = bootIntel();
+  ok(typeof I.forecastCone === 'function', 'the cone read exists');
+  ok(I.forecastCone([], { bars: 3 }).ok === false, 'a thin tape fails the cone closed');
+  const rows = tape(60, 0.5);
+  const c = I.forecastCone(rows, { bars: 3 });
+  ok(c.ok && c.steps.length === 3, 'three cone steps print');
+  const last = rows[rows.length - 1].c;
+  ok(c.steps[0].low < last && c.steps[0].high > last, 'the cone brackets the last close');
+  ok(c.steps[2].high - c.steps[2].mid > c.steps[0].high - c.steps[0].mid, 'the cone widens by sqrt(bars)');
+  ok(/not a target and not a stop/.test(c.why), 'the cone says it is not a target');
+  ok(Math.abs(c.drift) <= (c.steps[0].high - c.steps[0].mid) / 2 + 1e-9, 'the drift tilt is capped at half an ATR');
+}
+
+console.log('\n== 13) hg-v1358: the setup grade is a count of printed checks ==');
+{
+  const { I } = bootIntel();
+  ok(I.setupGrade({}, {}).grade === 'NONE', 'no side grades NONE');
+  const good = {
+    dir: 'BULL', patterns: ['hammer'], advancedPatterns: [],
+    confluence: { ok: true, ticket: true, why: 'families with' }
+  };
+  const intelOk = {
+    structure: { ok: true, items: [{ near: true }] },
+    fiveTf: { aligned: 'BULL', why: 'aligned' },
+    volRegime: { ok: true, regime: 'NORMAL' },
+    feedQuality: { ok: true, lock: false, why: 'agree' },
+    news: { ok: true, blackout: false, note: 'clear' }
+  };
+  const gA = I.setupGrade(good, intelOk);
+  ok(gA.grade === 'A' && gA.passed === gA.total, 'a full stack grades A');
+  const gLock = I.setupGrade(good, Object.assign({}, intelOk, { feedQuality: { ok: true, lock: true, why: 'diverged' } }));
+  ok(gLock.grade === 'C', 'a feed lock caps the grade at C');
+  const gB = I.setupGrade(good, { structure: { ok: true, items: [] }, fiveTf: { aligned: 'NONE', why: 'split' }, volRegime: { ok: true, regime: 'EXTREME' }, feedQuality: intelOk.feedQuality, news: intelOk.news });
+  ok(gB.passed === 5 && gB.grade === 'B', 'a partial stack grades B (' + gB.passed + ' of ' + gB.total + ')');
+  ok(gA.checks.length === 8 && gA.checks.every(c => typeof c.label === 'string'), 'every check is printed');
+  ok(/not a probability/.test(gA.why), 'the grade disclaims probability');
+}
+
+console.log('\n== 14) hg-v1358: the session clock and the distance read ==');
+{
+  const { I } = bootIntel();
+  ok(I.sessionOverlay().ok === false && /not loaded/.test(I.sessionOverlay().why), 'no session clock is UNREAD, not off-hours');
+  const booted = bootIntel({ hgGoldKillzoneRead: () => ({ zone: 'LONDON', weight: 2, label: 'LONDON KILLZONE', hourGMT: 8 }) });
+  const so = booted.I.sessionOverlay(Date.UTC(2026, 9, 14, 8, 30));
+  ok(so.ok && so.zone === 'LONDON', 'the shared killzone read is composed');
+  ok(/high-liquidity/.test(so.why), 'the session meaning is stated');
+  const d = I.distanceCard({ close: 4100, rows: tape(40, 0.25) }, { entry: 4095, stop: 4090, tp1: 4105, dir: 'BULL', horizon: 'SCALP' });
+  ok(d.ok && d.toEntry === -5 && isFinite(d.toEntryAtr), 'the distance to the bracket is measured in dollars and ATR');
+  ok(I.distanceCard({ close: 4100 }, null).ok === false, 'no bracket is a closed refusal');
+}
+
+console.log('\n== 15) hg-v1358: the pattern record counts three-bar follow-through ==');
+{
+  const fake = function (rows) {
+    return { dir: rows.length % 2 ? 'BULL' : 'BEAR', patterns: ['test-shape'], advancedPatterns: [] };
+  };
+  const { I } = bootIntel({ goldCandleForecast: fake });
+  const p = I.patternPerf(tape(60, 0.25), { windows: 10 });
+  ok(p.ok && p.follow3N > 0, 'the three-bar settle ran');
+  ok(/three bars later/.test(p.why), 'the follow-through is stated in the sentence');
+  ok(/in-sample/.test(p.why), 'the in-sample label survived');
+}
+
 console.log('\ntest-candle-forecast-intel-v1357: ' + pass + ' passed, 0 failed');
