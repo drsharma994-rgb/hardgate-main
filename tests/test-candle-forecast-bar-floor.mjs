@@ -28,6 +28,18 @@ console.log('\n== 1) the engine floor is 30, read from the source not from memor
   console.log('\n== 4) the guard fails open and names the count ==');
   ok(/Gold 15m tape unread/.test(TAB), 'a thin tape still throws a legible message');
   ok(/candles\.length < CF_MIN_BARS/.test(TAB), 'and it is the named floor that decides, not a literal');
+
+  console.log('\n== 4b) NO bare floor literal survives anywhere in the module ==');
+  /* hg-v1350: the 4h swing admission and the ultimate-confluence admission were left as
+     the bare literal 30 when the floor was first named. They agreed with the engine only
+     by coincidence - the exact state the loader was in before hg-v1349 - so a future
+     engine change would have blanked the swing silently the same way it blanked the 15m.
+     One home means EVERY reader; this asserts none was missed. */
+  const bare = TAB.match(/length\s*>=\s*30|length\s*<\s*30/g) || [];
+  ok(bare.length === 0,
+    'no reader compares against a bare 30 any more (found ' + bare.length + (bare.length ? ': ' + bare.join(', ') : '') + ')');
+  const named = (TAB.match(/CF_MIN_BARS/g) || []).length;
+  ok(named >= 6, 'and the named floor is read everywhere it is needed (found ' + named + ' uses)');
 }
 
 console.log('\n== 5) driven: a 20-29 bar tape cannot reach the engine any more ==');

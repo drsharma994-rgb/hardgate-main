@@ -241,7 +241,7 @@ on every page load since v1308:
         var load4 = this.loadGold('4h', 120);
         var loaded4 = await load4;
         var c4 = loaded4 && loaded4.rows;
-        if (Array.isArray(c4) && c4.length >= 30) {
+        if (Array.isArray(c4) && c4.length >= CF_MIN_BARS) {
           var fc4 = window.goldCandleForecast(c4, macroSnap || macroLive || null, { rows1d: tapes && tapes.rows1d });
           try {
             if (fc4 && typeof window.hgCfConfluence === 'function') {
@@ -293,7 +293,7 @@ on every page load since v1308:
         /* The first call is the 15m tally. When the 4h tape was read, ask
            again with that tape so the wide tally can name a swing beside
            the scalp. The house stop is still not this tally's stop. */
-        if (conf && Array.isArray(c4) && c4.length >= 30 && typeof window.hgUltimateConfluence === 'function') {
+        if (conf && Array.isArray(c4) && c4.length >= CF_MIN_BARS && typeof window.hgUltimateConfluence === 'function') {
           var withSwing = window.hgUltimateConfluence(candles, { swingRows: c4 });
           if (withSwing) conf = withSwing;
         }
