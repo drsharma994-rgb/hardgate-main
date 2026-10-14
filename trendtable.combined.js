@@ -256,6 +256,40 @@ function tmVolDivChipHtml(r){
   var dir = r.volDivLong ? 'long' : 'short';
   return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'VOL DIV' : 'VOL DIV') + '</span>';
 }
+/* hg-v1336: the pattern chip on every TREND MATRIX card — one line of
+   confluence a reader can trust by eye, because the engine is the SAME
+   hgCfCandlePatterns the gold candle forecast reads and the chip prints the
+   first name the engine stamped. Three visible states:
+     green  — bull majority, up to two names ("hammer / piercing")
+     red    — bear majority
+     dim    — a doji / inside / no-direction note (so a reader sees the
+              engine looked and nothing voted, not a dark feed)
+   And nothing at all if the engine never ran (no series, no ATR, no engine
+   loaded) — the chip MUST NOT appear when a pattern was not read, because a
+   missing chip means "unread" and a dim chip means "read, no vote". That is
+   the hg-v989 three-state contract on screen. The gpip class matches every
+   other chip on this card, so a reader never has to learn a second visual. */
+function tmCandleChipHtml(r){
+  var pat = r && r.candleReads;
+  if (!pat || typeof pat !== 'object') return '';
+  var bv = (typeof pat.bullVotes === 'number' && isFinite(pat.bullVotes)) ? pat.bullVotes : 0;
+  var ev = (typeof pat.bearVotes === 'number' && isFinite(pat.bearVotes)) ? pat.bearVotes : 0;
+  if (bv === 0 && ev === 0){
+    var notes = Array.isArray(pat.notes) ? pat.notes : [];
+    if (!notes.length) return '';
+    var noteText = String(notes[0] || '').slice(0, 48);
+    return '<span class="gpip" title="' + escH(noteText) + '">PATTERN · no vote</span>';
+  }
+  var dir, names;
+  if (bv > ev){ dir = 'bull'; names = Array.isArray(pat.bullNames) ? pat.bullNames : []; }
+  else if (ev > bv){ dir = 'bear'; names = Array.isArray(pat.bearNames) ? pat.bearNames : []; }
+  else { return '<span class="gpip" title="pattern tally tied — no vote">PATTERN · tie</span>'; }
+  var head = (dir === 'bull') ? 'BULL ' : 'BEAR ';
+  var shown = names.slice(0, 2).map(function(n){ return String(n || '').slice(0, 24); }).join(' / ');
+  if (!shown) shown = (dir === 'bull') ? ('bull vote x' + bv) : ('bear vote x' + ev);
+  var cls = (dir === 'bull') ? 'ok' : 'bad';
+  return '<span class="gpip ' + cls + '" title="' + escH(shown) + '">' + head + escH(shown) + '</span>';
+}
 
 function tmBarOpenSec(row){
   var t = row && row.t;
@@ -4043,6 +4077,69 @@ function tmLegReads(r, dir){
   else if (r.freshCross === 'DEATH') out['tm:freshCross'] = (dir === 'short');
   return out;
 }
+/* hg-v1336: CANDLESTICK PATTERN RECOGNITION on the 4h tape, as RECORD-ONLY
+   THREE-STATE READS. The function reads window.hgCfCandlePatterns — the ONE
+   HOME (hg-v949) in goldind.js that gold's candle forecast tab already uses
+   — on this row's own 4h series, over the last three closed bars with the
+   ATR of the series as the pattern-size gate. The engine fires on hammer /
+   shooting star / dragonfly / gravestone doji / marubozu / engulfing /
+   piercing / dark cloud / morning star / evening star / three white
+   soldiers / three black crows / tweezers / three inside / rising three
+   methods / falling three methods — 46 patterns since hg-v1316, each
+   ATR-gated so a dust bar is never a hammer and a monster bar is never a
+   doji. The RECORD BAG returned here is:
+     pattern:bullMajority — true when bullVotes > bearVotes
+     pattern:bearMajority — true when bearVotes > bullVotes
+       (so the two keys agree with each other by construction: if one is
+       true, the other must be false; a tie or no fire leaves BOTH absent)
+     pattern:withTrend    — true when the pattern majority agrees with
+                           tmDirOf(r), false when it fights, absent when
+                           the row has no direction or no majority
+     pattern:anyFire      — true when at least one pattern voted on either
+                           side, absent when nothing fired (so the ledger
+                           can split 'tape printed a pattern' vs 'quiet
+                           bar')
+   The pattern engine's longStop/shortStop and the raw name list ride on the
+   row (r.candleReads) so the card renderer can name the pattern that fired
+   without re-running the engine. Marks only: hg-v966 refuses an unmeasured
+   gate on this desk (hg-v987/v945/v922 measured the additive well dry), so
+   nothing here moves a tier, a plan or a desk — the ledger's read split
+   asks, out of sample, which of them separates. hg-v989 three-state: a
+   missing engine, a tape under six bars, an unreadable ATR all record
+   NOTHING, never a guessed false. */
+function tmCandleRead(rows){
+  try {
+    if (!Array.isArray(rows) || rows.length < 6) return null;
+    if (typeof W.hgCfCandlePatterns !== 'function') return null;
+    if (typeof atr !== 'function') return null;
+    var atrSeries = atr(rows, 14);
+    if (!Array.isArray(atrSeries) || !atrSeries.length) return null;
+    var atrLast = atrSeries[atrSeries.length - 1];
+    if (!(typeof atrLast === 'number' && isFinite(atrLast) && atrLast > 0)) return null;
+    var pat = W.hgCfCandlePatterns(rows, atrLast);
+    if (!pat || typeof pat !== 'object') return null;
+    return pat;
+  } catch (ePat) { return null; }
+}
+function tmCandleMarks(r, dir){
+  var out = {};
+  if (!r) return out;
+  var pat = r.candleReads;
+  if (!pat || typeof pat !== 'object') return out;
+  var bv = (typeof pat.bullVotes === 'number' && isFinite(pat.bullVotes)) ? pat.bullVotes : 0;
+  var ev = (typeof pat.bearVotes === 'number' && isFinite(pat.bearVotes)) ? pat.bearVotes : 0;
+  if (bv > 0 || ev > 0) out['pattern:anyFire'] = true;
+  if (bv > ev) { out['pattern:bullMajority'] = true; out['pattern:bearMajority'] = false; }
+  else if (ev > bv) { out['pattern:bullMajority'] = false; out['pattern:bearMajority'] = true; }
+  if (dir === 'long' || dir === 'short'){
+    if (bv > ev) out['pattern:withTrend'] = (dir === 'long');
+    else if (ev > bv) out['pattern:withTrend'] = (dir === 'short');
+    /* a tie or no fire records NOTHING on withTrend (hg-v989: absent is
+       absent, never a guessed false — the ledger must be able to split
+       the three states) */
+  }
+  return out;
+}
 function tmRecordReads(r, dir){
   var rd = {};
   if (!r) return undefined;
@@ -4075,6 +4172,15 @@ function tmRecordReads(r, dir){
     if (pm.wavwap) rd['pine:wavwapWith'] = pm.wavwap === dir;
     if (pm.smc) rd['pine:smcWith'] = pm.smc === dir;
   }
+  /* hg-v1336: fold the three-state candlestick-pattern marks in. The engine
+     is the one home in goldind.js (hgCfCandlePatterns); the pattern read is
+     stamped on the row at scan time (r.candleReads) so the ledger reads
+     exactly what the card paints. The ledger's read split then asks whether
+     a bull-majority bar or a with-trend-pattern bar separates winners, out
+     of sample — the one route this desk has to turning a pattern read into
+     a measurement rather than a claim. */
+  var cm = tmCandleMarks(r, dir), ck;
+  for (ck in cm){ if (Object.prototype.hasOwnProperty.call(cm, ck)) rd[ck] = cm[ck]; }
   return Object.keys(rd).length ? rd : undefined;
 }
 /* hg-v1159: the TICKET claim on a record is the board's own CLEAN tier — the
@@ -5368,13 +5474,20 @@ async function trendmxScanCore(hooks){
         var r1hc = tmClosedRows(r1h, 3600);
         if (!r4c.length || !r1c.length) return tmUnreadRow(item);
         var ts = trendScore(r1c, r4c);
+        /* hg-v1336: the candlestick pattern read, stamped on the row at scan
+           time off the SAME 4h closed-bar snapshot every other witness reads,
+           so the card renderer and the ledger see the exact same read. The
+           engine lives in goldind.js (hgCfCandlePatterns) — one home, hg-v949;
+           absent / under 6 bars / unreadable ATR all record null, hg-v989. */
+        var candleReads = tmCandleRead(r4c);
         var row = {
           sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
           xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
           rsi: ts.rsi,
           volDiv: ts.volDiv, volConf: ts.volConf,
           price: r4c[r4c.length - 1].c, rows4h: r4c, rows1d: r1c, rows1h: r1hc.length ? r1hc : null,
-          fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
+          fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark,
+          candleReads: candleReads
         };
         var dir = tmDirOf(row);
         if (!dir){ row.gate = null; return row; }
@@ -9022,7 +9135,7 @@ function mountTrendMatrix(el){
         '<td>' + trendmxCompPipsHtml(r.comps) + '</td>' +
         '<td><b>' + r.sym + '</b>' + tmVenueChip(r) + '</td>' +
         '<td class="' + scls + '"><b>' + (sc > 0 ? '+' : '') + sc + '</b></td>' +
-        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span>' + tmPostGateChip(r) + '</td>' +
+        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span>' + tmPostGateChip(r) + tmCandleChipHtml(r) + '</td>' +
         '<td>' + tri(r.comps.d1Trend, '▲ UP', '▼ DOWN') + '</td>' +
         '<td><span class="' + xcls + '">' + xtxt + '</span>' + fx + '</td>' +
         '<td>' + tri(r.comps.h4Cascade, '▲ ALIGN', '▼ INVERSE') + '</td>' +
@@ -9441,6 +9554,9 @@ W.trendmxFundingChipHtml = trendmxFundingChipHtml;
 W.trendmxRowTier = trendmxRowTier;
 W.tmLegReads = tmLegReads;                 /* hg-v1159: the composite's legs as marks */
 W.tmRecordReads = tmRecordReads;           /* hg-v1159: the one reads bag both record sites hand the ledger */
+W.tmCandleRead = tmCandleRead;             /* hg-v1336: the one call into hgCfCandlePatterns (the one home) */
+W.tmCandleMarks = tmCandleMarks;           /* hg-v1336: the three-state marks tmRecordReads folds into each record */
+W.tmCandleChipHtml = tmCandleChipHtml;     /* hg-v1336: the pattern chip the matrix row paints beside the gate chip */
 W.tmTicketClaim = tmTicketClaim;           /* hg-v1159: the ticket claim is the board's clean tier */
 W.tmValidSetup = tmValidSetup;             /* hg-v1160: the replay harness asks the desk's own plan validity rule */
 W.HG_TM_FACTOR_SEP = HG_TM_FACTOR_SEP;     /* hg-v1160: read by the panel, the drift guard and nothing else */

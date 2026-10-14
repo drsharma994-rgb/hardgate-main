@@ -7026,6 +7026,45 @@ terse status, and never launches a first-time scan on a global refresh.
     return (hit - b) / Math.sqrt(b * (1 - b) / eff);
   }
 
+  /* hg-v1298 — DISCLOSURE Z ON THE GATE-CLEAR POPULATION.
+     hg-v917 added positions 5-8 to every row = [formedN, formedWinRate,
+     formedNetXm, formedGrossR] — the record of this mechanic on the
+     population that cleared the 35-gate stack, which is the population
+     the gate exists to judge. hg-v917 said "no verdict moves", measured
+     for the POSITIVE (promotion) side only: at naive n nothing reaches
+     the family bar on either basis. The NEGATIVE (fail-outright) side
+     was unmeasured. hg-v1298 measured it: on the committed JSON, 6
+     mechanics would read ticket -> VETO under row[5]/row[6]
+     (THREE-BAR -4.13σ, P9-VOLBAR -2.97σ, PD-EQUILIBRIUM -3.60σ,
+     ADR-FADE -2.31σ, PIN-REJECT -3.34σ, SPRING -2.28σ) that the whole-
+     walk read fails to catch. ZERO mechanics flip the other way.
+
+     THIS IS A SEPARATE FUNCTION, not a change to hgOgReplayZ, for a
+     reason: hgOgEdgeProofPanelHtml (hg-v756) and the arithmetic pins
+     around it quote a specific whole-walk effN relationship (raw/eff =
+     1/sqrt(OG_EFF_N_RATIO)) and were measured against that. Changing
+     hgOgReplayZ would move those display numbers for a different
+     question than its original callers answer. hg-v1298 instead gives
+     the audit panel its own reader for the gate-clear population. No
+     other panel's semantics shift. No tickets change -- the ACTUAL veto
+     gate hgOgGateMeasuredEdge reads the forward ledger, not either of
+     these functions.
+
+     Fall through to the whole-walk read when a row has no hg-v917
+     gate-clear block (position 5 unreadable or <= 0) so a legacy record
+     written before that pack still returns a verdict. */
+  function hgOgReplayZOnFormed(row, be){
+    var fN = fin(row && row[5]), fHit = fin(row && row[6]);
+    var n = (isFinite(fN) && fN > 0) ? fN : fin(row && row[0]);
+    var hit = (isFinite(fN) && fN > 0) ? fHit : fin(row && row[1]);
+    var b = fin(be);
+    if (!isFinite(n) || !isFinite(hit) || !(n > 0)) return NaN;
+    if (!(b > 0 && b < 1)) return NaN;
+    var eff = hgOgEffN(n, true);
+    if (!(eff > 0)) return NaN;
+    return (hit - b) / Math.sqrt(b * (1 - b) / eff);
+  }
+
   /* THE BAR A PROMOTION IS ACTUALLY TESTED AGAINST.
 
      hgOgReplayEdgeVerdict already keeps two bounds: lo95 for the panel to
@@ -9258,6 +9297,13 @@ terse status, and never launches a first-time scan on a global refresh.
       /* hg-v935: and the refusal that follows from the same arithmetic —
          selecting mechanics by their record does not survive out of sample */
       + hgOgSelectionRefusedHtml()
+      /* hg-v1298: the PROFITABILITY AUDIT panel for this desk, naming
+         hg-v935 and hg-v937 and reading the committed state (54 measured
+         mechanics + current VETO count under the fixed gate-clear read).
+         Sits beside hg-v935 by design — the two answer different halves of
+         the same question. Returns '' when goldind.js is absent. */
+      + ((typeof window !== 'undefined' && typeof window.hgGoldAuditPanelHtml === 'function')
+          ? window.hgGoldAuditPanelHtml('omnigold') : '')
       /* if the ledger has moved on since the evidence was baked, that comes
          next — every number under it is about a different system */
       + hgOgEvidenceStaleHtml()
@@ -17169,6 +17215,7 @@ terse status, and never launches a first-time scan on a global refresh.
        bar field used to turn into the gold price — see num() */
     window.hgOgAtrOf = atrOf;
     window.hgOgReplayZ = hgOgReplayZ;
+    window.hgOgReplayZOnFormed = hgOgReplayZOnFormed;   /* hg-v1298 */
     /* the family every significance bar on this tab corrects for */
     window.HG_OG_MECHANIC_COUNT = OG_MECHANICS.length;
     window.HG_OG_EFF_N_RATIO = OG_EFF_N_RATIO;

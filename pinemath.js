@@ -1181,4 +1181,160 @@ function pineWeeklyAvwap(rows, opts){
 G.pineWeeklyAvwap = pineWeeklyAvwap;
 G.pineWeekStartSec = pineWeekStartSec;
 
+/* ---------------------------------------------------------------
+   hg-v1295: three more bar-only Pine ports as crypto state readers.
+   Each fires on the LAST CLOSED BAR only (newLong/newShort state at
+   bi = rows.length - 1). Return `{dir}` three-state (hg-v989); a tape
+   that did not flip returns null. No OMNIBTC / TREND MATRIX twin
+   duplicates: Supertrend is ATR-band flip (DIFFERENT from HalfTrend's
+   amplitude-pivot flip); MACD is signal-line cross (DIFFERENT from
+   Squeeze's BB-in-KC release); CCI is overbought/oversold re-entry
+   (DIFFERENT from Cipher's WaveTrend). Scored by nothing — these are
+   record-only three-state marks the forward ledger will measure
+   out of sample.
+   --------------------------------------------------------------- */
+
+/** Pine: Supertrend ATR(len) × mult — band flip on last closed bar. */
+function pineSupertrend(rows, opts){
+  opts = opts || {};
+  var len = opts.atrLen || 10;
+  var mult = opts.mult !== undefined ? +opts.mult : 3;
+  try{
+    if (!rows || rows.length < len + 5) return null;
+    var n = rows.length;
+    var atrArr = pineAtr(rows, len);
+    var upperPrev = NaN, lowerPrev = NaN, upper = NaN, lower = NaN;
+    var trend = 1, trendPrev = 1;
+    var flipLong = false, flipShort = false;
+    for (var i = 0; i < n; i++){
+      var r = rows[i];
+      var hl2 = (r.h + r.l) / 2;
+      var a = atrArr[i];
+      if (!isFinite(a)){ continue; }
+      var basicUpper = hl2 + mult * a;
+      var basicLower = hl2 - mult * a;
+      var prevClose = i > 0 ? rows[i - 1].c : r.c;
+      upper = (!isFinite(upperPrev) || basicUpper < upperPrev || prevClose > upperPrev) ? basicUpper : upperPrev;
+      lower = (!isFinite(lowerPrev) || basicLower > lowerPrev || prevClose < lowerPrev) ? basicLower : lowerPrev;
+      trendPrev = trend;
+      if (!isFinite(upperPrev) || !isFinite(lowerPrev)){
+        trend = 1;
+      } else if (trendPrev === 1 && r.c <= lowerPrev){
+        trend = -1;
+      } else if (trendPrev === -1 && r.c >= upperPrev){
+        trend = 1;
+      }
+      if (i === n - 1){
+        flipLong = (trendPrev === -1 && trend === 1);
+        flipShort = (trendPrev === 1 && trend === -1);
+      }
+      upperPrev = upper;
+      lowerPrev = lower;
+    }
+    var dir = flipLong ? 'long' : (flipShort ? 'short' : null);
+    if (!dir && opts.includeContext){
+      dir = trend === 1 ? 'long' : (trend === -1 ? 'short' : null);
+    }
+    return {
+      dir: dir,
+      trend: trend,
+      upper: upper,
+      lower: lower,
+      newLong: flipLong,
+      newShort: flipShort,
+      price: rows[n - 1].c
+    };
+  }catch(e){ return null; }
+}
+
+G.pineSupertrend = pineSupertrend;
+
+/** Pine: MACD(12, 26, 9) — signal-line cross on last closed bar. */
+function pineMacd(rows, opts){
+  opts = opts || {};
+  var fast = opts.fast || 12;
+  var slow = opts.slow || 26;
+  var sig = opts.signal || 9;
+  try{
+    if (!rows || rows.length < slow + sig + 5) return null;
+    var closes = rows.map(function(r){ return r.c; });
+    var emaFast = pineEma(closes, fast);
+    var emaSlow = pineEma(closes, slow);
+    var macdLine = new Array(closes.length).fill(NaN);
+    for (var i = 0; i < closes.length; i++){
+      if (isFinite(emaFast[i]) && isFinite(emaSlow[i])) macdLine[i] = emaFast[i] - emaSlow[i];
+    }
+    /* pineEma on a series with leading NaN seeds with NaN and never
+       recovers; find the first finite macd value and run the signal
+       EMA from there into its own aligned output. */
+    var startIdx = macdLine.findIndex(function(v){ return isFinite(v); });
+    if (startIdx < 0 || startIdx + sig > macdLine.length) return null;
+    var macdTail = macdLine.slice(startIdx);
+    var sigTail = pineEma(macdTail, sig);
+    var sigLine = new Array(macdLine.length).fill(NaN);
+    for (var j = 0; j < sigTail.length; j++) sigLine[startIdx + j] = sigTail[j];
+    var bi = closes.length - 1;
+    if (bi < 1) return null;
+    var m = macdLine[bi], s = sigLine[bi];
+    var mp = macdLine[bi - 1], sp = sigLine[bi - 1];
+    if (!isFinite(m) || !isFinite(s) || !isFinite(mp) || !isFinite(sp)) return null;
+    var newLong = (mp <= sp && m > s);
+    var newShort = (mp >= sp && m < s);
+    var dir = newLong ? 'long' : (newShort ? 'short' : null);
+    if (!dir && opts.includeContext){
+      if (m > s) dir = 'long';
+      else if (m < s) dir = 'short';
+    }
+    return {
+      dir: dir,
+      macd: m,
+      signal: s,
+      hist: m - s,
+      newLong: newLong,
+      newShort: newShort,
+      price: closes[bi]
+    };
+  }catch(e){ return null; }
+}
+
+G.pineMacd = pineMacd;
+
+/** Pine: CCI(len) re-entry — the prior bar's CCI was beyond ±obLevel,
+   the last closed bar's is back inside. */
+function pineCci(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 14;
+  var ob = opts.obLevel !== undefined ? +opts.obLevel : 100;
+  try{
+    if (!rows || rows.length < len + 5) return null;
+    var cciArr = cci(rows, len);
+    var bi = rows.length - 1;
+    if (bi < 1) return null;
+    var now = cciArr[bi];
+    var prev = cciArr[bi - 1];
+    if (!isFinite(now) || !isFinite(prev)) return null;
+    /* strict re-entry: prev beyond the band, now back inside.
+       equality to ±ob means not beyond on prev, and not back inside on
+       now — strict inequality is the hg-v989 three-state rule. */
+    var reentryLong = (prev < -ob && now > -ob);
+    var reentryShort = (prev > ob && now < ob);
+    var dir = reentryLong ? 'long' : (reentryShort ? 'short' : null);
+    if (!dir && opts.includeContext){
+      if (now < -ob) dir = 'long';
+      else if (now > ob) dir = 'short';
+    }
+    return {
+      dir: dir,
+      cci: now,
+      cciPrev: prev,
+      obLevel: ob,
+      newLong: reentryLong,
+      newShort: reentryShort,
+      price: rows[bi].c
+    };
+  }catch(e){ return null; }
+}
+
+G.pineCci = pineCci;
+
 })();

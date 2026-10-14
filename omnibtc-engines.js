@@ -80,7 +80,26 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
   function hasLevels(r){
     if (!r) return false;
     var e = fin(r.entry), s = fin(r.stop), t1 = fin(r.t1 != null ? r.t1 : r.tp);
-    return isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0;
+    if (!(isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0)) return false;
+    /* hg-v1304: direction geometry invariant, matching plans.js hg-v675.
+       A long with t1 ≤ entry (or stop ≥ entry) is mathematically unable
+       to profit — the trade can only hit stop or TP1 as a losing level
+       before any profitable move. Same mirror for shorts. Rejecting at
+       the engine builder means an inverted plan never enters `all`,
+       never surfaces in snap.candidates, and never reaches a downstream
+       reader (COMBI, SETUP CONFIRM, CONTRACT REPORT). Direction unknown
+       passes the geometry check (dir is resolved later by the picker). */
+    var dir = dirOf(r.dir || r.side || r.direction);
+    if (dir === 'long'){
+      if (!(s < e && t1 > e)) return false;
+      var t2L = fin(r.t2);
+      if (isFinite(t2L) && t2L > 0 && !(t2L > e)) return false;
+    } else if (dir === 'short'){
+      if (!(s > e && t1 < e)) return false;
+      var t2S = fin(r.t2);
+      if (isFinite(t2S) && t2S > 0 && !(t2S < e)) return false;
+    }
+    return true;
   }
 
   /* Extra engines are never G1–G7 CLEAN. near = watch with levels.

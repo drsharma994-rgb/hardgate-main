@@ -336,7 +336,13 @@ console.log('== 6) one home: nothing reads the marks back ==');
   assert(/ctx: inp\.catalogCtx \|\| null, ind: inp\.indReads \|\| null, killzone: inp\.killzone \|\| ''/.test(gi), 'goldind\'s forming stack passes the context to the census it paints');
   const files = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f));
   const namers = files.filter(f => /'ind:[A-Za-z0-9]+'/.test(strip(read(f))));
-  assert(namers.length === 1 && namers[0] === 'gold-catalog.js', 'the ind: key literals live in gold-catalog.js and nowhere else (' + namers.join(', ') + ')');
+  /* hg-v1297 ported the gold-side ind:* indicator-stack marks onto OMNIBTC
+     forward records through hgObtcIndicatorMarks (one home for the OMNIBTC
+     half). The gold half stays single-sourced in gold-catalog.js. */
+  const allowed = ['gold-catalog.js', 'omnibtc.js'];
+  const unexpected = namers.filter(f => !allowed.includes(f));
+  assert(unexpected.length === 0 && namers.length === allowed.length,
+    'the ind: key literals live only in gold-catalog.js (gold half) and omnibtc.js (crypto half, hg-v1297) (' + namers.join(', ') + ')');
   for (const g of ['hg-gates.js', 'cryptogates.js', 'gold-formation.js', 'hg-solidity.js', 'conviction-lock.js', 'hg-forward.js', 'gold-best-levels.js'])
     assert(!/ind:(adx|dmi|bb|sma|hv|park|vol|tsmom|hour|rsi|ker|atr|linreg|hurst|ac)/.test(strip(read(g))), g + ' names no indicator mark');
   assert(/freeReads/.test(strip(read('goldswing.js'))) && /indReads/.test(strip(read('goldswing.js'))), 'GOLD SWING forwards both bags since hg-v1166 — the hg-v1155 swing gap is closed (its own guard drives the record)');

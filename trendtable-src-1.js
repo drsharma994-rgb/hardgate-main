@@ -124,6 +124,69 @@ function tmLegReads(r, dir){
   else if (r.freshCross === 'DEATH') out['tm:freshCross'] = (dir === 'short');
   return out;
 }
+/* hg-v1336: CANDLESTICK PATTERN RECOGNITION on the 4h tape, as RECORD-ONLY
+   THREE-STATE READS. The function reads window.hgCfCandlePatterns — the ONE
+   HOME (hg-v949) in goldind.js that gold's candle forecast tab already uses
+   — on this row's own 4h series, over the last three closed bars with the
+   ATR of the series as the pattern-size gate. The engine fires on hammer /
+   shooting star / dragonfly / gravestone doji / marubozu / engulfing /
+   piercing / dark cloud / morning star / evening star / three white
+   soldiers / three black crows / tweezers / three inside / rising three
+   methods / falling three methods — 46 patterns since hg-v1316, each
+   ATR-gated so a dust bar is never a hammer and a monster bar is never a
+   doji. The RECORD BAG returned here is:
+     pattern:bullMajority — true when bullVotes > bearVotes
+     pattern:bearMajority — true when bearVotes > bullVotes
+       (so the two keys agree with each other by construction: if one is
+       true, the other must be false; a tie or no fire leaves BOTH absent)
+     pattern:withTrend    — true when the pattern majority agrees with
+                           tmDirOf(r), false when it fights, absent when
+                           the row has no direction or no majority
+     pattern:anyFire      — true when at least one pattern voted on either
+                           side, absent when nothing fired (so the ledger
+                           can split 'tape printed a pattern' vs 'quiet
+                           bar')
+   The pattern engine's longStop/shortStop and the raw name list ride on the
+   row (r.candleReads) so the card renderer can name the pattern that fired
+   without re-running the engine. Marks only: hg-v966 refuses an unmeasured
+   gate on this desk (hg-v987/v945/v922 measured the additive well dry), so
+   nothing here moves a tier, a plan or a desk — the ledger's read split
+   asks, out of sample, which of them separates. hg-v989 three-state: a
+   missing engine, a tape under six bars, an unreadable ATR all record
+   NOTHING, never a guessed false. */
+function tmCandleRead(rows){
+  try {
+    if (!Array.isArray(rows) || rows.length < 6) return null;
+    if (typeof W.hgCfCandlePatterns !== 'function') return null;
+    if (typeof atr !== 'function') return null;
+    var atrSeries = atr(rows, 14);
+    if (!Array.isArray(atrSeries) || !atrSeries.length) return null;
+    var atrLast = atrSeries[atrSeries.length - 1];
+    if (!(typeof atrLast === 'number' && isFinite(atrLast) && atrLast > 0)) return null;
+    var pat = W.hgCfCandlePatterns(rows, atrLast);
+    if (!pat || typeof pat !== 'object') return null;
+    return pat;
+  } catch (ePat) { return null; }
+}
+function tmCandleMarks(r, dir){
+  var out = {};
+  if (!r) return out;
+  var pat = r.candleReads;
+  if (!pat || typeof pat !== 'object') return out;
+  var bv = (typeof pat.bullVotes === 'number' && isFinite(pat.bullVotes)) ? pat.bullVotes : 0;
+  var ev = (typeof pat.bearVotes === 'number' && isFinite(pat.bearVotes)) ? pat.bearVotes : 0;
+  if (bv > 0 || ev > 0) out['pattern:anyFire'] = true;
+  if (bv > ev) { out['pattern:bullMajority'] = true; out['pattern:bearMajority'] = false; }
+  else if (ev > bv) { out['pattern:bullMajority'] = false; out['pattern:bearMajority'] = true; }
+  if (dir === 'long' || dir === 'short'){
+    if (bv > ev) out['pattern:withTrend'] = (dir === 'long');
+    else if (ev > bv) out['pattern:withTrend'] = (dir === 'short');
+    /* a tie or no fire records NOTHING on withTrend (hg-v989: absent is
+       absent, never a guessed false — the ledger must be able to split
+       the three states) */
+  }
+  return out;
+}
 function tmRecordReads(r, dir){
   var rd = {};
   if (!r) return undefined;
@@ -156,6 +219,15 @@ function tmRecordReads(r, dir){
     if (pm.wavwap) rd['pine:wavwapWith'] = pm.wavwap === dir;
     if (pm.smc) rd['pine:smcWith'] = pm.smc === dir;
   }
+  /* hg-v1336: fold the three-state candlestick-pattern marks in. The engine
+     is the one home in goldind.js (hgCfCandlePatterns); the pattern read is
+     stamped on the row at scan time (r.candleReads) so the ledger reads
+     exactly what the card paints. The ledger's read split then asks whether
+     a bull-majority bar or a with-trend-pattern bar separates winners, out
+     of sample — the one route this desk has to turning a pattern read into
+     a measurement rather than a claim. */
+  var cm = tmCandleMarks(r, dir), ck;
+  for (ck in cm){ if (Object.prototype.hasOwnProperty.call(cm, ck)) rd[ck] = cm[ck]; }
   return Object.keys(rd).length ? rd : undefined;
 }
 /* hg-v1159: the TICKET claim on a record is the board's own CLEAN tier — the

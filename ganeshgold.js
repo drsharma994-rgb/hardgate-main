@@ -664,6 +664,18 @@ function paint(el, snap){
     var fwd = el.querySelector('[data-r="ggfwd"]');
     if (fwd && typeof W.hgFwdPanelHTML === 'function') fwd.innerHTML = W.hgFwdPanelHTML('GANESHGOLD', { title: 'FORWARD - has the firm\u2019s pipeline paid?' });
   }catch(eF){}
+  /* hg-v1298: PROFITABILITY AUDIT panel on this desk. Says plainly that no
+     committed walk exists for GANESH GOLD so nothing can be filtered as
+     profitable here; names scripts/backtest-ganeshgold.mjs as the walker
+     to run on a machine with network. Appended to the ggfwd slot after the
+     forward panel so a reader sees "has it paid?" first, then "can it be
+     measured?". Returns '' when goldind.js is absent. */
+  try{
+    var fwd2 = el.querySelector('[data-r="ggfwd"]');
+    if (fwd2 && typeof W.hgGoldAuditPanelHtml === 'function'){
+      fwd2.innerHTML = (fwd2.innerHTML || '') + (W.hgGoldAuditPanelHtml('ganeshgold') || '');
+    }
+  }catch(eA){}
 }
 
 function mount(el){
@@ -728,6 +740,21 @@ W.ganeshGoldScan = ganeshGoldScan;
 W.ganeshGoldEval = ganeshGoldEval;
 W.ganeshGoldWarm = ganeshGoldWarm;
 W.ggWeekendVerdict = ggWeekendVerdict;   /* hg-v1154: the census route */
+
+/* hg-v1298 — HG_GANESH_WALK is the evidence literal, written from
+   scripts/backtest-ganeshgold-results.json by scripts/ganeshgold-evidence-
+   literal.mjs. Measured:false until the first machine with network bakes
+   it; the audit panel on this desk reads it and says NO MEASURED RECORD
+   so a reader knows nothing on GANESH GOLD can be filtered by
+   profitability until the ledger has one. */
+/* --- BEGIN GENERATED HG_GANESH_WALK (hg-v1298) --- */
+W.HG_GANESH_WALK = {
+  measured: false,
+  n: 0,
+  span: null,
+  note: "scripts/backtest-ganeshgold-results.json does not exist: the GANESH GOLD walk has not run on a machine that can fetch bars. The walker is wired at scripts/backtest-ganeshgold.mjs (hg-v1298). Until this bakes, nothing on this desk can be filtered by profitability — hg-v966 forbids a gate on measurement that has not happened."
+};
+/* --- END GENERATED HG_GANESH_WALK --- */
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'ganeshgold', label: 'GANESH GOLD', mount: mount, refresh: ganeshGoldRefresh });

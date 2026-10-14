@@ -256,6 +256,40 @@ function tmVolDivChipHtml(r){
   var dir = r.volDivLong ? 'long' : 'short';
   return '<span class="gpip ' + (dir === 'long' ? 'ok' : 'bad') + '">' + (dir === 'long' ? 'VOL DIV' : 'VOL DIV') + '</span>';
 }
+/* hg-v1336: the pattern chip on every TREND MATRIX card — one line of
+   confluence a reader can trust by eye, because the engine is the SAME
+   hgCfCandlePatterns the gold candle forecast reads and the chip prints the
+   first name the engine stamped. Three visible states:
+     green  — bull majority, up to two names ("hammer / piercing")
+     red    — bear majority
+     dim    — a doji / inside / no-direction note (so a reader sees the
+              engine looked and nothing voted, not a dark feed)
+   And nothing at all if the engine never ran (no series, no ATR, no engine
+   loaded) — the chip MUST NOT appear when a pattern was not read, because a
+   missing chip means "unread" and a dim chip means "read, no vote". That is
+   the hg-v989 three-state contract on screen. The gpip class matches every
+   other chip on this card, so a reader never has to learn a second visual. */
+function tmCandleChipHtml(r){
+  var pat = r && r.candleReads;
+  if (!pat || typeof pat !== 'object') return '';
+  var bv = (typeof pat.bullVotes === 'number' && isFinite(pat.bullVotes)) ? pat.bullVotes : 0;
+  var ev = (typeof pat.bearVotes === 'number' && isFinite(pat.bearVotes)) ? pat.bearVotes : 0;
+  if (bv === 0 && ev === 0){
+    var notes = Array.isArray(pat.notes) ? pat.notes : [];
+    if (!notes.length) return '';
+    var noteText = String(notes[0] || '').slice(0, 48);
+    return '<span class="gpip" title="' + escH(noteText) + '">PATTERN · no vote</span>';
+  }
+  var dir, names;
+  if (bv > ev){ dir = 'bull'; names = Array.isArray(pat.bullNames) ? pat.bullNames : []; }
+  else if (ev > bv){ dir = 'bear'; names = Array.isArray(pat.bearNames) ? pat.bearNames : []; }
+  else { return '<span class="gpip" title="pattern tally tied — no vote">PATTERN · tie</span>'; }
+  var head = (dir === 'bull') ? 'BULL ' : 'BEAR ';
+  var shown = names.slice(0, 2).map(function(n){ return String(n || '').slice(0, 24); }).join(' / ');
+  if (!shown) shown = (dir === 'bull') ? ('bull vote x' + bv) : ('bear vote x' + ev);
+  var cls = (dir === 'bull') ? 'ok' : 'bad';
+  return '<span class="gpip ' + cls + '" title="' + escH(shown) + '">' + head + escH(shown) + '</span>';
+}
 
 function tmBarOpenSec(row){
   var t = row && row.t;
