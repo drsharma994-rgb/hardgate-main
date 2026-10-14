@@ -613,7 +613,7 @@
       "expired": true
     },
     "BAT": {
-      "at": "2026-10-14T17:57:24.418Z",
+      "at": "2026-10-14T19:48:08.505Z",
       "score": 5,
       "fresh": true,
       "ago": 1,
@@ -621,7 +621,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-14T17:57:46.885Z",
+  "lastRunAt": "2026-10-14T19:48:25.507Z",
   "scanned": 504,
   "cards": 0
 }
