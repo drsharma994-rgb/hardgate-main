@@ -335,6 +335,11 @@
       "version": "hg-v1373",
       "built": "2026-10-15T11:00:00Z",
       "note": "The card shows the 60/40 limit, the measured expectancy, and how many minutes the signal has left. A limit is stale once price has run 85 percent of the way to TP1 and no recent bar tagged it. A missing bar time does not invent a full clock. The desk entry stays the desk entry."
+    },
+    {
+      "version": "hg-v1374",
+      "built": "2026-10-15T12:00:00Z",
+      "note": "Super Gold names equal highs and equal lows, the range midpoint, and the pool price is drawing toward. A resting limit into an opposing expansion bar waits for a 15m reclaim close. No measured ATR does not become 3.50. The desk entry is not moved."
     }
   ]
 }

@@ -620,6 +620,8 @@ function sgPrecisionGoldLevels(row, intel, opts){
   };
   try{
     sgAttachEntryPlan(precOut, sgDetectMicrostructureZones(rows15, null, side));
+    precOut.liquidityMap = sgSessionLiquidityMap(rows15, side, precOut.entry);
+    precOut.adverse = sgAdverseSelectionGuard({ dir: side }, precOut, { rows15: rows15 });
   }catch(ePlan){}
   return precOut;
 }
@@ -686,7 +688,7 @@ function sgDetectMicrostructureZones(rows, intel, side){
   var want = String(side || '').toLowerCase();
   if (want === 'buy' || want === 'bull') want = 'long';
   if (want === 'sell' || want === 'bear') want = 'short';
-  var out = { ok: rows.length >= 5, fvgs: [], obs: [], sweeps: [], nearestFvg: null, nearestOb: null };
+  var out = { ok: rows.length >= 5, fvgs: [], obs: [], sweeps: [], breakers: [], nearestFvg: null, nearestOb: null, nearestBreaker: null, mssConfirmed: false, chochLevel: null, impulseZScore: null, sweepReclaimed: false };
   if (!out.ok) return out;
   var bars = [];
   for (var i = 0; i < rows.length; i++){
@@ -753,7 +755,203 @@ function sgDetectMicrostructureZones(rows, intel, side){
     if (want && out.obs[f].side !== want) continue;
     if (nearer(out.nearestOb && out.nearestOb.mt, out.obs[f].mt)) out.nearestOb = out.obs[f];
   }
+  var refPx = last;
+  for (j = 1; j < bars.length - 1; j++){
+    b0 = bars[j - 1]; b1 = bars[j];
+    if (want !== 'short' && b0.c > b0.o && b1.c < b0.l && refPx > b0.h){
+      out.breakers.push({
+        side: 'long', top: +b0.h.toFixed(2), bottom: +b0.l.toFixed(2),
+        mt: +((b0.h + b0.l) / 2).toFixed(2), index: j - 1
+      });
+    } else if (want !== 'long' && b0.c < b0.o && b1.c > b0.h && refPx < b0.l){
+      out.breakers.push({
+        side: 'short', top: +b0.h.toFixed(2), bottom: +b0.l.toFixed(2),
+        mt: +((b0.h + b0.l) / 2).toFixed(2), index: j - 1
+      });
+    }
+  }
+  out.nearestBreaker = out.breakers.length ? out.breakers[out.breakers.length - 1] : null;
+  var nBars = bars.length;
+  for (j = Math.max(5, nBars - 6); j < nBars; j++){
+    var preHi = -Infinity, preLo = Infinity;
+    for (k = Math.max(0, j - 5); k < j; k++){
+      if (bars[k].h > preHi) preHi = bars[k].h;
+      if (bars[k].l < preLo) preLo = bars[k].l;
+    }
+    if (want !== 'short' && isFinite(preHi) && bars[j].c > preHi){
+      out.mssConfirmed = true;
+      out.chochLevel = +preHi.toFixed(2);
+    } else if (want === 'short' && isFinite(preLo) && bars[j].c < preLo){
+      out.mssConfirmed = true;
+      out.chochLevel = +preLo.toFixed(2);
+    }
+  }
+  var ranges = [];
+  for (j = 0; j < nBars; j++){
+    if (bars[j].h >= bars[j].l) ranges.push(bars[j].h - bars[j].l);
+  }
+  if (ranges.length > 1){
+    var meanRng = 0;
+    for (j = 0; j < ranges.length; j++) meanRng += ranges[j];
+    meanRng = meanRng / ranges.length;
+    var varRng = 0;
+    for (j = 0; j < ranges.length; j++) varRng += Math.pow(ranges[j] - meanRng, 2);
+    varRng = varRng / (ranges.length - 1);
+    var sdRng = Math.sqrt(Math.max(varRng, 0));
+    var maxRecent = 0;
+    for (j = Math.max(0, nBars - 5); j < nBars; j++){
+      maxRecent = Math.max(maxRecent, bars[j].h - bars[j].l);
+    }
+    if (sdRng > 0) out.impulseZScore = +((maxRecent - meanRng) / sdRng).toFixed(2);
+  }
+  for (j = 0; j < out.sweeps.length; j++){
+    if (!want || out.sweeps[j].side === want){ out.sweepReclaimed = true; break; }
+  }
   return out;
+}
+
+/* Equal highs and equal lows on the last 30 bars, the midpoint of that
+   range, and the nearest pool price is drawing toward. No measured ATR
+   means the cluster tolerance stays at 35 cents. It is not filled in as
+   a 3.50 ATR. The desk entry is not moved. */
+function sgSessionLiquidityMap(rows, side, refEntry){
+  if (!Array.isArray(rows) || rows.length < 6){
+    return { ok: false, eqHighs: [], eqLows: [], drawOnLiquidity: null, equilibrium: null, zonePricing: 'UNREAD', atrUnread: true };
+  }
+  var isLong = String(side || 'long').toLowerCase() !== 'short';
+  var slice = rows.slice(-30);
+  var atr = sgCalcBarsAtr(slice, 14);
+  var atrUnread = !(isFinite(atr) && atr > 0);
+  var eqTol = atrUnread ? 0.35 : Math.max(0.35, atr * 0.22);
+  var hi = -Infinity, lo = Infinity;
+  var highs = [], lows = [];
+  for (var i = 0; i < slice.length; i++){
+    var b = slice[i];
+    if (!b) continue;
+    var bh = N(b.h != null ? b.h : b.high);
+    var bl = N(b.l != null ? b.l : b.low);
+    if (isFinite(bh)){
+      if (bh > hi) hi = bh;
+      highs.push({ idx: i, px: bh });
+    }
+    if (isFinite(bl)){
+      if (bl < lo) lo = bl;
+      lows.push({ idx: i, px: bl });
+    }
+  }
+  if (!isFinite(hi) || !isFinite(lo) || !(hi > lo)){
+    return { ok: false, eqHighs: [], eqLows: [], drawOnLiquidity: null, equilibrium: null, zonePricing: 'UNREAD', atrUnread: atrUnread };
+  }
+  var eqHighs = [], eqLows = [];
+  for (var m = 1; m < highs.length - 1; m++){
+    var hCur = highs[m].px;
+    if (hCur >= highs[m - 1].px && hCur >= highs[m + 1].px){
+      for (var n2 = m + 2; n2 < highs.length; n2++){
+        if (Math.abs(highs[n2].px - hCur) <= eqTol){
+          eqHighs.push(+((highs[n2].px + hCur) / 2).toFixed(2));
+          break;
+        }
+      }
+    }
+  }
+  for (var m2 = 1; m2 < lows.length - 1; m2++){
+    var lCur = lows[m2].px;
+    if (lCur <= lows[m2 - 1].px && lCur <= lows[m2 + 1].px){
+      for (var n3 = m2 + 2; n3 < lows.length; n3++){
+        if (Math.abs(lows[n3].px - lCur) <= eqTol){
+          eqLows.push(+((lows[n3].px + lCur) / 2).toFixed(2));
+          break;
+        }
+      }
+    }
+  }
+  var equilibrium = +((hi + lo) / 2).toFixed(2);
+  var lastC = N(slice[slice.length - 1].c != null ? slice[slice.length - 1].c : slice[slice.length - 1].close);
+  var checkPx = (isFinite(+refEntry) && +refEntry > 0) ? +refEntry : lastC;
+  var pctInRange = +(((checkPx - lo) / (hi - lo)) * 100).toFixed(1);
+  var zonePricing = pctInRange <= 48 ? 'DISCOUNT' : (pctInRange >= 52 ? 'PREMIUM' : 'EQUILIBRIUM');
+  var inFavorableZone = isLong ? (pctInRange <= 55) : (pctInRange >= 45);
+  var drawOnLiquidity = isLong
+    ? (eqHighs.length
+      ? { type: 'BSL_EQH', px: eqHighs[eqHighs.length - 1], label: 'Equal Highs BSL @ ' + fmt(eqHighs[eqHighs.length - 1], 2) }
+      : { type: 'BSL_HIGH', px: +hi.toFixed(2), label: 'Session High BSL @ ' + fmt(hi, 2) })
+    : (eqLows.length
+      ? { type: 'SSL_EQL', px: eqLows[eqLows.length - 1], label: 'Equal Lows SSL @ ' + fmt(eqLows[eqLows.length - 1], 2) }
+      : { type: 'SSL_LOW', px: +lo.toFixed(2), label: 'Session Low SSL @ ' + fmt(lo, 2) });
+  return {
+    ok: true,
+    rangeHigh: +hi.toFixed(2),
+    rangeLow: +lo.toFixed(2),
+    equilibrium: equilibrium,
+    pctInRange: pctInRange,
+    zonePricing: zonePricing,
+    inFavorableZone: inFavorableZone,
+    eqHighs: eqHighs,
+    eqLows: eqLows,
+    drawOnLiquidity: drawOnLiquidity,
+    atr: atrUnread ? null : +atr.toFixed(2),
+    atrUnread: atrUnread
+  };
+}
+
+/* A resting limit into an opposing expansion bar is a knife. The speed is
+   the last bar's range divided by a measured ATR. No ATR means the speed
+   is unread, not a 3.50 stand-in and not a claim that the approach is safe. */
+function sgAdverseSelectionGuard(row, prec, intel){
+  row = row || {};
+  prec = prec || (row && row.precision) || null;
+  var side = String((row && (row.dir || row.side)) || (prec && prec.side) || '').toLowerCase();
+  var isLong = !(side === 'short' || side === 'sell' || side === 'bear');
+  var rows15 = (intel && Array.isArray(intel.rows15)) ? intel.rows15 : [];
+  if (rows15.length < 3){
+    return {
+      ok: false, status: 'UNREAD', executionMode: 'NO_VELOCITY',
+      approachVelocityAtr: null, opposingCloseStrength: null,
+      why: 'Fewer than 3 bars, so the approach speed is unread'
+    };
+  }
+  var atr = NaN;
+  if (prec && prec.unread !== true && isFinite(+prec.atr) && +prec.atr > 0) atr = +prec.atr;
+  if (!(atr > 0)) atr = sgCalcBarsAtr(rows15, 14);
+  if (!(isFinite(atr) && atr > 0)){
+    return {
+      ok: false, status: 'UNREAD', executionMode: 'NO_VELOCITY',
+      approachVelocityAtr: null, opposingCloseStrength: null,
+      why: 'ATR was not measured, so the approach speed is unread'
+    };
+  }
+  var last = rows15[rows15.length - 1];
+  var lo = N(last.l != null ? last.l : last.low);
+  var hi = N(last.h != null ? last.h : last.high);
+  var op = N(last.o != null ? last.o : last.open);
+  var cl = N(last.c != null ? last.c : last.close);
+  var rng = (isFinite(hi) && isFinite(lo) && hi > lo) ? (hi - lo) : 0;
+  var approachVelocityAtr = +(rng / atr).toFixed(2);
+  var opposingBar = isLong ? (cl < op) : (cl > op);
+  var opposingCloseStrength = 0;
+  if (opposingBar && rng > 0){
+    opposingCloseStrength = isLong ? +(((hi - cl) / rng).toFixed(2)) : +(((cl - lo) / rng).toFixed(2));
+  }
+  var status = 'SAFE_LIMIT';
+  var executionMode = 'RESTING_LIMIT';
+  var why = 'Controlled pullback (' + fmt(approachVelocityAtr, 2) + 'x ATR bar). Resting 60/40 limit.';
+  if (opposingBar && approachVelocityAtr >= 1.75 && opposingCloseStrength >= 0.82){
+    status = 'KNIFE_HAZARD';
+    executionMode = 'CONFIRMATION_CLOSE_ONLY';
+    why = 'Opposing expansion bar (' + fmt(approachVelocityAtr, 2) + 'x ATR, ' + Math.round(opposingCloseStrength * 100) + '% close). The resting limit waits for a 15m reclaim close.';
+  } else if (opposingBar && approachVelocityAtr >= 1.25 && opposingCloseStrength >= 0.72){
+    status = 'WAIT_CANDLE_CLOSE';
+    executionMode = 'TRANCHE_2_LIMIT_PLUS_CONFIRM';
+    why = 'Elevated opposing momentum (' + fmt(approachVelocityAtr, 2) + 'x ATR). Tranche 1 waits for a rejection wick. Tranche 2 stays the deep reload.';
+  }
+  return {
+    ok: true,
+    status: status,
+    executionMode: executionMode,
+    approachVelocityAtr: approachVelocityAtr,
+    opposingCloseStrength: opposingCloseStrength,
+    why: why
+  };
 }
 
 /* 60% at the measured entry, 40% at the nearest deeper level that was
@@ -1109,6 +1307,19 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
     score = Math.max(0, score - 25);
     tags.push(decay.status);
   }
+  var liqMap = sgSessionLiquidityMap((intel && intel.rows15) || [], isLong ? 'long' : 'short', ePx);
+  if (liqMap && liqMap.ok && liqMap.drawOnLiquidity && liqMap.drawOnLiquidity.label){
+    tags.push(liqMap.drawOnLiquidity.label);
+  }
+  var advGuard = sgAdverseSelectionGuard(row, prec, intel);
+  if (advGuard.status === 'KNIFE_HAZARD'){
+    score = Math.max(0, score - 15);
+    tags.push('KNIFE GUARD');
+  } else if (advGuard.status === 'SAFE_LIMIT'){
+    tags.push('SAFE LIMIT APPROACH');
+  } else if (advGuard.status === 'WAIT_CANDLE_CLOSE'){
+    tags.push('WAIT FOR CLOSE');
+  }
   var exp = sgCalcSetupExpectancy(row, prec, intel);
   var tranches = (prec && Array.isArray(prec.entryTranches)) ? prec.entryTranches : [];
   var tranchePlan = (tranches.length >= 2)
@@ -1128,7 +1339,9 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
     invalidationRule: invalidRule,
     scalePlan: scalePlan,
     expectancy: exp,
-    timeDecay: decay
+    timeDecay: decay,
+    liquidityMap: liqMap,
+    adverseSelection: advGuard
   };
   row.formation = formation;
   row.convictionScore = score;
@@ -2493,6 +2706,10 @@ function sgCrownDispatchPayload(snap, riskOpts, win){
   if (tape.lock) return { ready: false, reason: 'Tape locked: ' + tape.why };
   var decay = sgEvaluateSetupDecay(r, r.precision, snap && snap.intel);
   if (decay && decay.missedBoat) return { ready: false, reason: 'Price front-ran the entry. The limit is not chased.' };
+  var advSend = sgAdverseSelectionGuard(r, r.precision, snap && snap.intel);
+  if (advSend && advSend.status === 'KNIFE_HAZARD'){
+    return { ready: false, reason: 'Opposing expansion bar. The resting limit waits for a 15m reclaim close.' };
+  }
   if (lc.invalidated || lc.stoppedOut) return { ready: false, reason: lc.why || 'The crown is invalidated' };
   var blackout = false;
   try{
@@ -3317,6 +3534,16 @@ function mount(el){
             + (r.timeDecay.ttlLeftMin != null ? (' (' + r.timeDecay.ttlLeftMin + 'm left)') : ' (bar time unread)')
             + '.</div>')
           : '')
+        + (r.formation && r.formation.adverseSelection
+          ? ('<div class="hg-note" data-sg-exec="1">Exec ' + String(r.formation.adverseSelection.status)
+            + (r.formation.adverseSelection.executionMode ? (' / ' + String(r.formation.adverseSelection.executionMode)) : '')
+            + '.</div>')
+          : '')
+        + (r.formation && r.formation.liquidityMap && r.formation.liquidityMap.ok
+          ? ('<div class="hg-note" data-sg-dol="1">' + String(r.formation.liquidityMap.zonePricing)
+            + (r.formation.liquidityMap.drawOnLiquidity ? (' · ' + String(r.formation.liquidityMap.drawOnLiquidity.label)) : '')
+            + '. This does not move the desk entry.</div>')
+          : '')
         + (r.precision && r.precision.ok && !r.precision.unread && Array.isArray(r.precision.entryZone)
           ? ('<div class="hg-note" data-sg-zone="1">Entry zone '
             + fmt(r.precision.entryZone[0], 2) + ' to ' + fmt(r.precision.entryZone[1], 2)
@@ -3499,6 +3726,8 @@ W.sgDetectMicrostructureZones = sgDetectMicrostructureZones;
 W.sgCalcSetupExpectancy = sgCalcSetupExpectancy;
 W.sgEvaluateSetupDecay = sgEvaluateSetupDecay;
 W.sgSynthesizeTapeSetups = sgSynthesizeTapeSetups;
+W.sgSessionLiquidityMap = sgSessionLiquidityMap;
+W.sgAdverseSelectionGuard = sgAdverseSelectionGuard;
 W.sgPsychShieldStop = sgPsychShieldStop;
 W.sgHighAccuracyAudit = sgHighAccuracyAudit;
 
