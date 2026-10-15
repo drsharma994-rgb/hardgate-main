@@ -661,6 +661,280 @@ function sgStampPrecision(snap){
   return snap;
 }
 
+function sgClassifySetupArchetype(row, prec, intel){
+  row = row || {};
+  prec = prec || row.precision || null;
+  intel = intel || null;
+  var strat = String(row.strategy || row.stratKey || row.scanner || '').toLowerCase();
+  var side = String(row.dir || row.side || 'long').toLowerCase();
+  var isLong = (side === 'long' || side === 'buy' || side === 'bull');
+  var rows15 = (intel && Array.isArray(intel.rows15) && intel.rows15.length) ? intel.rows15 : [];
+  var atr = (prec && isFinite(prec.atr) && prec.atr > 0) ? prec.atr : sgCalcBarsAtr(rows15, 14);
+
+  /* Inspect last 3 closed 15m candles for sweep wick or expansion body */
+  var sweepWick = false, displacementBody = false;
+  if (rows15.length >= 3){
+    var last = rows15[rows15.length - 1];
+    var prev = rows15[rows15.length - 2];
+    var lo = N(last.l != null ? last.l : last.low);
+    var hi = N(last.h != null ? last.h : last.high);
+    var op = N(last.o != null ? last.o : last.open);
+    var cl = N(last.c != null ? last.c : last.close);
+    var pLo = N(prev.l != null ? prev.l : prev.low);
+    var pHi = N(prev.h != null ? prev.h : prev.high);
+    var rng = hi - lo;
+    var body = Math.abs(cl - op);
+    if (rng > 0 && body / rng >= 0.58) displacementBody = true;
+    if (isLong && isFinite(lo) && isFinite(pLo) && lo < pLo && cl > pLo) sweepWick = true;
+    if (!isLong && isFinite(hi) && isFinite(pHi) && hi > pHi && cl < pHi) sweepWick = true;
+  }
+
+  var nearOte = !!(prec && prec.ok && isFinite(prec.ote618) && isFinite(atr) && Math.abs(prec.entry - prec.ote618) <= atr * 0.65);
+  var nearVwap = !!(prec && prec.ok && isFinite(prec.vwap) && isFinite(atr) && Math.abs(prec.entry - prec.vwap) <= atr * 0.55);
+  var volReg = intel && intel.volRegime && intel.volRegime.regime ? String(intel.volRegime.regime) : '';
+
+  if (/judas|sweep|trap|reclaim|stop.?hunt|liq/i.test(strat)){
+    return {
+      code: 'JUDAS_SWEEP_RECLAIM',
+      label: 'JUDAS SWEEP & RECLAIM',
+      edgeNote: 'Liquidity pool swept beyond swing extreme with displacement reclaim back inside structure'
+    };
+  }
+  if (/coil|squeeze|breakout|expan|orb/i.test(strat)){
+    return {
+      code: 'COMPRESSION_COIL_BREAKOUT',
+      label: 'COMPRESSION COIL EXPANSION',
+      edgeNote: 'Volatility squeeze release with directional displacement candle commitment'
+    };
+  }
+  if (/ob|order.?block|fvg|ote|fib|pullback|gs1|cascade/i.test(strat)){
+    return {
+      code: 'OTE_ORDER_BLOCK_RELOAD',
+      label: 'OTE 61.8% + ORDER BLOCK RELOAD',
+      edgeNote: 'Institutional pullback into 61.8%–70.5% Fib OTE & unmitigated structure zone'
+    };
+  }
+  if (sweepWick){
+    return {
+      code: 'JUDAS_SWEEP_RECLAIM',
+      label: 'JUDAS SWEEP & RECLAIM',
+      edgeNote: 'Liquidity pool swept beyond swing extreme with displacement reclaim back inside structure'
+    };
+  }
+  if (volReg === 'EXPANSION' && displacementBody){
+    return {
+      code: 'COMPRESSION_COIL_BREAKOUT',
+      label: 'COMPRESSION COIL EXPANSION',
+      edgeNote: 'Volatility squeeze release with directional displacement candle commitment'
+    };
+  }
+  if (nearOte){
+    return {
+      code: 'OTE_ORDER_BLOCK_RELOAD',
+      label: 'OTE 61.8% + ORDER BLOCK RELOAD',
+      edgeNote: 'Institutional pullback into 61.8%–70.5% Fib OTE & unmitigated structure zone'
+    };
+  }
+  return {
+    code: 'VWAP_STRUCTURE_CONFLUENCE',
+    label: nearVwap ? 'SESSION VWAP + STRUCTURE DEFENSE' : 'HTF STRUCTURE CONFLUENCE',
+    edgeNote: nearVwap
+      ? 'Entry anchored at Session VWAP & marked intraday structure confluence'
+      : 'Multi-timeframe structural alignment with volatility-buffered invalidation'
+  };
+}
+
+function sgEnhanceSetupFormation(row, intel, snap, win){
+  win = win || W;
+  if (!row) return null;
+  var prec = row.precision || sgPrecisionGoldLevels(row, intel);
+  if (prec && prec.ok) row.precision = prec;
+  var arch = sgClassifySetupArchetype(row, prec, intel);
+  var side = String(row.dir || row.side || 'long').toLowerCase();
+  var isLong = (side === 'long' || side === 'buy' || side === 'bull');
+  var tags = [];
+  var score = (row.tier === 'clean') ? 72 : 58;
+
+  if (row.fusedConviction){
+    score += 8;
+    tags.push('SCALP+SWING FUSED');
+  }
+  if (row.minimalLossPass){
+    score += 6;
+    tags.push('MIN-LOSS VERIFIED');
+  }
+  if (prec && prec.ok){
+    if (/front-run/i.test(prec.entryReason)){
+      score += 4;
+      tags.push('OB/STRUCT FRONT-RUN');
+    } else if (/OTE/i.test(prec.entryReason)){
+      score += 4;
+      tags.push('OTE 61.8% RELOAD');
+    }
+    if (prec.psychShielded){
+      score += 3;
+      tags.push('SL SHIELDED $' + prec.psychMagnet);
+    }
+    if (prec.t1FrontRun){
+      score += 2;
+      tags.push('TP1 WALL FRONT-RUN');
+    }
+    if (prec.blendedRr >= 2.4){
+      score += 3;
+      tags.push('BLENDED ' + fmt(prec.blendedRr, 2) + 'R');
+    }
+  }
+  if (intel && intel.fiveTf && intel.fiveTf.aligned && intel.fiveTf.aligned !== 'NONE'){
+    var ftWant = isLong ? 'BULL' : 'BEAR';
+    if (intel.fiveTf.aligned === ftWant){
+      score += 4;
+      tags.push((intel.fiveTf.bull || intel.fiveTf.bear || 4) + '/5 TF ' + ftWant);
+    }
+  }
+  var ag = sgCandleAgreement(intel, isLong ? 'long' : 'short');
+  if (ag && ag.verdict === 'WITH'){
+    score += 3;
+    tags.push('15M CANDLE WITH');
+  }
+  if (row.killzone || (intel && intel.session && intel.session.ok && /LONDON|NY|OVERLAP/i.test(String(intel.session.label || '')))){
+    score += 3;
+    tags.push(String(row.killzone || (intel.session && intel.session.label) || 'KILLZONE').toUpperCase());
+  }
+  if (row.demoted) score -= 12;
+  if (sgFundBlocked(row)) score -= 25;
+  score = Math.max(0, Math.min(99, Math.round(score)));
+
+  var ePx = (prec && prec.ok) ? prec.entry : N(row.entry);
+  var sPx = (prec && prec.ok) ? prec.stop : N(row.stop);
+  var t1Px = (prec && prec.ok) ? prec.t1 : N(row.t1 || row.tp);
+  var t2Px = (prec && prec.ok) ? prec.t2 : N(row.t2 || row.tp2);
+  var t3Px = (prec && prec.ok) ? prec.t3 : N(row.t3 || row.tp3);
+  var ez = (prec && prec.ok && Array.isArray(prec.entryZone)) ? prec.entryZone : [ePx, ePx];
+
+  var triggerCond = (isLong ? 'Limit buy in zone ' : 'Limit sell in zone ')
+    + fmt(ez[0], 2) + '–' + fmt(ez[1], 2) + ' (anchor ' + fmt(ePx, 2) + ') on 15m hold';
+  var invalidRule = (isLong ? 'Hard invalidation below ' : 'Hard invalidation above ')
+    + fmt(sPx, 2) + (prec && prec.psychShielded ? (' (shielded past $' + prec.psychMagnet + ' sweep level)') : '');
+  var scalePlan = '50% @ TP1 ' + fmt(t1Px, 2) + ' (shift SL -> BE) · 30% @ TP2 ' + fmt(t2Px, 2) + ' (lock TP1) · 20% @ TP3 ' + fmt(t3Px, 2);
+
+  var formation = {
+    archetype: arch.code,
+    archetypeLabel: arch.label,
+    edgeNote: arch.edgeNote,
+    qualityScore: score,
+    qualityBand: score >= 90 ? 'ELITE' : (score >= 80 ? 'HIGH' : (score >= 70 ? 'SOLID' : 'WATCH')),
+    confluenceTags: tags,
+    triggerCondition: triggerCond,
+    invalidationRule: invalidRule,
+    scalePlan: scalePlan
+  };
+  row.formation = formation;
+  row.convictionScore = score;
+  return formation;
+}
+
+function sgFuseCrossDeskSetups(rows, intel, riskOpts){
+  if (!Array.isArray(rows) || rows.length < 2) return rows;
+  var side = sgMergeSide(rows);
+  if (!side) return rows;
+  var scalpBest = null, swingBest = null;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || sgFundBlocked(r)) continue;
+    var sc = String(r.scanner || r.source || '').toLowerCase();
+    if (!scalpBest && sc.indexOf('scalp') >= 0) scalpBest = r;
+    if (!swingBest && sc.indexOf('swing') >= 0) swingBest = r;
+  }
+  if (!scalpBest || !swingBest) return rows;
+
+  /* Fuse Scalp's high-precision entry/stop timing with Swing's extended structural targets */
+  var primary = (scalpBest.minimalLossPass && !swingBest.minimalLossPass) ? scalpBest
+              : ((swingBest.minimalLossPass && !scalpBest.minimalLossPass) ? swingBest : scalpBest);
+  primary.fusedConviction = true;
+  primary.fusedWith = (primary === scalpBest) ? (swingBest.id || 'gold-swing') : (scalpBest.id || 'gold-scalp');
+  var isLong = (side === 'long');
+  if (isFinite(N(swingBest.t1)) && N(swingBest.t1) > 0){
+    var swT1 = N(swingBest.t1);
+    if ((isLong && swT1 > N(primary.t1)) || (!isLong && swT1 < N(primary.t1))){
+      primary.t2 = swT1;
+      primary.tp2 = swT1;
+    }
+  }
+  if (isFinite(N(swingBest.t2)) && N(swingBest.t2) > 0){
+    var swT2 = N(swingBest.t2);
+    if ((isLong && swT2 > N(primary.t2 || primary.t1)) || (!isLong && swT2 < N(primary.t2 || primary.t1))){
+      primary.t3 = swT2;
+      primary.tp3 = swT2;
+    }
+  }
+  if (String(primary.strategy || '').indexOf('[FUSED]') < 0){
+    primary.strategy = (scalpBest.strategy || 'Gold Scalp') + ' + ' + (swingBest.strategy || 'Gold Swing') + ' [FUSED]';
+  }
+  if (!(primary.precision && primary.precision.ok && primary.precision.unread !== true)){
+    var prec = sgPrecisionGoldLevels(primary, intel);
+    if (prec && prec.ok) primary.precision = prec;
+  }
+  return rows;
+}
+
+function sgEnhanceArmedSetups(armed, intel){
+  if (!Array.isArray(armed) || !armed.length) return [];
+  var rows15 = (intel && Array.isArray(intel.rows15) && intel.rows15.length) ? intel.rows15 : [];
+  var atr = (intel && intel.volRegime && intel.volRegime.ok && isFinite(+intel.volRegime.atrNow) && +intel.volRegime.atrNow > 0)
+    ? +intel.volRegime.atrNow
+    : sgCalcBarsAtr(rows15, 14);
+  if (!isFinite(atr) || atr <= 0) atr = NaN;
+  var lastClose = rows15.length ? N(rows15[rows15.length - 1].c != null ? rows15[rows15.length - 1].c : rows15[rows15.length - 1].close) : NaN;
+
+  return armed.map(function(a){
+    if (!a) return a;
+    var lvl = N(a.level != null ? a.level : a.entry);
+    var dirRaw = String(a.dir || a.side || '').toLowerCase();
+    var isLong = (dirRaw === 'short' || dirRaw === 'sell' || dirRaw === 'bear') ? false
+               : ((dirRaw === 'long' || dirRaw === 'buy' || dirRaw === 'bull') ? true
+               : (isFinite(lastClose) && isFinite(lvl) ? (lvl <= lastClose) : true));
+    var side = isLong ? 'long' : 'short';
+    var distPts = (isFinite(lastClose) && isFinite(lvl) && lvl > 0) ? +(Math.abs(lastClose - lvl)).toFixed(2) : null;
+    var distAtr = (distPts != null && atr > 0) ? +(distPts / atr).toFixed(2) : null;
+    var readinessPct = (distAtr != null)
+      ? Math.max(15, Math.min(98, Math.round((1 - Math.min(distAtr, 2.5) / 2.5) * 100)))
+      : 50;
+    var projStop = (isFinite(atr) && atr > 0 && isFinite(lvl) && lvl > 0)
+      ? sgPsychShieldStop(isLong ? (lvl - atr * 1.1) : (lvl + atr * 1.1), side).stop
+      : null;
+    var risk = (isFinite(lvl) && isFinite(projStop)) ? Math.abs(lvl - projStop) : NaN;
+    var projT1 = (isFinite(risk) && isFinite(lvl) && lvl > 0) ? +(isLong ? (lvl + risk * 1.8) : (lvl - risk * 1.8)).toFixed(2) : null;
+    var projT2 = (isFinite(risk) && isFinite(lvl) && lvl > 0) ? +(isLong ? (lvl + risk * 2.8) : (lvl - risk * 2.8)).toFixed(2) : null;
+    return Object.assign({}, a, {
+      side: side,
+      level: isFinite(lvl) ? +lvl.toFixed(2) : a.level,
+      distPts: distPts,
+      distAtr: distAtr,
+      readinessPct: readinessPct,
+      projectedStop: projStop,
+      projectedT1: projT1,
+      projectedT2: projT2,
+      summary: (a.strategy || a.stratKey || 'Forming setup') + ' (' + side.toUpperCase() + ' @ ' + fmt(lvl, 2) + ')'
+        + (distPts != null ? (' · ' + fmt(distPts, 2) + ' pts (' + fmt(distAtr, 2) + ' ATR) away · ' + readinessPct + '% ready') : '')
+        + (projStop ? (' · proj SL ' + fmt(projStop, 2) + ' / TP1 ' + fmt(projT1, 2)) : '')
+    });
+  });
+}
+
+function sgApplyFormation(snap){
+  if (!snap) return snap;
+  var intel = snap.intel || null;
+  if (Array.isArray(snap.cands) && snap.cands.length){
+    snap.cands = sgFuseCrossDeskSetups(snap.cands, intel, defaultRiskOpts(W));
+    snap.cands.forEach(function(r){
+      try{ sgEnhanceSetupFormation(r, intel, snap, W); }catch(eF){}
+    });
+    superGoldSortCands(snap.cands);
+  }
+  if (Array.isArray(snap.armed)) snap.armed = sgEnhanceArmedSetups(snap.armed, intel);
+  return snap;
+}
+
 function refineSuperGoldLevels(win, c, hit){
   win = win || W;
   c = c || {};
@@ -719,6 +993,8 @@ function superGoldSortCands(cands){
   cands.sort(function(a, b){
     var am = a.minimalLossPass ? 1 : 0, bm = b.minimalLossPass ? 1 : 0;
     if (bm !== am) return bm - am;
+    var af = a.fusedConviction ? 1 : 0, bf = b.fusedConviction ? 1 : 0;
+    if (bf !== af) return bf - af;
     var ac = a.tier === 'clean' ? 1 : 0, bc = b.tier === 'clean' ? 1 : 0;
     if (bc !== ac) return bc - ac;
     var at = N(a.tally) || 0, bt = N(b.tally) || 0;
@@ -1140,6 +1416,9 @@ function buildSnapFromGoldScans(win, riskOpts, opts){
     return true;
   });
   superGoldSortCands(merged);
+  var formed = sgApplyFormation({ cands: merged, armed: armed, intel: null });
+  merged = formed.cands;
+  armed = formed.armed || armed;
   audit.armedCount = armed.length;
 
   return {
@@ -1268,6 +1547,7 @@ function autoSelectFirstSetup(snap){
 function superGoldAfterScan(snap){
   snap = snap || superGoldScan();
   if (!snap) return;
+  try{ sgApplyFormation(snap); }catch(eForm){}
   mergePublishSuperGoldSnap(snap);
   __sg.lastScanMsg = snap.stat || 'done';
   if (__sg.mounted && typeof __sg.setScanStatus === 'function') __sg.setScanStatus(__sg.lastScanMsg);
@@ -2600,7 +2880,7 @@ function mount(el){
       var armed = (snap && Array.isArray(snap.armed)) ? snap.armed : [];
       var armedTxt = armed.length
         ? ('FORMING: ' + armed.slice(0, 4).map(function(a){
-          return (a.strategy || a.stratKey || 'watch') + ' @ ' + fmt(a.level, 2);
+          return (a.summary || ((a.strategy || a.stratKey || 'watch') + ' @ ' + fmt(a.level, 2)));
         }).join(' · ') + (armed.length > 4 ? ' …' : ''))
         : '';
       armedEl.textContent = armedTxt;
@@ -2652,9 +2932,11 @@ function mount(el){
       }catch(eFundChip){ fundChip = ''; }
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
         + '<div class="hg-desk-top">'
-        + '<div class="hg-desk-sym">' + String(r.sym || 'XAU') + ' · ' + String(r.dir || '').toUpperCase() + '</div>'
+        + '<div class="hg-desk-sym">' + String(r.sym || 'XAU') + ' · ' + String(r.dir || '').toUpperCase()
+        + (r.fusedConviction ? ' · FUSED' : '') + '</div>'
         + '<div class="hg-desk-pills">'
         + '<span class="hg-pill ' + tierPillCls + '">' + tierLbl + '</span>'
+        + (r.formation ? ('<span class="hg-pill">' + String(r.formation.archetypeLabel || r.formation.archetype || '') + ' · ' + r.formation.qualityScore + '</span>') : '')
         + '<span class="hg-pill">' + String(r.scanner || '') + '</span>'
         + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span>'
         + smcChip
@@ -2759,6 +3041,7 @@ function mount(el){
       var prevSnap = superGoldScan();
       if (prevSnap && prevSnap.intel && !snap.intel) snap.intel = prevSnap.intel;
       sgStampPrecision(snap);
+      try{ sgApplyFormation(snap); }catch(eForm){}
       snap.scanAt = (__sg.lastScanAt || (superGoldScan() && superGoldScan().scanAt) || snap.at);
       mergePublishSuperGoldSnap(snap);
       if (__sg.mounted && typeof __sg.paintDesk === 'function') __sg.paintDesk(superGoldScan());
@@ -2838,6 +3121,10 @@ W.sgDispatchBracket = sgDispatchBracket;
 W.sgPrecisionGoldLevels = sgPrecisionGoldLevels;
 W.sgPrecisionOrdered = sgPrecisionOrdered;
 W.sgStampPrecision = sgStampPrecision;
+W.sgClassifySetupArchetype = sgClassifySetupArchetype;
+W.sgEnhanceSetupFormation = sgEnhanceSetupFormation;
+W.sgFuseCrossDeskSetups = sgFuseCrossDeskSetups;
+W.sgEnhanceArmedSetups = sgEnhanceArmedSetups;
 W.sgPsychShieldStop = sgPsychShieldStop;
 W.sgHighAccuracyAudit = sgHighAccuracyAudit;
 

@@ -315,6 +315,11 @@
       "version": "hg-v1369",
       "built": "2026-10-15T07:00:00Z",
       "note": "When no structure is close, the sniper entry uses the 61.8 to 70.5 percent band. If VWAP sits inside that band it pulls the entry to the midpoint. A close structure level still wins. An unread ATR is still not sent."
+    },
+    {
+      "version": "hg-v1370",
+      "built": "2026-10-15T08:00:00Z",
+      "note": "Super Gold names the setup. Judas sweep, OTE reload, coil breakout, or VWAP. A scalp and a swing on the same side fuse. The scalp entry and stop stay. The swing target is kept when it is farther. Forming levels show distance, readiness, and a projected stop and target. An unread ATR does not invent that distance."
     }
   ]
 }
