@@ -619,7 +619,7 @@ function sgPrecisionGoldLevels(row, intel, opts){
       + ' · Blended ' + fmt(blendedRr, 2) + 'R'
   };
   try{
-    sgAttachEntryPlan(precOut, sgDetectMicrostructureZones(rows15, null, side));
+    sgAttachEntryPlan(precOut, sgDetectMicrostructureZones(rows15, null, side), regime);
     precOut.liquidityMap = sgSessionLiquidityMap(rows15, side, precOut.entry);
     precOut.adverse = sgAdverseSelectionGuard({ dir: side }, precOut, { rows15: rows15 });
     precOut.dolMagnet = null;
@@ -1143,6 +1143,28 @@ function sgDailyBenchmarkLevels(row, intel){
       sourced = '15m-date';
     }
   }
+  /* No daily candle and no second date. The first half of a long window is
+     the range the later bars are judged against. It is not labeled a
+     calendar day. */
+  if (!(isFinite(pdh) && isFinite(pdl) && pdh > pdl) && rows15.length >= 12){
+    var half = Math.floor(rows15.length / 2);
+    var pHi = -Infinity, pLo = Infinity;
+    for (i = 0; i < half; i++){
+      var hb = rows15[i];
+      if (!hb) continue;
+      var hh = N(hb.h != null ? hb.h : hb.high);
+      var hl = N(hb.l != null ? hb.l : hb.low);
+      if (isFinite(hh) && hh > pHi) pHi = hh;
+      if (isFinite(hl) && hl < pLo) pLo = hl;
+    }
+    if (isFinite(pHi) && isFinite(pLo) && pHi > pLo){
+      pdh = pHi;
+      pdl = pLo;
+      var openBar = rows15[half];
+      sessionOpen = openBar ? N(openBar.o != null ? openBar.o : openBar.open) : NaN;
+      sourced = 'window-half';
+    }
+  }
   if (!isFinite(pdh) || !isFinite(pdl) || !(pdh > pdl)){
     return { ok: false, pdh: null, pdl: null, pdm: null, sessionOpen: null, amdPhase: 'UNREAD', benchmarkState: 'UNREAD', summary: 'No prior day on the tape, so the benchmark is unread' };
   }
@@ -1196,18 +1218,20 @@ function sgDailyBenchmarkLevels(row, intel){
     amdPhase: amdPhase,
     benchmarkState: benchmarkState,
     summary: benchmarkState + ' (PDL ' + fmt(pdl, 2) + ' · PDM ' + fmt(pdm, 2) + ' · PDH ' + fmt(pdh, 2) + ')'
+      + (sourced === 'window-half' ? ' · first half of this window, not a calendar day' : '')
   };
 }
 
-/* Distance from the live price to the entry, in points and in measured ATR.
-   A fill chance is not printed. There is no measured fill rate, and a
-   missing ATR is not filled in as 4. The 60/40 split is not changed. */
+/* Distance from the live price to the entry. The fill figure is a proximity
+   score from that measured distance, not a historical fill rate. No measured
+   ATR means no score, and it is not filled in as 4. */
 function sgSetupExecutionRadar(row, prec, intel, advGuard, benchmarks){
   row = row || {};
   prec = prec || (row && row.precision) || {};
   advGuard = advGuard || (row && row.adverseSelection) || {};
   benchmarks = benchmarks || (row && row.dailyBenchmarks) || {};
-  var rows15 = (intel && Array.isArray(intel.rows15)) ? intel.rows15 : [];
+  intel = intel || {};
+  var rows15 = Array.isArray(intel.rows15) ? intel.rows15 : [];
   var livePx = N(row.mark);
   if (!isFinite(livePx) && rows15.length){
     var lb = rows15[rows15.length - 1];
@@ -1216,20 +1240,32 @@ function sgSetupExecutionRadar(row, prec, intel, advGuard, benchmarks){
   var ePx = (isFinite(+prec.entry) && +prec.entry > 0) ? +prec.entry : N(row.entry);
   var atr = NaN;
   if (prec && prec.unread !== true && isFinite(+prec.atr) && +prec.atr > 0) atr = +prec.atr;
+  if (!(atr > 0) && intel.volRegime && intel.volRegime.ok && isFinite(+intel.volRegime.atrNow) && +intel.volRegime.atrNow > 0){
+    atr = +intel.volRegime.atrNow;
+  }
   if (!(atr > 0)) atr = sgCalcBarsAtr(rows15, 14);
   var distPts = (isFinite(livePx) && isFinite(ePx)) ? +(Math.abs(livePx - ePx).toFixed(2)) : null;
   var distAtr = (distPts != null && isFinite(atr) && atr > 0) ? +(distPts / atr).toFixed(2) : null;
+  var fill = null;
+  if (distAtr != null){
+    var rawFill = Math.round(94 - Math.min(2.5, distAtr) * 26);
+    if (advGuard && advGuard.status === 'SAFE_LIMIT') rawFill += 4;
+    if (advGuard && advGuard.status === 'KNIFE_HAZARD') rawFill -= 18;
+    fill = Math.max(15, Math.min(96, rawFill));
+  }
   var splitWeights = (prec && Array.isArray(prec.entryTranches) && prec.entryTranches.length >= 2)
     ? (prec.entryTranches[0].weightPct + '/' + prec.entryTranches[1].weightPct)
     : null;
   var amdPhase = (benchmarks && benchmarks.amdPhase) ? benchmarks.amdPhase : 'UNREAD';
+  var knife = advGuard && advGuard.status === 'KNIFE_HAZARD';
   var action = 'Distance unread';
-  if (advGuard && advGuard.status === 'KNIFE_HAZARD'){
+  if (knife){
     action = 'Wait for a 15m reclaim close. The resting limit stays';
   } else if (distPts == null){
     action = 'Distance unread';
   } else if (distAtr != null && distAtr <= 0.35){
-    action = 'Limit is ' + fmt(distPts, 2) + ' pts away (' + fmt(distAtr, 2) + ' ATR)';
+    action = 'IMMINENT FILL (' + fmt(distPts, 2) + ' pts / ' + fmt(distAtr, 2) + ' ATR'
+      + (fill != null ? (' · ' + fill + '% fill est') : '') + ')';
   } else if (distAtr != null){
     action = (splitWeights || '60/40') + ' limit is ' + fmt(distPts, 2) + ' pts away (' + fmt(distAtr, 2) + ' ATR)';
   } else {
@@ -1241,7 +1277,7 @@ function sgSetupExecutionRadar(row, prec, intel, advGuard, benchmarks){
     entryPx: isFinite(ePx) ? +ePx.toFixed(2) : null,
     distToEntryPts: distPts,
     distToEntryAtr: distAtr,
-    fillProbabilityPct: null,
+    fillProbabilityPct: fill,
     amdPhase: amdPhase,
     splitWeights: splitWeights,
     actionDirective: action
@@ -1395,7 +1431,7 @@ function sgAdverseSelectionGuard(row, prec, intel){
 /* 60% at the measured entry, 40% at the nearest deeper level that was
    actually on the tape. No deeper level means both tranches are the same
    price. The desk entry is not moved. */
-function sgAttachEntryPlan(prec, micro){
+function sgAttachEntryPlan(prec, micro, regime){
   if (!prec || prec.ok !== true || !(prec.entry > 0)) return prec;
   var entry = +prec.entry;
   var isLong = prec.side !== 'short';
@@ -1412,11 +1448,16 @@ function sgAttachEntryPlan(prec, micro){
   consider(prec.ote618, 'OTE 61.8%');
   var primary = +entry.toFixed(2);
   var second = deep != null ? +((+deep).toFixed(2)) : primary;
+  var reg = String(regime || '').toUpperCase();
+  var w1 = 60;
+  if (reg === 'EXPANSION') w1 = 45;
+  else if (micro && micro.absorptionDetected && isFinite(+micro.wickRejectionScore) && +micro.wickRejectionScore >= 82) w1 = 70;
+  var w2 = 100 - w1;
   prec.entryTranches = [
-    { weightPct: 60, price: primary, label: 'primary structure tap' },
-    { weightPct: 40, price: second, label: deep != null ? deepLabel : 'no deeper level measured' }
+    { weightPct: w1, price: primary, label: 'primary structure tap' },
+    { weightPct: w2, price: second, label: deep != null ? deepLabel : 'no deeper level measured' }
   ];
-  prec.blendedEntry = +((primary * 0.60 + second * 0.40).toFixed(2));
+  prec.blendedEntry = +((primary * w1 + second * w2) / 100).toFixed(2);
   return prec;
 }
 
@@ -1576,7 +1617,7 @@ function sgSynthesizeTapeSetups(intel, riskOpts, win){
   };
   var prec = sgPrecisionGoldLevels(row, intel);
   if (prec && prec.ok){
-    sgAttachEntryPlan(prec, micro);
+    sgAttachEntryPlan(prec, micro, intel && intel.volRegime && intel.volRegime.regime);
     prec.ordered = sgPrecisionOrdered(prec);
     row.precision = prec;
   }
@@ -1766,7 +1807,7 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   if (cascade && cascade.ibRaided && cascade.sessionRaid && cascade.sessionRaid !== 'UNREAD') tags.push(cascade.sessionRaid);
   var tranches = (prec && Array.isArray(prec.entryTranches)) ? prec.entryTranches : [];
   var tranchePlan = (tranches.length >= 2)
-    ? ('60% @ ' + fmt(tranches[0].price, 2) + ' + 40% @ ' + fmt(tranches[1].price, 2)
+    ? (tranches[0].weightPct + '% @ ' + fmt(tranches[0].price, 2) + ' + ' + tranches[1].weightPct + '% @ ' + fmt(tranches[1].price, 2)
       + ' (avg ' + fmt((prec && prec.blendedEntry) || ePx, 2) + ')')
     : '';
 

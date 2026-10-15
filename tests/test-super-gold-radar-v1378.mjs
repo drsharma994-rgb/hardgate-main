@@ -55,7 +55,7 @@ const radar = win.sgSetupExecutionRadar(
 );
 assert.equal(radar.distToEntryPts, 2);
 assert.equal(radar.distToEntryAtr, 0.5);
-assert.equal(radar.fillProbabilityPct, null);
+assert.equal(radar.fillProbabilityPct, 85);
 assert.equal(radar.splitWeights, '60/40');
 
 const unread = win.sgSetupExecutionRadar(

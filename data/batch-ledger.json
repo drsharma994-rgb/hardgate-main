@@ -360,6 +360,11 @@
       "version": "hg-v1378",
       "built": "2026-10-15T16:00:00Z",
       "note": "Super Gold names the prior day high, low, and midpoint only when a prior day is on the tape. A wick that rejects and closes back is absorption. The radar says how far the live price is from the entry. A missing ATR is not 4, and a fill chance is not invented. The 60/40 split and the desk entry stay."
+    },
+    {
+      "version": "hg-v1379",
+      "built": "2026-10-15T17:00:00Z",
+      "note": "When a long window has no prior day, the first half is the range the later bars are judged against, and the card says it is not a calendar day. A rejecting wick of 82 or more puts 70 percent on the near limit. Expansion puts 45 on the near limit and 55 on the deeper one. The fill figure is the measured distance, and a missing ATR still prints no score. The desk entry stays."
     }
   ]
 }
