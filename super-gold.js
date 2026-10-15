@@ -580,8 +580,10 @@ function sgPrecisionGoldLevels(row, intel, opts){
   var rr1 = +(Math.abs(targetT1 - bestEntry) / riskDist).toFixed(2);
   var rr2 = +(Math.abs(targetT2 - bestEntry) / riskDist).toFixed(2);
   var rr3 = +(Math.abs(targetT3 - bestEntry) / riskDist).toFixed(2);
-  /* Blended R:R across 50% TP1 + 30% TP2 + 20% TP3 */
-  var blendedRr = +(0.50 * rr1 + 0.30 * rr2 + 0.20 * rr3).toFixed(2);
+  var microSplit = null;
+  try{ microSplit = sgDetectMicrostructureZones(rows15, null, side); }catch(eMs){}
+  var tpSplits = sgAdaptiveTpSplits(intel, microSplit, side);
+  var blendedRr = +((tpSplits.t1Pct * rr1 + tpSplits.t2Pct * rr2 + tpSplits.t3Pct * rr3) / 100).toFixed(2);
   var precOut = {
     ok: true,
     side: side,
@@ -605,7 +607,7 @@ function sgPrecisionGoldLevels(row, intel, opts){
     rr2: rr2,
     rr3: rr3,
     blendedRr: blendedRr,
-    splits: { t1Pct: 50, t2Pct: 30, t3Pct: 20 },
+    splits: tpSplits,
     unread: atrUnread === true,
     ordered: false,
     vwap: swing ? swing.vwap : null,
@@ -613,13 +615,15 @@ function sgPrecisionGoldLevels(row, intel, opts){
     ote705: swing ? swing.ote705 : null,
     why: 'Entry ' + fmt(bestEntry, 2) + ' [' + fmt(entryZoneLow, 2) + '-' + fmt(entryZoneHigh, 2) + '] (' + entryReason + ')'
       + ' · SL ' + fmt(bestStop, 2) + ' (' + slNote + ')'
-      + ' · TP1 ' + fmt(targetT1, 2) + ' (' + fmt(rr1, 2) + 'R, 50%)'
-      + ' · TP2 ' + fmt(targetT2, 2) + ' (' + fmt(rr2, 2) + 'R, 30%)'
-      + ' · TP3 ' + fmt(targetT3, 2) + ' (' + fmt(rr3, 2) + 'R, 20%)'
+      + ' · TP1 ' + fmt(targetT1, 2) + ' (' + fmt(rr1, 2) + 'R, ' + tpSplits.t1Pct + '%)'
+      + ' · TP2 ' + fmt(targetT2, 2) + ' (' + fmt(rr2, 2) + 'R, ' + tpSplits.t2Pct + '%)'
+      + ' · TP3 ' + fmt(targetT3, 2) + ' (' + fmt(rr3, 2) + 'R, ' + tpSplits.t3Pct + '%)'
       + ' · Blended ' + fmt(blendedRr, 2) + 'R'
   };
   try{
-    sgAttachEntryPlan(precOut, sgDetectMicrostructureZones(rows15, null, side), regime);
+    sgAttachEntryPlan(precOut, microSplit || sgDetectMicrostructureZones(rows15, null, side), regime);
+    precOut.volumeProfile = sgIntradayVolumeProfile(rows15, side, precOut.entry);
+    precOut.ratchetLadder = sgBuildStopRatchetLadder(precOut.entry, precOut.stop, precOut.t1, precOut.t2, side);
     precOut.liquidityMap = sgSessionLiquidityMap(rows15, side, precOut.entry);
     precOut.adverse = sgAdverseSelectionGuard({ dir: side }, precOut, { rows15: rows15 });
     precOut.dolMagnet = null;
@@ -1284,6 +1288,184 @@ function sgSetupExecutionRadar(row, prec, intel, advGuard, benchmarks){
   };
 }
 
+/* Volume at price across the last 30 bars. A bar with no volume is left out.
+   No measured ATR does not become 3.50, and a missing volume does not become 1. */
+function sgIntradayVolumeProfile(rows, side, refEntry){
+  if (!Array.isArray(rows) || rows.length < 6){
+    return { ok: false, poc: null, vah: null, val: null, lvnLevels: [], profileState: 'UNREAD', nearPoc: false, summary: 'Not enough bars for a volume profile' };
+  }
+  var isLong = String(side || 'long').toLowerCase() !== 'short';
+  var slice = rows.slice(-30);
+  var atr = sgCalcBarsAtr(slice, 14);
+  var lo = Infinity, hi = -Infinity, bars = [];
+  for (var i = 0; i < slice.length; i++){
+    var b = slice[i];
+    if (!b) continue;
+    var bh = N(b.h != null ? b.h : b.high);
+    var bl = N(b.l != null ? b.l : b.low);
+    var bc = N(b.c != null ? b.c : b.close);
+    var bv = N(b.v != null ? b.v : b.vol);
+    if (!(isFinite(bh) && isFinite(bl) && isFinite(bc) && bh >= bl)) continue;
+    if (bl < lo) lo = bl;
+    if (bh > hi) hi = bh;
+    if (!(isFinite(bv) && bv > 0)) continue;
+    bars.push({ h: bh, l: bl, c: bc, typ: (bh + bl + bc) / 3, v: bv });
+  }
+  if (!bars.length || !(hi > lo)){
+    return { ok: false, poc: null, vah: null, val: null, lvnLevels: [], profileState: 'UNREAD', nearPoc: false, summary: 'No volume on these bars, so the profile is unread' };
+  }
+  var numBins = 12;
+  var step = (hi - lo) / numBins;
+  var bins = [];
+  for (var bIdx = 0; bIdx < numBins; bIdx++){
+    var bLow = lo + bIdx * step;
+    var bHigh = bLow + step;
+    bins.push({ idx: bIdx, low: bLow, high: bHigh, mid: (bLow + bHigh) / 2, vol: 0 });
+  }
+  var totalVol = 0;
+  for (i = 0; i < bars.length; i++){
+    var bar = bars[i];
+    for (var j = 0; j < numBins; j++){
+      var bn = bins[j];
+      var overlap = Math.min(bar.h, bn.high) - Math.max(bar.l, bn.low);
+      if (overlap > 0 || (bar.typ >= bn.low && bar.typ <= bn.high)){
+        var w = (bar.h > bar.l && overlap > 0) ? (overlap / (bar.h - bar.l)) : (1 / numBins);
+        var addV = bar.v * w;
+        bn.vol += addV;
+        totalVol += addV;
+      }
+    }
+  }
+  if (!(totalVol > 0)){
+    return { ok: false, poc: null, vah: null, val: null, lvnLevels: [], profileState: 'UNREAD', nearPoc: false, summary: 'No volume on these bars, so the profile is unread' };
+  }
+  var pocBin = bins[0];
+  for (var k = 1; k < numBins; k++){
+    if (bins[k].vol > pocBin.vol) pocBin = bins[k];
+  }
+  var vaVol = pocBin.vol;
+  var targetVol = totalVol * 0.70;
+  var leftIdx = pocBin.idx, rightIdx = pocBin.idx;
+  while (vaVol < targetVol && (leftIdx > 0 || rightIdx < numBins - 1)){
+    var leftV = leftIdx > 0 ? bins[leftIdx - 1].vol : -1;
+    var rightV = rightIdx < numBins - 1 ? bins[rightIdx + 1].vol : -1;
+    if (rightV >= leftV && rightIdx < numBins - 1){
+      rightIdx++;
+      vaVol += bins[rightIdx].vol;
+    } else if (leftIdx > 0){
+      leftIdx--;
+      vaVol += bins[leftIdx].vol;
+    } else break;
+  }
+  var poc = +pocBin.mid.toFixed(2);
+  var val = +bins[leftIdx].low.toFixed(2);
+  var vah = +bins[rightIdx].high.toFixed(2);
+  var lvnLevels = [];
+  for (var m = 1; m < numBins - 1; m++){
+    if (bins[m].vol < bins[m - 1].vol * 0.78 && bins[m].vol < bins[m + 1].vol * 0.78){
+      lvnLevels.push(+bins[m].mid.toFixed(2));
+    }
+  }
+  var lastClose = bars[bars.length - 1].c;
+  var checkPx = (isFinite(+refEntry) && +refEntry > 0) ? +refEntry : lastClose;
+  var nearPoc = (isFinite(atr) && atr > 0) ? (Math.abs(checkPx - poc) <= atr * 0.40) : false;
+  var recentLo = Infinity, recentHi = -Infinity;
+  var tail = bars.slice(-8);
+  for (i = 0; i < tail.length; i++){
+    if (tail[i].l < recentLo) recentLo = tail[i].l;
+    if (tail[i].h > recentHi) recentHi = tail[i].h;
+  }
+  var profileState = 'INSIDE_VALUE_AREA';
+  if (isLong && recentLo < val && lastClose >= val) profileState = 'VAL_SPRING_RECLAIM';
+  else if (!isLong && recentHi > vah && lastClose <= vah) profileState = 'VAH_UPTHRUST_REJECT';
+  else if (nearPoc) profileState = 'POC_MAGNET_RELOAD';
+  else if (isLong && lastClose > vah) profileState = 'VAH_BREAKOUT_ACCEPTANCE';
+  else if (!isLong && lastClose < val) profileState = 'VAL_BREAKDOWN_ACCEPTANCE';
+  return {
+    ok: true, poc: poc, vah: vah, val: val, lvnLevels: lvnLevels, nearPoc: nearPoc,
+    profileState: profileState,
+    summary: profileState + ' (VAL ' + fmt(val, 2) + ' · POC ' + fmt(poc, 2) + ' · VAH ' + fmt(vah, 2) + ')'
+  };
+}
+
+/* Spot against the token, only when both prices were read. A missing print
+   is unread. It is not a 75 alignment score and it is not a zero premium. */
+function sgCrossVenueSmtRead(row, intel, win){
+  win = win || W;
+  row = row || {};
+  var side = String(row.dir || row.side || '').toLowerCase();
+  if (side === 'buy' || side === 'bull') side = 'long';
+  if (side === 'sell' || side === 'bear') side = 'short';
+  var isLong = side !== 'short';
+  var sp = null;
+  try{
+    if (typeof win.goldspotState === 'function') sp = win.goldspotState();
+  }catch(eSp){ sp = null; }
+  var spotPx = sp && isFinite(N(sp.spot)) && N(sp.spot) > 0 ? N(sp.spot) : NaN;
+  var xmPx = sp && isFinite(N(sp.xm)) && N(sp.xm) > 0 ? N(sp.xm) : NaN;
+  var paxgPx = sp && isFinite(N(sp.paxg)) && N(sp.paxg) > 0 ? N(sp.paxg) : NaN;
+  if (!isFinite(spotPx) || !isFinite(paxgPx) || (side !== 'long' && side !== 'short')){
+    return { ok: false, smtState: 'UNREAD', spotVsTokenPremiumUsd: null, brokerDeltaUsd: null, venueAlignmentScore: null, smtConfirmed: false, summary: 'Spot or token price was not read' };
+  }
+  var prem = +(spotPx - paxgPx).toFixed(2);
+  var brokerDelta = isFinite(xmPx) ? +(Math.abs(spotPx - xmPx)).toFixed(2) : null;
+  var smtConfirmed = isLong ? (prem >= 0.05 && prem <= 6.0) : (prem <= -0.05 && prem >= -6.0);
+  var smtState = Math.abs(prem) > 8.0
+    ? 'DIVERGENT_CAUTION'
+    : (smtConfirmed ? (isLong ? 'SPOT_LEADING_BULL' : 'SPOT_LEADING_BEAR') : 'LOCKSTEP_CONFIRMATION');
+  var alignRaw = 92 + (smtConfirmed ? 6 : 0);
+  if (brokerDelta != null) alignRaw -= brokerDelta * 6;
+  var venueAlignmentScore = Math.max(40, Math.min(99, Math.round(alignRaw)));
+  return {
+    ok: true, smtState: smtState, spotVsTokenPremiumUsd: prem, brokerDeltaUsd: brokerDelta,
+    venueAlignmentScore: venueAlignmentScore, smtConfirmed: smtConfirmed,
+    summary: smtState + ' (Spot vs PAXG ' + (prem >= 0 ? '+' : '') + fmt(prem, 2) + ' USD · align ' + venueAlignmentScore + '/100)'
+  };
+}
+
+/* How the three targets are sized. Five agreeing timeframes keep more on
+   the runner. Compression takes more off at the first target. Anything else
+   stays 50/30/20. The target prices are not moved. */
+function sgAdaptiveTpSplits(intel, micro, side){
+  intel = intel || {};
+  micro = micro || {};
+  var regime = (intel.volRegime && intel.volRegime.regime) ? String(intel.volRegime.regime).toUpperCase() : '';
+  var ft = intel.fiveTf || {};
+  var isLong = String(side || 'long').toLowerCase() !== 'short';
+  var wantDir = isLong ? 'BULL' : 'BEAR';
+  var alignedCnt = isLong ? N(ft.bull) : N(ft.bear);
+  var volCommit = N(micro && micro.volCommitmentRatio);
+  var strongCascade = (ft.aligned === wantDir && isFinite(alignedCnt) && alignedCnt >= 5)
+    || (regime === 'EXPANSION' && isFinite(volCommit) && volCommit >= 1.5);
+  var defensiveMode = (regime === 'COMPRESSION') || (ft.aligned && ft.aligned !== 'NONE' && ft.aligned !== wantDir);
+  if (strongCascade && !defensiveMode){
+    return { t1Pct: 40, t2Pct: 30, t3Pct: 30, splitScheme: 'RUNNER_HEAVY_40_30_30' };
+  }
+  if (defensiveMode){
+    return { t1Pct: 60, t2Pct: 25, t3Pct: 15, splitScheme: 'FRONT_LOADED_60_25_15' };
+  }
+  return { t1Pct: 50, t2Pct: 30, t3Pct: 20, splitScheme: 'STANDARD_50_30_20' };
+}
+
+/* A plan for where the stop could move later. It does not change the desk stop. */
+function sgBuildStopRatchetLadder(bestEntry, bestStop, targetT1, targetT2, side){
+  var e = +bestEntry, s = +bestStop, t1 = +targetT1, t2 = +targetT2;
+  if (!(isFinite(e) && isFinite(s) && isFinite(t1) && isFinite(t2) && e > 0 && s > 0 && t1 > 0 && t2 > 0) || e === s){
+    return [];
+  }
+  var isLong = String(side || 'long').toLowerCase() !== 'short';
+  var riskDist = Math.abs(e - s);
+  var halfRiskStop = +(isLong ? (e - riskDist * 0.40) : (e + riskDist * 0.40)).toFixed(2);
+  var bePlusStop = +(isLong ? (e + riskDist * 0.25) : (e - riskDist * 0.25)).toFixed(2);
+  var mfe075Trigger = +(isLong ? (e + riskDist * 0.75) : (e - riskDist * 0.75)).toFixed(2);
+  return [
+    { stage: 0, code: 'INITIAL_SWEEP_SHIELD', triggerPx: +e.toFixed(2), stopPx: +s.toFixed(2), note: 'The desk stop. It is not moved.' },
+    { stage: 1, code: 'MFE_0_75R_RISK_HALVED', triggerPx: mfe075Trigger, stopPx: halfRiskStop, note: 'If price trades +0.75R, the plan tightens the stop to -0.40R' },
+    { stage: 2, code: 'TP1_HIT_BE_PLUS_0_25R', triggerPx: +t1.toFixed(2), stopPx: bePlusStop, note: 'If TP1 fills, the plan locks the stop 0.25R past entry' },
+    { stage: 3, code: 'TP2_HIT_STRUCTURAL_LOCK', triggerPx: +t2.toFixed(2), stopPx: +t1.toFixed(2), note: 'If TP2 fills, the plan locks the stop at TP1' }
+  ];
+}
+
 /* Equal highs and equal lows on the last 30 bars, the midpoint of that
    range, and the nearest pool price is drawing toward. No measured ATR
    means the cluster tolerance stays at 35 cents. It is not filled in as
@@ -1780,7 +1962,8 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
     + fmt(ez[0], 2) + '–' + fmt(ez[1], 2) + ' (anchor ' + fmt(ePx, 2) + ') on 15m hold';
   var invalidRule = (isLong ? 'Hard invalidation below ' : 'Hard invalidation above ')
     + fmt(sPx, 2) + (prec && prec.psychShielded ? (' (shielded past $' + prec.psychMagnet + ' sweep level)') : '');
-  var scalePlan = '50% @ TP1 ' + fmt(t1Px, 2) + ' (shift SL -> BE) · 30% @ TP2 ' + fmt(t2Px, 2) + ' (lock TP1) · 20% @ TP3 ' + fmt(t3Px, 2);
+  var sp = (prec && prec.splits && isFinite(+prec.splits.t1Pct)) ? prec.splits : { t1Pct: 50, t2Pct: 30, t3Pct: 20 };
+  var scalePlan = sp.t1Pct + '% @ TP1 ' + fmt(t1Px, 2) + ' (shift SL -> BE) · ' + sp.t2Pct + '% @ TP2 ' + fmt(t2Px, 2) + ' (lock TP1) · ' + sp.t3Pct + '% @ TP3 ' + fmt(t3Px, 2);
   var decay = sgEvaluateSetupDecay(row, prec, intel);
   if (decay.status === 'FRONT_RUN_INVALIDATED' || decay.status === 'EXPIRED'){
     score = Math.max(0, score - 25);
@@ -1804,6 +1987,13 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   var riskProfile = sgSetupRiskProfile(exp, prec);
   var benchmarks = sgDailyBenchmarkLevels(row, intel);
   var radar = sgSetupExecutionRadar(row, prec, intel, advGuard, benchmarks);
+  var volProf = (prec && prec.volumeProfile && prec.volumeProfile.ok)
+    ? prec.volumeProfile
+    : sgIntradayVolumeProfile((intel && intel.rows15) || [], isLong ? 'long' : 'short', ePx);
+  var smtRead = sgCrossVenueSmtRead(row, intel, win || W);
+  var ratchet = (prec && Array.isArray(prec.ratchetLadder) && prec.ratchetLadder.length)
+    ? prec.ratchetLadder
+    : sgBuildStopRatchetLadder(ePx, sPx, t1Px, t2Px, isLong ? 'long' : 'short');
   if (cascade && cascade.ibRaided && cascade.sessionRaid && cascade.sessionRaid !== 'UNREAD') tags.push(cascade.sessionRaid);
   var tranches = (prec && Array.isArray(prec.entryTranches)) ? prec.entryTranches : [];
   var tranchePlan = (tranches.length >= 2)
@@ -1829,7 +2019,10 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
     fractalCascade: cascade,
     riskProfile: riskProfile,
     dailyBenchmarks: benchmarks,
-    executionRadar: radar
+    executionRadar: radar,
+    volumeProfile: volProf,
+    smtRead: smtRead,
+    ratchetLadder: ratchet
   };
   row.formation = formation;
   row.convictionScore = score;
@@ -1842,6 +2035,9 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   row.riskProfile = riskProfile;
   row.dailyBenchmarks = benchmarks;
   row.executionRadar = radar;
+  row.volumeProfile = volProf;
+  row.smtRead = smtRead;
+  row.ratchetLadder = ratchet;
   return formation;
 }
 
@@ -4050,6 +4246,17 @@ function mount(el){
         + (r.executionRadar
           ? ('<div class="hg-note" data-sg-radar="1">' + String(r.executionRadar.actionDirective) + '.</div>')
           : '')
+        + (r.volumeProfile && r.volumeProfile.ok
+          ? ('<div class="hg-note" data-sg-vp="1">' + String(r.volumeProfile.summary) + '.</div>')
+          : '')
+        + (r.smtRead && r.smtRead.ok
+          ? ('<div class="hg-note" data-sg-smt="1">' + String(r.smtRead.summary) + '.</div>')
+          : '')
+        + (r.ratchetLadder && r.ratchetLadder.length
+          ? ('<div class="hg-note" data-sg-ratchet="1">Stop plan: '
+            + r.ratchetLadder.map(function(st){ return st.code + ' @ ' + fmt(st.stopPx, 2); }).join(' · ')
+            + '. The desk stop is not moved.</div>')
+          : '')
         + (r.precision && r.precision.ok && !r.precision.unread && Array.isArray(r.precision.entryZone)
           ? ('<div class="hg-note" data-sg-zone="1">Entry zone '
             + fmt(r.precision.entryZone[0], 2) + ' to ' + fmt(r.precision.entryZone[1], 2)
@@ -4238,6 +4445,10 @@ W.sgMultiTfFractalCascade = sgMultiTfFractalCascade;
 W.sgSetupRiskProfile = sgSetupRiskProfile;
 W.sgDailyBenchmarkLevels = sgDailyBenchmarkLevels;
 W.sgSetupExecutionRadar = sgSetupExecutionRadar;
+W.sgIntradayVolumeProfile = sgIntradayVolumeProfile;
+W.sgCrossVenueSmtRead = sgCrossVenueSmtRead;
+W.sgAdaptiveTpSplits = sgAdaptiveTpSplits;
+W.sgBuildStopRatchetLadder = sgBuildStopRatchetLadder;
 W.sgPsychShieldStop = sgPsychShieldStop;
 W.sgHighAccuracyAudit = sgHighAccuracyAudit;
 

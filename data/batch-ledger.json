@@ -365,6 +365,11 @@
       "version": "hg-v1379",
       "built": "2026-10-15T17:00:00Z",
       "note": "When a long window has no prior day, the first half is the range the later bars are judged against, and the card says it is not a calendar day. A rejecting wick of 82 or more puts 70 percent on the near limit. Expansion puts 45 on the near limit and 55 on the deeper one. The fill figure is the measured distance, and a missing ATR still prints no score. The desk entry stays."
+    },
+    {
+      "version": "hg-v1380",
+      "built": "2026-10-15T18:00:00Z",
+      "note": "Super Gold names the volume node, the value area, and whether spot leads the token. Five agreeing timeframes keep 40 percent for the first target and 30 for the runner. Compression takes 60 off at the first target. The stop ladder is a plan. The desk entry, stop, and targets are not moved. A bar with no volume is not counted as 1."
     }
   ]
 }
