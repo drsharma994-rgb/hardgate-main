@@ -22,12 +22,13 @@
    to 20,831. That two-step is asserted by name below.
 
    Twelve of the fifteen now prove the candle feed is load-bearing: starve it
-   and the output changes. Three do not, and each has a checked reason rather
-   than a shrug — they do not read candles at all:
+   and the output changes. The ones that do not each have a checked reason
+   rather than a shrug — they do not read candles at all:
 
-     super-gold  reads __hgSuperGoldSnap, other desks' published snapshots
-     goldspot    goes to /api/proxy for a spot print; no candle fetcher in it
-     tauric      is the /api/tauric agent pipeline
+     gold-confluence  reads desks that have already published, plus the IUX anchor
+     goldspot         goes to /api/proxy for a spot print; no candle fetcher in it
+     tauric           is the /api/tauric agent pipeline
+     candle-forecast  fetches its own tape, which this sweep stubs no network for
 
    And the instrument is checked before it is trusted. Two identical fed runs
    go first: whatever moves between THEM is this harness's own variance, and a
@@ -324,7 +325,7 @@ const STARVED = await sweep(true);
 {
   /* Each one's reason is READ OUT OF ITS FILE, not asserted from memory. */
   const NO_CANDLES = {
-    'super-gold': { file: 'super-gold.js', mark: /__hgSuperGoldSnap/, why: "other desks' published snapshots" },
+    'gold-confluence': { file: 'gold-confluence.js', mark: /hgGoldIuxAnchor/, why: 'published gold-desk snapshots and the IUX anchor, not a candle fetch of its own' },
     goldspot:     { file: 'goldspot.js',   mark: /[/]api[/]proxy/,    why: 'a proxied spot print' },
     tauric:       { file: 'tauric.js',     mark: /api[/]tauric/,      why: 'the TradingAgents pipeline' },
     /* hg-v1336 listed CANDLE FORECAST, and it is listed reluctantly. The tab DOES own

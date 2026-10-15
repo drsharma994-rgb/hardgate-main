@@ -385,6 +385,11 @@
       "version": "hg-v1383",
       "built": "2026-10-15T21:00:00Z",
       "note": "A one-go Gold Scalp upgrade now carries a measured ounce size. The size uses the desk stop and the half-Kelly risk when that risk was measured. One lot is 100 ounces. The desk entry, stop, and target stay."
+    },
+    {
+      "version": "hg-v1384",
+      "built": "2026-10-15T22:00:00Z",
+      "note": "CONFLUENCE is a new tab in the gold group. It reads the setups the gold desks have already published and forms one plan only when at least three of them agree on the side and none of them published the other side. At least two of those plans must sit on the live IUX gold price. The entry is the median of those plans. It is not moved to the live price. A missing IUX quote prints no live setup."
     }
   ]
 }
