@@ -4534,23 +4534,43 @@ function sgDetectGoldScalpArchetypes(c, intel, win){
   var archetype = 'UNREAD';
   var archetypeLabel = 'No scalp archetype measured';
   var edgeThesis = 'Nothing on the tape named this scalp';
-  if (/judas|sweep|raid|trap|liq/i.test(strat) || (hasSweep && (micro15.mssConfirmed || (micro5 && micro5.mssConfirmed)))){
+  if (/judas|sweep|raid|trap|liq/i.test(strat)){
     archetype = 'NY_JUDAS_LIQUIDITY_SWEEP';
     archetypeLabel = 'JUDAS LIQUIDITY SWEEP + MSS RECLAIM';
     edgeThesis = 'A raid beyond the session extreme, then a 5m or 15m reclaim';
-  } else if (/silver.?bullet|fvg|imbalance|gap/i.test(strat) || (hasFvg && (isSilverBulletWindow || micro15.mssConfirmed))){
+  } else if (/silver.?bullet|fvg|imbalance|gap/i.test(strat)){
     archetype = 'SILVER_BULLET_FVG_RELOAD';
     archetypeLabel = 'ICT SILVER BULLET 50% FVG CE RELOAD';
     edgeThesis = 'An unfilled 5m or 15m gap, limit at the midpoint';
-  } else if (/poc|val|vah|profile|auction/i.test(strat) || hasVaSpring){
+  } else if (/poc|val|vah|profile|auction/i.test(strat)){
     archetype = 'VAL_VAH_POC_AUCTION_SNAP';
     archetypeLabel = 'VALUE AREA SPRING -> POC MAGNET SNAP';
     edgeThesis = 'Price left the value area and the volume node is the magnet';
-  } else if (/breaker|ifvg|flip/i.test(strat) || (hasIfvgOrBreaker && isFinite(+micro15.volCommitmentRatio) && +micro15.volCommitmentRatio >= 1.25)){
+  } else if (/breaker|ifvg|flip/i.test(strat)){
     archetype = 'BREAKER_IFVG_FLIP_DEFENSE';
     archetypeLabel = 'BREAKER + INVERSE FVG POLARITY FLIP';
     edgeThesis = 'A broken zone flipped, with volume behind the flip';
-  } else if (/orb|coil|squeeze|breakout|expan/i.test(strat) || (isFinite(+micro15.impulseZScore) && +micro15.impulseZScore >= 1.20 && isFinite(+micro15.clvScore) && Math.abs(+micro15.clvScore) >= 0.55)){
+  } else if (/orb|coil|squeeze|breakout|expan/i.test(strat)){
+    archetype = 'ORB_COMPRESSION_SQUEEZE';
+    archetypeLabel = 'OPENING RANGE COMPRESSION SQUEEZE';
+    edgeThesis = 'A tight range released on a close near the extreme';
+  } else if (hasSweep && (micro15.mssConfirmed || (micro5 && micro5.mssConfirmed))){
+    archetype = 'NY_JUDAS_LIQUIDITY_SWEEP';
+    archetypeLabel = 'JUDAS LIQUIDITY SWEEP + MSS RECLAIM';
+    edgeThesis = 'A raid beyond the session extreme, then a 5m or 15m reclaim';
+  } else if (hasFvg && (isSilverBulletWindow || micro15.mssConfirmed)){
+    archetype = 'SILVER_BULLET_FVG_RELOAD';
+    archetypeLabel = 'ICT SILVER BULLET 50% FVG CE RELOAD';
+    edgeThesis = 'An unfilled 5m or 15m gap, limit at the midpoint';
+  } else if (hasVaSpring){
+    archetype = 'VAL_VAH_POC_AUCTION_SNAP';
+    archetypeLabel = 'VALUE AREA SPRING -> POC MAGNET SNAP';
+    edgeThesis = 'Price left the value area and the volume node is the magnet';
+  } else if (hasIfvgOrBreaker && isFinite(+micro15.volCommitmentRatio) && +micro15.volCommitmentRatio >= 1.25){
+    archetype = 'BREAKER_IFVG_FLIP_DEFENSE';
+    archetypeLabel = 'BREAKER + INVERSE FVG POLARITY FLIP';
+    edgeThesis = 'A broken zone flipped, with volume behind the flip';
+  } else if (isFinite(+micro15.impulseZScore) && +micro15.impulseZScore >= 1.20 && isFinite(+micro15.clvScore) && Math.abs(+micro15.clvScore) >= 0.55){
     archetype = 'ORB_COMPRESSION_SQUEEZE';
     archetypeLabel = 'OPENING RANGE COMPRESSION SQUEEZE';
     edgeThesis = 'A tight range released on a close near the extreme';
@@ -4627,7 +4647,7 @@ function sgRefineGoldScalpBracket(c, intel, win){
     entryAnchorReason = 'front-run ' + nearStruct.label + ' @ ' + fmt(nearStruct.px, 2);
   } else if (fvg5){
     bestEntry = +((rawEntry * 0.45 + fvg5.ce * 0.55)).toFixed(2);
-    entryAnchorReason = '5m FVG 50% CE (' + fmt(fvg5.ce, 2) + ')';
+    entryAnchorReason = '5m FVG CE (' + fmt(fvg5.ce, 2) + ')';
   } else if (fvg15){
     bestEntry = +((rawEntry * 0.50 + fvg15.ce * 0.50)).toFixed(2);
     entryAnchorReason = '15m FVG 50% CE (' + fmt(fvg15.ce, 2) + ')';
@@ -4663,6 +4683,13 @@ function sgRefineGoldScalpBracket(c, intel, win){
   if (curStopDist < minScalpStopDist) candidateStop = isLong ? (bestEntry - minScalpStopDist) : (bestEntry + minScalpStopDist);
   else if (curStopDist > maxScalpStopDist) candidateStop = isLong ? (bestEntry - maxScalpStopDist) : (bestEntry + maxScalpStopDist);
   var shield = sgPsychShieldStop(candidateStop, side);
+  if (!shield.shielded && isFinite(+candidateStop)){
+    var nearest5 = Math.round(+candidateStop / 5) * 5;
+    if (Math.abs(+candidateStop - nearest5) <= 0.65){
+      var s5 = isLong ? Math.min(+candidateStop, nearest5 - 0.65) : Math.max(+candidateStop, nearest5 + 0.65);
+      shield = { stop: +s5.toFixed(2), shielded: true, magnet: nearest5 };
+    }
+  }
   var bestStop = shield.stop;
   if (isLong && bestStop >= bestEntry) bestStop = +(bestEntry - minScalpStopDist).toFixed(2);
   if (!isLong && bestStop <= bestEntry) bestStop = +(bestEntry + minScalpStopDist).toFixed(2);
@@ -4835,6 +4862,7 @@ function sgEnhanceGoldScalpSetup(c, intel, win, opts){
   if (!sb || !sb.ok) return c;
   var scoreCard = sgScoreGoldScalpSetup(c, sb, intel, win);
   var arch = sb.archetypeInfo || {};
+  if (scoreCard.scalpTier === 'SCALP A+ SNIPER' || scoreCard.scalpTier === 'SCALP A') c.grade = 'A';
   var mutateLevels = opts.mutateLevels === true;
   c.scalpPrecision = sb;
   if (mutateLevels && sb.unread !== true){
@@ -4905,7 +4933,14 @@ function sgUpgradeGoldScalpTabInOneGo(snapOrWin, opts){
   var rawSnap = (snapOrWin && typeof snapOrWin === 'object' && (Array.isArray(snapOrWin.cands) || snapOrWin.at))
     ? snapOrWin : null;
   if (!rawSnap) return { at: Date.now(), cands: [], armed: [], scalpSummary: { totalSetups: 0, headline: '0 Gold Scalp setups active' } };
-  var intel = opts.intel || rawSnap.intel || {};
+  var intel = opts.intel || rawSnap.intel || null;
+  if (!intel || (!intel.volRegime && !intel.rows15 && !intel.structure && !intel.fiveTf)){
+    try{
+      var sgNow = superGoldScan();
+      if (sgNow && sgNow.intel) intel = sgNow.intel;
+    }catch(eI){}
+  }
+  intel = intel || {};
   var mutateLevels = opts.mutateLevels === true;
   var cands = Array.isArray(rawSnap.cands) ? rawSnap.cands.map(function(c){ return Object.assign({}, c); }) : [];
   cands = cands.map(function(c){ return sgEnhanceGoldScalpSetup(c, intel, win, { mutateLevels: mutateLevels }); });
@@ -4931,6 +4966,7 @@ function sgUpgradeGoldScalpTabInOneGo(snapOrWin, opts){
   });
   rawSnap.cands = cands;
   if (armed) rawSnap.armed = armed;
+  rawSnap.hgUpgradedVersion = 'hg-v1372';
   rawSnap.scalpSummary = {
     version: 'hg-v1381', totalSetups: cands.length, sniperAPlusCount: sniperCnt, gradeACount: gradeACnt,
     headline: cands.length ? (cands.length + ' Gold Scalp setups (' + sniperCnt + ' SNIPER A+ · ' + gradeACnt + ' GRADE A)') : '0 Gold Scalp setups active'
