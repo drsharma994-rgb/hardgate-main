@@ -76,12 +76,15 @@ console.log('fvg15', micro15.nearestFvg && micro15.nearestFvg.ce, 'abs15', micro
 const synth = win.sgSynthesizeGoldScalpSetups(intel, { balance: 10000, riskPct: 1 }, win);
 assert.equal(win.__sgGoldScalpEnhancerInstalled, true);
 assert.equal(gsSnap.hgUpgradedVersion, 'hg-v1372');
+assert.equal(gsSnap.oneGoUpgraded, true);
 assert.equal(gsSnap.cands.length, 2);
 assert.equal(judas.grade, 'A');
 assert.equal(judas.entry, 2650.5);
 assert.equal(judas.stop, 2645);
 assert.equal(se.scalpTier, 'SCALP A+ SNIPER');
 assert.ok(se.scalpScore >= 88);
+assert.ok(judas.scalpSizing && judas.scalpSizing.positionUnitsOz > 0);
+assert.equal(judas.entry, 2650.5);
 const sbCand = gsSnap.cands.find(c => c.id === 'scalp-sb-2');
 const arch1 = win.sgDetectGoldScalpArchetypes(judas, intel, win);
 const arch2 = win.sgDetectGoldScalpArchetypes(sbCand, intel, win);

@@ -168,7 +168,8 @@ function hitFromGoldCand(c, meta){
       : null,
     scanner: meta.scanner || meta.source,
     scalpEnhancement: c.scalpEnhancement || null,
-    scalpPrecision: c.scalpPrecision || null
+    scalpPrecision: c.scalpPrecision || null,
+    scalpSizing: c.scalpSizing || null
   };
 }
 
@@ -4259,7 +4260,12 @@ function mount(el){
           ? ('<div class="hg-note" data-sg-scalp="1">' + String(r.scalpEnhancement.scalpTier || '')
             + (r.scalpEnhancement.scalpScore != null ? (' ' + r.scalpEnhancement.scalpScore + '/100') : '')
             + ' · ' + String(r.scalpEnhancement.archetypeLabel || '')
-            + '. The desk entry, stop, and targets were not replaced.</div>')
+            + '. The desk entry, stop, and targets were not replaced.'
+            + (r.scalpSizing && r.scalpSizing.positionUnitsOz > 0
+              ? (' Size ' + fmt(r.scalpSizing.positionUnitsOz, 2) + ' oz'
+                + (r.scalpSizing.halfKellyLots != null ? (' (' + fmt(r.scalpSizing.halfKellyLots, 2) + ' lots at half-Kelly).') : '.'))
+              : '')
+            + '</div>')
           : '')
         + (r.ratchetLadder && r.ratchetLadder.length
           ? ('<div class="hg-note" data-sg-ratchet="1">Stop plan: '
@@ -4462,6 +4468,7 @@ W.sgDetectGoldScalpArchetypes = sgDetectGoldScalpArchetypes;
 W.sgRefineGoldScalpBracket = sgRefineGoldScalpBracket;
 W.sgScoreGoldScalpSetup = sgScoreGoldScalpSetup;
 W.sgEnhanceGoldScalpSetup = sgEnhanceGoldScalpSetup;
+W.sgScalpSizing = sgScalpSizing;
 W.sgSynthesizeGoldScalpSetups = sgSynthesizeGoldScalpSetups;
 W.sgUpgradeGoldScalpTabInOneGo = sgUpgradeGoldScalpTabInOneGo;
 W.sgPaintGoldScalpTabHud = sgPaintGoldScalpTabHud;
@@ -4853,6 +4860,28 @@ function sgScoreGoldScalpSetup(c, scalpBracket, intel, win){
   };
 }
 
+function sgScalpSizing(c, sb, scoreCard, win){
+  var risk = defaultRiskOpts(win);
+  var entry = N(c && c.entry);
+  var stop = N(c && c.stop);
+  var dist = Math.abs(entry - stop);
+  if (!(entry > 0 && dist > 0) || !(risk.balance > 0) || !(risk.riskPct > 0)) return null;
+  var kelly = (scoreCard && scoreCard.expectancy && isFinite(+scoreCard.expectancy.halfKellyRiskPct) && +scoreCard.expectancy.halfKellyRiskPct > 0)
+    ? +scoreCard.expectancy.halfKellyRiskPct : null;
+  var usePct = kelly != null ? kelly : risk.riskPct;
+  var riskDollars = risk.balance * (usePct / 100);
+  var oz = riskDollars / dist;
+  if (!(oz > 0)) return null;
+  return {
+    positionUnitsOz: +oz.toFixed(4),
+    halfKellyRiskPct: kelly,
+    halfKellyLots: +(oz / 100).toFixed(4),
+    contractOzPerLot: 100,
+    riskDollars: +riskDollars.toFixed(2),
+    stopDist: +dist.toFixed(2)
+  };
+}
+
 function sgEnhanceGoldScalpSetup(c, intel, win, opts){
   win = win || W;
   opts = opts || {};
@@ -4878,6 +4907,7 @@ function sgEnhanceGoldScalpSetup(c, intel, win, opts){
   var scalePlan = (sb.splits)
     ? (sb.splits.t1Pct + '% @ TP1 ' + fmt(sb.t1, 2) + ' · ' + sb.splits.t2Pct + '% @ TP2 ' + fmt(sb.t2, 2) + ' · ' + sb.splits.t3Pct + '% @ TP3 ' + fmt(sb.t3, 2))
     : 'Desk targets kept.';
+  c.scalpSizing = sgScalpSizing(c, sb, scoreCard, win);
   c.scalpEnhancement = {
     ok: true, version: 'hg-v1381', scalpTier: scoreCard.scalpTier, scalpScore: scoreCard.scalpScore,
     archetype: arch.archetype, archetypeLabel: arch.archetypeLabel, edgeThesis: arch.edgeThesis,
@@ -4967,6 +4997,7 @@ function sgUpgradeGoldScalpTabInOneGo(snapOrWin, opts){
   rawSnap.cands = cands;
   if (armed) rawSnap.armed = armed;
   rawSnap.hgUpgradedVersion = 'hg-v1372';
+  rawSnap.oneGoUpgraded = true;
   rawSnap.scalpSummary = {
     version: 'hg-v1381', totalSetups: cands.length, sniperAPlusCount: sniperCnt, gradeACount: gradeACnt,
     headline: cands.length ? (cands.length + ' Gold Scalp setups (' + sniperCnt + ' SNIPER A+ · ' + gradeACnt + ' GRADE A)') : '0 Gold Scalp setups active'
