@@ -821,42 +821,75 @@ function sgCalcSetupExpectancy(row, prec, intel){
     expectedValueR: ev,
     halfKellyRiskPct: halfPct,
     payoffAsymmetry: payoff,
-    rewardR: +reward.toFixed(2)
+    rewardR: +reward.toFixed(2),
+    summary: 'Win est ' + win + '% · E[R] +' + ev.toFixed(2) + 'R · Half-Kelly risk ' + halfPct.toFixed(2) + '%'
   };
 }
 
-/* A limit that price has already run 90% of the way to TP1 without tagging
-   is a missed fill. The desk does not chase it. Age uses the signal bar.
-   No bar time does not become an expiry. */
+/* A limit that price has already run 85% of the way to TP1, and that no
+   recent bar has tagged, is a missed fill. A scalp stays valid for 90
+   minutes. A swing stays valid for 6 hours. No signal bar means the clock
+   is unread, not a full TTL and not an expiry. */
 function sgEvaluateSetupDecay(row, prec, intel){
   row = row || {};
   prec = prec || row.precision || {};
   var side = String((prec && prec.side) || row.dir || row.side || '').toLowerCase();
   var isLong = !(side === 'short' || side === 'sell' || side === 'bear');
+  var isScalp = String(row.scanner || row.source || '').toLowerCase().indexOf('scalp') >= 0;
+  var maxValidMin = isScalp ? 90 : 360;
+  var bar = sgCandSec(row, row);
+  var ageMin = null;
+  var ttlLeftMin = null;
+  if (bar){
+    ageMin = Math.max(0, Math.round((Math.floor(Date.now() / 1000) - bar) / 60));
+    ttlLeftMin = Math.max(0, maxValidMin - ageMin);
+  }
   var entry = N(prec.entry != null ? prec.entry : row.entry);
   var t1 = N(prec.t1 != null ? prec.t1 : (row.t1 || row.tp));
   var mark = N(row.mark);
+  if (!isFinite(mark) && intel && Array.isArray(intel.rows15) && intel.rows15.length){
+    var lb = intel.rows15[intel.rows15.length - 1];
+    mark = N(lb && (lb.c != null ? lb.c : lb.close));
+  }
   var progress = null;
+  var progressToT1Pct = null;
   if (isFinite(entry) && isFinite(t1) && isFinite(mark) && t1 !== entry){
     progress = isLong ? (mark - entry) / (t1 - entry) : (entry - mark) / (entry - t1);
+    if (isFinite(progress)) progressToT1Pct = Math.round(Math.max(0, progress * 100));
   }
-  var missed = progress != null && progress >= 0.90;
-  var bar = sgCandSec(row, row);
-  var ageSec = null;
-  if (bar) ageSec = Math.max(0, Math.floor(Date.now() / 1000) - bar);
-  var ttlSec = 6 * 60 * 60;
-  var expired = ageSec != null && ageSec > ttlSec;
-  var status = missed ? 'FRONT_RUN_INVALIDATED' : (expired ? 'EXPIRED' : 'FRESH');
+  var missed = false;
+  if (progressToT1Pct != null && progressToT1Pct >= 85 && ((isLong && mark > entry) || (!isLong && mark < entry))){
+    var filledOnBar = false;
+    var look = (intel && Array.isArray(intel.rows15)) ? intel.rows15.slice(-8) : [];
+    for (var bi = 0; bi < look.length; bi++){
+      var b = look[bi];
+      if (!b) continue;
+      var bl = N(b.l != null ? b.l : b.low);
+      var bh = N(b.h != null ? b.h : b.high);
+      if (isLong && isFinite(bl) && bl <= entry) filledOnBar = true;
+      if (!isLong && isFinite(bh) && bh >= entry) filledOnBar = true;
+    }
+    if (!filledOnBar) missed = true;
+  }
+  var expired = ageMin != null && ageMin > maxValidMin;
+  var aging = !missed && !expired && ageMin != null && ageMin > maxValidMin * 0.65;
+  var status = missed ? 'FRONT_RUN_INVALIDATED' : (expired ? 'EXPIRED' : (aging ? 'AGING' : 'FRESH'));
   return {
     ok: true,
     status: status,
     missedBoat: missed === true,
     expired: expired === true,
     progress: progress != null ? +progress.toFixed(2) : null,
-    ageSec: ageSec,
-    ttlSec: ttlSec,
-    why: missed ? 'Price has run at least 90% of the way to TP1 without tagging the limit'
-      : (expired ? 'The signal bar is older than 6 hours' : 'The limit is still in front of price')
+    progressToT1Pct: progressToT1Pct,
+    ageMin: ageMin,
+    ttlLeftMin: ttlLeftMin,
+    ageSec: ageMin != null ? ageMin * 60 : null,
+    ttlSec: maxValidMin * 60,
+    why: missed
+      ? ('Price ran ' + progressToT1Pct + '% of the way to TP1 and no recent bar tagged the limit')
+      : (expired ? ('The signal bar is older than ' + maxValidMin + ' minutes')
+      : (ageMin == null ? 'No signal bar, so the validity clock is unread'
+      : ('The limit is still in front of price (' + ttlLeftMin + 'm left)')))
   };
 }
 
@@ -1071,6 +1104,17 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   var invalidRule = (isLong ? 'Hard invalidation below ' : 'Hard invalidation above ')
     + fmt(sPx, 2) + (prec && prec.psychShielded ? (' (shielded past $' + prec.psychMagnet + ' sweep level)') : '');
   var scalePlan = '50% @ TP1 ' + fmt(t1Px, 2) + ' (shift SL -> BE) · 30% @ TP2 ' + fmt(t2Px, 2) + ' (lock TP1) · 20% @ TP3 ' + fmt(t3Px, 2);
+  var decay = sgEvaluateSetupDecay(row, prec, intel);
+  if (decay.status === 'FRONT_RUN_INVALIDATED' || decay.status === 'EXPIRED'){
+    score = Math.max(0, score - 25);
+    tags.push(decay.status);
+  }
+  var exp = sgCalcSetupExpectancy(row, prec, intel);
+  var tranches = (prec && Array.isArray(prec.entryTranches)) ? prec.entryTranches : [];
+  var tranchePlan = (tranches.length >= 2)
+    ? ('60% @ ' + fmt(tranches[0].price, 2) + ' + 40% @ ' + fmt(tranches[1].price, 2)
+      + ' (avg ' + fmt((prec && prec.blendedEntry) || ePx, 2) + ')')
+    : '';
 
   var formation = {
     archetype: arch.code,
@@ -1080,13 +1124,17 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
     qualityBand: score >= 90 ? 'ELITE' : (score >= 80 ? 'HIGH' : (score >= 70 ? 'SOLID' : 'WATCH')),
     confluenceTags: tags,
     triggerCondition: triggerCond,
+    tranchePlan: tranchePlan,
     invalidationRule: invalidRule,
-    scalePlan: scalePlan
+    scalePlan: scalePlan,
+    expectancy: exp,
+    timeDecay: decay
   };
   row.formation = formation;
   row.convictionScore = score;
-  row.expectancy = sgCalcSetupExpectancy(row, prec, intel);
-  row.decay = sgEvaluateSetupDecay(row, prec, intel);
+  row.expectancy = exp;
+  row.decay = decay;
+  row.timeDecay = decay;
   return formation;
 }
 
@@ -3255,6 +3303,19 @@ function mount(el){
             + String(r.formation.triggerCondition || '') + ' · '
             + String(r.formation.invalidationRule || '') + ' · '
             + String(r.formation.scalePlan || '') + '</div>')
+          : '')
+        + (r.formation && r.formation.tranchePlan
+          ? ('<div class="hg-note" data-sg-tranches="1">' + String(r.formation.tranchePlan) + '</div>')
+          : '')
+        + (r.expectancy && r.expectancy.ok
+          ? ('<div class="hg-note" data-sg-expect="1">E[R] +' + fmt(r.expectancy.expectedValueR, 2)
+            + 'R on a ' + r.expectancy.estWinPct + '% estimate. Half-Kelly '
+            + fmt(r.expectancy.halfKellyRiskPct, 2) + '%.</div>')
+          : '')
+        + (r.timeDecay
+          ? ('<div class="hg-note" data-sg-ttl="1">Validity ' + String(r.timeDecay.status)
+            + (r.timeDecay.ttlLeftMin != null ? (' (' + r.timeDecay.ttlLeftMin + 'm left)') : ' (bar time unread)')
+            + '.</div>')
           : '')
         + (r.precision && r.precision.ok && !r.precision.unread && Array.isArray(r.precision.entryZone)
           ? ('<div class="hg-note" data-sg-zone="1">Entry zone '

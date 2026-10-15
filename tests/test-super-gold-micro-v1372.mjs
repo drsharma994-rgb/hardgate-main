@@ -79,7 +79,9 @@ async function runTests() {
   assert.equal(top.precision.entryTranches[0].weightPct, 60);
   assert.equal(top.precision.entryTranches[1].weightPct, 40);
   assert.ok(top.precision.blendedEntry < top.precision.entry, 'blend ' + top.precision.blendedEntry + ' entry ' + top.precision.entry);
-  assert.ok(top.expectancy);
+  assert.ok(top.formation && top.formation.tranchePlan.includes('60% @'));
+  assert.equal(typeof top.formation.timeDecay.ttlLeftMin, 'number');
+  assert.ok(top.formation.expectancy.summary.includes('E[R]'));
   assert.ok(top.expectancy.estWinPct >= 60, 'win ' + top.expectancy.estWinPct);
   assert.ok(top.expectancy.expectedValueR >= 1.2, 'ev ' + top.expectancy.expectedValueR);
   assert.ok(top.expectancy.halfKellyRiskPct >= 0.25 && top.expectancy.halfKellyRiskPct <= 1.5, 'kelly ' + top.expectancy.halfKellyRiskPct);

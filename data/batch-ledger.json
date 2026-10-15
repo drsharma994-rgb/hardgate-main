@@ -330,6 +330,11 @@
       "version": "hg-v1372",
       "built": "2026-10-15T10:00:00Z",
       "note": "Super Gold reads unfilled 15m gaps and order blocks. The suggestion can be two limits, 60 percent at the entry and 40 percent at the nearest deeper level on the tape. Expectancy uses the measured reward. A limit that price has already run 90 percent of the way to TP1 is not chased. A tape-only setup is kept off the crown."
+    },
+    {
+      "version": "hg-v1373",
+      "built": "2026-10-15T11:00:00Z",
+      "note": "The card shows the 60/40 limit, the measured expectancy, and how many minutes the signal has left. A limit is stale once price has run 85 percent of the way to TP1 and no recent bar tagged it. A missing bar time does not invent a full clock. The desk entry stays the desk entry."
     }
   ]
 }
