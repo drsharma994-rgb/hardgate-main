@@ -81,6 +81,77 @@ const scalp = crown.filter(v => v.id === 'goldscalp')[0];
 assert.equal(scalp.state, 'setup');
 assert.equal(scalp.side, 'long');
 
+const one = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SWING', state: 'setup', side: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78 }
+], { px: 4174.2 });
+assert.equal(one.ready, false);
+assert.equal(one.shortCount, 1);
+assert.match(one.reason, /1 gold desk published/);
+assert.doesNotMatch(one.reason, /1 gold desks/);
+
+const copied = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SWING', state: 'setup', side: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78 },
+  { desk: 'SUPER GOLD', state: 'setup', side: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78 },
+  { desk: 'GOLD PINE', state: 'setup', side: 'short', entry: 4174.42, stop: 4210.16, t1: 4120.79 }
+], { px: 4174 });
+assert.equal(copied.ready, false);
+assert.equal(copied.shortCount, 1);
+
+const twoShort = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SWING', state: 'setup', side: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78 },
+  { desk: 'GOLD SCALP', state: 'setup', side: 'short', entry: 4170, stop: 4205, t1: 4110 }
+], { px: 4174 });
+assert.equal(twoShort.ready, false);
+assert.equal(twoShort.shortCount, 2);
+
+win.goldscalpScan = () => ({ cands: [], whySilent: 'no 15m setup' });
+const silent = win.hgGoldConfluenceRead(win).filter(v => v.id === 'goldscalp')[0];
+assert.equal(silent.state, 'none');
+assert.match(silent.note, /no entry, stop, and target/);
+assert.match(silent.note, /no 15m setup/);
+win.goldDirectionScan = () => null;
+const dir = win.hgGoldConfluenceRead(win).filter(v => v.id === 'golddirection')[0];
+assert.equal(dir.state, 'unread');
+assert.match(dir.note, /LONG or SHORT/);
+
+const gw = {
+  Date, Math, Number, String, Array, Object, Promise, isFinite,
+  setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+  clearTimeout: (h) => globalThis.clearTimeout(h),
+  HG_tabs: [],
+  HG_warmups: []
+};
+gw.window = gw;
+gw.globalThis = gw;
+vm.createContext(gw);
+vm.runInContext(code, gw);
+gw.goldscalpScan = () => ({ cands: [row(2650, 2640, 2670)] });
+gw.goldswingScan = () => ({ cands: [row(2651, 2642, 2668)] });
+gw.superGoldScan = () => ({ cands: [row(2652, 2638, 2672)] });
+gw.goldPineScan = () => null;
+gw.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+let warmed = 0;
+gw.HG_warmups.push({
+  id: 'goldpine',
+  run(){
+    warmed += 1;
+    gw.goldPineScan = () => ({ cands: [row(2653, 2641, 2674)] });
+    return 'warmed';
+  }
+});
+const gathered = await gw.hgGoldConfluenceScan(gw, { gather: true });
+assert.equal(warmed, 1);
+assert.equal(gathered.ready, true);
+assert.equal(gathered.entry, 2651.5);
+assert.equal(gathered.longCount, 4);
+warmed = 0;
+gw.goldPineScan = () => null;
+await gw.hgGoldConfluenceScan(gw);
+assert.equal(warmed, 0);
+gw.crypto = { randomUUID: () => 'x' };
+await gw.hgGoldConfluenceScan(gw, { gather: true });
+assert.equal(warmed, 0);
+
 const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 assert.match(index, /gold-confluence\.js\?v=/);

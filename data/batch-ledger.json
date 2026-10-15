@@ -109,7 +109,7 @@
     {
       "version": "hg-v1319",
       "built": "2026-10-13T18:45:00Z",
-      "note": "CANDLE FORECAST names every remaining gold tab beside the candle pattern. OMNIGOLD DESK is driven on this tape. OPTI GOLD counts only a live open or waiting setup from its last scan. NEW GOLD counts only when its own three legs fire, and that level is not the stop. SUPER GOLD counts only a scan already on the page. MILLI GOLD is named and has no side. An unscanned or unloaded engine stays unread and is never agreement. A confluence ticket — a named candle pattern, two families with the call, none against — becomes the setup, including on the scalp bracket. The stop stays the pattern extreme or one ATR. Tab prices are not the stop. Four more candle shapes are named beside the call and do not vote: matching high and low, separating lines, stick sandwich, and upside-gap two crows."
+      "note": "CANDLE FORECAST names every remaining gold tab beside the candle pattern. OMNIGOLD DESK is driven on this tape. OPTI GOLD counts only a live open or waiting setup from its last scan. NEW GOLD counts only when its own three legs fire, and that level is not the stop. SUPER GOLD counts only a scan already on the page. MILLI GOLD is named and has no side. An unscanned or unloaded engine stays unread and is never agreement. A confluence ticket \u2014 a named candle pattern, two families with the call, none against \u2014 becomes the setup, including on the scalp bracket. The stop stays the pattern extreme or one ATR. Tab prices are not the stop. Four more candle shapes are named beside the call and do not vote: matching high and low, separating lines, stick sandwich, and upside-gap two crows."
     },
     {
       "version": "hg-v1320",
@@ -269,7 +269,7 @@
     {
       "version": "hg-v1360",
       "built": "2026-10-15T00:30:00Z",
-      "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR — a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
+      "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR \u2014 a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
     },
     {
       "version": "hg-v1361",
@@ -279,7 +279,7 @@
     {
       "version": "hg-v1362",
       "built": "2026-10-15T02:30:00Z",
-      "note": "SUPER GOLD's intelligence layer becomes an audit: a CROWN AUDIT grades the crowned row on nine printed checks (both desks on one side, GRADE A PASS, candles travelling with the crown, four-of-five timeframes on the crowned side, the entry at marked structure, a tradeable volatility regime, feeds agreeing, no news blackout, no fundamental headwind) with a feed lock or blackout capping the grade at C — the audit never uncrowns and is not a probability; a DISTANCE read names how far the source desk's sizing mark sits from the entry in dollars and ATR; the desk intel gains the cross-feed quality check and the structure map from the shared hgCfIntel readers; and the desk publishes one alert candidate through tabalerts only when crowned at GRADE B or better, expiring with the scan that earned it. All version surfaces move together."
+      "note": "SUPER GOLD's intelligence layer becomes an audit: a CROWN AUDIT grades the crowned row on nine printed checks (both desks on one side, GRADE A PASS, candles travelling with the crown, four-of-five timeframes on the crowned side, the entry at marked structure, a tradeable volatility regime, feeds agreeing, no news blackout, no fundamental headwind) with a feed lock or blackout capping the grade at C \u2014 the audit never uncrowns and is not a probability; a DISTANCE read names how far the source desk's sizing mark sits from the entry in dollars and ATR; the desk intel gains the cross-feed quality check and the structure map from the shared hgCfIntel readers; and the desk publishes one alert candidate through tabalerts only when crowned at GRADE B or better, expiring with the scan that earned it. All version surfaces move together."
     },
     {
       "version": "hg-v1363",
@@ -390,6 +390,11 @@
       "version": "hg-v1384",
       "built": "2026-10-15T22:00:00Z",
       "note": "CONFLUENCE is a new tab in the gold group. It reads the setups the gold desks have already published and forms one plan only when at least three of them agree on the side and none of them published the other side. At least two of those plans must sit on the live IUX gold price. The entry is the median of those plans. It is not moved to the live price. A missing IUX quote prints no live setup."
+    },
+    {
+      "version": "hg-v1385",
+      "built": "2026-10-15T23:00:00Z",
+      "note": "CONFLUENCE now runs the gold desks that can scan on their own before it votes. A desk that has not published a plan says so. A copy of another desk plan is not a second vote. Three different desks must still agree, and the entry stays the median, not the live IUX print."
     }
   ]
 }

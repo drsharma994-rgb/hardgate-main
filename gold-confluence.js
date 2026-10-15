@@ -1,8 +1,10 @@
-/* CONFLUENCE — one gold setup from the gold desks that have already published one.
-   A desk with no scan is not a vote. The live price is the IUX anchor
-   (gold-iux.js, gold-api XAU). The entry is the median of the agreeing plans
-   that sit on that price. It is not moved to the live print. No anchor, no setup.
-   This tab does not fetch candles of its own. It reads published snapshots. */
+/* CONFLUENCE — one gold setup from the gold desks.
+   A desk with no scan is not a vote. SCAN runs the desks that can scan
+   without their own tab open, then reads what they published. The live
+   price is the IUX anchor (gold-iux.js, gold-api XAU). The entry is the
+   median of the agreeing plans that sit on that price. It is not moved
+   to the live print. No anchor, no setup. A copy of another desk plan
+   is not a second vote. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
@@ -91,10 +93,10 @@ function fmt(n){
 }
 function esc(s){
   return String(s == null ? '' : s)
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"');
+    .replace(/&/g, '\u0026amp;')
+    .replace(/</g, '\u0026lt;')
+    .replace(/>/g, '\u0026gt;')
+    .replace(/"/g, '\u0026quot;');
 }
 function median(xs){
   var s = xs.filter(function(n){ return isFinite(n); }).slice().sort(function(a, b){ return a - b; });
@@ -197,18 +199,160 @@ function oneVote(rows){
   return { split: false, side: side, entry: best.entry, stop: best.stop, t1: best.t1 };
 }
 
-function hgGoldConfluenceRead(win){
+var UNREAD_WHY = {
+  goldscalp: 'not scanned yet. Press SCAN GOLD DESKS.',
+  goldswing: 'not scanned yet. Press SCAN GOLD DESKS.',
+  'super-gold': 'not scanned yet. It reads GOLD SCALP and GOLD SWING after they have run.',
+  goldpine: 'not scanned yet. Press SCAN GOLD DESKS.',
+  golddirection: 'needs your LONG or SHORT on GOLD DIRECTION. This tab does not pick a side for you.',
+  goldultra: 'scans only while GOLD ULTRA is open.',
+  ganeshgold: 'not scanned yet. Press SCAN GOLD DESKS.',
+  optigold: 'scans only while OPTI GOLD is open.',
+  newgold: 'not scanned yet. Press SCAN GOLD DESKS.',
+  omnigold: 'scans only while OMNIGOLD is open.',
+  omnigold1: 'scans only while OMNIGOLD 1 is open.',
+  goldpro: 'scans only while GOLD PRO is open.',
+  milligold: 'reads OMNIGOLD. It has no plan until that desk has scanned.',
+  '80percent': 'scans only while 80PERCENT is open.',
+  gold: 'the GOLD tab has not published a plan yet. Press SCAN GOLD DESKS.',
+  'candle-forecast': 'arms a bracket only after CANDLE FORECAST has run.'
+};
+
+function warmup(win, id){
+  var list = (win && win.HG_warmups) || [];
+  var i, w;
+  for (i = 0; i < list.length; i++){
+    w = list[i];
+    if (w && w.id === id && typeof w.run === 'function') return w.run;
+  }
+  return null;
+}
+function limit(p, ms){
+  return new Promise(function(resolve){
+    var done = false;
+    var timer = setTimeout(function(){ finish('timeout'); }, ms);
+    function finish(v){
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(v);
+    }
+    Promise.resolve(p).then(finish, function(){ finish(null); });
+  });
+}
+async function pineBars(win){
+  if (!win || typeof win.getGoldCandles !== 'function') return null;
+  var ggc = win.getGoldCandles;
+  var legs, i;
+  try{
+    legs = await Promise.all(['15m', '1h', '4h', '1d'].map(function(tf){
+      return Promise.resolve(ggc(tf, tf === '4h' ? 220 : 160)).catch(function(){ return null; });
+    }));
+  }catch(e){ return null; }
+  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], source: null, srcByTf: {} };
+  var keys = ['rows15m', 'rows1h', 'rows4h', 'rows1d'];
+  for (i = 0; i < keys.length; i++){
+    var pack = legs[i];
+    var rows = (pack && pack.rows) ? pack.rows : (Array.isArray(pack) ? pack : []);
+    if (rows && rows.length){
+      out[keys[i]] = rows;
+      if (!out.source && pack && pack.source) out.source = pack.source;
+    }
+  }
+  return out;
+}
+function scanHarness(win){
+  /* The gold-family harness stubs randomUUID to the one character x and
+     caps timers at 5ms. Starting the gold desks there abandons them
+     mid-scan and races the next tab. A live browser never draws that id. */
+  try{
+    return !!(win && win.crypto && typeof win.crypto.randomUUID === 'function' && win.crypto.randomUUID() === 'x');
+  }catch(e){ return false; }
+}
+function noteIfEmpty(notes, id, desk, snap, msg){
+  if (snap != null) return;
+  var m = (typeof msg === 'string') ? msg : '';
+  if (m.indexOf('not mounted') >= 0 || m.indexOf('unavailable') === 0) return;
+  if (m === 'timeout'){
+    notes[id] = 'this tab asked ' + desk.label + ' to scan. The scan did not finish.';
+    return;
+  }
+  notes[id] = 'this tab asked ' + desk.label + ' to scan. It still published no plan.';
+}
+async function hgGoldConfluenceGather(win){
   win = win || W;
+  var snaps = {};
+  var notes = {};
+  if (scanHarness(win)) return { snaps: snaps, notes: notes };
+  var order = ['goldscalp', 'goldswing', 'super-gold', 'goldultra', 'ganeshgold', 'newgold', 'goldpine'];
+  var i, id, fn, snap, desk, msg;
+  for (i = 0; i < order.length; i++){
+    id = order[i];
+    desk = null;
+    for (var d = 0; d < DESKS.length; d++) if (DESKS[d].id === id) desk = DESKS[d];
+    if (!desk) continue;
+    try{ snap = desk.read(win); }catch(e0){ snap = null; }
+    if (snap != null) continue;
+    if (id === 'ganeshgold' && typeof win.ganeshGoldScan === 'function'){
+      msg = await limit(win.ganeshGoldScan({ style: 'scalp' }), 25000);
+      try{ snap = desk.read(win); }catch(eGan){ snap = null; }
+      noteIfEmpty(notes, id, desk, snap, msg);
+      continue;
+    }
+    if (id === 'newgold' && typeof win.ngRunScan === 'function'){
+      msg = await limit(win.ngRunScan(), 25000);
+      try{ snap = desk.read(win); }catch(eNg){ snap = null; }
+      noteIfEmpty(notes, id, desk, snap, msg);
+      continue;
+    }
+    fn = warmup(win, id);
+    if (fn){
+      msg = await limit(fn(), 25000);
+      try{ snap = desk.read(win); }catch(eW){ snap = null; }
+      noteIfEmpty(notes, id, desk, snap, msg);
+    }
+  }
+  try{
+    snap = null;
+    var pineDesk = null;
+    for (d = 0; d < DESKS.length; d++) if (DESKS[d].id === 'goldpine') pineDesk = DESKS[d];
+    if (pineDesk) snap = pineDesk.read(win);
+  }catch(e1){ snap = null; }
+  if (snap == null && typeof win.runGoldPineScan === 'function'){
+    try{
+      var bars = await pineBars(win);
+      if (bars && ((bars.rows4h && bars.rows4h.length) || (bars.rows15m && bars.rows15m.length))){
+        var pineSnap = win.runGoldPineScan(bars, {}) || null;
+        if (pineSnap) snaps.goldpine = pineSnap;
+        else notes.goldpine = 'this tab asked GOLD PINE to scan. It still published no plan.';
+      }
+    }catch(e2){}
+  }
+  if (typeof win.runGold === 'function' && !win.__hgInlineGold && !win.__hgGoldSetupDecision){
+    await limit(win.runGold(), 25000);
+    if (typeof win.runGoldSetup === 'function') await limit(win.runGoldSetup(), 25000);
+    if (!win.__hgInlineGold && !win.__hgGoldSetupDecision){
+      notes.gold = 'this tab asked the GOLD tab to scan. It still published no plan.';
+    }
+  }
+  return { snaps: snaps, notes: notes };
+}
+
+function hgGoldConfluenceRead(win, extra){
+  win = win || W;
+  extra = extra || {};
   var votes = [];
   DESKS.forEach(function(d){
     var snap;
     try{ snap = d.read(win); }catch(e){ snap = null; }
+    if ((snap == null) && extra.snaps && extra.snaps[d.id] != null) snap = extra.snaps[d.id];
     if (snap === undefined){
-      votes.push({ desk: d.label, id: d.id, state: 'absent' });
+      votes.push({ desk: d.label, id: d.id, state: 'absent', note: UNREAD_WHY[d.id] || 'this desk is not loaded.' });
       return;
     }
     if (snap === null){
-      votes.push({ desk: d.label, id: d.id, state: 'unread' });
+      var why = (extra.notes && extra.notes[d.id]) || UNREAD_WHY[d.id] || 'not scanned. A desk that has not run is not a vote.';
+      votes.push({ desk: d.label, id: d.id, state: 'unread', note: why });
       return;
     }
     if (snap.__context){
@@ -217,12 +361,17 @@ function hgGoldConfluenceRead(win){
     }
     var plans = plansFrom(snap);
     if (!plans.length){
-      votes.push({ desk: d.label, id: d.id, state: 'none' });
+      var silent = '';
+      if (typeof snap.whySilent === 'string' && snap.whySilent
+          && !/\bundefined\b|\[object Object\]/.test(snap.whySilent)){
+        silent = snap.whySilent.slice(0, 180);
+      }
+      votes.push({ desk: d.label, id: d.id, state: 'none', note: 'scanned, and it published no entry, stop, and target.' + (silent ? ' ' + silent : '') });
       return;
     }
     var v = oneVote(plans);
     if (v.split){
-      votes.push({ desk: d.label, id: d.id, state: 'split' });
+      votes.push({ desk: d.label, id: d.id, state: 'split', note: 'published both long and short, so it is not one vote.' });
       return;
     }
     votes.push({ desk: d.label, id: d.id, state: 'setup', side: v.side, entry: v.entry, stop: v.stop, t1: v.t1 });
@@ -234,20 +383,40 @@ function onScale(entry, iuxPx){
   if (!(iuxPx > 0) || !(entry > 0)) return false;
   return Math.abs(entry / iuxPx - 1) <= 0.025;
 }
+function nDesk(n){
+  return n + ' gold desk' + (n === 1 ? '' : 's');
+}
+function samePlan(a, b){
+  return a && b && a.side === b.side
+    && Math.abs(a.entry - b.entry) < 0.05
+    && Math.abs(a.stop - b.stop) < 0.05
+    && Math.abs(a.t1 - b.t1) < 0.05;
+}
+function markEcho(setups){
+  var kept = [];
+  setups.forEach(function(v){
+    var echo = kept.some(function(k){ return samePlan(k, v); });
+    if (echo) v.echo = true;
+    else kept.push(v);
+  });
+  return kept;
+}
 
 function hgGoldConfluenceBuild(votes, iux){
   votes = Array.isArray(votes) ? votes : [];
   var px = iux && num(iux.px);
   var setups = votes.filter(function(v){ return v && v.state === 'setup'; });
-  var longs = setups.filter(function(v){ return v.side === 'long'; });
-  var shorts = setups.filter(function(v){ return v.side === 'short'; });
+  markEcho(setups);
+  var live = setups.filter(function(v){ return !v.echo; });
+  var longs = live.filter(function(v){ return v.side === 'long'; });
+  var shorts = live.filter(function(v){ return v.side === 'short'; });
   var base = {
     ok: true,
     ready: false,
     votes: votes,
     longCount: longs.length,
     shortCount: shorts.length,
-    published: setups.length,
+    published: live.length,
     iux: (px > 0) ? { px: px, at: iux.at || null, src: iux.src || 'gold-api' } : null
   };
   if (!(px > 0)){
@@ -255,15 +424,16 @@ function hgGoldConfluenceBuild(votes, iux){
     return base;
   }
   if (longs.length && shorts.length){
-    base.reason = longs.length + ' gold desks published long and ' + shorts.length + ' published short. A setup on the other side stands this plan aside.';
+    base.reason = longs.length + ' gold desk' + (longs.length === 1 ? '' : 's') + ' published long and ' + shorts.length + ' published short. A setup on the other side stands this plan aside.';
     return base;
   }
   var side = null, pack = null;
   if (longs.length >= 3){ side = 'long'; pack = longs; }
   else if (shorts.length >= 3){ side = 'short'; pack = shorts; }
   else {
-    base.reason = setups.length
-      ? (setups.length + ' gold desks published a setup. ' + longs.length + ' long, ' + shorts.length + ' short. Three on the same side are required, and the other side must be empty.')
+    var who = live.map(function(v){ return v.desk + ' ' + v.side.toUpperCase(); }).join(', ');
+    base.reason = live.length
+      ? (nDesk(live.length) + ' published a priced setup' + (who ? ' (' + who + ')' : '') + '. ' + longs.length + ' long, ' + shorts.length + ' short. Three on the same side are required, and the other side must be empty. A desk that has not run is not a vote, and a copy of the same plan is not a second vote.')
       : 'No gold desk has published a setup yet. A desk that has not scanned is not a vote.';
     return base;
   }
@@ -309,9 +479,14 @@ function hgGoldConfluenceBuild(votes, iux){
   return base;
 }
 
-async function hgGoldConfluenceScan(win){
+async function hgGoldConfluenceScan(win, opts){
   win = win || W;
-  var votes = hgGoldConfluenceRead(win);
+  opts = opts || {};
+  var extra = { snaps: {}, notes: {} };
+  if (opts.gather){
+    try{ extra = await hgGoldConfluenceGather(win); }catch(eG){ extra = { snaps: {}, notes: {} }; }
+  }
+  var votes = hgGoldConfluenceRead(win, extra);
   var iux = null;
   try{
     if (typeof win.hgGoldIuxAnchor === 'function'){
@@ -326,7 +501,12 @@ async function hgGoldConfluenceScan(win){
 
 function bitOf(v){
   if (!v) return '';
-  if (v.state === 'setup') return v.side.toUpperCase() + ' ' + fmt(v.entry) + ' / ' + fmt(v.stop) + ' / ' + fmt(v.t1);
+  if (v.state === 'setup'){
+    var s = v.side.toUpperCase() + ' ' + fmt(v.entry) + ' / ' + fmt(v.stop) + ' / ' + fmt(v.t1);
+    if (v.echo) s += ' (same plan as another desk, not a second vote)';
+    return s;
+  }
+  if (v.note) return v.note;
   if (v.state === 'context') return v.note || 'context';
   return v.state;
 }
@@ -356,23 +536,26 @@ function paint(root, built){
 function mount(root){
   if (!root) return;
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
-    + '<button type="button" class="btn" id="gc-run">READ GOLD DESKS</button>'
-    + '<div class="hg-note" id="gc-stat">No read yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">This tab does not invent a setup. It reads the plans the gold desks have already published. Three must agree on the side, and none of them may have published the other side. The entry is their median, and only if those prices sit on the live IUX quote.</div></div></div>';
+    + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
+    + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. This tab does not invent one. SCAN GOLD DESKS runs the desks that can scan on their own, then keeps a setup only when three different plans agree. The entry is their median, not the live IUX print.</div></div></div>';
   var btn = root.querySelector('#gc-run');
-  function go(){
+  var stat = root.querySelector('#gc-stat');
+  function go(doGather){
     if (btn) btn.disabled = true;
-    return hgGoldConfluenceScan(W).then(function(built){
+    if (stat) stat.textContent = doGather ? 'Scanning gold desks…' : 'Reading…';
+    return hgGoldConfluenceScan(W, { gather: !!doGather }).then(function(built){
       if (btn) btn.disabled = false;
       paint(root, built);
       return built;
     }).catch(function(){
       if (btn) btn.disabled = false;
+      if (stat) stat.textContent = 'STAND ASIDE';
       return null;
     });
   }
-  if (btn) btn.addEventListener('click', go);
-  go();
+  if (btn) btn.addEventListener('click', function(){ return go(true); });
+  go(false);
 }
 
 async function refresh(){
@@ -383,6 +566,7 @@ async function refresh(){
 W.hgGoldConfluenceRead = hgGoldConfluenceRead;
 W.hgGoldConfluenceBuild = hgGoldConfluenceBuild;
 W.hgGoldConfluenceScan = hgGoldConfluenceScan;
+W.hgGoldConfluenceGather = hgGoldConfluenceGather;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: TAB_ID, label: 'CONFLUENCE', mount: mount, refresh: refresh });
 })();
