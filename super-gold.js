@@ -25,7 +25,8 @@ var __sg = {
   mounted: false, syncTimer: null, scanTimer: null, root: null,
   lastKey: '', selectedId: null, scanBusy: false, lastScanAt: 0,
   scanPromise: null, lastScanMsg: '', selectedHit: null,
-  dispatchedKeys: {}, lastDispatch: null
+  dispatchedKeys: {}, lastDispatch: null,
+  intelHealTimer: null, intelHealCount: 0
 };
 
 function N(v){ return Number(v); }
@@ -2365,9 +2366,37 @@ function sgPublishAlert(snap){
   }catch(eAl){ /* an alert is a dispatch, never a reason the desk fails */ }
 }
 
+function sgScheduleIntelHeal(win){
+  win = win || W;
+  if (__sg.intelHealTimer) clearTimeout(__sg.intelHealTimer);
+  var snap = superGoldScan();
+  if (!snap || !sgSnapFresh(snap)) return;
+  var intel = snap.intel;
+  var missing = intel && intel.diagnostics && intel.diagnostics.missingLegs;
+  var needsHeal = !intel || !intel.ok || (Array.isArray(missing) && missing.length > 0);
+  if (!needsHeal || __sg.intelHealCount >= 2) return;
+  __sg.intelHealTimer = setTimeout(async function(){
+    __sg.intelHealTimer = null;
+    if (__sg.scanBusy) return;
+    var cur = superGoldScan();
+    if (!cur || !sgSnapFresh(cur)) return;
+    __sg.intelHealCount++;
+    try{
+      var healed = await superGoldIntel(win, { retries: 1 });
+      if (healed && healed.ok && !(healed.diagnostics && healed.diagnostics.missingLegs && healed.diagnostics.missingLegs.length)){
+        cur.intel = healed;
+        sgStampPrecision(cur);
+        superGoldAfterScan(cur);
+        sgPublishAlert(superGoldScan());
+      }
+    }catch(eH){}
+  }, 4000);
+}
+
 async function superGoldRunScanInner(opts){
   opts = opts || {};
   __sg.scanBusy = true;
+  __sg.intelHealCount = 0;
   __sg.lastScanMsg = 'Scanning GOLD SCALP + GOLD SWING…';
   if (__sg.mounted && typeof __sg.setScanStatus === 'function') __sg.setScanStatus(__sg.lastScanMsg);
   try{
@@ -2400,6 +2429,7 @@ async function superGoldRunScanInner(opts){
     __sg.lastScanAt = snap.scanAt;
     superGoldAfterScan(snap);
     sgPublishAlert(superGoldScan());
+    sgScheduleIntelHeal(W);
     return snap.cands.length ? ('ok · ' + snap.cands.length + ' setups') : 'ok · 0 setups';
   }catch(e){
     __sg.lastScanMsg = 'Scan error: ' + ((e && e.message) ? e.message : String(e));
@@ -2797,14 +2827,16 @@ function mount(el){
     try{
       var exNow = sgCrownExecution(snap);
       if ((exNow.state === 'ARMED' || exNow.state === 'TRIGGERED') && intel && Array.isArray(intel.rows15)){
-        sgDrawChart(host, intel.rows15, exNow);
+        var crownedNow = sgCrownedRow(snap);
+        var precNow = crownedNow && crownedNow.row && crownedNow.row.precision;
+        sgDrawChart(host, intel.rows15, exNow, precNow);
       }
     }catch(eCh){}
   }
 
   /* hg-v1363: the crowned bracket on the tape — last 60 closed 15m candles
      with entry / stop / T1 as level lines. Plain canvas, no dependency. */
-  function sgDrawChart(host, rows, ex){
+  function sgDrawChart(host, rows, ex, prec){
     var wrap = host && host.querySelector ? host.querySelector('#sg-crown-chart') : null;
     if (!wrap || typeof document === 'undefined' || !document.createElement) return;
     rows = Array.isArray(rows) ? rows.slice(-60) : [];
@@ -2823,6 +2855,13 @@ function mount(el){
     if (isFinite(ex.entry)) lvls.push({ px: ex.entry, color: '#2563eb', label: 'entry' });
     if (isFinite(ex.stop)) lvls.push({ px: ex.stop, color: '#dc262c', label: 'stop' });
     if (isFinite(ex.t1)) lvls.push({ px: ex.t1, color: '#15803d', label: 't1' });
+    if (prec && prec.ok && prec.unread !== true && sgPrecisionOrdered(prec)){
+      lvls.push({ px: prec.entry, color: '#60a5fa', label: 'suggest entry' });
+      lvls.push({ px: prec.stop, color: '#f59e0b', label: 'suggest stop' });
+      lvls.push({ px: prec.t1, color: '#34d399', label: 'suggest tp1' });
+      if (isFinite(prec.t2)) lvls.push({ px: prec.t2, color: '#10b981', label: 'suggest tp2' });
+      if (isFinite(prec.t3)) lvls.push({ px: prec.t3, color: '#06b6d4', label: 'suggest tp3' });
+    }
     lvls.forEach(function(l){ if (l.px < lo) lo = l.px; if (l.px > hi) hi = l.px; });
     if (!(hi > lo)) return;
     var pad = 8, Wd = cv.width - pad * 2, Ht = cv.height - pad * 2;
@@ -2952,6 +2991,17 @@ function mount(el){
         + sgGeoLine(r)
         + '</div>'
         + '<div class="hg-note" style="margin-top:8px">' + String(r.strategy || '')
+        + (r.formation
+          ? ('<div class="hg-note" data-sg-playbook="1"><b>Playbook:</b> '
+            + String(r.formation.triggerCondition || '') + ' · '
+            + String(r.formation.invalidationRule || '') + ' · '
+            + String(r.formation.scalePlan || '') + '</div>')
+          : '')
+        + (r.precision && r.precision.ok && !r.precision.unread && Array.isArray(r.precision.entryZone)
+          ? ('<div class="hg-note" data-sg-zone="1">Entry zone '
+            + fmt(r.precision.entryZone[0], 2) + ' to ' + fmt(r.precision.entryZone[1], 2)
+            + '. Desk entry stays ' + fmt(r.entry, 2) + '.</div>')
+          : '')
         + (r.precision && r.precision.ok && !r.precision.unread
           ? ('<div class="hg-note" data-sg-send="1">SEND '
             + fmt(r.precision.entry, 2) + ' / stop ' + fmt(r.precision.stop, 2)

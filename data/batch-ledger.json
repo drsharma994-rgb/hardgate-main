@@ -320,6 +320,11 @@
       "version": "hg-v1370",
       "built": "2026-10-15T08:00:00Z",
       "note": "Super Gold names the setup. Judas sweep, OTE reload, coil breakout, or VWAP. A scalp and a swing on the same side fuse. The scalp entry and stop stay. The swing target is kept when it is farther. Forming levels show distance, readiness, and a projected stop and target. An unread ATR does not invent that distance."
+    },
+    {
+      "version": "hg-v1371",
+      "built": "2026-10-15T09:00:00Z",
+      "note": "The card shows the playbook and the measured entry zone beside the desk entry, which stays put. The chart draws the suggested ladder only when it was measured. A scan with a missing candle leg retries once. An unread ladder is not drawn and is not sent."
     }
   ]
 }
