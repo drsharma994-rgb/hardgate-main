@@ -549,11 +549,11 @@
       "expired": true
     },
     "ADA": {
-      "at": "2026-10-12T14:18:11.342Z",
-      "score": 4,
+      "at": "2026-10-15T16:05:31.061Z",
+      "score": 2,
       "fresh": true,
-      "ago": 4,
-      "crossDay": "2026-10-07",
+      "ago": 8,
+      "crossDay": "2026-10-06",
       "expired": true
     },
     "OGN": {
@@ -573,10 +573,10 @@
       "expired": true
     },
     "RLC": {
-      "at": "2026-10-12T19:50:09.716Z",
-      "score": 5,
+      "at": "2026-10-15T16:05:33.049Z",
+      "score": 4,
       "fresh": true,
-      "ago": 3,
+      "ago": 6,
       "crossDay": "2026-10-08",
       "expired": true
     },
@@ -619,9 +619,17 @@
       "ago": 2,
       "crossDay": "2026-10-12",
       "expired": true
+    },
+    "NIGHT": {
+      "at": "2026-10-15T16:05:34.706Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 1,
+      "crossDay": "2026-10-13",
+      "expired": true
     }
   },
-  "lastRunAt": "2026-10-15T14:15:09.547Z",
+  "lastRunAt": "2026-10-15T16:05:50.639Z",
   "scanned": 504,
   "cards": 0
 }
