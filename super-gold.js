@@ -622,6 +622,18 @@ function sgPrecisionGoldLevels(row, intel, opts){
     sgAttachEntryPlan(precOut, sgDetectMicrostructureZones(rows15, null, side));
     precOut.liquidityMap = sgSessionLiquidityMap(rows15, side, precOut.entry);
     precOut.adverse = sgAdverseSelectionGuard({ dir: side }, precOut, { rows15: rows15 });
+    precOut.dolMagnet = null;
+    var dolPx = precOut.liquidityMap && precOut.liquidityMap.drawOnLiquidity && precOut.liquidityMap.drawOnLiquidity.px;
+    if (isFinite(+dolPx) && precOut.unread !== true){
+      var toward = isLong ? (+dolPx > precOut.entry) : (+dolPx < precOut.entry);
+      if (toward){
+        precOut.dolMagnet = {
+          px: +(+dolPx).toFixed(2),
+          suggested: +((isLong ? +dolPx - 0.35 : +dolPx + 0.35).toFixed(2)),
+          movedEntry: false
+        };
+      }
+    }
   }catch(ePlan){}
   return precOut;
 }
@@ -692,7 +704,7 @@ function sgDetectMicrostructureZones(rows, intel, side){
   var want = String(side || '').toLowerCase();
   if (want === 'buy' || want === 'bull') want = 'long';
   if (want === 'sell' || want === 'bear') want = 'short';
-  var out = { ok: rows.length >= 5, fvgs: [], obs: [], sweeps: [], breakers: [], nearestFvg: null, nearestOb: null, nearestBreaker: null, mssConfirmed: false, chochLevel: null, impulseZScore: null, sweepReclaimed: false };
+  var out = { ok: rows.length >= 5, fvgs: [], ifvgs: [], obs: [], sweeps: [], breakers: [], nearestFvg: null, nearestIfvg: null, nearestOb: null, nearestBreaker: null, mssConfirmed: false, chochLevel: null, impulseZScore: null, volCommitmentRatio: null, sweepReclaimed: false };
   if (!out.ok) return out;
   var bars = [];
   for (var i = 0; i < rows.length; i++){
@@ -811,7 +823,220 @@ function sgDetectMicrostructureZones(rows, intel, side){
   for (j = 0; j < out.sweeps.length; j++){
     if (!want || out.sweeps[j].side === want){ out.sweepReclaimed = true; break; }
   }
+  var atrM = sgCalcBarsAtr(rows, 14);
+  var minGap = (isFinite(atrM) && atrM > 0) ? atrM * 0.06 : 0;
+  for (j = 2; j < bars.length - 1; j++){
+    b0 = bars[j - 2]; b2 = bars[j];
+    if (want !== 'short' && b0.l > b2.h && (b0.l - b2.h) > minGap){
+      var up = false;
+      for (k = j + 1; k < bars.length; k++){ if (bars[k].c > b0.l){ up = true; break; } }
+      if (up && refPx >= b2.h){
+        out.ifvgs.push({
+          side: 'long', top: +b0.l.toFixed(2), bottom: +b2.h.toFixed(2),
+          ce: +((b0.l + b2.h) / 2).toFixed(2), width: +(b0.l - b2.h).toFixed(2), index: j
+        });
+      }
+    } else if (want !== 'long' && b2.l > b0.h && (b2.l - b0.h) > minGap){
+      var dn = false;
+      for (k = j + 1; k < bars.length; k++){ if (bars[k].c < b0.h){ dn = true; break; } }
+      if (dn && refPx <= b2.l){
+        out.ifvgs.push({
+          side: 'short', top: +b2.l.toFixed(2), bottom: +b0.h.toFixed(2),
+          ce: +((b2.l + b0.h) / 2).toFixed(2), width: +(b2.l - b0.h).toFixed(2), index: j
+        });
+      }
+    }
+  }
+  out.nearestIfvg = out.ifvgs.length ? out.ifvgs[out.ifvgs.length - 1] : null;
+  var volKept = [];
+  for (j = 0; j < rows.length; j++){
+    if (!sgBarPx(rows[j])) continue;
+    var rawV = rows[j].v != null ? rows[j].v : rows[j].vol;
+    volKept.push((isFinite(N(rawV)) && N(rawV) > 0) ? N(rawV) : null);
+  }
+  var volNums = volKept.filter(function(v){ return v != null; });
+  if (volNums.length >= 2){
+    var meanVol = 0;
+    for (j = 0; j < volNums.length; j++) meanVol += volNums[j];
+    meanVol = meanVol / volNums.length;
+    var maxRecentVol = 0, sawRecent = false;
+    for (j = Math.max(0, volKept.length - 5); j < volKept.length; j++){
+      if (volKept[j] != null){ sawRecent = true; if (volKept[j] > maxRecentVol) maxRecentVol = volKept[j]; }
+    }
+    if (sawRecent && meanVol > 0) out.volCommitmentRatio = +(maxRecentVol / meanVol).toFixed(2);
+  }
   return out;
+}
+
+/* How many timeframes actually printed the same direction, and whether
+   the Asian range (00:00-07:00 UTC) or the prior UTC day was swept and
+   reclaimed. A missing row is not counted as aligned. No bar clock means
+   the session raid is unread, not a continuation. */
+function sgBarUtc(b){
+  if (!b || b.t == null || b.t === '') return null;
+  var n = +b.t;
+  if (!isFinite(n) || n <= 0) return null;
+  var ms = Math.abs(n) > 1e12 ? n : n * 1000;
+  var d = new Date(ms);
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
+function sgMultiTfFractalCascade(row, intel){
+  row = row || {};
+  intel = intel || {};
+  var side = String(row.dir || row.side || '').toLowerCase();
+  if (side === 'buy' || side === 'bull') side = 'long';
+  if (side === 'sell' || side === 'bear') side = 'short';
+  if (side !== 'long' && side !== 'short'){
+    return { ok: false, alignedCount: 0, totalTf: null, cascadeState: 'UNREAD', sessionRaid: 'UNREAD', ibRaided: false, summary: 'No side, so the cascade is unread' };
+  }
+  var isLong = side === 'long';
+  var wantDir = isLong ? 'BULL' : 'BEAR';
+  var ft = intel.fiveTf || null;
+  var tfRows = (ft && Array.isArray(ft.rows)) ? ft.rows : [];
+  var alignedCount = 0, htfAligned = false, ltfAligned = false, alignedList = [];
+  for (var i = 0; i < tfRows.length; i++){
+    var r = tfRows[i];
+    if (!r) continue;
+    var d = String(r.dir || '').toUpperCase();
+    var tf = String(r.tf || '').toLowerCase();
+    if (d !== wantDir) continue;
+    alignedCount++;
+    if (tf) alignedList.push(r.tf);
+    if (tf === '4h' || tf === '1d' || tf === '1h') htfAligned = true;
+    if (tf === '15m' || tf === '5m') ltfAligned = true;
+  }
+  var totalTf = tfRows.length ? tfRows.length : null;
+  var rows15 = Array.isArray(intel.rows15) ? intel.rows15 : [];
+  var ibHigh = -Infinity, ibLow = Infinity, asianN = 0;
+  var byDay = {};
+  for (i = 0; i < rows15.length; i++){
+    var b = rows15[i];
+    var dt = sgBarUtc(b);
+    if (!dt || !b) continue;
+    var bh = N(b.h != null ? b.h : b.high);
+    var bl = N(b.l != null ? b.l : b.low);
+    if (dt.getUTCHours() < 7){
+      asianN++;
+      if (isFinite(bh) && bh > ibHigh) ibHigh = bh;
+      if (isFinite(bl) && bl < ibLow) ibLow = bl;
+    }
+    var day = dt.toISOString().slice(0, 10);
+    if (!byDay[day]) byDay[day] = { hi: -Infinity, lo: Infinity };
+    if (isFinite(bh) && bh > byDay[day].hi) byDay[day].hi = bh;
+    if (isFinite(bl) && bl < byDay[day].lo) byDay[day].lo = bl;
+  }
+  var sessionRaid = 'UNREAD';
+  var ibRaided = false;
+  var lastC = null;
+  if (rows15.length){
+    var lastBar = rows15[rows15.length - 1];
+    lastC = N(lastBar && (lastBar.c != null ? lastBar.c : lastBar.close));
+  }
+  if (asianN >= 3 && isFinite(ibHigh) && isFinite(ibLow) && ibHigh > ibLow){
+    var sweptLo = false, sweptHi = false;
+    for (i = 0; i < rows15.length; i++){
+      var dt2 = sgBarUtc(rows15[i]);
+      if (!dt2 || dt2.getUTCHours() < 7) continue;
+      var bh2 = N(rows15[i].h != null ? rows15[i].h : rows15[i].high);
+      var bl2 = N(rows15[i].l != null ? rows15[i].l : rows15[i].low);
+      if (isFinite(bl2) && bl2 < ibLow) sweptLo = true;
+      if (isFinite(bh2) && bh2 > ibHigh) sweptHi = true;
+    }
+    if (isLong && sweptLo && isFinite(lastC) && lastC > ibLow){
+      sessionRaid = 'ASIAN_IB_LOW_SWEEP_RECLAIM';
+      ibRaided = true;
+    } else if (!isLong && sweptHi && isFinite(lastC) && lastC < ibHigh){
+      sessionRaid = 'ASIAN_IB_HIGH_SWEEP_REJECT';
+      ibRaided = true;
+    } else if (isLong && isFinite(lastC) && lastC > ibHigh){
+      sessionRaid = 'IB_RANGE_EXPANSION_BREAKOUT';
+    } else if (!isLong && isFinite(lastC) && lastC < ibLow){
+      sessionRaid = 'IB_RANGE_BREAKDOWN_EXPANSION';
+    } else {
+      sessionRaid = 'INSIDE_ASIAN_RANGE';
+    }
+  }
+  var days = Object.keys(byDay).sort();
+  var pdh = null, pdl = null, pdRaided = false;
+  if (days.length >= 2 && rows15.length){
+    var lastDay = sgBarUtc(rows15[rows15.length - 1]);
+    var lastKey = lastDay ? lastDay.toISOString().slice(0, 10) : days[days.length - 1];
+    var prevKey = null;
+    for (i = 0; i < days.length; i++){ if (days[i] < lastKey) prevKey = days[i]; }
+    if (prevKey && isFinite(byDay[prevKey].hi) && isFinite(byDay[prevKey].lo)){
+      pdh = +byDay[prevKey].hi.toFixed(2);
+      pdl = +byDay[prevKey].lo.toFixed(2);
+      var sweptPdl = false, sweptPdh = false;
+      for (i = 0; i < rows15.length; i++){
+        var dt3 = sgBarUtc(rows15[i]);
+        if (!dt3 || dt3.toISOString().slice(0, 10) !== lastKey) continue;
+        var bh3 = N(rows15[i].h != null ? rows15[i].h : rows15[i].high);
+        var bl3 = N(rows15[i].l != null ? rows15[i].l : rows15[i].low);
+        if (isFinite(bl3) && bl3 < pdl) sweptPdl = true;
+        if (isFinite(bh3) && bh3 > pdh) sweptPdh = true;
+      }
+      if (isLong && sweptPdl && isFinite(lastC) && lastC > pdl){
+        pdRaided = true;
+        if (!ibRaided) sessionRaid = 'PDL_SWEEP_RECLAIM';
+      } else if (!isLong && sweptPdh && isFinite(lastC) && lastC < pdh){
+        pdRaided = true;
+        if (!ibRaided) sessionRaid = 'PDH_SWEEP_REJECT';
+      }
+    }
+  }
+  var cascadeState = (htfAligned && ltfAligned && alignedCount >= 4)
+    ? 'FULL_FRACTAL_CASCADE'
+    : (htfAligned ? 'HTF_DOMINANT_ALIGN' : (ibRaided || pdRaided ? 'LIQUIDITY_RAID_REVERSAL' : (alignedCount > 0 ? 'PARTIAL_ALIGNMENT' : 'UNREAD')));
+  var countTxt = (totalTf != null) ? (alignedCount + '/' + totalTf + ' TF') : (alignedCount + ' TF');
+  return {
+    ok: cascadeState !== 'UNREAD' || sessionRaid !== 'UNREAD',
+    alignedCount: alignedCount,
+    totalTf: totalTf,
+    htfAligned: htfAligned,
+    ltfAligned: ltfAligned,
+    alignedTimeframes: alignedList,
+    cascadeState: cascadeState,
+    ibHigh: (asianN >= 3 && isFinite(ibHigh)) ? +ibHigh.toFixed(2) : null,
+    ibLow: (asianN >= 3 && isFinite(ibLow)) ? +ibLow.toFixed(2) : null,
+    ibRaided: ibRaided,
+    pdh: pdh,
+    pdl: pdl,
+    pdRaided: pdRaided,
+    sessionRaid: sessionRaid,
+    summary: cascadeState + ' (' + countTxt + ' · ' + sessionRaid + ')'
+  };
+}
+
+/* Breakeven win rate is 1 / (1 + measured R). A missing reward or a missing
+   win estimate stays unread. It is not filled in as 2.2R or 62%. The loss
+   is a full 1R, not a made-up 0.88. */
+function sgSetupRiskProfile(exp, prec){
+  exp = exp || {};
+  prec = prec || {};
+  var blended = null;
+  if (exp.ok === true && isFinite(+exp.rewardR) && +exp.rewardR > 0) blended = +exp.rewardR;
+  else if (prec && prec.ok === true && prec.unread !== true && isFinite(+prec.blendedRr) && +prec.blendedRr > 0) blended = +prec.blendedRr;
+  var win = (exp.ok === true && isFinite(+exp.estWinPct) && +exp.estWinPct > 0) ? +exp.estWinPct : null;
+  var kelly = (exp.ok === true && isFinite(+exp.halfKellyRiskPct) && +exp.halfKellyRiskPct > 0) ? +exp.halfKellyRiskPct : null;
+  if (!(blended > 0) || win == null){
+    return {
+      ok: false, unread: true, breakevenWinPct: null, edgeMarginPct: null,
+      streak5DdPct: null, ruinGrade: null,
+      why: 'No measured reward or win estimate, so the hurdle is unread'
+    };
+  }
+  var be = +((1 / (1 + blended)) * 100).toFixed(1);
+  var edge = +(win - be).toFixed(1);
+  var streak = (kelly != null) ? +((1 - Math.pow(1 - kelly / 100, 5)) * 100).toFixed(2) : null;
+  var grade = edge >= 30 ? 'FORTRESS' : (edge >= 20 ? 'INSTITUTIONAL' : (edge >= 10 ? 'STANDARD' : 'TIGHT'));
+  return {
+    ok: true, unread: false, lossR: 1,
+    breakevenWinPct: be, edgeMarginPct: edge, streak5DdPct: streak, ruinGrade: grade,
+    summary: 'BE hurdle ' + fmt(be, 1) + '% · edge +' + fmt(edge, 1) + '% (' + grade + ')'
+      + (streak != null ? (' · 5-loss DD ' + fmt(streak, 2) + '%') : '')
+  };
 }
 
 /* Equal highs and equal lows on the last 30 bars, the midpoint of that
@@ -1325,6 +1550,9 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
     tags.push('WAIT FOR CLOSE');
   }
   var exp = sgCalcSetupExpectancy(row, prec, intel);
+  var cascade = sgMultiTfFractalCascade(row, intel);
+  var riskProfile = sgSetupRiskProfile(exp, prec);
+  if (cascade && cascade.ibRaided && cascade.sessionRaid && cascade.sessionRaid !== 'UNREAD') tags.push(cascade.sessionRaid);
   var tranches = (prec && Array.isArray(prec.entryTranches)) ? prec.entryTranches : [];
   var tranchePlan = (tranches.length >= 2)
     ? ('60% @ ' + fmt(tranches[0].price, 2) + ' + 40% @ ' + fmt(tranches[1].price, 2)
@@ -1345,7 +1573,9 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
     expectancy: exp,
     timeDecay: decay,
     liquidityMap: liqMap,
-    adverseSelection: advGuard
+    adverseSelection: advGuard,
+    fractalCascade: cascade,
+    riskProfile: riskProfile
   };
   row.formation = formation;
   row.convictionScore = score;
@@ -1354,6 +1584,8 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   row.timeDecay = decay;
   row.adverseSelection = advGuard;
   row.liquidityMap = liqMap;
+  row.fractalCascade = cascade;
+  row.riskProfile = riskProfile;
   return formation;
 }
 
@@ -3550,6 +3782,12 @@ function mount(el){
             + (r.formation.liquidityMap.drawOnLiquidity ? (' · ' + String(r.formation.liquidityMap.drawOnLiquidity.label)) : '')
             + '. This does not move the desk entry.</div>')
           : '')
+        + (r.fractalCascade
+          ? ('<div class="hg-note" data-sg-cascade="1">' + String(r.fractalCascade.summary) + '.</div>')
+          : '')
+        + (r.riskProfile && r.riskProfile.ok
+          ? ('<div class="hg-note" data-sg-hurdle="1">' + String(r.riskProfile.summary) + '. This does not change the size.</div>')
+          : '')
         + (r.precision && r.precision.ok && !r.precision.unread && Array.isArray(r.precision.entryZone)
           ? ('<div class="hg-note" data-sg-zone="1">Entry zone '
             + fmt(r.precision.entryZone[0], 2) + ' to ' + fmt(r.precision.entryZone[1], 2)
@@ -3734,6 +3972,8 @@ W.sgEvaluateSetupDecay = sgEvaluateSetupDecay;
 W.sgSynthesizeTapeSetups = sgSynthesizeTapeSetups;
 W.sgSessionLiquidityMap = sgSessionLiquidityMap;
 W.sgAdverseSelectionGuard = sgAdverseSelectionGuard;
+W.sgMultiTfFractalCascade = sgMultiTfFractalCascade;
+W.sgSetupRiskProfile = sgSetupRiskProfile;
 W.sgPsychShieldStop = sgPsychShieldStop;
 W.sgHighAccuracyAudit = sgHighAccuracyAudit;
 
