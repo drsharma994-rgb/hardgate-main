@@ -589,10 +589,10 @@
       "expired": true
     },
     "METIS": {
-      "at": "2026-10-14T10:34:46.751Z",
-      "score": 5,
+      "at": "2026-10-15T08:42:49.522Z",
+      "score": 4,
       "fresh": true,
-      "ago": 7,
+      "ago": 8,
       "crossDay": "2026-10-06",
       "expired": true
     },
@@ -613,7 +613,7 @@
       "expired": true
     },
     "BAT": {
-      "at": "2026-10-15T03:10:43.562Z",
+      "at": "2026-10-15T08:42:45.483Z",
       "score": 5,
       "fresh": true,
       "ago": 2,
@@ -621,7 +621,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-15T06:52:23.389Z",
+  "lastRunAt": "2026-10-15T08:43:01.908Z",
   "scanned": 504,
   "cards": 0
 }
