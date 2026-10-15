@@ -355,6 +355,11 @@
       "version": "hg-v1377",
       "built": "2026-10-15T15:00:00Z",
       "note": "A later bar that takes the opening-block low and closes back above it is an Asian-range sweep, even when that wick is still inside 00:00-07:00 UTC. Five agreeing timeframes stay a full cascade. The breakeven hurdle stays on the measured reward. The desk entry is not moved."
+    },
+    {
+      "version": "hg-v1378",
+      "built": "2026-10-15T16:00:00Z",
+      "note": "Super Gold names the prior day high, low, and midpoint only when a prior day is on the tape. A wick that rejects and closes back is absorption. The radar says how far the live price is from the entry. A missing ATR is not 4, and a fill chance is not invented. The 60/40 split and the desk entry stay."
     }
   ]
 }

@@ -704,7 +704,7 @@ function sgDetectMicrostructureZones(rows, intel, side){
   var want = String(side || '').toLowerCase();
   if (want === 'buy' || want === 'bull') want = 'long';
   if (want === 'sell' || want === 'bear') want = 'short';
-  var out = { ok: rows.length >= 5, fvgs: [], ifvgs: [], obs: [], sweeps: [], breakers: [], nearestFvg: null, nearestIfvg: null, nearestOb: null, nearestBreaker: null, mssConfirmed: false, chochLevel: null, impulseZScore: null, volCommitmentRatio: null, sweepReclaimed: false };
+  var out = { ok: rows.length >= 5, fvgs: [], ifvgs: [], obs: [], sweeps: [], breakers: [], nearestFvg: null, nearestIfvg: null, nearestOb: null, nearestBreaker: null, mssConfirmed: false, chochLevel: null, impulseZScore: null, volCommitmentRatio: null, clvScore: null, wickRejectionScore: null, absorptionDetected: false, sweepReclaimed: false };
   if (!out.ok) return out;
   var bars = [];
   for (var i = 0; i < rows.length; i++){
@@ -864,6 +864,29 @@ function sgDetectMicrostructureZones(rows, intel, side){
       if (volKept[j] != null){ sawRecent = true; if (volKept[j] > maxRecentVol) maxRecentVol = volKept[j]; }
     }
     if (sawRecent && meanVol > 0) out.volCommitmentRatio = +(maxRecentVol / meanVol).toFixed(2);
+  }
+  var lastBar = bars[bars.length - 1];
+  if (lastBar && lastBar.h > lastBar.l){
+    out.clvScore = +((((lastBar.c - lastBar.l) - (lastBar.h - lastBar.c)) / (lastBar.h - lastBar.l))).toFixed(2);
+  }
+  var atrAbs = sgCalcBarsAtr(rows, 14);
+  var maxWickRatio = 0;
+  var isLongSide = want !== 'short';
+  if (want === 'long' || want === 'short'){
+    for (j = Math.max(0, bars.length - 4); j < bars.length; j++){
+      var wb = bars[j];
+      if (!wb || !(wb.h > wb.l)) continue;
+      var wRng = wb.h - wb.l;
+      var bodyLo = Math.min(wb.o, wb.c), bodyHi = Math.max(wb.o, wb.c);
+      var favWick = isLongSide ? (bodyLo - wb.l) : (wb.h - bodyHi);
+      var wickRatio = favWick / wRng;
+      if (wickRatio > maxWickRatio) maxWickRatio = wickRatio;
+      var favClose = isLongSide ? ((wb.c - wb.l) / wRng >= 0.55) : ((wb.h - wb.c) / wRng >= 0.55);
+      var wickBig = wickRatio >= 0.35 || (isFinite(atrAbs) && atrAbs > 0 && favWick >= atrAbs * 0.25);
+      if (wickBig && favClose) out.absorptionDetected = true;
+    }
+    var dirClv = (out.clvScore == null) ? 0 : (isLongSide ? out.clvScore : -out.clvScore);
+    out.wickRejectionScore = Math.max(0, Math.min(100, Math.round(maxWickRatio * 85 + Math.max(0, dirClv) * 35 + (out.absorptionDetected ? 15 : 0))));
   }
   return out;
 }
@@ -1071,6 +1094,157 @@ function sgSetupRiskProfile(exp, prec){
     breakevenWinPct: be, edgeMarginPct: edge, streak5DdPct: streak, ruinGrade: grade,
     summary: 'BE hurdle ' + fmt(be, 1) + '% · edge +' + fmt(edge, 1) + '% (' + grade + ')'
       + (streak != null ? (' · 5-loss DD ' + fmt(streak, 2) + '%') : '')
+  };
+}
+
+/* Prior-day high, low, and midpoint. A daily bar is used when the tape has
+   one. Otherwise the split is the UTC date on the 15-minute bars. The first
+   half of a single session is not called yesterday. */
+function sgDailyBenchmarkLevels(row, intel){
+  row = row || {};
+  intel = intel || {};
+  var side = String(row.dir || row.side || '').toLowerCase();
+  if (side === 'buy' || side === 'bull') side = 'long';
+  if (side === 'sell' || side === 'bear') side = 'short';
+  var isLong = side !== 'short';
+  var rows1d = Array.isArray(intel.rows1d) ? intel.rows1d : [];
+  var rows15 = Array.isArray(intel.rows15) ? intel.rows15 : [];
+  var pdh = NaN, pdl = NaN, sessionOpen = NaN, sourced = null;
+  if (rows1d.length >= 2){
+    var prevDay = rows1d[rows1d.length - 2];
+    var curDay = rows1d[rows1d.length - 1];
+    pdh = N(prevDay && (prevDay.h != null ? prevDay.h : prevDay.high));
+    pdl = N(prevDay && (prevDay.l != null ? prevDay.l : prevDay.low));
+    sessionOpen = N(curDay && (curDay.o != null ? curDay.o : curDay.open));
+    sourced = '1d';
+  }
+  if (!(isFinite(pdh) && isFinite(pdl) && pdh > pdl) && rows15.length){
+    var byDay = {};
+    for (var i = 0; i < rows15.length; i++){
+      var b = rows15[i];
+      var dt = sgBarUtc(b);
+      if (!dt || !b) continue;
+      var key = dt.toISOString().slice(0, 10);
+      if (!byDay[key]) byDay[key] = { hi: -Infinity, lo: Infinity, open: NaN };
+      var bh = N(b.h != null ? b.h : b.high);
+      var bl = N(b.l != null ? b.l : b.low);
+      var bo = N(b.o != null ? b.o : b.open);
+      if (isFinite(bh) && bh > byDay[key].hi) byDay[key].hi = bh;
+      if (isFinite(bl) && bl < byDay[key].lo) byDay[key].lo = bl;
+      if (!isFinite(byDay[key].open) && isFinite(bo)) byDay[key].open = bo;
+    }
+    var days = Object.keys(byDay).sort();
+    if (days.length >= 2){
+      var prev = byDay[days[days.length - 2]];
+      var cur = byDay[days[days.length - 1]];
+      pdh = prev.hi;
+      pdl = prev.lo;
+      sessionOpen = cur.open;
+      sourced = '15m-date';
+    }
+  }
+  if (!isFinite(pdh) || !isFinite(pdl) || !(pdh > pdl)){
+    return { ok: false, pdh: null, pdl: null, pdm: null, sessionOpen: null, amdPhase: 'UNREAD', benchmarkState: 'UNREAD', summary: 'No prior day on the tape, so the benchmark is unread' };
+  }
+  var pdm = +((pdh + pdl) / 2).toFixed(2);
+  var lastClose = NaN;
+  if (rows15.length){
+    var lb = rows15[rows15.length - 1];
+    lastClose = N(lb.c != null ? lb.c : lb.close);
+  }
+  if (!isFinite(lastClose)) lastClose = N(row.mark);
+  var recentLo = Infinity, recentHi = -Infinity;
+  var recentSlice = rows15.slice(-Math.min(15, rows15.length));
+  for (var r = 0; r < recentSlice.length; r++){
+    var rb = recentSlice[r];
+    if (!rb) continue;
+    var rh = N(rb.h != null ? rb.h : rb.high);
+    var rl = N(rb.l != null ? rb.l : rb.low);
+    if (isFinite(rl) && rl < recentLo) recentLo = rl;
+    if (isFinite(rh) && rh > recentHi) recentHi = rh;
+  }
+  var benchmarkState = 'INTRADAY_EQUILIBRIUM';
+  var amdPhase = 'UNREAD';
+  if (side !== 'long' && side !== 'short'){
+    benchmarkState = 'UNREAD';
+  } else if (isLong && recentLo <= pdl && isFinite(lastClose) && lastClose > pdl){
+    benchmarkState = 'PDL_SWEEP_RECLAIM';
+    amdPhase = 'MANIPULATION_JUDAS_RAID';
+  } else if (!isLong && recentHi >= pdh && isFinite(lastClose) && lastClose < pdh){
+    benchmarkState = 'PDH_SWEEP_REJECT';
+    amdPhase = 'MANIPULATION_JUDAS_RAID';
+  } else if (isLong && isFinite(sessionOpen) && recentLo < sessionOpen && isFinite(lastClose) && lastClose > sessionOpen){
+    benchmarkState = 'OPEN_JUDAS_RECLAIM_BULL';
+    amdPhase = 'DISTRIBUTION_EXPANSION';
+  } else if (!isLong && isFinite(sessionOpen) && recentHi > sessionOpen && isFinite(lastClose) && lastClose < sessionOpen){
+    benchmarkState = 'OPEN_JUDAS_REJECT_BEAR';
+    amdPhase = 'DISTRIBUTION_EXPANSION';
+  } else if (isLong && isFinite(lastClose) && lastClose >= pdm){
+    benchmarkState = 'ABOVE_PDM_CONTINUATION';
+    amdPhase = 'RELOAD_PULLBACK';
+  } else if (!isLong && isFinite(lastClose) && lastClose <= pdm){
+    benchmarkState = 'BELOW_PDM_CONTINUATION';
+    amdPhase = 'RELOAD_PULLBACK';
+  }
+  return {
+    ok: true,
+    source: sourced,
+    pdh: +pdh.toFixed(2),
+    pdl: +pdl.toFixed(2),
+    pdm: pdm,
+    sessionOpen: isFinite(sessionOpen) ? +sessionOpen.toFixed(2) : null,
+    amdPhase: amdPhase,
+    benchmarkState: benchmarkState,
+    summary: benchmarkState + ' (PDL ' + fmt(pdl, 2) + ' · PDM ' + fmt(pdm, 2) + ' · PDH ' + fmt(pdh, 2) + ')'
+  };
+}
+
+/* Distance from the live price to the entry, in points and in measured ATR.
+   A fill chance is not printed. There is no measured fill rate, and a
+   missing ATR is not filled in as 4. The 60/40 split is not changed. */
+function sgSetupExecutionRadar(row, prec, intel, advGuard, benchmarks){
+  row = row || {};
+  prec = prec || (row && row.precision) || {};
+  advGuard = advGuard || (row && row.adverseSelection) || {};
+  benchmarks = benchmarks || (row && row.dailyBenchmarks) || {};
+  var rows15 = (intel && Array.isArray(intel.rows15)) ? intel.rows15 : [];
+  var livePx = N(row.mark);
+  if (!isFinite(livePx) && rows15.length){
+    var lb = rows15[rows15.length - 1];
+    livePx = N(lb && (lb.c != null ? lb.c : lb.close));
+  }
+  var ePx = (isFinite(+prec.entry) && +prec.entry > 0) ? +prec.entry : N(row.entry);
+  var atr = NaN;
+  if (prec && prec.unread !== true && isFinite(+prec.atr) && +prec.atr > 0) atr = +prec.atr;
+  if (!(atr > 0)) atr = sgCalcBarsAtr(rows15, 14);
+  var distPts = (isFinite(livePx) && isFinite(ePx)) ? +(Math.abs(livePx - ePx).toFixed(2)) : null;
+  var distAtr = (distPts != null && isFinite(atr) && atr > 0) ? +(distPts / atr).toFixed(2) : null;
+  var splitWeights = (prec && Array.isArray(prec.entryTranches) && prec.entryTranches.length >= 2)
+    ? (prec.entryTranches[0].weightPct + '/' + prec.entryTranches[1].weightPct)
+    : null;
+  var amdPhase = (benchmarks && benchmarks.amdPhase) ? benchmarks.amdPhase : 'UNREAD';
+  var action = 'Distance unread';
+  if (advGuard && advGuard.status === 'KNIFE_HAZARD'){
+    action = 'Wait for a 15m reclaim close. The resting limit stays';
+  } else if (distPts == null){
+    action = 'Distance unread';
+  } else if (distAtr != null && distAtr <= 0.35){
+    action = 'Limit is ' + fmt(distPts, 2) + ' pts away (' + fmt(distAtr, 2) + ' ATR)';
+  } else if (distAtr != null){
+    action = (splitWeights || '60/40') + ' limit is ' + fmt(distPts, 2) + ' pts away (' + fmt(distAtr, 2) + ' ATR)';
+  } else {
+    action = 'Limit is ' + fmt(distPts, 2) + ' pts away. ATR was not measured';
+  }
+  return {
+    ok: distPts != null,
+    livePx: isFinite(livePx) ? +livePx.toFixed(2) : null,
+    entryPx: isFinite(ePx) ? +ePx.toFixed(2) : null,
+    distToEntryPts: distPts,
+    distToEntryAtr: distAtr,
+    fillProbabilityPct: null,
+    amdPhase: amdPhase,
+    splitWeights: splitWeights,
+    actionDirective: action
   };
 }
 
@@ -1587,6 +1761,8 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   var exp = sgCalcSetupExpectancy(row, prec, intel);
   var cascade = sgMultiTfFractalCascade(row, intel);
   var riskProfile = sgSetupRiskProfile(exp, prec);
+  var benchmarks = sgDailyBenchmarkLevels(row, intel);
+  var radar = sgSetupExecutionRadar(row, prec, intel, advGuard, benchmarks);
   if (cascade && cascade.ibRaided && cascade.sessionRaid && cascade.sessionRaid !== 'UNREAD') tags.push(cascade.sessionRaid);
   var tranches = (prec && Array.isArray(prec.entryTranches)) ? prec.entryTranches : [];
   var tranchePlan = (tranches.length >= 2)
@@ -1610,7 +1786,9 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
     liquidityMap: liqMap,
     adverseSelection: advGuard,
     fractalCascade: cascade,
-    riskProfile: riskProfile
+    riskProfile: riskProfile,
+    dailyBenchmarks: benchmarks,
+    executionRadar: radar
   };
   row.formation = formation;
   row.convictionScore = score;
@@ -1621,6 +1799,8 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   row.liquidityMap = liqMap;
   row.fractalCascade = cascade;
   row.riskProfile = riskProfile;
+  row.dailyBenchmarks = benchmarks;
+  row.executionRadar = radar;
   return formation;
 }
 
@@ -3823,6 +4003,12 @@ function mount(el){
         + (r.riskProfile && r.riskProfile.ok
           ? ('<div class="hg-note" data-sg-hurdle="1">' + String(r.riskProfile.summary) + '. This does not change the size.</div>')
           : '')
+        + (r.dailyBenchmarks && r.dailyBenchmarks.ok
+          ? ('<div class="hg-note" data-sg-pdh="1">' + String(r.dailyBenchmarks.summary) + '. This does not move the desk entry.</div>')
+          : '')
+        + (r.executionRadar
+          ? ('<div class="hg-note" data-sg-radar="1">' + String(r.executionRadar.actionDirective) + '.</div>')
+          : '')
         + (r.precision && r.precision.ok && !r.precision.unread && Array.isArray(r.precision.entryZone)
           ? ('<div class="hg-note" data-sg-zone="1">Entry zone '
             + fmt(r.precision.entryZone[0], 2) + ' to ' + fmt(r.precision.entryZone[1], 2)
@@ -4009,6 +4195,8 @@ W.sgSessionLiquidityMap = sgSessionLiquidityMap;
 W.sgAdverseSelectionGuard = sgAdverseSelectionGuard;
 W.sgMultiTfFractalCascade = sgMultiTfFractalCascade;
 W.sgSetupRiskProfile = sgSetupRiskProfile;
+W.sgDailyBenchmarkLevels = sgDailyBenchmarkLevels;
+W.sgSetupExecutionRadar = sgSetupExecutionRadar;
 W.sgPsychShieldStop = sgPsychShieldStop;
 W.sgHighAccuracyAudit = sgHighAccuracyAudit;
 
