@@ -1,10 +1,11 @@
 /* CONFLUENCE — one gold setup from the gold desks.
-   A desk with no scan is not a vote. SCAN runs the desks that can scan
-   without their own tab open, then reads what they published. The live
-   price is the IUX anchor (gold-iux.js, gold-api XAU). The entry is the
-   median of the agreeing plans that sit on that price. It is not moved
-   to the live print. No anchor, no setup. A copy of another desk plan
-   is not a second vote. */
+   SCAN opens every gold desk that has not published yet and waits for
+   that scan to finish. A desk that only runs while its own tab is open
+   is opened here. The live price is the IUX anchor (gold-iux.js,
+   gold-api XAU). The entry is the median of the agreeing plans that
+   sit on that price. It is not moved to the live print. No anchor, no
+   setup. A copy of another desk plan is not a second vote. GOLD
+   DIRECTION is not given a side. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
@@ -205,18 +206,36 @@ var UNREAD_WHY = {
   'super-gold': 'not scanned yet. It reads GOLD SCALP and GOLD SWING after they have run.',
   goldpine: 'not scanned yet. Press SCAN GOLD DESKS.',
   golddirection: 'needs your LONG or SHORT on GOLD DIRECTION. This tab does not pick a side for you.',
-  goldultra: 'scans only while GOLD ULTRA is open.',
+  goldultra: 'not scanned yet. Press SCAN GOLD DESKS.',
   ganeshgold: 'not scanned yet. Press SCAN GOLD DESKS.',
-  optigold: 'scans only while OPTI GOLD is open.',
+  optigold: 'not scanned yet. Press SCAN GOLD DESKS.',
   newgold: 'not scanned yet. Press SCAN GOLD DESKS.',
-  omnigold: 'scans only while OMNIGOLD is open.',
-  omnigold1: 'scans only while OMNIGOLD 1 is open.',
-  goldpro: 'scans only while GOLD PRO is open.',
-  milligold: 'reads OMNIGOLD. It has no plan until that desk has scanned.',
-  '80percent': 'scans only while 80PERCENT is open.',
+  omnigold: 'not scanned yet. Press SCAN GOLD DESKS.',
+  omnigold1: 'not scanned yet. Press SCAN GOLD DESKS.',
+  goldpro: 'not scanned yet. Press SCAN GOLD DESKS.',
+  milligold: 'not scanned yet. It reads OMNIGOLD after that desk has finished. Press SCAN GOLD DESKS.',
+  '80percent': 'not scanned yet. Press SCAN GOLD DESKS.',
   gold: 'the GOLD tab has not published a plan yet. Press SCAN GOLD DESKS.',
-  'candle-forecast': 'arms a bracket only after CANDLE FORECAST has run.'
+  'candle-forecast': 'not scanned yet. Press SCAN GOLD DESKS.'
 };
+
+/* How long one desk may take. The user can wait. A hung fetch still ends. */
+var DESK_WAIT = 120000;
+var POLL_MS = 250;
+
+/* Desks whose scan lives on the mounted tab. refresh awaits the promise.
+   click starts a run whose promise the button does not return, so the
+   button is watched until it is enabled again. auto starts inside mount. */
+var OPEN_DESKS = [
+  { id: 'goldultra', sel: '#guRun', how: 'refresh' },
+  { id: 'optigold', sel: '#ogRun', how: 'auto' },
+  { id: 'omnigold', sel: '#ogRun', how: 'click' },
+  { id: 'omnigold1', sel: '#og1Run', how: 'refresh' },
+  { id: 'goldpro', sel: '[data-gp="run"]', how: 'click' },
+  { id: 'milligold', sel: '#milliRun', how: 'auto' },
+  { id: '80percent', sel: '#p80Run', how: 'auto' },
+  { id: 'candle-forecast', sel: '#cfRunBtn', how: 'refresh' }
+];
 
 function warmup(win, id){
   var list = (win && win.HG_warmups) || [];
@@ -225,6 +244,17 @@ function warmup(win, id){
     w = list[i];
     if (w && w.id === id && typeof w.run === 'function') return w.run;
   }
+  return null;
+}
+function deskById(id){
+  var i;
+  for (i = 0; i < DESKS.length; i++) if (DESKS[i].id === id) return DESKS[i];
+  return null;
+}
+function tabMod(win, id){
+  var list = (win && win.HG_tabs) || [];
+  var i;
+  for (i = 0; i < list.length; i++) if (list[i] && list[i].id === id) return list[i];
   return null;
 }
 function limit(p, ms){
@@ -239,6 +269,32 @@ function limit(p, ms){
     }
     Promise.resolve(p).then(finish, function(){ finish(null); });
   });
+}
+function sleep(ms){
+  return new Promise(function(resolve){ setTimeout(resolve, ms); });
+}
+function say(onProgress, msg){
+  if (typeof onProgress !== 'function') return;
+  try{ onProgress(msg); }catch(e){}
+}
+function qsel(pane, sel){
+  try{ return (pane && pane.querySelector) ? pane.querySelector(sel) : null; }
+  catch(e){ return null; }
+}
+function paneOf(win, id){
+  var doc = win && win.document;
+  if (!doc || typeof doc.getElementById !== 'function' || typeof doc.createElement !== 'function') return null;
+  var pane = null;
+  try{ pane = doc.getElementById('tab_' + id); }catch(e0){ pane = null; }
+  if (pane) return pane;
+  var host = null;
+  try{ host = doc.createElement('div'); }catch(e1){ return null; }
+  if (!host) return null;
+  try{ host.id = 'tab_' + id; }catch(e2){}
+  var parent = doc.body || doc.documentElement;
+  if (!parent || typeof parent.appendChild !== 'function') return null;
+  try{ parent.appendChild(host); }catch(e3){ return null; }
+  return host;
 }
 async function pineBars(win){
   if (!win || typeof win.getGoldCandles !== 'function') return null;
@@ -274,12 +330,83 @@ function noteIfEmpty(notes, id, desk, snap, msg){
   var m = (typeof msg === 'string') ? msg : '';
   if (m.indexOf('not mounted') >= 0 || m.indexOf('unavailable') === 0) return;
   if (m === 'timeout'){
-    notes[id] = 'this tab asked ' + desk.label + ' to scan. The scan did not finish.';
+    notes[id] = 'this tab waited for ' + desk.label + ' to finish. The scan did not finish.';
     return;
   }
-  notes[id] = 'this tab asked ' + desk.label + ' to scan. It still published no plan.';
+  notes[id] = 'this tab waited for ' + desk.label + ' to finish. It still published no plan.';
 }
-async function hgGoldConfluenceGather(win){
+function readSnap(desk, win){
+  try{ return desk.read(win); }catch(e){ return null; }
+}
+async function pollDesk(desk, win, btn){
+  var t0 = Date.now();
+  var sawBusy = false;
+  while (Date.now() - t0 < DESK_WAIT){
+    if (readSnap(desk, win) != null) return 'plan';
+    if (btn && btn.disabled) sawBusy = true;
+    else if (sawBusy) return 'done';
+    await sleep(POLL_MS);
+  }
+  return 'timeout';
+}
+async function driveOpen(win, spec, notes, onProgress){
+  var desk = deskById(spec.id);
+  if (!desk) return;
+  if (readSnap(desk, win) != null) return;
+  var mod = tabMod(win, spec.id);
+  if (!mod || typeof mod.mount !== 'function') return;
+  var pane = paneOf(win, spec.id);
+  if (!pane){
+    notes[spec.id] = 'this tab could not open ' + desk.label + '.';
+    return;
+  }
+  say(onProgress, 'Waiting for ' + desk.label + '…');
+  var btn = qsel(pane, spec.sel);
+  var opened = false;
+  if (!btn){
+    try{ mod.mount(pane); opened = true; }
+    catch(eM){
+      notes[spec.id] = 'this tab could not open ' + desk.label + '.';
+      return;
+    }
+    btn = qsel(pane, spec.sel);
+  }
+  if (spec.how === 'refresh' && typeof mod.refresh === 'function'){
+    var out = await limit(mod.refresh(), DESK_WAIT);
+    if (readSnap(desk, win) != null) return;
+    var s = (typeof out === 'string') ? out : '';
+    if (out !== 'timeout' && s.indexOf('skip') !== 0 && s.indexOf('busy') !== 0){
+      noteIfEmpty(notes, spec.id, desk, null, out);
+      return;
+    }
+    if (out === 'timeout'){
+      noteIfEmpty(notes, spec.id, desk, null, 'timeout');
+      return;
+    }
+  }
+  if (spec.how === 'auto' && opened){
+    var autoHow = await pollDesk(desk, win, null);
+    if (readSnap(desk, win) != null) return;
+    noteIfEmpty(notes, spec.id, desk, null, autoHow === 'timeout' ? 'timeout' : null);
+    return;
+  }
+  if (btn && btn.disabled){
+    /* already running */
+  } else if (btn && typeof btn.click === 'function'){
+    try{ btn.click(); }catch(eC){}
+  } else if (typeof mod.refresh === 'function'){
+    var again = await limit(mod.refresh(), DESK_WAIT);
+    noteIfEmpty(notes, spec.id, desk, readSnap(desk, win), again);
+    return;
+  } else {
+    notes[spec.id] = 'this tab could not start ' + desk.label + '.';
+    return;
+  }
+  var how = await pollDesk(desk, win, btn);
+  if (readSnap(desk, win) != null) return;
+  noteIfEmpty(notes, spec.id, desk, null, how === 'timeout' ? 'timeout' : null);
+}
+async function hgGoldConfluenceGather(win, onProgress){
   win = win || W;
   var snaps = {};
   var notes = {};
@@ -288,52 +415,59 @@ async function hgGoldConfluenceGather(win){
   var i, id, fn, snap, desk, msg;
   for (i = 0; i < order.length; i++){
     id = order[i];
-    desk = null;
-    for (var d = 0; d < DESKS.length; d++) if (DESKS[d].id === id) desk = DESKS[d];
+    desk = deskById(id);
     if (!desk) continue;
-    try{ snap = desk.read(win); }catch(e0){ snap = null; }
+    snap = readSnap(desk, win);
     if (snap != null) continue;
     if (id === 'ganeshgold' && typeof win.ganeshGoldScan === 'function'){
-      msg = await limit(win.ganeshGoldScan({ style: 'scalp' }), 25000);
-      try{ snap = desk.read(win); }catch(eGan){ snap = null; }
+      say(onProgress, 'Waiting for ' + desk.label + '…');
+      msg = await limit(win.ganeshGoldScan({ style: 'scalp' }), DESK_WAIT);
+      snap = readSnap(desk, win);
       noteIfEmpty(notes, id, desk, snap, msg);
       continue;
     }
     if (id === 'newgold' && typeof win.ngRunScan === 'function'){
-      msg = await limit(win.ngRunScan(), 25000);
-      try{ snap = desk.read(win); }catch(eNg){ snap = null; }
+      say(onProgress, 'Waiting for ' + desk.label + '…');
+      msg = await limit(win.ngRunScan(), DESK_WAIT);
+      snap = readSnap(desk, win);
       noteIfEmpty(notes, id, desk, snap, msg);
       continue;
     }
     fn = warmup(win, id);
     if (fn){
-      msg = await limit(fn(), 25000);
-      try{ snap = desk.read(win); }catch(eW){ snap = null; }
+      say(onProgress, 'Waiting for ' + desk.label + '…');
+      msg = await limit(fn(), DESK_WAIT);
+      snap = readSnap(desk, win);
       noteIfEmpty(notes, id, desk, snap, msg);
     }
   }
   try{
     snap = null;
-    var pineDesk = null;
-    for (d = 0; d < DESKS.length; d++) if (DESKS[d].id === 'goldpine') pineDesk = DESKS[d];
-    if (pineDesk) snap = pineDesk.read(win);
+    var pineDesk = deskById('goldpine');
+    if (pineDesk) snap = readSnap(pineDesk, win);
   }catch(e1){ snap = null; }
   if (snap == null && typeof win.runGoldPineScan === 'function'){
     try{
+      say(onProgress, 'Waiting for GOLD PINE…');
       var bars = await pineBars(win);
       if (bars && ((bars.rows4h && bars.rows4h.length) || (bars.rows15m && bars.rows15m.length))){
         var pineSnap = win.runGoldPineScan(bars, {}) || null;
         if (pineSnap) snaps.goldpine = pineSnap;
-        else notes.goldpine = 'this tab asked GOLD PINE to scan. It still published no plan.';
+        else notes.goldpine = 'this tab waited for GOLD PINE to finish. It still published no plan.';
       }
     }catch(e2){}
   }
   if (typeof win.runGold === 'function' && !win.__hgInlineGold && !win.__hgGoldSetupDecision){
-    await limit(win.runGold(), 25000);
-    if (typeof win.runGoldSetup === 'function') await limit(win.runGoldSetup(), 25000);
+    say(onProgress, 'Waiting for GOLD…');
+    await limit(win.runGold(), DESK_WAIT);
+    if (typeof win.runGoldSetup === 'function') await limit(win.runGoldSetup(), DESK_WAIT);
     if (!win.__hgInlineGold && !win.__hgGoldSetupDecision){
-      notes.gold = 'this tab asked the GOLD tab to scan. It still published no plan.';
+      notes.gold = 'this tab waited for the GOLD tab to finish. It still published no plan.';
     }
+  }
+  for (i = 0; i < OPEN_DESKS.length; i++){
+    try{ await driveOpen(win, OPEN_DESKS[i], notes, onProgress); }
+    catch(eOpen){}
   }
   return { snaps: snaps, notes: notes };
 }
@@ -484,7 +618,7 @@ async function hgGoldConfluenceScan(win, opts){
   opts = opts || {};
   var extra = { snaps: {}, notes: {} };
   if (opts.gather){
-    try{ extra = await hgGoldConfluenceGather(win); }catch(eG){ extra = { snaps: {}, notes: {} }; }
+    try{ extra = await hgGoldConfluenceGather(win, opts.onProgress); }catch(eG){ extra = { snaps: {}, notes: {} }; }
   }
   var votes = hgGoldConfluenceRead(win, extra);
   var iux = null;
@@ -538,13 +672,16 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. This tab does not invent one. SCAN GOLD DESKS runs the desks that can scan on their own, then keeps a setup only when three different plans agree. The entry is their median, not the live IUX print.</div></div></div>';
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. SCAN GOLD DESKS opens each gold desk that has not published yet and waits until that scan finishes. A setup is kept only when three different plans agree. The entry is their median, not the live IUX print. GOLD DIRECTION still needs your own LONG or SHORT.</div></div></div>';
   var btn = root.querySelector('#gc-run');
   var stat = root.querySelector('#gc-stat');
   function go(doGather){
     if (btn) btn.disabled = true;
     if (stat) stat.textContent = doGather ? 'Scanning gold desks…' : 'Reading…';
-    return hgGoldConfluenceScan(W, { gather: !!doGather }).then(function(built){
+    return hgGoldConfluenceScan(W, {
+      gather: !!doGather,
+      onProgress: function(msg){ if (stat) stat.textContent = msg; }
+    }).then(function(built){
       if (btn) btn.disabled = false;
       paint(root, built);
       return built;

@@ -152,6 +152,69 @@ gw.crypto = { randomUUID: () => 'x' };
 await gw.hgGoldConfluenceScan(gw, { gather: true });
 assert.equal(warmed, 0);
 
+/* A desk that only scans once its tab is open is opened and waited on.
+   The button's click does not return the scan promise, so the wait is
+   the published plan, not the click. */
+const wait = {
+  Date, Math, Number, String, Array, Object, Promise, isFinite,
+  setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+  clearTimeout: (h) => globalThis.clearTimeout(h),
+  HG_tabs: [],
+  HG_warmups: []
+};
+wait.window = wait;
+wait.globalThis = wait;
+const nodes = {};
+wait.document = {
+  body: { appendChild(n){ nodes[n.id] = n; return n; } },
+  getElementById(id){ return nodes[id] || null; },
+  createElement(){ return { id: '', querySelector(){ return null; } }; }
+};
+vm.createContext(wait);
+vm.runInContext(code, wait);
+wait.goldscalpScan = () => ({ cands: [row(2650, 2640, 2670)] });
+wait.goldswingScan = () => ({ cands: [row(2651, 2642, 2668)] });
+wait.superGoldScan = () => ({ cands: [row(2652, 2638, 2672)] });
+wait.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+let og = null;
+let opened = 0;
+let clicks = 0;
+wait.hgOgState = () => og;
+wait.HG_tabs.push({
+  id: 'omnigold',
+  mount(pane){
+    opened += 1;
+    const btn = {
+      disabled: false,
+      click(){
+        clicks += 1;
+        this.disabled = true;
+        const self = this;
+        globalThis.setTimeout(function(){
+          og = { cands: [row(2649, 2639, 2669)] };
+          self.disabled = false;
+        }, 40);
+      }
+    };
+    pane.querySelector = (sel) => (sel === '#ogRun' ? btn : null);
+  }
+});
+const waited = await wait.hgGoldConfluenceScan(wait, { gather: true });
+assert.equal(opened, 1);
+assert.equal(clicks, 1);
+assert.equal(waited.ready, true);
+assert.equal(waited.longCount, 4);
+assert.equal(waited.entry, 2650.5);
+const again = await wait.hgGoldConfluenceScan(wait, { gather: true });
+assert.equal(opened, 1);
+assert.equal(clicks, 1);
+assert.equal(again.ready, true);
+wait.crypto = { randomUUID: () => 'x' };
+og = null;
+await wait.hgGoldConfluenceScan(wait, { gather: true });
+assert.equal(opened, 1);
+assert.equal(clicks, 1);
+
 const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 assert.match(index, /gold-confluence\.js\?v=/);

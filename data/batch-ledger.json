@@ -395,6 +395,11 @@
       "version": "hg-v1385",
       "built": "2026-10-15T23:00:00Z",
       "note": "CONFLUENCE now runs the gold desks that can scan on their own before it votes. A desk that has not published a plan says so. A copy of another desk plan is not a second vote. Three different desks must still agree, and the entry stays the median, not the live IUX print."
+    },
+    {
+      "version": "hg-v1386",
+      "built": "2026-10-16T01:00:00Z",
+      "note": "CONFLUENCE waits for every gold desk that can publish before it votes. A desk that only scans while its tab is open is opened and given time to finish. Three different plans must still agree. The entry stays their median, not the live IUX print."
     }
   ]
 }
