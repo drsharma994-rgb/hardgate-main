@@ -958,6 +958,41 @@ function sgMultiTfFractalCascade(row, intel){
       sessionRaid = 'INSIDE_ASIAN_RANGE';
     }
   }
+  /* The opening block of the window handed to the desk. A later bar that
+     takes its low and closes back above it is the same raid, even when
+     that wick still falls inside 00:00-07:00 UTC and the clock range
+     swallowed it. */
+  var winN = Math.min(10, Math.max(3, Math.floor(rows15.length / 3)));
+  if (rows15.length > winN){
+    var wHi = -Infinity, wLo = Infinity, pLo = Infinity, pHi = -Infinity;
+    for (i = 0; i < winN; i++){
+      var wh = N(rows15[i].h != null ? rows15[i].h : rows15[i].high);
+      var wl = N(rows15[i].l != null ? rows15[i].l : rows15[i].low);
+      if (isFinite(wh) && wh > wHi) wHi = wh;
+      if (isFinite(wl) && wl < wLo) wLo = wl;
+    }
+    for (i = winN; i < rows15.length; i++){
+      var ph = N(rows15[i].h != null ? rows15[i].h : rows15[i].high);
+      var pl = N(rows15[i].l != null ? rows15[i].l : rows15[i].low);
+      if (isFinite(pl) && pl < pLo) pLo = pl;
+      if (isFinite(ph) && ph > pHi) pHi = ph;
+    }
+    if (isFinite(wHi) && isFinite(wLo) && wHi > wLo){
+      if (isLong && pLo < wLo && isFinite(lastC) && lastC > wLo){
+        sessionRaid = 'ASIAN_IB_LOW_SWEEP_RECLAIM';
+        ibRaided = true;
+        ibHigh = wHi;
+        ibLow = wLo;
+        asianN = Math.max(asianN, 3);
+      } else if (!isLong && pHi > wHi && isFinite(lastC) && lastC < wHi){
+        sessionRaid = 'ASIAN_IB_HIGH_SWEEP_REJECT';
+        ibRaided = true;
+        ibHigh = wHi;
+        ibLow = wLo;
+        asianN = Math.max(asianN, 3);
+      }
+    }
+  }
   var days = Object.keys(byDay).sort();
   var pdh = null, pdl = null, pdRaided = false;
   if (days.length >= 2 && rows15.length){

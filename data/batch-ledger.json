@@ -350,6 +350,11 @@
       "version": "hg-v1376",
       "built": "2026-10-15T14:00:00Z",
       "note": "Super Gold names the timeframes that actually agree, an Asian-range sweep only when the bar clock says so, and an inverse gap only after price closes back through it. The breakeven hurdle uses the measured reward. A missing print is unread, not 2.2R or 62 percent. The desk entry and TP1 are not moved."
+    },
+    {
+      "version": "hg-v1377",
+      "built": "2026-10-15T15:00:00Z",
+      "note": "A later bar that takes the opening-block low and closes back above it is an Asian-range sweep, even when that wick is still inside 00:00-07:00 UTC. Five agreeing timeframes stay a full cascade. The breakeven hurdle stays on the measured reward. The desk entry is not moved."
     }
   ]
 }
