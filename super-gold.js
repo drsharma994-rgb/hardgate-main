@@ -166,7 +166,9 @@ function hitFromGoldCand(c, meta){
       ? { refuse: !!c.fund.refuse, demote: !!c.fund.demote,
           chips: Array.isArray(c.fund.chips) ? c.fund.chips.slice() : [] }
       : null,
-    scanner: meta.scanner || meta.source
+    scanner: meta.scanner || meta.source,
+    scalpEnhancement: c.scalpEnhancement || null,
+    scalpPrecision: c.scalpPrecision || null
   };
 }
 
@@ -2367,6 +2369,7 @@ function rankRawGoldCands(win, rawCands, ctx){
 function collectRawGoldDeskCands(win, opts){
   win = win || W;
   opts = opts || {};
+  try{ sgInstallGoldScalpTabEnhancer(win); }catch(eInst){}
   var allowStale = opts.allowStale === true;
   var raw = [], armed = [], rejected = [], whySilent = null, scanned = 0, venues = [];
 
@@ -4252,6 +4255,12 @@ function mount(el){
         + (r.smtRead && r.smtRead.ok
           ? ('<div class="hg-note" data-sg-smt="1">' + String(r.smtRead.summary) + '.</div>')
           : '')
+        + (r.scalpEnhancement
+          ? ('<div class="hg-note" data-sg-scalp="1">' + String(r.scalpEnhancement.scalpTier || '')
+            + (r.scalpEnhancement.scalpScore != null ? (' ' + r.scalpEnhancement.scalpScore + '/100') : '')
+            + ' · ' + String(r.scalpEnhancement.archetypeLabel || '')
+            + '. The desk entry, stop, and targets were not replaced.</div>')
+          : '')
         + (r.ratchetLadder && r.ratchetLadder.length
           ? ('<div class="hg-note" data-sg-ratchet="1">Stop plan: '
             + r.ratchetLadder.map(function(st){ return st.code + ' @ ' + fmt(st.stopPx, 2); }).join(' · ')
@@ -4449,8 +4458,529 @@ W.sgIntradayVolumeProfile = sgIntradayVolumeProfile;
 W.sgCrossVenueSmtRead = sgCrossVenueSmtRead;
 W.sgAdaptiveTpSplits = sgAdaptiveTpSplits;
 W.sgBuildStopRatchetLadder = sgBuildStopRatchetLadder;
+W.sgDetectGoldScalpArchetypes = sgDetectGoldScalpArchetypes;
+W.sgRefineGoldScalpBracket = sgRefineGoldScalpBracket;
+W.sgScoreGoldScalpSetup = sgScoreGoldScalpSetup;
+W.sgEnhanceGoldScalpSetup = sgEnhanceGoldScalpSetup;
+W.sgSynthesizeGoldScalpSetups = sgSynthesizeGoldScalpSetups;
+W.sgUpgradeGoldScalpTabInOneGo = sgUpgradeGoldScalpTabInOneGo;
+W.sgPaintGoldScalpTabHud = sgPaintGoldScalpTabHud;
+W.sgInstallGoldScalpTabEnhancer = sgInstallGoldScalpTabEnhancer;
 W.sgPsychShieldStop = sgPsychShieldStop;
 W.sgHighAccuracyAudit = sgHighAccuracyAudit;
+
+/* Gold Scalp names the setup and suggests a bracket. The suggestion is not
+   written onto the desk entry, stop, or targets unless the desk asks for that.
+   A missing ATR is not filled in as 2.2. A missing spread is not filled in
+   as 35 cents. An empty tape does not grow a scalp setup. */
+function sgCalcEma(rows, period){
+  if (!Array.isArray(rows) || !rows.length) return NaN;
+  period = period || 9;
+  var k = 2 / (period + 1);
+  var ema = NaN;
+  for (var i = 0; i < rows.length; i++){
+    var b = rows[i];
+    if (!b) continue;
+    var c = N(b.c != null ? b.c : b.close);
+    if (!isFinite(c)) continue;
+    ema = isNaN(ema) ? c : (c * k + ema * (1 - k));
+  }
+  return isFinite(ema) ? +ema.toFixed(2) : NaN;
+}
+
+function sgDetectGoldScalpArchetypes(c, intel, win){
+  win = win || W;
+  c = c || {};
+  intel = intel || {};
+  var sideRaw = String(c.dir || c.side || '').toLowerCase();
+  if (sideRaw === 'buy' || sideRaw === 'bull') sideRaw = 'long';
+  if (sideRaw === 'sell' || sideRaw === 'bear') sideRaw = 'short';
+  if (sideRaw !== 'long' && sideRaw !== 'short'){
+    return { ok: false, side: null, archetype: 'UNREAD', archetypeLabel: 'No side, so the scalp type is unread' };
+  }
+  var isLong = sideRaw === 'long';
+  var side = sideRaw;
+  var rows15 = Array.isArray(c.rows15m) && c.rows15m.length ? c.rows15m : (Array.isArray(intel.rows15) ? intel.rows15 : []);
+  var rows5 = Array.isArray(c.rows5m) && c.rows5m.length ? c.rows5m : (Array.isArray(intel.rows5) ? intel.rows5 : []);
+  var micro15 = sgDetectMicrostructureZones(rows15, null, side);
+  var micro5 = rows5.length >= 5 ? sgDetectMicrostructureZones(rows5, null, side) : null;
+  var volProf = sgIntradayVolumeProfile(rows15, side, N(c.entry));
+  var liqMap = sgSessionLiquidityMap(rows15, side, N(c.entry));
+  var benchmarks = sgDailyBenchmarkLevels(c, intel);
+  var fractal = sgMultiTfFractalCascade(c, intel);
+  var ema9_15 = sgCalcEma(rows15, 9), ema21_15 = sgCalcEma(rows15, 21);
+  var ema9_5 = sgCalcEma(rows5, 9), ema21_5 = sgCalcEma(rows5, 21);
+  var emaRibbonAligned15 = (isFinite(ema9_15) && isFinite(ema21_15))
+    ? (isLong ? ema9_15 >= ema21_15 : ema9_15 <= ema21_15) : null;
+  var emaRibbonAligned5 = (isFinite(ema9_5) && isFinite(ema21_5))
+    ? (isLong ? ema9_5 >= ema21_5 : ema9_5 <= ema21_5) : null;
+  var candSec = sgCandSec(c, c);
+  var utcHour = candSec != null ? new Date(candSec * 1000).getUTCHours() : null;
+  var sessLbl = String(c.killzone || (intel.session && intel.session.label) || '').toUpperCase();
+  var isLondonKz = (utcHour != null && utcHour >= 7 && utcHour <= 10) || /LONDON/i.test(sessLbl);
+  var isNyKz = (utcHour != null && utcHour >= 12 && utcHour <= 16) || /NY|OVERLAP|NEW.?YORK/i.test(sessLbl);
+  var isSilverBulletWindow = utcHour != null && (utcHour === 7 || utcHour === 8 || utcHour === 14 || utcHour === 15 || utcHour === 18 || utcHour === 19);
+  var killzoneActive = !!(isLondonKz || isNyKz || isSilverBulletWindow);
+  var killzoneWindow = !killzoneActive ? 'UNREAD'
+    : (isLondonKz && isNyKz ? 'LONDON_NY_OVERLAP_KZ'
+      : (isNyKz ? 'NY_OPEN_SILVER_BULLET_KZ'
+      : (isLondonKz ? 'LONDON_OPEN_JUDAS_KZ' : 'ICT_SILVER_BULLET_WINDOW')));
+  var strat = String(c.strategy || c.stratKey || '').toLowerCase();
+  var hasSweep = !!(micro15.sweepReclaimed || (micro5 && micro5.sweepReclaimed) || (fractal && fractal.ibRaided)
+    || (benchmarks && (benchmarks.benchmarkState === 'PDL_SWEEP_RECLAIM' || benchmarks.benchmarkState === 'PDH_SWEEP_REJECT')));
+  var hasFvg = !!(micro15.nearestFvg || (micro5 && micro5.nearestFvg));
+  var hasIfvgOrBreaker = !!(micro15.nearestIfvg || micro15.nearestBreaker || (micro5 && (micro5.nearestIfvg || micro5.nearestBreaker)));
+  var hasVaSpring = !!(volProf && volProf.ok && (volProf.profileState === 'VAL_SPRING_RECLAIM' || volProf.profileState === 'VAH_UPTHRUST_REJECT' || volProf.nearPoc));
+  var archetype = 'UNREAD';
+  var archetypeLabel = 'No scalp archetype measured';
+  var edgeThesis = 'Nothing on the tape named this scalp';
+  if (/judas|sweep|raid|trap|liq/i.test(strat) || (hasSweep && (micro15.mssConfirmed || (micro5 && micro5.mssConfirmed)))){
+    archetype = 'NY_JUDAS_LIQUIDITY_SWEEP';
+    archetypeLabel = 'JUDAS LIQUIDITY SWEEP + MSS RECLAIM';
+    edgeThesis = 'A raid beyond the session extreme, then a 5m or 15m reclaim';
+  } else if (/silver.?bullet|fvg|imbalance|gap/i.test(strat) || (hasFvg && (isSilverBulletWindow || micro15.mssConfirmed))){
+    archetype = 'SILVER_BULLET_FVG_RELOAD';
+    archetypeLabel = 'ICT SILVER BULLET 50% FVG CE RELOAD';
+    edgeThesis = 'An unfilled 5m or 15m gap, limit at the midpoint';
+  } else if (/poc|val|vah|profile|auction/i.test(strat) || hasVaSpring){
+    archetype = 'VAL_VAH_POC_AUCTION_SNAP';
+    archetypeLabel = 'VALUE AREA SPRING -> POC MAGNET SNAP';
+    edgeThesis = 'Price left the value area and the volume node is the magnet';
+  } else if (/breaker|ifvg|flip/i.test(strat) || (hasIfvgOrBreaker && isFinite(+micro15.volCommitmentRatio) && +micro15.volCommitmentRatio >= 1.25)){
+    archetype = 'BREAKER_IFVG_FLIP_DEFENSE';
+    archetypeLabel = 'BREAKER + INVERSE FVG POLARITY FLIP';
+    edgeThesis = 'A broken zone flipped, with volume behind the flip';
+  } else if (/orb|coil|squeeze|breakout|expan/i.test(strat) || (isFinite(+micro15.impulseZScore) && +micro15.impulseZScore >= 1.20 && isFinite(+micro15.clvScore) && Math.abs(+micro15.clvScore) >= 0.55)){
+    archetype = 'ORB_COMPRESSION_SQUEEZE';
+    archetypeLabel = 'OPENING RANGE COMPRESSION SQUEEZE';
+    edgeThesis = 'A tight range released on a close near the extreme';
+  } else if (emaRibbonAligned15 === true && emaRibbonAligned5 === true){
+    archetype = 'VWAP_EMA_RIBBON_CONTINUATION';
+    archetypeLabel = '5M/15M VWAP + EMA RIBBON SCALP';
+    edgeThesis = 'The 9 and 21 averages agree on both the 5m and the 15m';
+  }
+  return {
+    ok: archetype !== 'UNREAD', side: side, archetype: archetype, archetypeLabel: archetypeLabel, edgeThesis: edgeThesis,
+    killzoneActive: killzoneActive, killzoneWindow: killzoneWindow, isSilverBulletWindow: isSilverBulletWindow,
+    emaRibbonAligned15: emaRibbonAligned15, emaRibbonAligned5: emaRibbonAligned5,
+    ema9_15: isFinite(ema9_15) ? ema9_15 : null, ema21_15: isFinite(ema21_15) ? ema21_15 : null,
+    ema9_5: isFinite(ema9_5) ? ema9_5 : null, ema21_5: isFinite(ema21_5) ? ema21_5 : null,
+    micro15: micro15, micro5: micro5, volProfile: volProf, liquidityMap: liqMap, benchmarks: benchmarks, fractalCascade: fractal
+  };
+}
+
+function sgRefineGoldScalpBracket(c, intel, win){
+  win = win || W;
+  c = c || {};
+  intel = intel || {};
+  var archInfo = sgDetectGoldScalpArchetypes(c, intel, win);
+  var side = archInfo.side;
+  var isLong = side === 'long';
+  var rawEntry = N(c.rawEntry != null ? c.rawEntry : c.entry);
+  var rawStop = N(c.rawStop != null ? c.rawStop : c.stop);
+  var rawT1 = N(c.rawT1 != null ? c.rawT1 : (c.t1 || c.tp));
+  var rawT2 = N(c.t2 || c.tp2);
+  var rawT3 = N(c.t3 || c.tp3);
+  if (!(rawEntry > 0 && rawStop > 0 && rawEntry !== rawStop) || (side !== 'long' && side !== 'short')){
+    return { ok: false, reason: 'invalid raw scalp entry/stop' };
+  }
+  var rows15 = Array.isArray(c.rows15m) && c.rows15m.length ? c.rows15m : (Array.isArray(intel.rows15) ? intel.rows15 : []);
+  var rows5 = Array.isArray(c.rows5m) && c.rows5m.length ? c.rows5m : (Array.isArray(intel.rows5) ? intel.rows5 : []);
+  var atr15 = (intel.volRegime && intel.volRegime.ok && isFinite(+intel.volRegime.atrNow) && +intel.volRegime.atrNow > 0)
+    ? +intel.volRegime.atrNow : sgCalcBarsAtr(rows15, 14);
+  if (!(isFinite(atr15) && atr15 > 0)){
+    return {
+      ok: true, unread: true, side: side, entry: rawEntry, stop: rawStop,
+      t1: rawT1 > 0 ? rawT1 : null, t2: rawT2 > 0 ? rawT2 : null, t3: rawT3 > 0 ? rawT3 : null,
+      entryReason: 'ATR was not measured, so the desk scalp prices stay',
+      entryTranches: null, splits: null, ratchetLadder: [], archetypeInfo: archInfo, atr: null, movedEntry: false
+    };
+  }
+  var atr5 = sgCalcBarsAtr(rows5, 14);
+  var micro15 = archInfo.micro15 || {};
+  var micro5 = archInfo.micro5 || {};
+  var volProf = archInfo.volProfile || {};
+  var liqMap = archInfo.liquidityMap || {};
+  var swing15 = sgImpulseSwing(rows15, side);
+  var bestEntry = rawEntry;
+  var entryAnchorReason = 'desk scalp trigger';
+  var fvg5 = micro5 && micro5.nearestFvg && Math.abs(micro5.nearestFvg.ce - rawEntry) <= atr15 * 0.45 ? micro5.nearestFvg : null;
+  var fvg15 = micro15 && micro15.nearestFvg && Math.abs(micro15.nearestFvg.ce - rawEntry) <= atr15 * 0.55 ? micro15.nearestFvg : null;
+  var ifvg15 = micro15 && micro15.nearestIfvg && Math.abs(micro15.nearestIfvg.ce - rawEntry) <= atr15 * 0.55 ? micro15.nearestIfvg : null;
+  var brk15 = micro15 && micro15.nearestBreaker && Math.abs(micro15.nearestBreaker.mt - rawEntry) <= atr15 * 0.55 ? micro15.nearestBreaker : null;
+  var ob15 = micro15 && micro15.nearestOb && Math.abs(micro15.nearestOb.mt - rawEntry) <= atr15 * 0.55 ? micro15.nearestOb : null;
+  var structItems = (intel.structure && intel.structure.ok && Array.isArray(intel.structure.items)) ? intel.structure.items : [];
+  var nearStruct = null;
+  for (var i = 0; i < structItems.length; i++){
+    var spx = N(structItems[i] && structItems[i].px);
+    if (isFinite(spx) && spx > 0 && Math.abs(spx - rawEntry) <= atr15 * 0.42){
+      if (!nearStruct || Math.abs(spx - rawEntry) < Math.abs(nearStruct.px - rawEntry)){
+        nearStruct = { px: spx, label: structItems[i].label || '15m structure' };
+      }
+    }
+  }
+  if (fvg5 && nearStruct){
+    bestEntry = +((fvg5.ce * 0.55 + (isLong ? nearStruct.px + 0.20 : nearStruct.px - 0.20) * 0.45)).toFixed(2);
+    entryAnchorReason = '5m FVG CE (' + fmt(fvg5.ce, 2) + ') + front-run ' + nearStruct.label;
+  } else if (nearStruct){
+    bestEntry = +(isLong ? nearStruct.px + 0.22 : nearStruct.px - 0.22).toFixed(2);
+    entryAnchorReason = 'front-run ' + nearStruct.label + ' @ ' + fmt(nearStruct.px, 2);
+  } else if (fvg5){
+    bestEntry = +((rawEntry * 0.45 + fvg5.ce * 0.55)).toFixed(2);
+    entryAnchorReason = '5m FVG 50% CE (' + fmt(fvg5.ce, 2) + ')';
+  } else if (fvg15){
+    bestEntry = +((rawEntry * 0.50 + fvg15.ce * 0.50)).toFixed(2);
+    entryAnchorReason = '15m FVG 50% CE (' + fmt(fvg15.ce, 2) + ')';
+  } else if (ifvg15){
+    bestEntry = +((rawEntry * 0.50 + ifvg15.ce * 0.50)).toFixed(2);
+    entryAnchorReason = '15m IFVG 50% CE (' + fmt(ifvg15.ce, 2) + ')';
+  } else if (brk15){
+    bestEntry = +((rawEntry * 0.50 + brk15.mt * 0.50)).toFixed(2);
+    entryAnchorReason = '15m Breaker 50% MT (' + fmt(brk15.mt, 2) + ')';
+  } else if (ob15){
+    bestEntry = +((rawEntry * 0.50 + ob15.mt * 0.50)).toFixed(2);
+    entryAnchorReason = '15m OB 50% MT (' + fmt(ob15.mt, 2) + ')';
+  } else if (volProf && volProf.ok && volProf.nearPoc && isFinite(volProf.poc)){
+    bestEntry = +((rawEntry * 0.55 + volProf.poc * 0.45)).toFixed(2);
+    entryAnchorReason = 'Intraday POC Magnet (' + fmt(volProf.poc, 2) + ')';
+  }
+  var regime = (intel.volRegime && intel.volRegime.regime) ? String(intel.volRegime.regime).toUpperCase() : '';
+  var zonePad = (isFinite(atr5) && atr5 > 0) ? +(atr5 * (regime === 'EXPANSION' ? 0.30 : 0.22)).toFixed(2) : null;
+  var entryZoneLow = zonePad != null ? +(bestEntry - zonePad).toFixed(2) : bestEntry;
+  var entryZoneHigh = zonePad != null ? +(bestEntry + zonePad).toFixed(2) : bestEntry;
+  var w1Pct = (regime === 'EXPANSION') ? 50 : ((micro15 && micro15.absorptionDetected && isFinite(+micro15.wickRejectionScore) && +micro15.wickRejectionScore >= 75) ? 70 : 65);
+  var w2Pct = 100 - w1Pct;
+  var t2EntryPx = zonePad == null ? bestEntry : (isLong ? entryZoneLow : entryZoneHigh);
+  var blendedEntry = +((w1Pct / 100) * bestEntry + (w2Pct / 100) * t2EntryPx).toFixed(2);
+  var minScalpStopDist = +(atr15 * 0.65).toFixed(2);
+  var maxScalpStopDist = Math.max(Math.abs(rawEntry - rawStop), +(atr15 * 1.85).toFixed(2));
+  var candidateStop = rawStop;
+  if (micro5 && isFinite(micro5.sweptLevel) && isFinite(atr5) && atr5 > 0){
+    var swStop = isLong ? (micro5.sweptLevel - atr5 * 0.35) : (micro5.sweptLevel + atr5 * 0.35);
+    if (Math.abs(bestEntry - swStop) >= minScalpStopDist && Math.abs(bestEntry - swStop) <= maxScalpStopDist) candidateStop = swStop;
+  }
+  var curStopDist = Math.abs(bestEntry - candidateStop);
+  if (curStopDist < minScalpStopDist) candidateStop = isLong ? (bestEntry - minScalpStopDist) : (bestEntry + minScalpStopDist);
+  else if (curStopDist > maxScalpStopDist) candidateStop = isLong ? (bestEntry - maxScalpStopDist) : (bestEntry + maxScalpStopDist);
+  var shield = sgPsychShieldStop(candidateStop, side);
+  var bestStop = shield.stop;
+  if (isLong && bestStop >= bestEntry) bestStop = +(bestEntry - minScalpStopDist).toFixed(2);
+  if (!isLong && bestStop <= bestEntry) bestStop = +(bestEntry + minScalpStopDist).toFixed(2);
+  var riskDist = +(Math.abs(bestEntry - bestStop)).toFixed(2);
+  if (!(riskDist > 0)) return { ok: false, reason: 'scalp stop collapsed onto the entry' };
+  var stopAtrRatio = +(riskDist / atr15).toFixed(2);
+  var minT1Dist = riskDist * 1.65;
+  var targetT1 = (rawT1 > 0 && Math.abs(rawT1 - bestEntry) >= riskDist * 1.45 && Math.abs(rawT1 - bestEntry) <= riskDist * 4.5)
+    ? rawT1 : (isLong ? (bestEntry + minT1Dist) : (bestEntry - minT1Dist));
+  var t1FrontRun = false;
+  for (var j = 0; j < structItems.length; j++){
+    var opPx = N(structItems[j] && structItems[j].px);
+    if (!isFinite(opPx) || opPx <= 0) continue;
+    if (isLong && opPx > bestEntry + riskDist * 1.35 && Math.abs(opPx - targetT1) <= atr15 * 0.55){
+      targetT1 = +(opPx - 0.35).toFixed(2); t1FrontRun = true; break;
+    } else if (!isLong && opPx < bestEntry - riskDist * 1.35 && Math.abs(opPx - targetT1) <= atr15 * 0.55){
+      targetT1 = +(opPx + 0.35).toFixed(2); t1FrontRun = true; break;
+    }
+  }
+  var dolMagnetized = false;
+  if (!t1FrontRun && liqMap && liqMap.ok && liqMap.drawOnLiquidity && isFinite(liqMap.drawOnLiquidity.px)){
+    var dolPx = liqMap.drawOnLiquidity.px;
+    if (isLong && dolPx >= bestEntry + riskDist * 1.4 && Math.abs(dolPx - targetT1) <= atr15 * 0.75){
+      targetT1 = +(dolPx - 0.35).toFixed(2); dolMagnetized = true;
+    } else if (!isLong && dolPx <= bestEntry - riskDist * 1.4 && Math.abs(dolPx - targetT1) <= atr15 * 0.75){
+      targetT1 = +(dolPx + 0.35).toFixed(2); dolMagnetized = true;
+    }
+  }
+  targetT1 = +targetT1.toFixed(2);
+  var targetT2 = (rawT2 > 0 && Math.abs(rawT2 - bestEntry) > Math.abs(targetT1 - bestEntry))
+    ? rawT2 : (isLong ? (bestEntry + riskDist * 2.55) : (bestEntry - riskDist * 2.55));
+  if (swing15 && isFinite(swing15.ext1618)){
+    if (isLong && swing15.ext1618 > targetT1 + riskDist * 0.45 && swing15.ext1618 <= bestEntry + riskDist * 3.4) targetT2 = swing15.ext1618;
+    else if (!isLong && swing15.ext1618 < targetT1 - riskDist * 0.45 && swing15.ext1618 >= bestEntry - riskDist * 3.4) targetT2 = swing15.ext1618;
+  }
+  targetT2 = +targetT2.toFixed(2);
+  var targetT3 = (rawT3 > 0 && Math.abs(rawT3 - bestEntry) > Math.abs(targetT2 - bestEntry))
+    ? rawT3 : (isLong ? (bestEntry + riskDist * 3.4) : (bestEntry - riskDist * 3.4));
+  if (isLong && targetT3 <= targetT2) targetT3 = +(targetT2 + riskDist * 0.9).toFixed(2);
+  if (!isLong && targetT3 >= targetT2) targetT3 = +(targetT2 - riskDist * 0.9).toFixed(2);
+  targetT3 = +targetT3.toFixed(2);
+  var rr1 = +(Math.abs(targetT1 - bestEntry) / riskDist).toFixed(2);
+  var rr2 = +(Math.abs(targetT2 - bestEntry) / riskDist).toFixed(2);
+  var rr3 = +(Math.abs(targetT3 - bestEntry) / riskDist).toFixed(2);
+  var ft = intel.fiveTf || {};
+  var wantDir = isLong ? 'BULL' : 'BEAR';
+  var alignedCnt = isLong ? N(ft.bull) : N(ft.bear);
+  var scalpSplits = (regime === 'COMPRESSION')
+    ? { t1Pct: 65, t2Pct: 25, t3Pct: 10, splitScheme: 'SCALP_FAST_BANK_65_25_10' }
+    : ((ft.aligned === wantDir && isFinite(alignedCnt) && alignedCnt >= 5)
+      ? { t1Pct: 45, t2Pct: 30, t3Pct: 25, splitScheme: 'SCALP_CASCADE_RUNNER_45_30_25' }
+      : { t1Pct: 55, t2Pct: 30, t3Pct: 15, splitScheme: 'SCALP_STANDARD_55_30_15' });
+  var blendedRr = +((scalpSplits.t1Pct * rr1 + scalpSplits.t2Pct * rr2 + scalpSplits.t3Pct * rr3) / 100).toFixed(2);
+  var mfe060Px = +(isLong ? (bestEntry + riskDist * 0.60) : (bestEntry - riskDist * 0.60)).toFixed(2);
+  var cutRiskStop = +(isLong ? (bestEntry - riskDist * 0.35) : (bestEntry + riskDist * 0.35)).toFixed(2);
+  var bePlusStop = +(isLong ? (bestEntry + riskDist * 0.25) : (bestEntry - riskDist * 0.25)).toFixed(2);
+  return {
+    ok: true, unread: false, side: side, entry: bestEntry, blendedEntry: blendedEntry, rawEntry: rawEntry,
+    movedEntry: bestEntry !== +rawEntry.toFixed(2),
+    entryZone: [entryZoneLow, entryZoneHigh],
+    entryTranches: [
+      { tranche: 1, weightPct: w1Pct, price: bestEntry, role: '5m/15m Primary Scalp Trigger' },
+      { tranche: 2, weightPct: w2Pct, price: t2EntryPx, role: 'Deep Micro-OTE / OB Reload' }
+    ],
+    entryReason: entryAnchorReason, stop: +(+bestStop).toFixed(2), rawStop: rawStop, riskDist: riskDist,
+    atr: +atr15.toFixed(2), atr5m: (isFinite(atr5) && atr5 > 0) ? +atr5.toFixed(2) : null,
+    stopAtrRatio: stopAtrRatio, psychShielded: !!shield.shielded, psychMagnet: shield.magnet,
+    slNote: (shield.shielded ? ('shielded past $' + shield.magnet + ' · ') : '') + fmt(riskDist, 2) + ' pts (' + fmt(stopAtrRatio, 2) + ' ATR)',
+    t1: targetT1, t2: targetT2, t3: targetT3, t1FrontRun: t1FrontRun, dolMagnetized: dolMagnetized,
+    rr1: rr1, rr2: rr2, rr3: rr3, blendedRr: blendedRr, splits: scalpSplits,
+    ratchetLadder: [
+      { stage: 0, code: 'SCALP_INITIAL_SHIELD', triggerPx: bestEntry, stopPx: +(+bestStop).toFixed(2), note: 'Suggested scalp stop. The desk stop is not moved.' },
+      { stage: 1, code: 'SCALP_MFE_0_60R_TRIM', triggerPx: mfe060Px, stopPx: cutRiskStop, note: 'If price trades +0.60R, the plan tightens the stop to -0.35R' },
+      { stage: 2, code: 'SCALP_TP1_BANK_BE_PLUS', triggerPx: targetT1, stopPx: bePlusStop, note: 'If TP1 fills, the plan locks the stop 0.25R past entry' },
+      { stage: 3, code: 'SCALP_TP2_LOCK_TP1', triggerPx: targetT2, stopPx: targetT1, note: 'If TP2 fills, the plan locks the stop at TP1' }
+    ],
+    archetypeInfo: archInfo
+  };
+}
+
+function sgScoreGoldScalpSetup(c, scalpBracket, intel, win){
+  win = win || W;
+  c = c || {};
+  intel = intel || {};
+  var sb = scalpBracket || sgRefineGoldScalpBracket(c, intel, win);
+  if (!sb || !sb.ok){
+    return { ok: false, scalpScore: 0, scalpTier: 'SCALP VETO', gatesPassed: 0, gatesTotal: 10, gates: [], spreadUsd: null };
+  }
+  var arch = sb.archetypeInfo || sgDetectGoldScalpArchetypes(c, intel, win);
+  var micro15 = arch.micro15 || {};
+  var micro5 = arch.micro5 || {};
+  var volProf = arch.volProfile || {};
+  var liqMap = arch.liquidityMap || {};
+  var advGuard = sgAdverseSelectionGuard(c, sb, intel);
+  var decay = sgEvaluateSetupDecay(c, sb, intel);
+  var smtRead = sgCrossVenueSmtRead(c, intel, win);
+  var spreadUsd = null;
+  try{
+    if (typeof win.goldspotState === 'function'){
+      var sp = win.goldspotState();
+      if (sp && isFinite(N(sp.spot)) && isFinite(N(sp.xm)) && N(sp.spot) > 0 && N(sp.xm) > 0){
+        spreadUsd = +(Math.abs(N(sp.spot) - N(sp.xm))).toFixed(2);
+      }
+    }
+  }catch(eSp){}
+  var spreadToRiskPct = (spreadUsd != null && sb.riskDist > 0) ? +((spreadUsd / sb.riskDist) * 100).toFixed(1) : null;
+  var gates = [], passedCnt = 0, vetoReasons = [];
+  function gate(id, label, passed, detail, critical){
+    var p = passed === true;
+    gates.push({ id: id, label: label, passed: p, detail: detail || '', critical: !!critical });
+    if (p) passedCnt++;
+    else if (critical) vetoReasons.push(label);
+  }
+  gate('GS_G1_KILLZONE_TIMING', 'Kill-Zone / Silver Bullet Timing', arch.killzoneActive === true, arch.killzoneWindow, false);
+  var ag15 = sgCandleAgreement(intel, sb.side);
+  var m5m15Sync = (ag15.verdict === 'WITH' || arch.emaRibbonAligned15 === true) && arch.emaRibbonAligned5 === true;
+  gate('GS_G2_M5_M15_IMPULSE_SYNC', '5m/15m Impulse & EMA9/21 Sync', m5m15Sync, '15m ' + ag15.verdict, false);
+  var hasMicroAnchor = !!(micro15.nearestFvg || micro15.nearestIfvg || micro15.nearestOb || micro15.nearestBreaker
+    || micro15.sweepReclaimed || (micro5 && (micro5.nearestFvg || micro5.sweepReclaimed)));
+  gate('GS_G3_MICROSTRUCTURE_ANCHOR', '5m/15m FVG/OB/Sweep Anchor', hasMicroAnchor, sb.entryReason, false);
+  var vaOk = !!(volProf.ok && (volProf.nearPoc || volProf.profileState === 'VAL_SPRING_RECLAIM' || volProf.profileState === 'VAH_UPTHRUST_REJECT' || (liqMap.ok && liqMap.inFavorableZone)));
+  gate('GS_G4_VOLUME_PROFILE_VA', 'Volume Profile & Discount/Premium', vaOk, volProf.profileState || 'unread', false);
+  var wick = isFinite(+micro15.wickRejectionScore) ? +micro15.wickRejectionScore : null;
+  var absOk = !!(micro15.absorptionDetected || (wick != null && wick >= 55) || (micro5 && micro5.absorptionDetected));
+  gate('GS_G5_WICK_ABSORPTION_CLV', 'Wick Absorption & CLV Pressure', absOk, wick != null ? ('Wick score ' + wick) : 'wick score unread', false);
+  gate('GS_G6_SPREAD_TO_RISK_GUARD', 'Spread-to-Stop Efficiency (<=18%)', spreadToRiskPct != null && spreadToRiskPct <= 18,
+    spreadToRiskPct == null ? 'spread was not read' : ('Spread $' + fmt(spreadUsd, 2) + ' = ' + spreadToRiskPct + '% of SL'),
+    spreadToRiskPct != null && spreadToRiskPct > 28);
+  gate('GS_G7_SWEEP_SHIELDED_STOP', 'Micro-Sweep-Shielded Stop Geometry', !sb.unread && sb.stopAtrRatio >= 0.60 && sb.stopAtrRatio <= 2.15, sb.slNote || 'ATR unread', false);
+  gate('GS_G8_ASYMMETRIC_SCALP_PAYOFF', 'Fast-Bank TP Asymmetry', !sb.unread && sb.rr1 >= 1.45 && sb.blendedRr >= 1.95,
+    sb.unread ? 'ATR unread' : ('TP1 ' + fmt(sb.rr1, 2) + 'R · Blended ' + fmt(sb.blendedRr, 2) + 'R'), false);
+  var execSafe = advGuard.status !== 'KNIFE_HAZARD' && decay.status !== 'FRONT_RUN_INVALIDATED' && decay.status !== 'EXPIRED';
+  gate('GS_G9_ADVERSE_SELECTION_SAFE', 'Knife & Front-Run Guard Clear', execSafe, advGuard.status + ' · ' + decay.status, decay.status === 'FRONT_RUN_INVALIDATED' || decay.status === 'EXPIRED');
+  var blackout = !!(intel.news && intel.news.blackout);
+  try{ if (!blackout && typeof win.hgFundamentalBlackout === 'function') blackout = win.hgFundamentalBlackout('XAUUSD') === true; }catch(eB){}
+  var macroClear = !blackout && !sgFundBlocked(c) && (!smtRead.ok || smtRead.smtState !== 'DIVERGENT_CAUTION');
+  gate('GS_G10_MACRO_NEWS_SMT_CLEAR', 'Blackout, Fund & Bullion SMT Clear', macroClear, blackout ? 'BLACKOUT' : (smtRead.smtState || 'CLEAR'), blackout || sgFundBlocked(c));
+  var rawScore = Math.round((passedCnt / 10) * 82)
+    + (sb.psychShielded ? 4 : 0)
+    + (sb.t1FrontRun || sb.dolMagnetized ? 4 : 0)
+    + (arch.isSilverBulletWindow ? 4 : 0)
+    + (smtRead && smtRead.smtConfirmed ? 3 : 0)
+    + (micro15.mssConfirmed ? 3 : 0);
+  if (c.demoted) rawScore -= 8;
+  if (vetoReasons.length) rawScore = Math.min(rawScore, 52);
+  var scalpScore = Math.max(0, Math.min(99, rawScore));
+  var exp = sgCalcSetupExpectancy(c, sb, intel);
+  var riskProf = sgSetupRiskProfile(exp, sb);
+  var radar = sgSetupExecutionRadar(c, sb, intel, advGuard, arch.benchmarks);
+  var scalpTier = 'SCALP B WATCH';
+  if (vetoReasons.length || scalpScore < 60) scalpTier = 'SCALP VETO';
+  else if (scalpScore >= 88 && passedCnt >= 9) scalpTier = 'SCALP A+ SNIPER';
+  else if (scalpScore >= 76 && passedCnt >= 8) scalpTier = 'SCALP A';
+  var spreadDragR = (spreadUsd != null && sb.riskDist > 0) ? +(spreadUsd / sb.riskDist).toFixed(2) : null;
+  var netExpectedValueR = (exp && isFinite(exp.expectedValueR) && spreadDragR != null) ? +(exp.expectedValueR - spreadDragR).toFixed(2) : null;
+  return {
+    ok: true, scalpScore: scalpScore, scalpTier: scalpTier, gatesPassed: passedCnt, gatesTotal: 10, vetoReasons: vetoReasons,
+    spreadUsd: spreadUsd, spreadToRiskPct: spreadToRiskPct, spreadDragR: spreadDragR, netExpectedValueR: netExpectedValueR,
+    timeStopMin: 45, timeStopRule: '45m time-stop: scratch if the trade never reaches +0.50R',
+    expectancy: exp, riskProfile: riskProf, executionRadar: radar, adverseSelection: advGuard, timeDecay: decay, smtRead: smtRead, gates: gates
+  };
+}
+
+function sgEnhanceGoldScalpSetup(c, intel, win, opts){
+  win = win || W;
+  opts = opts || {};
+  if (!c || !c.dir) return c;
+  intel = intel || {};
+  var sb = sgRefineGoldScalpBracket(c, intel, win);
+  if (!sb || !sb.ok) return c;
+  var scoreCard = sgScoreGoldScalpSetup(c, sb, intel, win);
+  var arch = sb.archetypeInfo || {};
+  var mutateLevels = opts.mutateLevels === true;
+  c.scalpPrecision = sb;
+  if (mutateLevels && sb.unread !== true){
+    c.entry = sb.entry;
+    c.stop = sb.stop;
+    c.t1 = sb.t1;
+    c.t2 = sb.t2;
+    c.t3 = sb.t3;
+  }
+  var tranchePlan = (sb.entryTranches && sb.entryTranches.length >= 2)
+    ? (sb.entryTranches[0].weightPct + '% @ ' + fmt(sb.entryTranches[0].price, 2) + ' + ' + sb.entryTranches[1].weightPct + '% @ ' + fmt(sb.entryTranches[1].price, 2))
+    : 'Desk prices kept. ATR was not measured.';
+  var scalePlan = (sb.splits)
+    ? (sb.splits.t1Pct + '% @ TP1 ' + fmt(sb.t1, 2) + ' · ' + sb.splits.t2Pct + '% @ TP2 ' + fmt(sb.t2, 2) + ' · ' + sb.splits.t3Pct + '% @ TP3 ' + fmt(sb.t3, 2))
+    : 'Desk targets kept.';
+  c.scalpEnhancement = {
+    ok: true, version: 'hg-v1381', scalpTier: scoreCard.scalpTier, scalpScore: scoreCard.scalpScore,
+    archetype: arch.archetype, archetypeLabel: arch.archetypeLabel, edgeThesis: arch.edgeThesis,
+    killzoneWindow: arch.killzoneWindow, spreadUsd: scoreCard.spreadUsd, spreadToRiskPct: scoreCard.spreadToRiskPct,
+    spreadDragR: scoreCard.spreadDragR, netExpectedValueR: scoreCard.netExpectedValueR,
+    timeStopMin: scoreCard.timeStopMin, timeStopRule: scoreCard.timeStopRule,
+    tranchePlan: tranchePlan, scalePlan: scalePlan, ratchetLadder: sb.ratchetLadder || [],
+    gatesPassed: scoreCard.gatesPassed, gatesTotal: scoreCard.gatesTotal, gates: scoreCard.gates,
+    expectancy: scoreCard.expectancy, riskProfile: scoreCard.riskProfile, executionRadar: scoreCard.executionRadar,
+    deskUntouched: !mutateLevels
+  };
+  return c;
+}
+
+function sgSynthesizeGoldScalpSetups(intel, riskOpts, win){
+  win = win || W;
+  intel = intel || {};
+  var rows15 = Array.isArray(intel.rows15) ? intel.rows15 : [];
+  if (rows15.length < 12) return [];
+  var ft = intel.fiveTf || {};
+  var side = ft.aligned === 'BEAR' ? 'short' : (ft.aligned === 'BULL' ? 'long' : null);
+  if (!side) return [];
+  var atr15 = (intel.volRegime && intel.volRegime.ok && isFinite(+intel.volRegime.atrNow) && +intel.volRegime.atrNow > 0)
+    ? +intel.volRegime.atrNow : sgCalcBarsAtr(rows15, 14);
+  if (!(atr15 > 0)) return [];
+  var isLong = side === 'long';
+  var micro15 = sgDetectMicrostructureZones(rows15, null, side);
+  var anchor = micro15.nearestFvg || micro15.nearestIfvg || micro15.nearestOb;
+  if (!anchor && !micro15.sweepReclaimed) return [];
+  var last = rows15[rows15.length - 1];
+  var lastC = N(last && (last.c != null ? last.c : last.close));
+  var e1 = anchor ? N(anchor.ce != null ? anchor.ce : anchor.mt) : lastC;
+  if (!(e1 > 0)) return [];
+  var s1 = sgPsychShieldStop(isLong ? (e1 - atr15 * 0.95) : (e1 + atr15 * 0.95), side).stop;
+  var r1 = Math.abs(e1 - s1);
+  if (!(r1 > 0)) return [];
+  var barT = (last && (last.t || last.time)) || null;
+  var cand = {
+    id: ['GS-SYNTH', side, e1.toFixed(2), barT || 'notime'].join('|'),
+    sym: 'XAUUSD', dir: side, grade: 'B', entry: +e1.toFixed(2), stop: +(+s1).toFixed(2),
+    t1: +(isLong ? (e1 + r1 * 1.70) : (e1 - r1 * 1.70)).toFixed(2),
+    mark: isFinite(lastC) ? lastC : null, barT: barT, rows15m: rows15,
+    strategy: micro15.sweepReclaimed ? 'Judas Sweep Scalp' : 'Silver Bullet FVG Scalp',
+    scanner: 'gold-scalp', synthesized: true
+  };
+  return [sgEnhanceGoldScalpSetup(cand, intel, win, { mutateLevels: false })];
+}
+
+function sgUpgradeGoldScalpTabInOneGo(snapOrWin, opts){
+  opts = opts || {};
+  var win = (snapOrWin && typeof snapOrWin.goldscalpScan === 'function' && !Array.isArray(snapOrWin.cands))
+    ? snapOrWin : (opts.win || W);
+  var rawSnap = (snapOrWin && typeof snapOrWin === 'object' && (Array.isArray(snapOrWin.cands) || snapOrWin.at))
+    ? snapOrWin : null;
+  if (!rawSnap) return { at: Date.now(), cands: [], armed: [], scalpSummary: { totalSetups: 0, headline: '0 Gold Scalp setups active' } };
+  var intel = opts.intel || rawSnap.intel || {};
+  var mutateLevels = opts.mutateLevels === true;
+  var cands = Array.isArray(rawSnap.cands) ? rawSnap.cands.map(function(c){ return Object.assign({}, c); }) : [];
+  cands = cands.map(function(c){ return sgEnhanceGoldScalpSetup(c, intel, win, { mutateLevels: mutateLevels }); });
+  if (opts.includeSynthesized === true && intel && Array.isArray(intel.rows15)){
+    var synth = sgSynthesizeGoldScalpSetups(intel, opts.riskOpts, win);
+    var seen = {};
+    cands.forEach(function(c){ if (c && c.id) seen[c.id] = true; });
+    synth.forEach(function(sc){ if (sc && sc.id && !seen[sc.id]) cands.push(sc); });
+  }
+  cands.sort(function(a, b){
+    var as = N(a && a.scalpEnhancement && a.scalpEnhancement.scalpScore);
+    var bs = N(b && b.scalpEnhancement && b.scalpEnhancement.scalpScore);
+    if (!isFinite(as)) as = -1;
+    if (!isFinite(bs)) bs = -1;
+    return bs - as;
+  });
+  var armed = Array.isArray(rawSnap.armed) ? sgEnhanceArmedSetups(rawSnap.armed.slice(), intel) : rawSnap.armed;
+  var sniperCnt = 0, gradeACnt = 0;
+  cands.forEach(function(c){
+    var st = c && c.scalpEnhancement && c.scalpEnhancement.scalpTier;
+    if (st === 'SCALP A+ SNIPER') sniperCnt++;
+    else if (st === 'SCALP A') gradeACnt++;
+  });
+  rawSnap.cands = cands;
+  if (armed) rawSnap.armed = armed;
+  rawSnap.scalpSummary = {
+    version: 'hg-v1381', totalSetups: cands.length, sniperAPlusCount: sniperCnt, gradeACount: gradeACnt,
+    headline: cands.length ? (cands.length + ' Gold Scalp setups (' + sniperCnt + ' SNIPER A+ · ' + gradeACnt + ' GRADE A)') : '0 Gold Scalp setups active'
+  };
+  try{ sgPaintGoldScalpTabHud(rawSnap, win); }catch(eHud){}
+  return rawSnap;
+}
+
+function sgPaintGoldScalpTabHud(scalpSnap, win){
+  win = win || W;
+  if (typeof document === 'undefined' || !document.querySelector) return false;
+  var host = document.querySelector('#goldscalp, [data-tab="goldscalp"], .hg-goldscalp');
+  if (!host || !scalpSnap || !scalpSnap.scalpSummary) return false;
+  var hud = host.querySelector('#hg-gs-v1381-hud');
+  if (!hud){
+    hud = document.createElement('div');
+    hud.id = 'hg-gs-v1381-hud';
+    hud.className = 'hg-note';
+    if (host.firstChild) host.insertBefore(hud, host.firstChild);
+    else host.appendChild(hud);
+  }
+  var sum = scalpSnap.scalpSummary;
+  var top = Array.isArray(scalpSnap.cands) && scalpSnap.cands[0] ? scalpSnap.cands[0] : null;
+  var se = top && top.scalpEnhancement;
+  hud.innerHTML = '<b>GOLD SCALP</b> · ' + String(sum.headline)
+    + (se ? (' · ' + String(se.scalpTier) + ' ' + se.scalpScore + '/100 · ' + String(se.archetypeLabel) + '. Desk prices were not replaced.') : '');
+  return true;
+}
+
+function sgInstallGoldScalpTabEnhancer(win){
+  win = win || W;
+  if (!win || typeof win.goldscalpScan !== 'function' || win.goldscalpScan.__hgWrappedScalp) return false;
+  var orig = win.goldscalpScan;
+  var wrapped = function(){
+    var raw = orig.apply(this, arguments);
+    if (!raw) return raw;
+    try{
+      return sgUpgradeGoldScalpTabInOneGo(raw, {
+        win: win,
+        mutateLevels: win.__sgApplyScalpPrecisionInPlace === true,
+        includeSynthesized: win.__sgSynthesizeGoldScalp === true
+      });
+    }catch(eUp){ return raw; }
+  };
+  wrapped.__hgWrappedScalp = true;
+  wrapped.__orig = orig;
+  win.goldscalpScan = wrapped;
+  win.__sgGoldScalpEnhancerInstalled = true;
+  return true;
+}
 
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'super-gold', label: 'SUPER GOLD', run: superGoldWarm });
