@@ -684,6 +684,10 @@ function sgBarPx(b){
    A bullish order block is the down candle directly before the up displacement.
    The displacement wick is not a fill. A later bar trading into the zone is. */
 function sgDetectMicrostructureZones(rows, intel, side){
+  if (typeof intel === 'string' && (side == null || side === '')){
+    side = intel;
+    intel = null;
+  }
   rows = Array.isArray(rows) ? rows : [];
   var want = String(side || '').toLowerCase();
   if (want === 'buy' || want === 'bull') want = 'long';
@@ -1348,6 +1352,8 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   row.expectancy = exp;
   row.decay = decay;
   row.timeDecay = decay;
+  row.adverseSelection = advGuard;
+  row.liquidityMap = liqMap;
   return formation;
 }
 

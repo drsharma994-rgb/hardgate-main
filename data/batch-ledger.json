@@ -340,6 +340,11 @@
       "version": "hg-v1374",
       "built": "2026-10-15T12:00:00Z",
       "note": "Super Gold names equal highs and equal lows, the range midpoint, and the pool price is drawing toward. A resting limit into an opposing expansion bar waits for a 15m reclaim close. No measured ATR does not become 3.50. The desk entry is not moved."
+    },
+    {
+      "version": "hg-v1375",
+      "built": "2026-10-15T13:00:00Z",
+      "note": "The crowned row carries the pre-fill guard. A calm tape is a resting limit. An opposing expansion bar is a knife and waits for the 15m close. The detector accepts the side as its second argument. The desk entry is not moved."
     }
   ]
 }
