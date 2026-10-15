@@ -325,6 +325,11 @@
       "version": "hg-v1371",
       "built": "2026-10-15T09:00:00Z",
       "note": "The card shows the playbook and the measured entry zone beside the desk entry, which stays put. The chart draws the suggested ladder only when it was measured. A scan with a missing candle leg retries once. An unread ladder is not drawn and is not sent."
+    },
+    {
+      "version": "hg-v1372",
+      "built": "2026-10-15T10:00:00Z",
+      "note": "Super Gold reads unfilled 15m gaps and order blocks. The suggestion can be two limits, 60 percent at the entry and 40 percent at the nearest deeper level on the tape. Expectancy uses the measured reward. A limit that price has already run 90 percent of the way to TP1 is not chased. A tape-only setup is kept off the crown."
     }
   ]
 }

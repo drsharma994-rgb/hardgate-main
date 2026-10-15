@@ -582,8 +582,7 @@ function sgPrecisionGoldLevels(row, intel, opts){
   var rr3 = +(Math.abs(targetT3 - bestEntry) / riskDist).toFixed(2);
   /* Blended R:R across 50% TP1 + 30% TP2 + 20% TP3 */
   var blendedRr = +(0.50 * rr1 + 0.30 * rr2 + 0.20 * rr3).toFixed(2);
-
-  return {
+  var precOut = {
     ok: true,
     side: side,
     entry: bestEntry,
@@ -619,6 +618,10 @@ function sgPrecisionGoldLevels(row, intel, opts){
       + ' · TP3 ' + fmt(targetT3, 2) + ' (' + fmt(rr3, 2) + 'R, 20%)'
       + ' · Blended ' + fmt(blendedRr, 2) + 'R'
   };
+  try{
+    sgAttachEntryPlan(precOut, sgDetectMicrostructureZones(rows15, null, side));
+  }catch(ePlan){}
+  return precOut;
 }
 
 /* A suggestion is sendable only when the side, the stop, and the three
@@ -656,10 +659,261 @@ function sgStampPrecision(snap){
       if (prec && prec.ok){
         prec.ordered = sgPrecisionOrdered(prec);
         row.precision = prec;
+        row.expectancy = sgCalcSetupExpectancy(row, prec, snap.intel || null);
+        row.decay = sgEvaluateSetupDecay(row, prec, snap.intel || null);
       }
     }catch(eSt){}
   });
   return snap;
+}
+
+function sgBarPx(b){
+  if (!b) return null;
+  var o = N(b.o != null ? b.o : b.open);
+  var h = N(b.h != null ? b.h : b.high);
+  var l = N(b.l != null ? b.l : b.low);
+  var c = N(b.c != null ? b.c : b.close);
+  if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  return { o: o, h: h, l: l, c: c, t: b.t };
+}
+
+/* 15m gaps and order blocks that later bars have not traded back into.
+   A bullish gap is the third bar's low above the first bar's high.
+   A bullish order block is the down candle directly before the up displacement.
+   The displacement wick is not a fill. A later bar trading into the zone is. */
+function sgDetectMicrostructureZones(rows, intel, side){
+  rows = Array.isArray(rows) ? rows : [];
+  var want = String(side || '').toLowerCase();
+  if (want === 'buy' || want === 'bull') want = 'long';
+  if (want === 'sell' || want === 'bear') want = 'short';
+  var out = { ok: rows.length >= 5, fvgs: [], obs: [], sweeps: [], nearestFvg: null, nearestOb: null };
+  if (!out.ok) return out;
+  var bars = [];
+  for (var i = 0; i < rows.length; i++){
+    var px = sgBarPx(rows[i]);
+    if (px) bars.push(px);
+  }
+  if (bars.length < 5){ out.ok = false; return out; }
+  var last = bars[bars.length - 1].c;
+  function nearer(cur, px){
+    if (!cur) return true;
+    return Math.abs(px - last) < Math.abs(cur - last);
+  }
+  var f, j, k, b0, b1, b2, gap, ob, later, filled, sweepLo, sweepHi;
+  for (f = 2; f < bars.length; f++){
+    b0 = bars[f - 2]; b2 = bars[f];
+    if (b2.l > b0.h){
+      gap = { kind: 'FVG', side: 'long', bottom: +b0.h.toFixed(2), top: +b2.l.toFixed(2), index: f };
+      gap.ce = +(((gap.bottom + gap.top) / 2).toFixed(2));
+      filled = false;
+      for (k = f + 1; k < bars.length; k++){ if (bars[k].l <= gap.top){ filled = true; break; } }
+      if (!filled) out.fvgs.push(gap);
+    } else if (b2.h < b0.l){
+      gap = { kind: 'FVG', side: 'short', bottom: +b2.h.toFixed(2), top: +b0.l.toFixed(2), index: f };
+      gap.ce = +(((gap.bottom + gap.top) / 2).toFixed(2));
+      filled = false;
+      for (k = f + 1; k < bars.length; k++){ if (bars[k].h >= gap.bottom){ filled = true; break; } }
+      if (!filled) out.fvgs.push(gap);
+    }
+  }
+  for (j = 0; j < bars.length - 1; j++){
+    b0 = bars[j]; b1 = bars[j + 1];
+    if (b0.c < b0.o && b1.c > b1.o && b1.c > b0.h && (b1.c - b1.o) >= Math.max(0.5, (b0.h - b0.l) * 0.5)){
+      ob = { kind: 'OB', side: 'long', bottom: +b0.l.toFixed(2), top: +b0.h.toFixed(2), index: j };
+      ob.mt = +(((ob.bottom + ob.top) / 2).toFixed(2));
+      filled = false;
+      for (k = j + 2; k < bars.length; k++){ if (bars[k].l <= ob.top){ filled = true; break; } }
+      if (!filled) out.obs.push(ob);
+    } else if (b0.c > b0.o && b1.c < b1.o && b1.c < b0.l && (b1.o - b1.c) >= Math.max(0.5, (b0.h - b0.l) * 0.5)){
+      ob = { kind: 'OB', side: 'short', bottom: +b0.l.toFixed(2), top: +b0.h.toFixed(2), index: j };
+      ob.mt = +(((ob.bottom + ob.top) / 2).toFixed(2));
+      filled = false;
+      for (k = j + 2; k < bars.length; k++){ if (bars[k].h >= ob.bottom){ filled = true; break; } }
+      if (!filled) out.obs.push(ob);
+    }
+  }
+  for (j = 5; j < bars.length; j++){
+    sweepLo = Infinity; sweepHi = -Infinity;
+    for (k = j - 5; k < j; k++){
+      if (bars[k].l < sweepLo) sweepLo = bars[k].l;
+      if (bars[k].h > sweepHi) sweepHi = bars[k].h;
+    }
+    if (bars[j].l < sweepLo && bars[j].c > sweepLo){
+      out.sweeps.push({ side: 'long', index: j, pool: +sweepLo.toFixed(2), close: +bars[j].c.toFixed(2) });
+    }
+    if (bars[j].h > sweepHi && bars[j].c < sweepHi){
+      out.sweeps.push({ side: 'short', index: j, pool: +sweepHi.toFixed(2), close: +bars[j].c.toFixed(2) });
+    }
+  }
+  for (f = 0; f < out.fvgs.length; f++){
+    if (want && out.fvgs[f].side !== want) continue;
+    if (nearer(out.nearestFvg && out.nearestFvg.ce, out.fvgs[f].ce)) out.nearestFvg = out.fvgs[f];
+  }
+  for (f = 0; f < out.obs.length; f++){
+    if (want && out.obs[f].side !== want) continue;
+    if (nearer(out.nearestOb && out.nearestOb.mt, out.obs[f].mt)) out.nearestOb = out.obs[f];
+  }
+  return out;
+}
+
+/* 60% at the measured entry, 40% at the nearest deeper level that was
+   actually on the tape. No deeper level means both tranches are the same
+   price. The desk entry is not moved. */
+function sgAttachEntryPlan(prec, micro){
+  if (!prec || prec.ok !== true || !(prec.entry > 0)) return prec;
+  var entry = +prec.entry;
+  var isLong = prec.side !== 'short';
+  var deep = null, deepLabel = '';
+  function consider(px, label){
+    if (!isFinite(px)) return;
+    px = +px;
+    if (isLong && px < entry && (deep == null || px > deep)){ deep = px; deepLabel = label; }
+    if (!isLong && px > entry && (deep == null || px < deep)){ deep = px; deepLabel = label; }
+  }
+  if (micro && micro.nearestOb) consider(micro.nearestOb.mt, 'OB 50% mean threshold');
+  if (micro && micro.nearestFvg) consider(micro.nearestFvg.ce, 'FVG 50% consequent encroachment');
+  consider(prec.ote705, 'OTE 70.5%');
+  consider(prec.ote618, 'OTE 61.8%');
+  var primary = +entry.toFixed(2);
+  var second = deep != null ? +((+deep).toFixed(2)) : primary;
+  prec.entryTranches = [
+    { weightPct: 60, price: primary, label: 'primary structure tap' },
+    { weightPct: 40, price: second, label: deep != null ? deepLabel : 'no deeper level measured' }
+  ];
+  prec.blendedEntry = +((primary * 0.60 + second * 0.40).toFixed(2));
+  return prec;
+}
+
+/* Win rate is a count of what the tape actually confirmed. Reward is the
+   measured blended R. No reward means no expectancy, not a filled-in one. */
+function sgCalcSetupExpectancy(row, prec, intel){
+  prec = prec || (row && row.precision) || null;
+  var reward = (prec && isFinite(+prec.blendedRr) && +prec.blendedRr > 0) ? +prec.blendedRr
+    : (prec && isFinite(+prec.rr1) && +prec.rr1 > 0 ? +prec.rr1 : NaN);
+  if (!(reward > 0) || (prec && prec.unread === true)){
+    return { ok: false, estWinPct: null, expectedValueR: null, halfKellyRiskPct: null, payoffAsymmetry: null, why: 'reward was not measured' };
+  }
+  var side = String((prec && prec.side) || (row && row.dir) || '').toLowerCase();
+  var want = (side === 'short' || side === 'sell' || side === 'bear') ? 'BEAR' : 'BULL';
+  var win = 52;
+  var ft = intel && intel.fiveTf;
+  if (ft && ft.aligned === want) win += 8;
+  if (row && row.fusedConviction) win += 4;
+  if (row && row.minimalLossPass) win += 4;
+  if (row && row.killzone) win += 2;
+  if (prec && prec.t1FrontRun) win += 2;
+  if (prec && prec.entryTranches && prec.blendedEntry &&
+      ((want === 'BULL' && prec.blendedEntry < prec.entry) || (want === 'BEAR' && prec.blendedEntry > prec.entry))) win += 2;
+  win = Math.max(35, Math.min(74, win));
+  var p = win / 100;
+  var ev = +((p * reward) - (1 - p)).toFixed(2);
+  var kelly = p - (1 - p) / reward;
+  var halfPct = null;
+  if (kelly > 0 && ev > 0){
+    halfPct = +Math.min(1.5, (kelly / 2) * 5).toFixed(2);
+  } else {
+    halfPct = 0;
+  }
+  var payoff = +((p * reward) / Math.max(0.01, 1 - p)).toFixed(2);
+  return {
+    ok: ev > 0,
+    estWinPct: win,
+    expectedValueR: ev,
+    halfKellyRiskPct: halfPct,
+    payoffAsymmetry: payoff,
+    rewardR: +reward.toFixed(2)
+  };
+}
+
+/* A limit that price has already run 90% of the way to TP1 without tagging
+   is a missed fill. The desk does not chase it. Age uses the signal bar.
+   No bar time does not become an expiry. */
+function sgEvaluateSetupDecay(row, prec, intel){
+  row = row || {};
+  prec = prec || row.precision || {};
+  var side = String((prec && prec.side) || row.dir || row.side || '').toLowerCase();
+  var isLong = !(side === 'short' || side === 'sell' || side === 'bear');
+  var entry = N(prec.entry != null ? prec.entry : row.entry);
+  var t1 = N(prec.t1 != null ? prec.t1 : (row.t1 || row.tp));
+  var mark = N(row.mark);
+  var progress = null;
+  if (isFinite(entry) && isFinite(t1) && isFinite(mark) && t1 !== entry){
+    progress = isLong ? (mark - entry) / (t1 - entry) : (entry - mark) / (entry - t1);
+  }
+  var missed = progress != null && progress >= 0.90;
+  var bar = sgCandSec(row, row);
+  var ageSec = null;
+  if (bar) ageSec = Math.max(0, Math.floor(Date.now() / 1000) - bar);
+  var ttlSec = 6 * 60 * 60;
+  var expired = ageSec != null && ageSec > ttlSec;
+  var status = missed ? 'FRONT_RUN_INVALIDATED' : (expired ? 'EXPIRED' : 'FRESH');
+  return {
+    ok: true,
+    status: status,
+    missedBoat: missed === true,
+    expired: expired === true,
+    progress: progress != null ? +progress.toFixed(2) : null,
+    ageSec: ageSec,
+    ttlSec: ttlSec,
+    why: missed ? 'Price has run at least 90% of the way to TP1 without tagging the limit'
+      : (expired ? 'The signal bar is older than 6 hours' : 'The limit is still in front of price')
+  };
+}
+
+/* A tape-only setup, returned beside the desk. It is not pushed onto the
+   crown. No aligned side, no unfilled zone, or no marked target means none. */
+function sgSynthesizeTapeSetups(intel, riskOpts, win){
+  win = win || W;
+  if (!intel || intel.ok === false) return [];
+  var rows = Array.isArray(intel.rows15) ? intel.rows15 : [];
+  if (rows.length < 8) return [];
+  var aligned = intel.fiveTf && intel.fiveTf.aligned;
+  var side = aligned === 'BULL' ? 'long' : (aligned === 'BEAR' ? 'short' : '');
+  if (!side) return [];
+  var micro = sgDetectMicrostructureZones(rows, intel, side);
+  if (!micro.ok || (!micro.nearestFvg && !micro.nearestOb)) return [];
+  var isLong = side === 'long';
+  var entry = micro.nearestFvg ? micro.nearestFvg.ce : micro.nearestOb.mt;
+  var rawStop = micro.nearestOb
+    ? (isLong ? micro.nearestOb.bottom : micro.nearestOb.top)
+    : NaN;
+  if (!isFinite(entry) || !isFinite(rawStop) || entry === rawStop) return [];
+  if (isLong && !(rawStop < entry)) return [];
+  if (!isLong && !(rawStop > entry)) return [];
+  var items = (intel.structure && intel.structure.ok && Array.isArray(intel.structure.items)) ? intel.structure.items : [];
+  var t1 = NaN;
+  for (var i = 0; i < items.length; i++){
+    var px = N(items[i] && items[i].px);
+    if (!(px > 0)) continue;
+    if (isLong && px > entry && (!isFinite(t1) || px < t1)) t1 = px;
+    if (!isLong && px < entry && (!isFinite(t1) || px > t1)) t1 = px;
+  }
+  if (!isFinite(t1)) return [];
+  var last = sgBarPx(rows[rows.length - 1]);
+  var row = {
+    id: 'tape-synth-1',
+    sym: 'XAUUSD',
+    dir: side,
+    grade: 'A',
+    tier: 'clean',
+    entry: +entry.toFixed(2),
+    stop: +rawStop.toFixed(2),
+    t1: +t1.toFixed(2),
+    strategy: micro.nearestFvg ? 'Unmitigated FVG reload' : 'Unmitigated order block reload',
+    synthesized: true,
+    scanner: 'tape',
+    mark: last ? last.c : null,
+    barT: last && last.t ? last.t : null
+  };
+  var prec = sgPrecisionGoldLevels(row, intel);
+  if (prec && prec.ok){
+    sgAttachEntryPlan(prec, micro);
+    prec.ordered = sgPrecisionOrdered(prec);
+    row.precision = prec;
+  }
+  try{ sgEnhanceSetupFormation(row, intel, null, win); }catch(eSy){}
+  row.expectancy = sgCalcSetupExpectancy(row, row.precision, intel);
+  return (row.formation && row.expectancy) ? [row] : [];
 }
 
 function sgClassifySetupArchetype(row, prec, intel){
@@ -831,6 +1085,8 @@ function sgEnhanceSetupFormation(row, intel, snap, win){
   };
   row.formation = formation;
   row.convictionScore = score;
+  row.expectancy = sgCalcSetupExpectancy(row, prec, intel);
+  row.decay = sgEvaluateSetupDecay(row, prec, intel);
   return formation;
 }
 
@@ -933,6 +1189,7 @@ function sgApplyFormation(snap){
     superGoldSortCands(snap.cands);
   }
   if (Array.isArray(snap.armed)) snap.armed = sgEnhanceArmedSetups(snap.armed, intel);
+  try{ snap.tapeSetups = intel ? sgSynthesizeTapeSetups(intel, defaultRiskOpts(W), W) : []; }catch(eTape){ snap.tapeSetups = []; }
   return snap;
 }
 
@@ -2186,6 +2443,8 @@ function sgCrownDispatchPayload(snap, riskOpts, win){
     return { ready: false, reason: 'Crown audit grade ' + (cc.grade || 'NONE') + ' is below B, so nothing is sent' };
   }
   if (tape.lock) return { ready: false, reason: 'Tape locked: ' + tape.why };
+  var decay = sgEvaluateSetupDecay(r, r.precision, snap && snap.intel);
+  if (decay && decay.missedBoat) return { ready: false, reason: 'Price front-ran the entry. The limit is not chased.' };
   if (lc.invalidated || lc.stoppedOut) return { ready: false, reason: lc.why || 'The crown is invalidated' };
   var blackout = false;
   try{
@@ -3175,6 +3434,10 @@ W.sgClassifySetupArchetype = sgClassifySetupArchetype;
 W.sgEnhanceSetupFormation = sgEnhanceSetupFormation;
 W.sgFuseCrossDeskSetups = sgFuseCrossDeskSetups;
 W.sgEnhanceArmedSetups = sgEnhanceArmedSetups;
+W.sgDetectMicrostructureZones = sgDetectMicrostructureZones;
+W.sgCalcSetupExpectancy = sgCalcSetupExpectancy;
+W.sgEvaluateSetupDecay = sgEvaluateSetupDecay;
+W.sgSynthesizeTapeSetups = sgSynthesizeTapeSetups;
 W.sgPsychShieldStop = sgPsychShieldStop;
 W.sgHighAccuracyAudit = sgHighAccuracyAudit;
 
