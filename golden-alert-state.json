@@ -613,15 +613,15 @@
       "expired": true
     },
     "BAT": {
-      "at": "2026-10-14T19:48:08.505Z",
+      "at": "2026-10-15T01:20:06.854Z",
       "score": 5,
       "fresh": true,
-      "ago": 1,
+      "ago": 2,
       "crossDay": "2026-10-12",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-14T23:29:46.858Z",
+  "lastRunAt": "2026-10-15T01:20:21.643Z",
   "scanned": 504,
   "cards": 0
 }
