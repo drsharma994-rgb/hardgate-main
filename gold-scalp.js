@@ -6,14 +6,16 @@
 (function (root) {
   'use strict';
   function GoldScalpEngine(){ this.core = new root.HG_GoldCoreEngine(); }
+  var HG_SCALP_RR = { min: 1.5, t1: 1.5, t2: 2.5, t3: 3.5 };
   function bracket(entry, risk, dir){
     var sign = dir === 'BULL' ? 1 : -1;
+    // hg-v1390: align to house 1.5R/2.5R ladder + 1.5R minimum (was 2.6R target, 1.2R floor)
     return {
-      target: +(entry + sign * risk * 2.6).toFixed(2),
-      tp1_1_5R: +(entry + sign * risk * 1.5).toFixed(2),
-      tp2_2_6R: +(entry + sign * risk * 2.6).toFixed(2),
-      tp3_3_5R: +(entry + sign * risk * 3.5).toFixed(2),
-      riskReward: 2.6
+      target: +(entry + sign * risk * HG_SCALP_RR.t2).toFixed(2),
+      tp1_1_5R: +(entry + sign * risk * HG_SCALP_RR.t1).toFixed(2),
+      tp2_2_6R: +(entry + sign * risk * HG_SCALP_RR.t2).toFixed(2),
+      tp3_3_5R: +(entry + sign * risk * HG_SCALP_RR.t3).toFixed(2),
+      riskReward: HG_SCALP_RR.t2
     };
   }
   GoldScalpEngine.prototype.evaluateScalp = function(klines15m, dayKlines15m, macroData, silverKlines){
@@ -138,7 +140,7 @@
       setup.target = setup.tp2_2_6R;
       var room = Math.abs(setup.target - setup.entryPrice);
       var riskNow = Math.abs(setup.entryPrice - setup.stopLoss);
-      if (!(room >= riskNow)) return { active: false, veto: true, reason: 'The remaining daily range is under 1R, so the target is not worth the stop' };
+      if (!(room >= riskNow * HG_SCALP_RR.min)) return { active: false, veto: true, reason: 'The remaining daily range is under ' + HG_SCALP_RR.min.toFixed(1) + 'R, so the target is not worth the stop' };
       setup.adrRemaining = '$' + adr.remainingDollars;
     }
     var lots = this.core.calculateContractLots(10000, 0.01, setup.entryPrice, setup.stopLoss);
