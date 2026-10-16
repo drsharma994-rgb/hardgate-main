@@ -36,6 +36,11 @@ function fresh(opts){
   vm.createContext(win);
   vm.runInContext(opts.code || SRC, win);
   win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+  /* hg-v1393: upstream's hg-v1391 ready gate reads measuredSpread via
+     goldspotState; stub it in the fresh harness so the scan can earn
+     ready and write a record. The without-spread fail-closed case is
+     asserted in test-gold-confluence-tab.mjs. */
+  win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });
   return win;
 }
 
@@ -315,6 +320,9 @@ function ok(cond, msg){
   vm.runInContext(fwdSrc, win);
   vm.runInContext(confSrc, win);
   win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+  /* hg-v1393: §6b has its own fresh harness; stub goldspotState so the
+     upstream hg-v1391 ready gate can read a measured spread. */
+  win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });
   const BT = 1760000000;
   win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { barT: BT })] });
   win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { barT: BT + 60 })] });
@@ -356,7 +364,9 @@ function ok(cond, msg){
   w.ganeshGoldState = () => ({ plan: cand(2652, 2638, 2672) });
   w.superGoldScan = () => ({ cands: [cand(2650, 2641, 2670)] });
   const votes = w.hgGoldConfluenceRead(w);
-  const built = w.hgGoldConfluenceBuild(votes, { px: 2651.5, src: 'gold-api' });
+  /* hg-v1393: upstream's hg-v1391 ready requires netR>=1.20R after
+     measured spread; pass one so parity still asserts ready. */
+  const built = w.hgGoldConfluenceBuild(votes, { px: 2651.5, src: 'gold-api' }, { spreadUsd: 0.30 });
   ok(built.ready === true, '§7 parity ready');
   ok(built.side === 'long', '§7 parity side');
   ok(built.entry === 2651, '§7 parity entry');
@@ -411,6 +421,8 @@ async function runFixture(code){
   vm.createContext(win);
   vm.runInContext(code, win);
   win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+  /* hg-v1393: upstream's hg-v1391 ready gate reads measuredSpread. */
+  win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });
   const recorded = [];
   win.hgFwdRecordScan = (tab, tf, cands) => { recorded.push({ tab, tf, cands: cands.slice() }); return 1; };
   const BT = 1760000000;
@@ -469,7 +481,8 @@ const mutations = [
       vm.createContext(win);
       vm.runInContext(mutatedCode, win);
       win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
-      const r = [];
+      /* hg-v1393: ready requires measured spread. */
+      win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });      const r = [];
       win.hgFwdRecordScan = (tab, tf, cands) => { r.push({ tab, tf, cands: cands.slice() }); return 1; };
       win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { barT: null })] });
       win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { barT: null })] });
@@ -537,7 +550,8 @@ const mutations = [
       vm.createContext(win);
       vm.runInContext(mutatedCode, win);
       win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
-      const r = [];
+      /* hg-v1393: ready requires measured spread. */
+      win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });      const r = [];
       win.hgFwdRecordScan = (tab, tf, cands) => { r.push({ tab, tf, cands: cands.slice() }); return 1; };
       win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { barT: null })] });
       win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { barT: null })] });
@@ -589,6 +603,8 @@ const mutations = [
       vm.createContext(win);
       vm.runInContext(mutatedCode, win);
       win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+      /* hg-v1393: ready requires measured spread. */
+      win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });
       /* Stub hgInGoldWeekend to return the sign of what the second-arg
          receives, so we can read which instant leaked through. The real
          function is OS-dependent on today's date; stubbing isolates the
@@ -638,6 +654,8 @@ const mutations = [
       vm.createContext(win);
       vm.runInContext(mutatedCode, win);
       win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+      /* hg-v1393: ready requires measured spread. */
+      win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });
       const r = [];
       win.hgFwdRecordScan = (tab, tf, cands) => { r.push({ tab, tf, cands: cands.slice() }); return 1; };
       const BT = 1760000000;
@@ -702,7 +720,8 @@ const mutations = [
       vm.createContext(win);
       vm.runInContext(mutatedCode, win);
       win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
-      const r = [];
+      /* hg-v1393: ready requires measured spread. */
+      win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });      const r = [];
       win.hgFwdRecordScan = (tab, tf, cands) => { r.push({ tab, tf, cands: cands.slice() }); return 1; };
       win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { barT: null })] });
       win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { barT: null })] });

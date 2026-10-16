@@ -259,10 +259,18 @@ function oneVote(rows){
      fabricated). This is what makes the forward record settleable on the
      bar the plan was JUDGED on rather than the floor of the scan clock
      (hg-v978). */
+  /* hg-v1393: carry grade and lead from the chosen row too. Upstream's
+     hg-v1391 ready gate requires `priced.filter(v => v.lead || sendGrade(v.grade)) >= 2`
+     and the vote push below dropped both fields (hg-v932: work done
+     upstream and dropped at the handoff), so crownOk read 0 on every
+     scan — the ready gate was unreachable even with every desk crowned A.
+     Fix at the oneVote boundary so every downstream vote consumer sees
+     them, not just the ready gate. */
   return {
     split: false, side: side,
     entry: best.entry, stop: best.stop, t1: best.t1,
-    barT: best.barT, signalT: best.signalT
+    barT: best.barT, signalT: best.signalT,
+    grade: best.grade, lead: best.lead === true
   };
 }
 
@@ -582,10 +590,13 @@ function hgGoldConfluenceRead(win, extra){
        model. recordConfluence reads these back on the ready plan and
        passes them to hgFwdRecordScan so the ledger dates on the bar the
        plan was judged on (hg-v978), not the floor of the scan clock. */
+    /* hg-v1393: grade and lead ride through too (hg-v932 fix). The ready
+       gate at line 870 reads these; the vote push used to drop both. */
     votes.push({
       desk: d.label, id: d.id, state: 'setup',
       side: v.side, entry: v.entry, stop: v.stop, t1: v.t1,
-      barT: v.barT, signalT: v.signalT
+      barT: v.barT, signalT: v.signalT,
+      grade: v.grade, lead: v.lead === true
     });
   });
   return votes;
@@ -858,6 +869,38 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     + '. Entry ' + fmt(entry) + ' is the median of their plans, not the live print ' + fmt(px) + '.'
     + (base.costNote ? ' ' + base.costNote : '');
   if (!costOk) return base;
+  // hg-v1391: MOST-ACCURATE confluence scoring (3 desks -> accurate, not just quorum)
+  // 1) cluster tightness: entries must cluster within 0.8% (~$28 at $3500) — loose cluster = degraded accuracy
+  // 2) netR after measured spread must survive 1.2R (was 1R) — cost-toxic median blocked
+  // 3) at least 2 of priced desks are crowned/A-grade (sendGrade) — B/C swarm cannot lead
+  var entries = priced.map(function(v){ return v.entry; });
+  var maxE = Math.max.apply(null, entries), minE = Math.min.apply(null, entries);
+  var spreadPct = (maxE - minE) / entry * 100;
+  var tightOk = spreadPct <= 0.80;
+  var netOk = isFinite(base.netRr) ? base.netRr >= 1.20 : false;
+  var crowned = priced.filter(function(v){ return v.lead === true || sendGrade(v.grade); }).length;
+  var crownOk = crowned >= 2;
+  base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk, crowned: crowned, crownOk: crownOk };
+  if (!tightOk){
+    base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — median held but accuracy is degraded.';
+    base.accuracyTier = 'WATCH';
+  } else if (!netOk){
+    base.reason += ' Net ' + fmt(base.netRr) + 'R after $' + fmt(base.spreadUsd) + ' spread is under 1.20R — cost degrades accuracy.';
+    base.accuracyTier = 'WATCH';
+  } else if (!crownOk){
+    base.reason += ' Only ' + crowned + ' of ' + priced.length + ' desks are crowned/A — B/C swarm cannot be MOST ACCURATE.';
+    base.accuracyTier = 'WATCH';
+  } else {
+    base.accuracyTier = 'HIGH';
+    base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + priced.length + ' crowned — MOST ACCURATE.';
+  }
+  // Stand aside only if caller wants strict HIGH; default keeps ready but tags tier
+  // For this task: require HIGH for ready (most accurate only)
+  if (base.accuracyTier !== 'HIGH'){
+    base.ready = false;
+    base.watch = { side: side, entry: entry, stop: stop, t1: t1, count: priced.length, need: 3, rr: +(reward/risk).toFixed(2), mark: px, desks: base.desks, spreadUsd: base.spreadUsd, netRr: base.netRr, costNote: base.costNote, accuracy: base.accuracy };
+    return base;
+  }
   base.ready = true;
   return base;
 }

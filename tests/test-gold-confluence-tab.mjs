@@ -23,7 +23,11 @@ win.superGoldScan = () => ({ cands: [row(2650, 2641, 2670)] });
 win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
 
 const votes = win.hgGoldConfluenceRead(win);
-const built = win.hgGoldConfluenceBuild(votes, { px: 2651.5, src: 'gold-api' });
+/* hg-v1393: upstream's hg-v1391 ready gate requires netR>=1.20R after
+   measured spread; a build with no cost arg leaves netRr null and ready
+   false (correct hg-v966-compliant tightening). Pass a measured cost to
+   earn ready. The without-spread case is asserted separately below. */
+const built = win.hgGoldConfluenceBuild(votes, { px: 2651.5, src: 'gold-api' }, { spreadUsd: 0.30 });
 assert.equal(built.ready, true);
 assert.equal(built.side, 'long');
 assert.equal(built.entry, 2651);
@@ -38,10 +42,16 @@ const supVote = built.votes.filter(v => v.id === 'super-gold')[0];
 assert.equal(supVote.derived, true);
 assert.equal(supVote.echo, true);
 assert.equal(supVote.sameAs, 'GOLD SCALP');
-assert.match(built.reason, /spread was not read/);
+/* hg-v1393: the without-spread case still watches, not ready. */
+const noSpread = win.hgGoldConfluenceBuild(votes, { px: 2651.5, src: 'gold-api' });
+assert.equal(noSpread.ready, false);
+assert.ok(noSpread.watch, 'watch when spread unread');
+assert.match(noSpread.reason, /spread was not read/);
 
 const rec = [];
 win.hgFwdRecordScan = (tab, tf, cands) => { rec.push({ tab, tf, cands }); return 1; };
+/* hg-v1393: scan path reads measuredSpread from goldspotState; stub it. */
+win.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });
 const scanned = await win.hgGoldConfluenceScan(win);
 assert.equal(scanned.ready, true);
 assert.equal(scanned.entry, 2651);
@@ -59,7 +69,13 @@ const split = win.hgGoldConfluenceBuild(win.hgGoldConfluenceRead(win), { px: 265
 assert.equal(split.ready, false);
 assert.equal(split.longCount, 3);
 assert.equal(split.shortCount, 1);
-assert.equal(split.watch, undefined);
+/* hg-v1393: hg-v1391 widened attachWatch so a dominant-side longs+shorts
+   split now paints a WATCH naming the dominant side. The pre-pack
+   `split.watch === undefined` assertion was the behaviour this pack
+   explicitly changed. */
+assert.ok(split.watch, 'desks-disagree split now carries a WATCH (hg-v1391)');
+assert.equal(split.watch.reason, 'desks disagree');
+assert.match(split.watch.label, /DESKS DISAGREE/);
 
 const noPx = win.hgGoldConfluenceBuild(votes, null);
 assert.equal(noPx.ready, false);
@@ -67,8 +83,12 @@ assert.match(noPx.reason, /not read/);
 
 delete win.goldDirectionScan;
 win.goldPineScan = () => ({ cands: [row(3000, 2900, 3200)] });
-const far = win.hgGoldConfluenceBuild(win.hgGoldConfluenceRead(win), { px: 2651.5 });
-assert.equal(far.ready, true);
+/* hg-v1393: a far pine that is off-scale from IUX now paints an
+   OFF-SCALE watch (hg-v1391 widening). Without a spread, netR cannot
+   compute, so ready remains false even on-scale — but the median entry
+   is still the median of the on-scale cluster, not the far outlier. */
+const far = win.hgGoldConfluenceBuild(win.hgGoldConfluenceRead(win), { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(far.ready, true, 'with cluster + spread, far pine is excluded from on-scale and ready stays true');
 assert.equal(far.entry, 2651);
 assert.ok(far.offChart >= 1);
 assert.notEqual(far.entry, 3000);
@@ -163,12 +183,14 @@ assert.ok(wide.netRr < 1);
 assert.match(wide.reason, /under 1R/);
 assert.match(wide.reason, /not a setup/);
 
+/* hg-v1393: upstream's hg-v1391 ready gate reads vote.grade/lead for the
+   crowned filter and needs a measured spread for netRr. Pass both. */
 const milli = win.hgGoldConfluenceBuild([
-  { id: 'omnigold', desk: 'OMNIGOLD', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670 },
-  { id: 'milligold', desk: 'MILLI GOLD', state: 'setup', side: 'long', entry: 2650, stop: 2641, t1: 2670 },
-  { id: 'goldscalp', desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2651, stop: 2642, t1: 2668 },
-  { id: 'goldswing', desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2652, stop: 2638, t1: 2672 }
-], { px: 2651 });
+  { id: 'omnigold', desk: 'OMNIGOLD', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A' },
+  { id: 'milligold', desk: 'MILLI GOLD', state: 'setup', side: 'long', entry: 2650, stop: 2641, t1: 2670, grade: 'A' },
+  { id: 'goldscalp', desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2651, stop: 2642, t1: 2668, grade: 'A' },
+  { id: 'goldswing', desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2652, stop: 2638, t1: 2672, grade: 'A' }
+], { px: 2651 }, { spreadUsd: 0.30 });
 assert.equal(milli.ready, true);
 assert.equal(milli.longCount, 3);
 assert.ok(milli.desks.indexOf('MILLI GOLD') < 0);
@@ -192,6 +214,8 @@ gw.goldswingScan = () => ({ cands: [row(2651, 2642, 2668)] });
 gw.superGoldScan = () => ({ cands: [row(2652, 2638, 2672)] });
 gw.goldPineScan = () => null;
 gw.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+/* hg-v1393: scan path reads measuredSpread from goldspotState; stub it. */
+gw.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });
 let warmed = 0;
 gw.HG_warmups.push({
   id: 'goldpine',
@@ -238,6 +262,8 @@ wait.goldscalpScan = () => ({ cands: [row(2650, 2640, 2670)] });
 wait.goldswingScan = () => ({ cands: [row(2651, 2642, 2668)] });
 wait.superGoldScan = () => ({ cands: [row(2652, 2638, 2672)] });
 wait.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+/* hg-v1393: scan reads measuredSpread from goldspotState (hg-v1391 ready). */
+wait.goldspotState = () => ({ spot: 2651.5, xm: 2651.2 });
 let og = null;
 let opened = 0;
 let clicks = 0;

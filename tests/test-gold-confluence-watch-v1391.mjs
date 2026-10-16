@@ -42,7 +42,12 @@ function makeVote(desk, side, entry, stop, t1, barT){
   return {
     desk: desk, id: desk.toLowerCase().replace(/[^a-z0-9]/g, ''), state: 'setup',
     side: side, entry: entry, stop: stop, t1: t1,
-    barT: typeof barT === 'number' ? barT : 1_700_000_000
+    barT: typeof barT === 'number' ? barT : 1_700_000_000,
+    /* hg-v1393: upstream's hg-v1391 ready gate requires crownOk (>=2 votes
+       with grade:'A' or lead:true). Give every synthetic vote grade:'A' so
+       the ready-is-UNCHANGED-on-3-same-side-on-scale claim can be tested;
+       the alternative is to loosen the gate, which hg-v966 refuses. */
+    grade: 'A', lead: false
   };
 }
 
