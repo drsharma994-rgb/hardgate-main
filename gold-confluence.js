@@ -4,8 +4,13 @@
    is opened here. The live price is the IUX anchor (gold-iux.js,
    gold-api XAU). The entry is the median of the agreeing plans that
    sit on that price. It is not moved to the live print. No anchor, no
-   setup. A copy of another desk plan is not a second vote. GOLD
-   DIRECTION is not given a side. */
+   setup. Fewer than three independent desks is a watch, not a setup.
+   SUPER GOLD reads GOLD SCALP and GOLD SWING. MILLI GOLD reads
+   OMNIGOLD. Neither is a second vote. A candidate votes only when the
+   desk crowned it or graded it A. A measured spot-versus-XM spread is
+   subtracted. An unread spread is named and not invented. A formed
+   setup is written to the forward ledger. GOLD DIRECTION is not given
+   a side. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
@@ -140,7 +145,17 @@ function pushItem(snap, item, rows){
     || item.ticket === true);
   rows.push(row);
 }
-function listsOf(snap){
+function sendGrade(g){
+  if (g == null || g === '') return false;
+  if (typeof g === 'object'){
+    if (g.ticket === true) return true;
+    g = g.letter || g.grade || g.name || '';
+  }
+  var s = String(g).trim().toUpperCase().replace(/\s+/g, ' ');
+  return s === 'A' || s === 'A+' || s === 'SCALP A' || s === 'SCALP A+'
+    || s === 'SNIPER A' || s === 'SNIPER A+' || s === 'TICKET';
+}
+function collectRows(snap){
   var keys = ['cands', 'rows', 'candidates', 'results', 'setups', 'cards', 'hits'];
   var found = false, rows = [], i;
   for (i = 0; i < keys.length; i++){
@@ -154,8 +169,25 @@ function listsOf(snap){
       snap[k].forEach(function(item){ pushItem(snap, item, rows); });
     });
   }
+  return rows;
+}
+function listsOf(snap){
+  /* A list is not a vote. The row the desk would send is the crown
+     (best id, ticket, qualifying verdict) or an A grade. A B, a C, or
+     a row with no grade does not fill the quorum. */
+  var rows = collectRows(snap);
   var leads = rows.filter(function(r){ return r.lead; });
-  return leads.length ? leads : rows;
+  if (leads.length) return leads;
+  return rows.filter(function(r){ return sendGrade(r.grade); });
+}
+function uncrowned(snap){
+  var rows = collectRows(snap);
+  if (!rows.length) return false;
+  var i;
+  for (i = 0; i < rows.length; i++){
+    if (rows[i].lead || sendGrade(rows[i].grade)) return false;
+  }
+  return true;
 }
 function plansFrom(snap){
   if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return [];
@@ -495,6 +527,10 @@ function hgGoldConfluenceRead(win, extra){
     }
     var plans = plansFrom(snap);
     if (!plans.length){
+      if (uncrowned(snap)){
+        votes.push({ desk: d.label, id: d.id, state: 'none', note: 'scanned, and it did not crown a plan to send.' });
+        return;
+      }
       var silent = '';
       if (typeof snap.whySilent === 'string' && snap.whySilent
           && !/\bundefined\b|\[object Object\]/.test(snap.whySilent)){
@@ -526,9 +562,39 @@ function samePlan(a, b){
     && Math.abs(a.stop - b.stop) < 0.05
     && Math.abs(a.t1 - b.t1) < 0.05;
 }
+/* SUPER GOLD is a selection over GOLD SCALP and GOLD SWING.
+   MILLI GOLD is OMNIGOLD filtered. Same side or not, that plan is
+   the parent desk, including when the stop is a dollar away. */
+var DERIVED_OF = {
+  'super-gold': { parents: ['goldscalp', 'goldswing'], reads: 'GOLD SCALP and GOLD SWING' },
+  milligold: { parents: ['omnigold'], reads: 'OMNIGOLD' }
+};
+function nearPlan(a, b){
+  return a && b && a.side === b.side
+    && Math.abs(a.entry - b.entry) <= 1
+    && Math.abs(a.stop - b.stop) <= 1
+    && Math.abs(a.t1 - b.t1) <= 1;
+}
 function markEcho(setups){
+  var byId = {};
+  setups.forEach(function(v){ if (v && v.id) byId[v.id] = v; });
+  setups.forEach(function(v){
+    var spec = v && DERIVED_OF[v.id];
+    if (!spec) return;
+    v.derived = true;
+    v.echo = true;
+    v.reads = spec.reads;
+    var named = null;
+    spec.parents.forEach(function(pid){
+      var p = byId[pid];
+      if (!p || p.side !== v.side) return;
+      if (!named || nearPlan(p, v)) named = p.desk;
+    });
+    v.sameAs = named;
+  });
   var kept = [];
   setups.forEach(function(v){
+    if (v.echo) return;
     var echo = kept.some(function(k){ return samePlan(k, v); });
     if (echo) v.echo = true;
     else kept.push(v);
@@ -536,7 +602,83 @@ function markEcho(setups){
   return kept;
 }
 
-function hgGoldConfluenceBuild(votes, iux){
+function measuredSpread(win){
+  /* The same read SUPER GOLD uses: |spot - xm| from GOLD SPOT.
+     Missing either leg is unread. Nothing is filled in. */
+  try{
+    if (!win || typeof win.goldspotState !== 'function') return null;
+    var sp = win.goldspotState();
+    if (!sp || typeof sp !== 'object') return null;
+    var a = num(sp.spot), b = num(sp.xm);
+    if (!(a > 0 && b > 0)) return null;
+    return +Math.abs(a - b).toFixed(2);
+  }catch(e){ return null; }
+}
+function costOf(cost){
+  if (!cost) return null;
+  var s = num(cost.spreadUsd);
+  if (!(s >= 0)) return null;
+  return +s.toFixed(2);
+}
+function applyCost(base, risk, reward){
+  var rr = risk > 0 ? +(reward / risk).toFixed(2) : NaN;
+  base.rr = rr;
+  if (base.spreadUsd == null){
+    base.netRr = null;
+    base.costNote = 'The venue spread was not read.';
+    return true;
+  }
+  var drag = risk > 0 ? base.spreadUsd / risk : NaN;
+  var net = (isFinite(rr) && isFinite(drag)) ? +(rr - drag).toFixed(2) : NaN;
+  base.netRr = net;
+  if (!(net >= 1)){
+    base.costNote = 'Measured spread $' + fmt(base.spreadUsd) + ' leaves ' + (isFinite(net) ? fmt(net) : '-') + 'R after cost, which is under 1R, so this is not a setup.';
+    return false;
+  }
+  base.costNote = 'Measured spread $' + fmt(base.spreadUsd) + ' leaves ' + fmt(net) + 'R after cost.';
+  return true;
+}
+function asideNames(votes){
+  var out = [];
+  (votes || []).forEach(function(v){
+    if (!v) return;
+    if (v.state === 'none' || v.state === 'unread' || v.state === 'absent') out.push(v.desk);
+  });
+  return out;
+}
+function attachWatch(base, pack, votes, px){
+  if (!pack || pack.length < 1 || pack.length > 2) return;
+  var side = pack[0].side;
+  var entry = +median(pack.map(function(v){ return v.entry; })).toFixed(2);
+  var stop = +median(pack.map(function(v){ return v.stop; })).toFixed(2);
+  var t1 = +median(pack.map(function(v){ return v.t1; })).toFixed(2);
+  if (!ordered(side, entry, stop, t1)) return;
+  var risk = Math.abs(entry - stop);
+  var reward = Math.abs(t1 - entry);
+  var rr = risk > 0 ? +(reward / risk).toFixed(2) : NaN;
+  var watch = {
+    side: side,
+    entry: entry,
+    stop: stop,
+    t1: t1,
+    count: pack.length,
+    need: 3,
+    rr: rr,
+    mark: (px > 0) ? px : null,
+    desks: pack.map(function(v){ return v.desk; }),
+    aside: asideNames(votes),
+    spreadUsd: base.spreadUsd,
+    netRr: null,
+    costNote: 'The venue spread was not read.'
+  };
+  if (base.spreadUsd != null && risk > 0 && isFinite(rr)){
+    watch.netRr = +(rr - base.spreadUsd / risk).toFixed(2);
+    watch.costNote = 'Measured spread $' + fmt(base.spreadUsd) + '.';
+  }
+  base.watch = watch;
+}
+
+function hgGoldConfluenceBuild(votes, iux, cost){
   votes = Array.isArray(votes) ? votes : [];
   var px = iux && num(iux.px);
   var setups = votes.filter(function(v){ return v && v.state === 'setup'; });
@@ -551,9 +693,12 @@ function hgGoldConfluenceBuild(votes, iux){
     longCount: longs.length,
     shortCount: shorts.length,
     published: live.length,
+    spreadUsd: costOf(cost),
     iux: (px > 0) ? { px: px, at: iux.at || null, src: iux.src || 'gold-api' } : null
   };
   if (!(px > 0)){
+    if (longs.length && !shorts.length) attachWatch(base, longs, votes, NaN);
+    else if (shorts.length && !longs.length) attachWatch(base, shorts, votes, NaN);
     base.reason = 'The live IUX gold price was not read, so no setup is formed.';
     return base;
   }
@@ -566,9 +711,18 @@ function hgGoldConfluenceBuild(votes, iux){
   else if (shorts.length >= 3){ side = 'short'; pack = shorts; }
   else {
     var who = live.map(function(v){ return v.desk + ' ' + v.side.toUpperCase(); }).join(', ');
+    if (!live.length && setups.length){
+      base.reason = 'A published plan here only repeats another desk. It is not a second vote, and no independent desk has a crowned plan.';
+      return base;
+    }
     base.reason = live.length
       ? (nDesk(live.length) + ' published a priced setup' + (who ? ' (' + who + ')' : '') + '. ' + longs.length + ' long, ' + shorts.length + ' short. Three on the same side are required, and the other side must be empty. A desk that has not run is not a vote, and a copy of the same plan is not a second vote.')
       : 'No gold desk has published a setup yet. A desk that has not scanned is not a vote.';
+    attachWatch(base, longs.length ? longs : shorts, votes, px);
+    if (base.watch){
+      base.reason += ' WATCH ' + base.watch.count + ' of 3. Entry ' + fmt(base.watch.entry)
+        + ' is the median of the desks that published, not the live print ' + fmt(px) + '.';
+    }
     return base;
   }
   var priced = pack.filter(function(v){ return onScale(v.entry, px); });
@@ -588,29 +742,45 @@ function hgGoldConfluenceBuild(votes, iux){
   }
   var risk = Math.abs(entry - stop);
   var reward = Math.abs(t1 - entry);
-  var rr = risk > 0 ? +(reward / risk).toFixed(2) : NaN;
   var through = (side === 'long') ? (px - entry) / (t1 - entry) : (entry - px) / (entry - t1);
-  if (through >= 0.85){
-    base.side = side;
-    base.entry = entry;
-    base.stop = stop;
-    base.t1 = t1;
-    base.reason = 'The live IUX price has already travelled most of the way to the target. The entry is not moved up to ' + fmt(px) + '.';
-    return base;
-  }
-  base.ready = true;
   base.side = side;
   base.entry = entry;
   base.stop = stop;
   base.t1 = t1;
-  base.rr = rr;
   base.mark = px;
   base.deskCount = priced.length;
   base.offChart = off;
   base.desks = priced.map(function(v){ return v.desk; });
+  if (through >= 0.85){
+    base.reason = 'The live IUX price has already travelled most of the way to the target. The entry is not moved up to ' + fmt(px) + '.';
+    return base;
+  }
+  var costOk = applyCost(base, risk, reward);
   base.reason = priced.length + ' desks agree ' + side.toUpperCase()
-    + '. Entry ' + fmt(entry) + ' is the median of their plans, not the live print ' + fmt(px) + '.';
+    + '. Entry ' + fmt(entry) + ' is the median of their plans, not the live print ' + fmt(px) + '.'
+    + (base.costNote ? ' ' + base.costNote : '');
+  if (!costOk) return base;
+  base.ready = true;
   return base;
+}
+
+var lastFwdKey = '';
+function recordConfluence(win, built){
+  if (!built || built.ready !== true) return;
+  if (!win || typeof win.hgFwdRecordScan !== 'function') return;
+  var key = built.side + '|' + built.entry + '|' + built.stop + '|' + built.t1;
+  if (key === lastFwdKey) return;
+  try{
+    win.hgFwdRecordScan('CONFLUENCE', '15m', [{
+      sym: 'XAUUSD',
+      dir: built.side,
+      entry: built.entry,
+      stop: built.stop,
+      t1: built.t1,
+      ticket: true
+    }]);
+    lastFwdKey = key;
+  }catch(e){}
 }
 
 async function hgGoldConfluenceScan(win, opts){
@@ -628,8 +798,9 @@ async function hgGoldConfluenceScan(win, opts){
       if (a && num(a.px) > 0) iux = { px: +a.px, at: a.at || Date.now(), src: a.src || 'gold-api' };
     }
   }catch(e){ iux = null; }
-  var built = hgGoldConfluenceBuild(votes, iux);
+  var built = hgGoldConfluenceBuild(votes, iux, { spreadUsd: measuredSpread(win) });
   built.at = Date.now();
+  if (!scanHarness(win)) recordConfluence(win, built);
   return built;
 }
 
@@ -637,34 +808,56 @@ function bitOf(v){
   if (!v) return '';
   if (v.state === 'setup'){
     var s = v.side.toUpperCase() + ' ' + fmt(v.entry) + ' / ' + fmt(v.stop) + ' / ' + fmt(v.t1);
-    if (v.echo) s += ' (same plan as another desk, not a second vote)';
+    if (v.derived){
+      s += v.sameAs
+        ? (' (same idea as ' + v.sameAs + ', not a second vote)')
+        : (' (reads ' + (v.reads || 'another gold desk') + ', not a separate vote)');
+    } else if (v.echo) s += ' (same plan as another desk, not a second vote)';
     return s;
   }
   if (v.note) return v.note;
   if (v.state === 'context') return v.note || 'context';
   return v.state;
 }
+function rrText(card){
+  if (!card) return '-';
+  if (isFinite(card.netRr)) return fmt(card.netRr) + 'R net';
+  if (isFinite(card.rr)) return fmt(card.rr) + (card.spreadUsd == null ? 'R gross' : 'R');
+  return '-';
+}
+function levelCard(title, card){
+  return '<div class="hg-desk-card">'
+    + '<div class="hg-desk-top"><div class="hg-desk-sym">' + esc(title) + '</div></div>'
+    + '<div class="hg-desk-levels">'
+    + '<div><div class="k">ENTRY</div><div class="v">' + fmt(card.entry) + '</div></div>'
+    + '<div><div class="k">STOP</div><div class="v">' + fmt(card.stop) + '</div></div>'
+    + '<div><div class="k">TP1</div><div class="v">' + fmt(card.t1) + '</div></div>'
+    + '<div><div class="k">IUX</div><div class="v">' + fmt(card.mark) + '</div></div>'
+    + '<div><div class="k">RR</div><div class="v">' + rrText(card) + '</div></div>'
+    + '</div></div>';
+}
 function paint(root, built){
   var desk = root.querySelector('#gc-desk');
   var stat = root.querySelector('#gc-stat');
   if (!desk || !built) return;
-  if (stat) stat.textContent = built.ready ? 'ONE SETUP' : 'STAND ASIDE';
+  if (stat) stat.textContent = built.ready ? 'ONE SETUP' : (built.watch ? 'WATCH' : 'STAND ASIDE');
   var voteHtml = (built.votes || []).map(function(v){
     return '<div class="hg-note">' + esc(v.desk) + ' — ' + esc(bitOf(v)) + '</div>';
   }).join('');
   var plan = '';
   if (built.ready){
-    plan = '<div class="hg-desk-card">'
-      + '<div class="hg-desk-top"><div class="hg-desk-sym">XAUUSD · ' + esc(built.side.toUpperCase()) + '</div></div>'
-      + '<div class="hg-desk-levels">'
-      + '<div><div class="k">ENTRY</div><div class="v">' + fmt(built.entry) + '</div></div>'
-      + '<div><div class="k">STOP</div><div class="v">' + fmt(built.stop) + '</div></div>'
-      + '<div><div class="k">TP1</div><div class="v">' + fmt(built.t1) + '</div></div>'
-      + '<div><div class="k">IUX</div><div class="v">' + fmt(built.mark) + '</div></div>'
-      + '<div><div class="k">RR</div><div class="v">' + (isFinite(built.rr) ? fmt(built.rr) + 'R' : '-') + '</div></div>'
-      + '</div></div>';
+    plan = levelCard('XAUUSD · ' + built.side.toUpperCase(), built);
+  } else if (built.watch){
+    var w = built.watch;
+    plan = levelCard('WATCH · ' + w.count + ' OF 3', w);
+    if (w.aside && w.aside.length) plan += '<div class="hg-note">Stood aside: ' + esc(w.aside.join(', ')) + '</div>';
+  } else if (isFinite(built.entry) && isFinite(built.stop) && isFinite(built.t1)){
+    plan = levelCard('STOOD ASIDE · ' + String(built.side || '').toUpperCase(), built);
   }
-  desk.innerHTML = '<div class="hg-note">' + esc(built.reason || '') + '</div>' + plan + voteHtml;
+  var cost = '';
+  var note = (built.watch && built.watch.costNote) || built.costNote || '';
+  if (note && (!built.reason || built.reason.indexOf(note) < 0)) cost = '<div class="hg-note">' + esc(note) + '</div>';
+  desk.innerHTML = '<div class="hg-note">' + esc(built.reason || '') + '</div>' + plan + cost + voteHtml;
 }
 
 function mount(root){
@@ -672,7 +865,7 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. SCAN GOLD DESKS opens each gold desk that has not published yet and waits until that scan finishes. A setup is kept only when three different plans agree. The entry is their median, not the live IUX print. GOLD DIRECTION still needs your own LONG or SHORT.</div></div></div>';
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. SCAN GOLD DESKS opens each gold desk that has not published yet and waits until that scan finishes. Three different crowned plans are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. SUPER GOLD and MILLI GOLD repeat the desk they read. GOLD DIRECTION still needs your own LONG or SHORT.</div></div></div>';
   var btn = root.querySelector('#gc-run');
   var stat = root.querySelector('#gc-stat');
   function go(doGather){
