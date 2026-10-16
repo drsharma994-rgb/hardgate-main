@@ -410,6 +410,11 @@
       "version": "hg-v1388",
       "built": "2026-10-16T05:00:00Z",
       "note": "Gold Scalp reads 5m order flow, the opening range, a 50 35 15 micro ladder, and four measured scalp vectors. Desk prices stay put."
+    },
+    {
+      "version": "hg-v1389",
+      "built": "2026-10-16T06:10:00Z",
+      "note": "The gold confluence fallback scores a candle impulse, the 20-bar average, and RSI only when those are read. An unread venue spread is named and is not filled in as zero. The fallback does not replace the gold candle builder, the day-swing reader, or the measure reader."
     }
   ]
 }
