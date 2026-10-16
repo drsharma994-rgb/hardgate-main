@@ -961,6 +961,24 @@ function collectCandleForecast(out){
   }catch(e){ /* never breaks the batch */ }
 }
 
+/* hg-v1362: SUPER GOLD's one crown alert. The desk decides WHETHER its
+   crowned pick is alertable (fresh scan, both desks on one side, GRADE B or
+   better on the printed crown checks, feeds not locked, no blackout) and
+   publishes it as a state function; this collector only validates the
+   bracket. Silence without a state is correct, not an error. */
+function collectSuperGold(out){
+  try{
+    if (typeof W.superGoldAlertState !== 'function') return;
+    var s = W.superGoldAlertState();
+    if (!s || typeof s !== 'object') return;
+    if (!s.dir || !fin(+s.entry) || !fin(+s.stop) || !fin(+s.t1)) return;
+    pushSetup(out, 'SUPER GOLD', {
+      sym: s.sym || 'XAUUSD', dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1,
+      clean: s.clean === true, tier: s.tier
+    }, { note: s.note || null });
+  }catch(e){ /* never breaks the batch */ }
+}
+
 function hgTabAlertsCollect(win){
   var out = [];
   var root = win || W;
@@ -969,6 +987,7 @@ function hgTabAlertsCollect(win){
   try{
     collectOmnibtc(out);   /* hg-v1053: the desk's one crown, first - it is the most selective read */
     collectTrendmxCrown(out);   /* hg-v1068: the matrix's one crown, right after */
+    collectSuperGold(out);   /* hg-v1362: the gold conviction desk's one crown */
     collectCandleForecast(out);   /* hg-v1357: the forecast tab's one armed setup */
     collectGaneshGold(out);   /* hg-v1072: the firm's one crown */
     collectCrypto(out, 'swing', 'SWING');

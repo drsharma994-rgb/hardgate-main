@@ -549,11 +549,11 @@
       "expired": true
     },
     "ADA": {
-      "at": "2026-10-12T14:18:11.342Z",
-      "score": 4,
+      "at": "2026-10-16T05:00:10.181Z",
+      "score": 2,
       "fresh": true,
-      "ago": 4,
-      "crossDay": "2026-10-07",
+      "ago": 9,
+      "crossDay": "2026-10-06",
       "expired": true
     },
     "OGN": {
@@ -573,10 +573,10 @@
       "expired": true
     },
     "RLC": {
-      "at": "2026-10-12T19:50:09.716Z",
-      "score": 5,
+      "at": "2026-10-15T19:46:58.314Z",
+      "score": 4,
       "fresh": true,
-      "ago": 3,
+      "ago": 6,
       "crossDay": "2026-10-08",
       "expired": true
     },
@@ -589,10 +589,10 @@
       "expired": true
     },
     "METIS": {
-      "at": "2026-10-14T10:34:46.751Z",
-      "score": 5,
+      "at": "2026-10-15T10:33:26.908Z",
+      "score": 4,
       "fresh": true,
-      "ago": 7,
+      "ago": 8,
       "crossDay": "2026-10-06",
       "expired": true
     },
@@ -611,9 +611,33 @@
       "ago": 2,
       "crossDay": "2026-10-11",
       "expired": true
+    },
+    "BAT": {
+      "at": "2026-10-15T10:33:22.950Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 2,
+      "crossDay": "2026-10-12",
+      "expired": true
+    },
+    "NIGHT": {
+      "at": "2026-10-15T19:46:59.597Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 1,
+      "crossDay": "2026-10-13",
+      "expired": true
+    },
+    "W": {
+      "at": "2026-10-16T05:00:11.601Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 3,
+      "crossDay": "2026-10-12",
+      "expired": true
     }
   },
-  "lastRunAt": "2026-10-14T12:25:43.829Z",
+  "lastRunAt": "2026-10-16T05:00:25.965Z",
   "scanned": 504,
   "cards": 0
 }

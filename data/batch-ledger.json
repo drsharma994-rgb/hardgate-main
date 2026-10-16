@@ -109,7 +109,7 @@
     {
       "version": "hg-v1319",
       "built": "2026-10-13T18:45:00Z",
-      "note": "CANDLE FORECAST names every remaining gold tab beside the candle pattern. OMNIGOLD DESK is driven on this tape. OPTI GOLD counts only a live open or waiting setup from its last scan. NEW GOLD counts only when its own three legs fire, and that level is not the stop. SUPER GOLD counts only a scan already on the page. MILLI GOLD is named and has no side. An unscanned or unloaded engine stays unread and is never agreement. A confluence ticket — a named candle pattern, two families with the call, none against — becomes the setup, including on the scalp bracket. The stop stays the pattern extreme or one ATR. Tab prices are not the stop. Four more candle shapes are named beside the call and do not vote: matching high and low, separating lines, stick sandwich, and upside-gap two crows."
+      "note": "CANDLE FORECAST names every remaining gold tab beside the candle pattern. OMNIGOLD DESK is driven on this tape. OPTI GOLD counts only a live open or waiting setup from its last scan. NEW GOLD counts only when its own three legs fire, and that level is not the stop. SUPER GOLD counts only a scan already on the page. MILLI GOLD is named and has no side. An unscanned or unloaded engine stays unread and is never agreement. A confluence ticket \u2014 a named candle pattern, two families with the call, none against \u2014 becomes the setup, including on the scalp bracket. The stop stays the pattern extreme or one ATR. Tab prices are not the stop. Four more candle shapes are named beside the call and do not vote: matching high and low, separating lines, stick sandwich, and upside-gap two crows."
     },
     {
       "version": "hg-v1320",
@@ -269,7 +269,147 @@
     {
       "version": "hg-v1360",
       "built": "2026-10-15T00:30:00Z",
-      "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR — a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
+      "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR \u2014 a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1361",
+      "built": "2026-10-15T01:30:00Z",
+      "note": "SUPER GOLD gains a desk intelligence strip pinned to each scan: the five-timeframe matrix (5m trigger through 1d regime) from the shared hgCfIntel readers, the shared candle engine's 15m read with a WITH/AGAINST/UNREAD verdict against the crowned side (a disagreement is shown, never hidden, and never uncrowns), the volatility regime, the session killzone clock and the news execution state. Computed in the scan's one async window so the render path never fetches; a failed leg is UNREAD, not agreement; a matrix of five unread rows is not a read. The v1358/v1359 crown rules are untouched. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1362",
+      "built": "2026-10-15T02:30:00Z",
+      "note": "SUPER GOLD's intelligence layer becomes an audit: a CROWN AUDIT grades the crowned row on nine printed checks (both desks on one side, GRADE A PASS, candles travelling with the crown, four-of-five timeframes on the crowned side, the entry at marked structure, a tradeable volatility regime, feeds agreeing, no news blackout, no fundamental headwind) with a feed lock or blackout capping the grade at C \u2014 the audit never uncrowns and is not a probability; a DISTANCE read names how far the source desk's sizing mark sits from the entry in dollars and ATR; the desk intel gains the cross-feed quality check and the structure map from the shared hgCfIntel readers; and the desk publishes one alert candidate through tabalerts only when crowned at GRADE B or better, expiring with the scan that earned it. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1363",
+      "built": "2026-10-15T03:30:00Z",
+      "note": "SUPER GOLD gains the crown execution layer: an ARMED/TRIGGERED/NO-TRADE state machine for the crowned bracket judged against the source desk's sizing mark (a crown with no mark is ARMED with the trigger unread, never a fabricated fill); the forecast cone and the closed 15m window pinned to the scan so the render path never fetches; a mini candlestick chart of the crowned entry/stop/T1 on the tape; the desk's forward record split into pool-wide and crowned-only so the reader can see whether the crown earns its place; a next-scan countdown repainted by the desk's own sync timer; and the execution state now renders even when the tape legs of the intel read failed. All version surfaces move together."
+    },
+    {
+      "version": "hg-v1364",
+      "built": "2026-10-15T04:30:00Z",
+      "note": "Super Gold retries a candle leg that comes back empty, then reads the fallback. A cross-venue gap past 12 USD locks a send. The path after the crowned bar is named and the source stop is not moved. A send needs a real size and a real bar time, and the scan itself does not send."
+    },
+    {
+      "version": "hg-v1365",
+      "built": "2026-10-15T05:00:00Z",
+      "note": "Super Gold keeps the source bar time on the crowned row. A send uses the size the desk already calculated. It does not invent a size, and a second click of the same crown is a duplicate."
+    },
+    {
+      "version": "hg-v1366",
+      "built": "2026-10-15T05:30:00Z",
+      "note": "Super Gold prints a 12-gate sniper scorecard and a level suggestion from the measured ATR, the OTE, and marked structure. The suggestion does not replace the crowned entry or stop. An unread ATR moves nothing. A hard veto blocks a send."
+    },
+    {
+      "version": "hg-v1367",
+      "built": "2026-10-15T06:00:00Z",
+      "note": "A measured sniper suggestion is what Super Gold sends: entry in front of structure, stop past the round number, and the three targets. Twelve of twelve gates is SNIPER A+. A blackout stands aside. An unread ATR is not sent. The card still shows the desk levels."
+    },
+    {
+      "version": "hg-v1368",
+      "built": "2026-10-15T06:30:00Z",
+      "note": "Super Gold stamps the measured sniper bracket onto the row after the tape is read. The card and the send use that same bracket. A ladder out of order is not sent. A refresh keeps the tape. The desk entry and stop on the row stay as published."
+    },
+    {
+      "version": "hg-v1369",
+      "built": "2026-10-15T07:00:00Z",
+      "note": "When no structure is close, the sniper entry uses the 61.8 to 70.5 percent band. If VWAP sits inside that band it pulls the entry to the midpoint. A close structure level still wins. An unread ATR is still not sent."
+    },
+    {
+      "version": "hg-v1370",
+      "built": "2026-10-15T08:00:00Z",
+      "note": "Super Gold names the setup. Judas sweep, OTE reload, coil breakout, or VWAP. A scalp and a swing on the same side fuse. The scalp entry and stop stay. The swing target is kept when it is farther. Forming levels show distance, readiness, and a projected stop and target. An unread ATR does not invent that distance."
+    },
+    {
+      "version": "hg-v1371",
+      "built": "2026-10-15T09:00:00Z",
+      "note": "The card shows the playbook and the measured entry zone beside the desk entry, which stays put. The chart draws the suggested ladder only when it was measured. A scan with a missing candle leg retries once. An unread ladder is not drawn and is not sent."
+    },
+    {
+      "version": "hg-v1372",
+      "built": "2026-10-15T10:00:00Z",
+      "note": "Super Gold reads unfilled 15m gaps and order blocks. The suggestion can be two limits, 60 percent at the entry and 40 percent at the nearest deeper level on the tape. Expectancy uses the measured reward. A limit that price has already run 90 percent of the way to TP1 is not chased. A tape-only setup is kept off the crown."
+    },
+    {
+      "version": "hg-v1373",
+      "built": "2026-10-15T11:00:00Z",
+      "note": "The card shows the 60/40 limit, the measured expectancy, and how many minutes the signal has left. A limit is stale once price has run 85 percent of the way to TP1 and no recent bar tagged it. A missing bar time does not invent a full clock. The desk entry stays the desk entry."
+    },
+    {
+      "version": "hg-v1374",
+      "built": "2026-10-15T12:00:00Z",
+      "note": "Super Gold names equal highs and equal lows, the range midpoint, and the pool price is drawing toward. A resting limit into an opposing expansion bar waits for a 15m reclaim close. No measured ATR does not become 3.50. The desk entry is not moved."
+    },
+    {
+      "version": "hg-v1375",
+      "built": "2026-10-15T13:00:00Z",
+      "note": "The crowned row carries the pre-fill guard. A calm tape is a resting limit. An opposing expansion bar is a knife and waits for the 15m close. The detector accepts the side as its second argument. The desk entry is not moved."
+    },
+    {
+      "version": "hg-v1376",
+      "built": "2026-10-15T14:00:00Z",
+      "note": "Super Gold names the timeframes that actually agree, an Asian-range sweep only when the bar clock says so, and an inverse gap only after price closes back through it. The breakeven hurdle uses the measured reward. A missing print is unread, not 2.2R or 62 percent. The desk entry and TP1 are not moved."
+    },
+    {
+      "version": "hg-v1377",
+      "built": "2026-10-15T15:00:00Z",
+      "note": "A later bar that takes the opening-block low and closes back above it is an Asian-range sweep, even when that wick is still inside 00:00-07:00 UTC. Five agreeing timeframes stay a full cascade. The breakeven hurdle stays on the measured reward. The desk entry is not moved."
+    },
+    {
+      "version": "hg-v1378",
+      "built": "2026-10-15T16:00:00Z",
+      "note": "Super Gold names the prior day high, low, and midpoint only when a prior day is on the tape. A wick that rejects and closes back is absorption. The radar says how far the live price is from the entry. A missing ATR is not 4, and a fill chance is not invented. The 60/40 split and the desk entry stay."
+    },
+    {
+      "version": "hg-v1379",
+      "built": "2026-10-15T17:00:00Z",
+      "note": "When a long window has no prior day, the first half is the range the later bars are judged against, and the card says it is not a calendar day. A rejecting wick of 82 or more puts 70 percent on the near limit. Expansion puts 45 on the near limit and 55 on the deeper one. The fill figure is the measured distance, and a missing ATR still prints no score. The desk entry stays."
+    },
+    {
+      "version": "hg-v1380",
+      "built": "2026-10-15T18:00:00Z",
+      "note": "Super Gold names the volume node, the value area, and whether spot leads the token. Five agreeing timeframes keep 40 percent for the first target and 30 for the runner. Compression takes 60 off at the first target. The stop ladder is a plan. The desk entry, stop, and targets are not moved. A bar with no volume is not counted as 1."
+    },
+    {
+      "version": "hg-v1381",
+      "built": "2026-10-15T19:00:00Z",
+      "note": "The Gold Scalp desk names the scalp type and a suggested bracket. The suggestion is not written onto the desk entry, stop, or targets. A missing ATR is not filled in as 2.2, and a missing spread is not filled in as 35 cents. An empty tape does not grow a scalp setup."
+    },
+    {
+      "version": "hg-v1382",
+      "built": "2026-10-15T20:00:00Z",
+      "note": "A Gold Scalp that passes the ten gates is named an A plus sniper and its grade moves to A. The suggestion shields a stop that sits on a five-dollar number and pulls the first target 35 cents in front of a measured supply wall. The desk entry, stop, and target stay."
+    },
+    {
+      "version": "hg-v1383",
+      "built": "2026-10-15T21:00:00Z",
+      "note": "A one-go Gold Scalp upgrade now carries a measured ounce size. The size uses the desk stop and the half-Kelly risk when that risk was measured. One lot is 100 ounces. The desk entry, stop, and target stay."
+    },
+    {
+      "version": "hg-v1384",
+      "built": "2026-10-15T22:00:00Z",
+      "note": "CONFLUENCE is a new tab in the gold group. It reads the setups the gold desks have already published and forms one plan only when at least three of them agree on the side and none of them published the other side. At least two of those plans must sit on the live IUX gold price. The entry is the median of those plans. It is not moved to the live price. A missing IUX quote prints no live setup."
+    },
+    {
+      "version": "hg-v1385",
+      "built": "2026-10-15T23:00:00Z",
+      "note": "CONFLUENCE now runs the gold desks that can scan on their own before it votes. A desk that has not published a plan says so. A copy of another desk plan is not a second vote. Three different desks must still agree, and the entry stays the median, not the live IUX print."
+    },
+    {
+      "version": "hg-v1386",
+      "built": "2026-10-16T01:00:00Z",
+      "note": "CONFLUENCE waits for every gold desk that can publish before it votes. A desk that only scans while its tab is open is opened and given time to finish. Three different plans must still agree. The entry stays their median, not the live IUX print."
+    },
+    {
+      "version": "hg-v1387",
+      "built": "2026-10-16T02:00:00Z",
+      "note": "CONFLUENCE shows a watch when fewer than three desks agree, and that watch is not a setup. Super Gold and Milli Gold are the same idea as the desk they read. Only a crowned or A plan votes. A measured venue spread is subtracted, and an unread spread is named. A formed setup is written to the forward ledger."
+    },
+    {
+      "version": "hg-v1388",
+      "built": "2026-10-16T05:00:00Z",
+      "note": "Gold Scalp reads 5m order flow, the opening range, a 50 35 15 micro ladder, and four measured scalp vectors. Desk prices stay put."
     }
   ]
 }

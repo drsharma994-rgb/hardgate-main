@@ -919,6 +919,12 @@ async function runGoldPro(ui){
       }
     }catch(eSmc){}
 
+    try{
+      if (window.__hgGoldProVerdict && lvPlan && isFinite(+lvPlan.entry) && isFinite(+lvPlan.stop) && isFinite(+lvPlan.t1)){
+        window.__hgGoldProVerdict.plan = { dir: lvPlan.dir, entry: +lvPlan.entry, stop: +lvPlan.stop, t1: +lvPlan.t1 };
+      }
+    }catch(eGpPlan){}
+
     /* FORWARD LOG. GOLD PRO issues one live 4H setup at a time rather than a
        list, so the mechanic is whether its levels came from the composite
        GOLD SETUP decision or the raw ATR fallback — those are different
