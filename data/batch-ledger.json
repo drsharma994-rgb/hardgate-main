@@ -415,6 +415,11 @@
       "version": "hg-v1389",
       "built": "2026-10-16T06:10:00Z",
       "note": "The gold confluence fallback scores a candle impulse, the 20-bar average, and RSI only when those are read. An unread venue spread is named and is not filled in as zero. The fallback does not replace the gold candle builder, the day-swing reader, or the measure reader."
+    },
+    {
+      "version": "hg-v1394",
+      "built": "2026-10-16T16:10:00Z",
+      "note": "CONFLUENCE scans when the tab opens and no longer stands aside just because the venue spread was not read. A Gold Ultra crown still votes when the count did not fire. The Gold Pine top card is the vote. Super Gold counts when Scalp and Swing published nothing. A cached or proxied IUX quote is used when the live read fails. Three crowned plans are still required, and a measured spread under 1.20R is still a watch."
     }
   ]
 }
