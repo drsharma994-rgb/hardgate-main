@@ -760,6 +760,38 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     + '. Entry ' + fmt(entry) + ' is the median of their plans, not the live print ' + fmt(px) + '.'
     + (base.costNote ? ' ' + base.costNote : '');
   if (!costOk) return base;
+  // hg-v1391: MOST-ACCURATE confluence scoring (3 desks -> accurate, not just quorum)
+  // 1) cluster tightness: entries must cluster within 0.8% (~$28 at $3500) — loose cluster = degraded accuracy
+  // 2) netR after measured spread must survive 1.2R (was 1R) — cost-toxic median blocked
+  // 3) at least 2 of priced desks are crowned/A-grade (sendGrade) — B/C swarm cannot lead
+  var entries = priced.map(function(v){ return v.entry; });
+  var maxE = Math.max.apply(null, entries), minE = Math.min.apply(null, entries);
+  var spreadPct = (maxE - minE) / entry * 100;
+  var tightOk = spreadPct <= 0.80;
+  var netOk = isFinite(base.netRr) ? base.netRr >= 1.20 : false;
+  var crowned = priced.filter(function(v){ return v.lead === true || sendGrade(v.grade); }).length;
+  var crownOk = crowned >= 2;
+  base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk, crowned: crowned, crownOk: crownOk };
+  if (!tightOk){
+    base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — median held but accuracy is degraded.';
+    base.accuracyTier = 'WATCH';
+  } else if (!netOk){
+    base.reason += ' Net ' + fmt(base.netRr) + 'R after $' + fmt(base.spreadUsd) + ' spread is under 1.20R — cost degrades accuracy.';
+    base.accuracyTier = 'WATCH';
+  } else if (!crownOk){
+    base.reason += ' Only ' + crowned + ' of ' + priced.length + ' desks are crowned/A — B/C swarm cannot be MOST ACCURATE.';
+    base.accuracyTier = 'WATCH';
+  } else {
+    base.accuracyTier = 'HIGH';
+    base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + priced.length + ' crowned — MOST ACCURATE.';
+  }
+  // Stand aside only if caller wants strict HIGH; default keeps ready but tags tier
+  // For this task: require HIGH for ready (most accurate only)
+  if (base.accuracyTier !== 'HIGH'){
+    base.ready = false;
+    base.watch = { side: side, entry: entry, stop: stop, t1: t1, count: priced.length, need: 3, rr: +(reward/risk).toFixed(2), mark: px, desks: base.desks, spreadUsd: base.spreadUsd, netRr: base.netRr, costNote: base.costNote, accuracy: base.accuracy };
+    return base;
+  }
   base.ready = true;
   return base;
 }
