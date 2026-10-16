@@ -549,7 +549,7 @@
       "expired": true
     },
     "ADA": {
-      "at": "2026-10-16T03:09:30.790Z",
+      "at": "2026-10-16T05:00:10.181Z",
       "score": 2,
       "fresh": true,
       "ago": 9,
@@ -627,9 +627,17 @@
       "ago": 1,
       "crossDay": "2026-10-13",
       "expired": true
+    },
+    "W": {
+      "at": "2026-10-16T05:00:11.601Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 3,
+      "crossDay": "2026-10-12",
+      "expired": true
     }
   },
-  "lastRunAt": "2026-10-16T03:09:48.542Z",
+  "lastRunAt": "2026-10-16T05:00:25.965Z",
   "scanned": 504,
   "cards": 0
 }
