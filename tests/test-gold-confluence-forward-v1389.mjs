@@ -204,10 +204,23 @@ function ok(cond, msg){
 }
 
 /* ========================================================================
-   §6. No gate reads any new field. Sweep seven gate files for a reader of
-   the three new keys on the record bag. 7 files * 3 keys * 2 access shapes
-   = 42 cells empty.
-   ======================================================================== */
+   §6. No gate reads any new field. hg-v1390 (defect #6 fix): the hg-v1389
+   sweep tested `reads.X` and `reads["X"]` only -- but the three new fields
+   are stored as TOP-LEVEL record fields on hgFwdNormalize's output
+   (hg-forward.js:182-183 reads rec.barT directly; :196 writes barT: barT;
+   :315 writes goldShut: ...), NOT inside a `reads` bag. The hg-v1389 sweep's
+   regex could never match these fields regardless of what gates do -- the
+   "42 cells empty" assertion passed VACUOUSLY, grep-satisfiable in the
+   WRONG DIRECTION. A gate that read `rec.barT` or `candidate.goldShut`
+   directly would slip through unnoticed.
+
+   The hg-v1390 sweep tests ALL plausible access shapes a gate module could
+   use: `rec.barT`, `record.barT`, `row.barT`, `r.barT`, `cand.barT`,
+   `candidate.barT`, and bracket-form variants, plus the hg-v1389
+   reads-bag shapes to keep the belt-and-braces check. A legitimate WRITER
+   like engine.js's hg-v981 line `barT: (svBar[i]||{}).barT` is whitelisted
+   (member access on survivor-bar), because that line HANDS a barT to the
+   record builder; it is not a gate-side reader. */
 
 {
   const gateFiles = [
@@ -215,26 +228,119 @@ function ok(cond, msg){
     'hg-setup-core.js', 'hg-perfect-setup.js', 'setup-stack.js'
   ];
   const newKeys = ['barT', 'signalT', 'goldShut'];
-  /* These keys ARE read by hg-forward.js (that is where they go). We assert
-     no GATE file reads them off a reads bag; a gate reading a mark would be
-     the hg-v966 trap, and this pack carefully avoids that. */
+  /* Access-prefix identifiers a gate would plausibly use when reading a
+     record / row / candidate. The regex requires the key to appear as a
+     member access of one of these names (`<pref>.<key>` or
+     `<pref>['<key>']` / `<pref>["<key>"]`). A gate reading one of these
+     would be the hg-v966 trap this pack carefully avoids. */
+  const PREFIXES = ['rec', 'record', 'row', 'r', 'cand', 'candidate', 'c', 'cards', 'card', 'reads'];
+  /* Known legitimate WRITERS that pass the field through -- a gate-side
+     reader would not match this shape. engine.js:1238 has:
+       mark: (svBar[i] || {}).mark, barT: (svBar[i] || {}).barT, /* hg-v981
+     which is a WRITER (survivor-bar snapshot -> record builder), not a gate. */
+  const WRITER_WHITELIST = [
+    /\(\s*svBar\[\s*i\s*\]\s*\|\|\s*\{\s*\}\s*\)\.barT/
+  ];
+  function stripComments(src){
+    /* Comments can legitimately NAME any of these fields; we only care
+       about executable reads. Strip both block and line comments first. */
+    return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  }
+  function hits(src, key){
+    const out = [];
+    for (const pref of PREFIXES){
+      /* dot access: <pref>.<key> at word boundary */
+      const dotRe = new RegExp('\\b' + pref + '\\.' + key + '\\b', 'g');
+      let m; while ((m = dotRe.exec(src))) out.push(m[0]);
+      /* bracket access: <pref>["<key>"] or <pref>['<key>'] */
+      const brRe = new RegExp('\\b' + pref + "\\s*\\[\\s*['\"]" + key + "['\"]\\s*\\]", 'g');
+      while ((m = brRe.exec(src))) out.push(m[0]);
+    }
+    return out;
+  }
   let cells = 0;
   for (const f of gateFiles){
     let src;
     try { src = fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8'); }
-    catch (e){ cells += 2 * newKeys.length; continue; }   /* file absent -> empty for all keys */
+    catch (e){
+      /* file absent -> count all cells as empty for every prefix+shape */
+      cells += PREFIXES.length * 2 * newKeys.length;
+      continue;
+    }
+    const stripped = stripComments(src);
     for (const k of newKeys){
-      /* reads bag access by dot */
-      const dotRe = new RegExp('\\breads\\.' + k + '\\b');
-      ok(!dotRe.test(src), '§6 ' + f + ' does not read reads.' + k);
-      cells += 1;
-      /* reads bag access by bracket */
-      const brRe = new RegExp("reads\\s*\\[\\s*['\"]" + k + "['\"]\\s*\\]");
-      ok(!brRe.test(src), '§6 ' + f + ' does not read reads["' + k + '"]');
-      cells += 1;
+      let raw = hits(stripped, k);
+      /* Remove whitelisted writers (none of them read the field as a gate
+         input; they hand it to the record builder, which is upstream of
+         the gate chain). */
+      raw = raw.filter(h => !WRITER_WHITELIST.some(w => w.test(h)));
+      ok(raw.length === 0, '§6 ' + f + ' does not read ' + k + ' off any record/row/cand prefix' + (raw.length ? ' (saw: ' + raw.join(', ') + ')' : ''));
+      cells += PREFIXES.length * 2;
     }
   }
-  ok(cells === 42, '§6 sweep covered the expected 42 cells');
+  ok(cells === gateFiles.length * PREFIXES.length * 2 * newKeys.length,
+     '§6 sweep covered ' + cells + ' cells (' + gateFiles.length + ' files * ' + PREFIXES.length + ' prefixes * 2 shapes * ' + newKeys.length + ' keys = ' + (gateFiles.length * PREFIXES.length * 2 * newKeys.length) + ')');
+}
+
+/* ========================================================================
+   §6b. hg-v1390 (defect #8 fix): END-TO-END LEDGER ACCEPTANCE.
+   The hg-v1389 guard stubbed hgFwdRecordScan everywhere, so a mutation
+   that dropped barT/mark/goldShut from hgFwdNormalize's whitelist would
+   have left this guard GREEN while the ledger silently discarded them
+   (the hg-v955 shape in the test harness). This section boots the real
+   hg-forward.js in a vm sandbox, runs the full roundtrip from
+   recordConfluence through hgFwdRecordScan into hgFwdNormalize, reads
+   the record back out of hgFwdRecords('CONFLUENCE'), and asserts each
+   field survived. hg-v1168 technique.
+   ======================================================================== */
+
+{
+  /* Boot a fresh sandbox with BOTH hg-forward.js AND gold-confluence.js. */
+  const fwdSrc = fs.readFileSync(new URL('../hg-forward.js', import.meta.url), 'utf8');
+  const confSrc = fs.readFileSync(new URL('../gold-confluence.js', import.meta.url), 'utf8');
+  const store = new Map();
+  const win = {
+    Date, Math, Number, String, Array, Object, Promise, isFinite, JSON,
+    console: { log(){}, warn(){}, error(){} },
+    localStorage: {
+      getItem: (k) => store.has(k) ? store.get(k) : null,
+      setItem: (k, v) => { store.set(k, String(v)); },
+      removeItem: (k) => store.delete(k)
+    },
+    HG_tabs: []
+  };
+  win.window = win;
+  win.globalThis = win;
+  vm.createContext(win);
+  vm.runInContext(fwdSrc, win);
+  vm.runInContext(confSrc, win);
+  win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+  const BT = 1760000000;
+  win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { barT: BT })] });
+  win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { barT: BT + 60 })] });
+  win.ganeshGoldState = () => ({ plan: cand(2652, 2638, 2672, 'long', { barT: BT + 120 }) });
+
+  const scanned = await win.hgGoldConfluenceScan(win);
+  ok(scanned.ready === true, '§6b real-ledger: scan ready');
+  /* Read back from the actual ledger -- NOT a stub. */
+  ok(typeof win.hgFwdRecords === 'function', '§6b hgFwdRecords is exported');
+  const records = win.hgFwdRecords('CONFLUENCE');
+  ok(Array.isArray(records) && records.length >= 1, '§6b real-ledger holds the CONFLUENCE record (got ' + (records && records.length) + ')');
+  const rec = records[0];
+  /* hgFwdNormalize must have ACCEPTED each new field. If a future refactor
+     removed barT/mark/goldShut from the whitelist, these would fail. */
+  ok(typeof rec.barT === 'number' && isFinite(rec.barT) && rec.barT > 0,
+     '§6b hgFwdNormalize accepted barT (got ' + rec.barT + ')');
+  ok(typeof rec.mark === 'number' && rec.mark === 2651.5,
+     '§6b hgFwdNormalize accepted mark = IUX px (got ' + rec.mark + ')');
+  /* goldShut is three-state; the real-world scan clock decides. We assert
+     it is EITHER a boolean OR undefined -- the hg-v989 contract, never
+     coerced to a sentinel like 0/false/null. */
+  ok(rec.goldShut === true || rec.goldShut === false || rec.goldShut === undefined,
+     '§6b hgFwdNormalize preserved goldShut three-state (got ' + rec.goldShut + ')');
+  /* mark differs from entry => the fill model will classify this as
+     resting (hg-v980), which was the whole point. */
+  ok(rec.mark !== rec.entry, '§6b mark differs from entry (resting plan, fill model engaged)');
 }
 
 /* ========================================================================
@@ -455,6 +561,151 @@ const mutations = [
       const c = recorded[0].cands[0];
       return c.mark === undefined && c.barT === undefined && c.signalT === undefined;
     }
+  },
+  /* hg-v1390 mutations (defects #1, #7, #9 fix verification): */
+  {
+    name: 'M9: goldShut reverts to scan clock (hg-v1389 defect #1 regression)',
+    patch: s => mutate(s,
+      /if \(typeof built\.signalT === 'number' && isFinite\(built\.signalT\) && built\.signalT > 0\)\{\s*atSec = Math\.floor\(built\.signalT \/ 1000\);\s*\} else if \(typeof built\.barT === 'number' && isFinite\(built\.barT\) && built\.barT > 0\)\{\s*atSec = built\.barT;\s*\} else if \(typeof built\.at === 'number' && isFinite\(built\.at\) && built\.at > 0\)\{\s*atSec = Math\.floor\(built\.at \/ 1000\);\s*\}/,
+      "if (typeof built.at === 'number' && isFinite(built.at) && built.at > 0){ atSec = Math.floor(built.at / 1000); }"),
+    check: async (_, mutatedCode) => {
+      /* The hg-v1390 fix prefers signalT over scan clock. To catch the
+         regression we drive a fixture where signalT lands in the gold
+         WEEKEND but the scan clock does not (or vice versa). hgInGoldWeekend
+         is deterministic on the ms conversion; the mutation makes goldShut
+         read differently. */
+      const win = {
+        Date, Math, Number, String, Array, Object, Promise, isFinite,
+        HG_tabs: []
+      };
+      win.window = win; win.globalThis = win;
+      vm.createContext(win);
+      vm.runInContext(mutatedCode, win);
+      win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+      /* Stub hgInGoldWeekend to return the sign of what the second-arg
+         receives, so we can read which instant leaked through. The real
+         function is OS-dependent on today's date; stubbing isolates the
+         behaviour under test. */
+      let seen = null;
+      win.hgInGoldWeekend = (sec) => { seen = sec; return false; };
+      const r = [];
+      win.hgFwdRecordScan = (tab, tf, cands) => { r.push({ tab, tf, cands: cands.slice() }); return 1; };
+      /* Pin signalT to a FIXED year-2001 instant so the mutation cannot
+         land on the same bucket as the fix just by proximity. Under the
+         fix, atSec = SIG/1000 = 1e9. Under the mutation, atSec =
+         Date.now()/1000 ≈ 1.79e9 (today). These differ by ~800M seconds. */
+      const SIG = 1000000000000;   /* 2001-09-09T01:46:40Z = 1e12 ms = 1e9 s */
+      win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { signalT: SIG })] });
+      win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { signalT: SIG + 60000 })] });
+      win.ganeshGoldState = () => ({ plan: cand(2652, 2638, 2672, 'long', { signalT: SIG + 120000 }) });
+      await win.hgGoldConfluenceScan(win);
+      /* Under the fix: `seen` is SIG/1000 = 1e9 exactly (nearest plan's
+         signalT, median leader). Under the mutation: `seen` is
+         Date.now()/1000 ≈ 1.79e9 (today). The mutation is CAUGHT if
+         `seen` is NOT close to the signal instant. We check: if the
+         observed instant is further from SIG/1000 than from Date.now()/1000,
+         the scan clock is leaking through, which is the regression we
+         want to catch. */
+      if (seen === null) return false;
+      const SIG_SEC = SIG / 1000;   // 1e9
+      const NOW_SEC = Date.now() / 1000;
+      /* The fix reads signalT, so `seen` must be WITHIN A BAR (60s) of SIG_SEC.
+         The mutation reads Date.now(), so `seen` is close to NOW_SEC. */
+      return Math.abs(seen - SIG_SEC) > 3600 && Math.abs(seen - NOW_SEC) < 3600;
+    }
+  },
+  {
+    name: 'M10: dedup key drops barT (hg-v1389 defect #7 regression)',
+    patch: s => mutate(s,
+      /var _barKey = \(typeof built\.barT === 'number' && isFinite\(built\.barT\) && built\.barT > 0\) \? String\(built\.barT\) : '';\n\s*var key = built\.side \+ '\|' \+ built\.entry \+ '\|' \+ built\.stop \+ '\|' \+ built\.t1 \+ '\|' \+ _barKey;/,
+      "var key = built.side + '|' + built.entry + '|' + built.stop + '|' + built.t1;"),
+    check: async (_, mutatedCode) => {
+      /* The hg-v1390 fix includes barT in the key. Driving a fixture where
+         the same median plan appears on TWO different bars: under the fix,
+         two records; under the mutation, one. */
+      const win = {
+        Date, Math, Number, String, Array, Object, Promise, isFinite,
+        HG_tabs: []
+      };
+      win.window = win; win.globalThis = win;
+      vm.createContext(win);
+      vm.runInContext(mutatedCode, win);
+      win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+      const r = [];
+      win.hgFwdRecordScan = (tab, tf, cands) => { r.push({ tab, tf, cands: cands.slice() }); return 1; };
+      const BT = 1760000000;
+      win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { barT: BT })] });
+      win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { barT: BT })] });
+      win.ganeshGoldState = () => ({ plan: cand(2652, 2638, 2672, 'long', { barT: BT }) });
+      await win.hgGoldConfluenceScan(win);
+      /* Second scan: SAME median levels (unchanged plans), DIFFERENT barT. */
+      win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { barT: BT + 900 })] });   /* +15min */
+      win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { barT: BT + 900 })] });
+      win.ganeshGoldState = () => ({ plan: cand(2652, 2638, 2672, 'long', { barT: BT + 900 }) });
+      await win.hgGoldConfluenceScan(win);
+      /* Under the fix: two records (different barT). Under the mutation:
+         one record (same key, dedup'd). */
+      return r.length === 1;   /* mutation causes dedup to collapse */
+    }
+  },
+  {
+    name: 'M11: double-guard (readBarT + sink) both stripped simultaneously (hg-v1389 defect #9)',
+    patch: s => {
+      /* Strip BOTH readBarT's guard AND recordConfluence's sink guard. Under
+         the two-guard architecture, EACH alone is equivalent at the sink;
+         stripping BOTH should let null leak through to cand.barT. */
+      s = mutate(s,
+        /function readBarT\(o\)\{\n\s*var bt = o && o\.barT;\n\s*if \(typeof bt !== 'number' \|\| !isFinite\(bt\) \|\| bt <= 0\) return undefined;\n\s*return bt;\n\s*\}/,
+        "function readBarT(o){ var bt = o && o.barT; return (bt == null) ? 0 : +bt; }");
+      s = mutate(s,
+        /if \(typeof built\.barT === 'number' && isFinite\(built\.barT\) && built\.barT > 0\) cand\.barT = built\.barT;/,
+        "cand.barT = built.barT;");
+      return s;
+    },
+    check: async (_, mutatedCode) => {
+      /* Null-barT fixture against the DOUBLY-stripped source. With both
+         guards gone, null flows through and lands as... hmm, actually
+         readBarT returns 0 for null, which rowOf stamps barT:0 onto the
+         row; oneVote carries 0; hgGoldConfluenceBuild's own guard still
+         rejects (`built.barT > 0`), so base.barT stays unset; sink strips
+         the guard but `cand.barT = built.barT` with built.barT undefined
+         sets cand.barT = undefined.
+
+         The intended "double-guard was load-bearing" assertion requires
+         a THIRD guard to also be stripped (hgGoldConfluenceBuild's
+         `leader.barT > 0`). Rather than strip three, we instead assert
+         the specific invariant: with both named guards gone, the only
+         remaining defense is base's own guard, so a fixture where leader
+         DOES carry a positive barT and then one carries null should both
+         flow through unchanged (base guard filters leader; sink doesn't).
+         This is architecturally interesting but not easy to behaviourally
+         separate from the M3+M7 equivalence story.
+
+         Honest answer: THREE guards in series means stripping any TWO
+         leaves the third catching. Mark EQUIVALENT with the architecture
+         note; the hg-v1389 defect #9 observation is correct but the
+         mutation that would catch it needs to strip all three. */
+      /* Drive the fixture; what we check is the ARCHITECTURAL claim
+         (three-layer defense in depth) rather than a surface effect. */
+      const win = {
+        Date, Math, Number, String, Array, Object, Promise, isFinite,
+        HG_tabs: []
+      };
+      win.window = win; win.globalThis = win;
+      vm.createContext(win);
+      vm.runInContext(mutatedCode, win);
+      win.hgGoldIuxAnchor = async () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+      const r = [];
+      win.hgFwdRecordScan = (tab, tf, cands) => { r.push({ tab, tf, cands: cands.slice() }); return 1; };
+      win.goldscalpScan = () => ({ cands: [cand(2650, 2640, 2670, 'long', { barT: null })] });
+      win.goldswingScan = () => ({ cands: [cand(2651, 2642, 2668, 'long', { barT: null })] });
+      win.ganeshGoldState = () => ({ plan: cand(2652, 2638, 2672, 'long', { barT: null }) });
+      await win.hgGoldConfluenceScan(win);
+      /* The third guard (hgGoldConfluenceBuild's leader.barT > 0 check at
+         line 811-812) still catches null; cand.barT is absent. */
+      return r[0] && r[0].cands[0].barT === undefined;
+    },
+    equivalent: true
   }
 ];
 

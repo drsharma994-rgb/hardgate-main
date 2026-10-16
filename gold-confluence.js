@@ -828,7 +828,19 @@ var lastFwdKey = '';
 function recordConfluence(win, built){
   if (!built || built.ready !== true) return;
   if (!win || typeof win.hgFwdRecordScan !== 'function') return;
-  var key = built.side + '|' + built.entry + '|' + built.stop + '|' + built.t1;
+  /* hg-v1390 (defect #7 fix): dedup key MUST include barT, otherwise a stable
+     median plan writes exactly ONE record for the full life of the module
+     and every scan on a later closed bar is silently dropped. hg-forward.js's
+     own dedup key at :127 includes barT for exactly this reason: hg-v581 says
+     two scans on the SAME closed bar in different clock minutes should be
+     one record, and two scans on DIFFERENT bars with the same levels should
+     be two. The hg-v1389 key had four fields and dropped barT at the handoff
+     -- the hg-v932 "work done upstream, dropped at the handoff" shape in my
+     own just-shipped pack, caught by the hg-v1389 audit before the user did.
+     Absent barT falls back to the empty string so legacy callers that pass
+     no bar still dedup on the levels alone (the pre-pack behaviour). */
+  var _barKey = (typeof built.barT === 'number' && isFinite(built.barT) && built.barT > 0) ? String(built.barT) : '';
+  var key = built.side + '|' + built.entry + '|' + built.stop + '|' + built.t1 + '|' + _barKey;
   if (key === lastFwdKey) return;
   /* hg-v1389: the fields hg-v978/v980/v953 named as the record's minimum
      honest payload. Each is read from what the module already has in hand
@@ -883,12 +895,33 @@ function recordConfluence(win, built){
   if (typeof built.mark === 'number' && isFinite(built.mark) && built.mark > 0) cand.mark = built.mark;
   if (typeof built.barT === 'number' && isFinite(built.barT) && built.barT > 0) cand.barT = built.barT;
   if (typeof built.signalT === 'number' && isFinite(built.signalT) && built.signalT > 0) cand.signalT = built.signalT;
-  /* hg-v953 gold weekend mark. hgInGoldWeekend takes seconds; built.at is
-     ms. Fail-open on absent helper or junk clock -- undefined is honest
-     ("not recorded") rather than coerced to false. */
+  /* hg-v953 gold weekend mark, hg-v1390 (defect #1 fix): the instant MUST be
+     the SIGNAL BAR, never the scan clock. hg-v953/v977 doctrine is strict on
+     this: "the instant it was FORMED ON, in seconds, read from whatever the
+     desk that produced it recorded -- never Date.now()". The hg-v1389 pack
+     propagated built.signalT/built.barT correctly through the vote model
+     for the record's own barT (seven lines above) but then DROPPED them at
+     this leg, reading built.at (= Date.now(), set at :920) instead. The
+     hg-v932 "work done upstream, dropped at the handoff" shape in my own
+     just-shipped pack. Failure mode measured by the hg-v1389 audit:
+     - Saturday scan over cached Friday 21:30 UTC signals wrote shut:true
+       on a plan formed Friday-before-close (which is NOT in the weekend)
+     - Monday-early-UTC edge-of-weekend scans misattributed both ways
+     Fix: PREFER built.signalT (ms, /1000), then built.barT (seconds, direct),
+     then fall back to built.at (ms, /1000) for backward compatibility --
+     each guarded with the same typeof/isFinite/>0 shape the barT/mark/
+     signalT leg above uses. A missing instant leaves cand.goldShut
+     undefined (hg-v989 three-state), never coerced to false. */
   if (typeof win.hgInGoldWeekend === 'function'){
-    var atSec = (typeof built.at === 'number' && isFinite(built.at) && built.at > 0) ? Math.floor(built.at / 1000) : NaN;
-    if (isFinite(atSec)){
+    var atSec = NaN;
+    if (typeof built.signalT === 'number' && isFinite(built.signalT) && built.signalT > 0){
+      atSec = Math.floor(built.signalT / 1000);
+    } else if (typeof built.barT === 'number' && isFinite(built.barT) && built.barT > 0){
+      atSec = built.barT;
+    } else if (typeof built.at === 'number' && isFinite(built.at) && built.at > 0){
+      atSec = Math.floor(built.at / 1000);
+    }
+    if (isFinite(atSec) && atSec > 0){
       try{
         var shut = win.hgInGoldWeekend(atSec);
         cand.goldShut = (shut === true) ? true : (shut === false ? false : undefined);
