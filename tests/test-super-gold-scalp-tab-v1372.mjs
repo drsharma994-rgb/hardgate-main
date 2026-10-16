@@ -4,6 +4,14 @@ import vm from 'node:vm';
 const code = fs.readFileSync(new URL('../super-gold.js', import.meta.url), 'utf8');
 function createHarness(overrides = {}) {
   const now = Date.parse('2026-10-15T14:30:00Z');
+  const RealDate = Date;
+  function FixedDate(...args){
+    return args.length ? new RealDate(...args) : new RealDate(now);
+  }
+  FixedDate.prototype = RealDate.prototype;
+  FixedDate.now = function(){ return now; };
+  FixedDate.parse = RealDate.parse;
+  FixedDate.UTC = RealDate.UTC;
   const baseRows15 = Array.from({ length: 30 }, (_, i) => {
     const t = Math.floor((now - (30 - i) * 900_000) / 1000);
     if (i < 15) return { t, o: 2649.5, h: 2651.2, l: 2648.8, c: 2650.1, v: 4200 };
@@ -22,7 +30,7 @@ function createHarness(overrides = {}) {
     return { t, o: +(base - 0.2).toFixed(2), h: +(base + 0.5).toFixed(2), l: +(base - 0.4).toFixed(2), c: +base.toFixed(2), v: 900 };
   });
   const win = {
-    Date, Math, Number, String, Array, Object, Promise, setTimeout, clearTimeout,
+    Date: FixedDate, Math, Number, String, Array, Object, Promise, setTimeout, clearTimeout,
     setInterval: () => 1, clearInterval: () => {},
     HG_tabs: [], HG_warmups: [],
     hgCfIntel: {
@@ -75,7 +83,7 @@ const micro15 = win.sgDetectMicrostructureZones(baseRows15, 'long');
 console.log('fvg15', micro15.nearestFvg && micro15.nearestFvg.ce, 'abs15', micro15.absorptionDetected, 'wick15', micro15.wickRejectionScore, 'sweep', micro15.sweepReclaimed);
 const synth = win.sgSynthesizeGoldScalpSetups(intel, { balance: 10000, riskPct: 1 }, win);
 assert.equal(win.__sgGoldScalpEnhancerInstalled, true);
-assert.equal(gsSnap.hgUpgradedVersion, 'hg-v1372');
+assert.equal(gsSnap.hgUpgradedVersion, 'hg-v1373');
 assert.equal(gsSnap.oneGoUpgraded, true);
 assert.equal(gsSnap.cands.length, 2);
 assert.equal(judas.grade, 'A');

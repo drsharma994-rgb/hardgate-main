@@ -405,6 +405,11 @@
       "version": "hg-v1387",
       "built": "2026-10-16T02:00:00Z",
       "note": "CONFLUENCE shows a watch when fewer than three desks agree, and that watch is not a setup. Super Gold and Milli Gold are the same idea as the desk they read. Only a crowned or A plan votes. A measured venue spread is subtracted, and an unread spread is named. A formed setup is written to the forward ledger."
+    },
+    {
+      "version": "hg-v1388",
+      "built": "2026-10-16T05:00:00Z",
+      "note": "Gold Scalp reads 5m order flow, the opening range, a 50 35 15 micro ladder, and four measured scalp vectors. Desk prices stay put."
     }
   ]
 }
