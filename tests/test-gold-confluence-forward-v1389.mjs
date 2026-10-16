@@ -376,7 +376,14 @@ function ok(cond, msg){
   const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   ok(swCacheOk(sw), '§8 sw.js HG_CACHE matches build-stamp');
   const stamp = fs.readFileSync(new URL('../build-stamp.js', import.meta.url), 'utf8');
-  ok(/hg-v1389: CONFLUENCE writes a measurable forward record/.test(stamp), '§8 pack text names the fix');
+  /* hg-v1391: the merge of origin/main's parallel hg-v1389 (fallback scores
+     + unread spread) took upstream wholesale on build-stamp.js, so the
+     original pack-text "CONFLUENCE writes a measurable forward record" was
+     overwritten by upstream's own hg-v1389 line. The hg-v1390 line in the
+     current stamp explicitly names "hg-v1389 (measurable forward record for
+     CONFLUENCE) still ships" so a reader can still trace that forward-record
+     fix to its originating pack. Match that stable reference instead. */
+  ok(/hg-v1389 \(measurable forward record for CONFLUENCE\) still ships/.test(stamp), '§8 pack text references hg-v1389 forward-record fix');
 }
 
 /* ========================================================================

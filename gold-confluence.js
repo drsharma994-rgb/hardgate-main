@@ -688,8 +688,20 @@ function asideNames(votes){
   });
   return out;
 }
-function attachWatch(base, pack, votes, px){
-  if (!pack || pack.length < 1 || pack.length > 2) return;
+function attachWatch(base, pack, votes, px, opts){
+  /* hg-v1391: a watch is a measurement that already took place. The levels
+     ride on `pack`, each one a real desk crown. Refusing to paint them when
+     the setup threshold is not met is hg-v932 ("work done upstream, dropped
+     at the handoff") -- the user sees STAND ASIDE where the engine has
+     entry/stop/t1 in hand. The pack upper bound is widened from 2 to 20
+     (sanity only; no gold desk pack exceeds the number of desks) so a
+     3+-same-side watch can be labeled OFF-SCALE or DESKS-DISAGREE. The
+     3-desk-same-side-on-scale `ready` gate (hg-v1384..v1387) is UNCHANGED
+     and is asserted structurally in the guard: this function sets no
+     `ready` field. hg-v966 holds. opts carries the reason/label that make
+     this watch readable (default = the hg-v1384 "awaiting third desk"). */
+  opts = opts || {};
+  if (!pack || pack.length < 1 || pack.length > 20) return;
   var side = pack[0].side;
   var entry = +median(pack.map(function(v){ return v.entry; })).toFixed(2);
   var stop = +median(pack.map(function(v){ return v.stop; })).toFixed(2);
@@ -711,7 +723,9 @@ function attachWatch(base, pack, votes, px){
     aside: asideNames(votes),
     spreadUsd: base.spreadUsd,
     netRr: null,
-    costNote: 'The venue spread was not read.'
+    costNote: 'The venue spread was not read.',
+    reason: (typeof opts.reason === 'string' && opts.reason) ? opts.reason : 'awaiting third desk',
+    label: (typeof opts.label === 'string' && opts.label) ? opts.label : null
   };
   if (base.spreadUsd != null && risk > 0 && isFinite(rr)){
     watch.netRr = +(rr - base.spreadUsd / risk).toFixed(2);
@@ -746,6 +760,20 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   }
   if (longs.length && shorts.length){
     base.reason = longs.length + ' gold desk' + (longs.length === 1 ? '' : 's') + ' published long and ' + shorts.length + ' published short. A setup on the other side stands this plan aside.';
+    /* hg-v1391: the dominant side's crowns ARE measurements -- real desks
+       priced real plans -- and refusing to paint them is hg-v932 in this
+       pack's own code. Show the larger side as a watch labelled DESKS
+       DISAGREE so the user sees what the published side has. A true tie
+       (same count both sides) shows nothing but the vote list, honestly:
+       there is no dominant side to name. The 3-desk-on-scale setup gate
+       is unchanged (ready stays false). hg-v966 holds. */
+    var dom = (longs.length > shorts.length) ? longs : (shorts.length > longs.length) ? shorts : null;
+    if (dom){
+      attachWatch(base, dom, votes, px, {
+        reason: 'desks disagree',
+        label: 'DESKS DISAGREE · ' + dom.length + ' ' + dom[0].side.toUpperCase() + ' vs ' + (dom === longs ? shorts.length : longs.length) + ' ' + (dom === longs ? 'SHORT' : 'LONG')
+      });
+    }
     return base;
   }
   var side = null, pack = null;
@@ -772,6 +800,16 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   if (priced.length < 2){
     base.side = side;
     base.reason = 'The desks agree ' + side + ', but fewer than two of those plans sit within 2.5% of the live IUX price (' + fmt(px) + ').';
+    /* hg-v1391: 3+ desks agreeing is already past the agreement threshold;
+       what fails is the on-scale rule. The agreeing side has entry/stop/t1
+       in hand -- show it as a watch labelled OFF-SCALE so the reader sees
+       what the desks said, and sees that it sits >2.5% from the live IUX
+       print. ready still requires >=2 priced within band (hg-v1384..v1387
+       on-scale gate unchanged). */
+    attachWatch(base, pack, votes, px, {
+      reason: 'off-scale from IUX',
+      label: 'OFF-SCALE · ' + pack.length + ' AGREE ' + side.toUpperCase()
+    });
     return base;
   }
   var entry = +median(priced.map(function(v){ return v.entry; })).toFixed(2);
@@ -1000,7 +1038,13 @@ function paint(root, built){
     plan = levelCard('XAUUSD · ' + built.side.toUpperCase(), built);
   } else if (built.watch){
     var w = built.watch;
-    plan = levelCard('WATCH · ' + w.count + ' OF 3', w);
+    /* hg-v1391: a watch now carries three distinct reasons -- "awaiting
+       third desk" (1-2 same-side published), "desks disagree" (longs AND
+       shorts, dominant side shown), "off-scale from IUX" (3+ agree but
+       off the live print). The label travels on the watch so the header
+       names which case the user is reading, and no reader has to look
+       up the reason in prose. */
+    plan = levelCard('WATCH · ' + (w.label || (w.count + ' OF ' + w.need)), w);
     if (w.aside && w.aside.length) plan += '<div class="hg-note">Stood aside: ' + esc(w.aside.join(', ')) + '</div>';
   } else if (isFinite(built.entry) && isFinite(built.stop) && isFinite(built.t1)){
     plan = levelCard('STOOD ASIDE · ' + String(built.side || '').toUpperCase(), built);
