@@ -2973,6 +2973,7 @@ function hgGoldSetupEdgeApply(cand, opts){
    clears the 1.2R minimum the candidate is DROPPED with a named reason —
    the same bar __gsCand holds every house plan to. Never throws. */
 var GS_STOP_FLOOR_ATR = 1.5;
+var GS_MIN_RR = 1.2; /* hg-v1390: accuracy guard — floor stays 1.2R pending full 6000-bar re-walk; 1.5R measured in swing-scope only */
 
 /* COST-HEAVY demotion. Even a contract-true 1.5×ATR stop can be economically
    unpayable in quiet tape: the GOLD SCALP replay's <0.08%-risk cohort ran
@@ -3075,11 +3076,11 @@ function hgGoldScalpStopFloor(c, a15){
     var floorD = GS_STOP_FLOOR_ATR * a15;
     if (risk >= floorD * (1 - 1e-9)) return c;
     var rr1F = isFinite(+c.t1) ? Math.abs(+c.t1 - e) / floorD : NaN;
-    if (!(isFinite(rr1F) && rr1F >= 1.2)){
+    if (!(isFinite(rr1F) && rr1F >= GS_MIN_RR)){
       c.dropped = true;
       c.reason = 'engine stop ' + (risk / a15).toFixed(2) + '×ATR is below the '
         + GS_STOP_FLOOR_ATR + '×ATR scalp floor; at the floored stop TP1 pays '
-        + (isFinite(rr1F) ? rr1F.toFixed(1) : '—') + 'R < 1.2R minimum — cost-toxic geometry (replay-measured)';
+        + (isFinite(rr1F) ? rr1F.toFixed(1) : '—') + 'R < ' + GS_MIN_RR.toFixed(1) + 'R minimum — cost-toxic geometry (replay-measured)';
       if (!Array.isArray(c.stamps)) c.stamps = [];
       if (c.stamps.indexOf('STOP FLOOR') < 0) c.stamps.push('STOP FLOOR');
       return c;
@@ -3290,16 +3291,16 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
     var bucket = String(isFinite(anchor) ? Math.round(anchor) : Math.round(D.entry));
     /* (3) MIN R:R AFTER SNAPPING — opposing structure too close to pay for
        the trade: dropped with a named reason, never silently. */
-    if (lv.rr < 1.2){
+    if (lv.rr < GS_MIN_RR){
       /* hg-v929: rr and rrFloor are carried as NUMBERS, not left to be parsed
          back out of the sentence. The reject funnel's shortfall readout reads
          these; a prose parse would have coupled the panel to the wording and
          gone quietly blank the next time the sentence was reworded. */
       return { dropped: true, id: key + '|' + dir + '|' + bucket,
                strategy: GST_NAME[key] || key, stratKey: key, dir: dir,
-               rr: lv.rr, rrFloor: 1.2,
+               rr: lv.rr, rrFloor: GS_MIN_RR,
                reason: 'structure too close — R:R insufficient (opposing structure caps TP1 at '
-                       + lv.rr.toFixed(1) + 'R < 1.2R minimum)' };
+                       + lv.rr.toFixed(1) + 'R < ' + GS_MIN_RR.toFixed(1) + 'R minimum)' };
     }
 
     var demoted = false, offSess = false, stamps = [], gateNotes = [];
