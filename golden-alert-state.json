@@ -549,7 +549,7 @@
       "expired": true
     },
     "ADA": {
-      "at": "2026-10-16T01:18:51.167Z",
+      "at": "2026-10-16T03:09:30.790Z",
       "score": 2,
       "fresh": true,
       "ago": 9,
@@ -629,7 +629,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-16T01:19:06.591Z",
+  "lastRunAt": "2026-10-16T03:09:48.542Z",
   "scanned": 504,
   "cards": 0
 }
