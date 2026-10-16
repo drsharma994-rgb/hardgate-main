@@ -117,6 +117,28 @@ function ordered(side, entry, stop, t1){
   if (side === 'short') return t1 < entry && entry < stop;
   return false;
 }
+/* hg-v1389: READ the fields each gold desk already stamps on its own
+   candidates (hg-v978 barT / hg-v977 signalT, so the ledger dates on the
+   signal bar, never the floor of the scan clock) and carry them through
+   the vote model. Three-state (hg-v989): a plan that carries none of
+   them is unchanged, a plan that carries one gets its value propagated
+   -- never fabricated, never coerced through +null (hg-v948, isFinite(+null)
+   is true because +null is 0, so a plan carrying barT: null would read as
+   the epoch). Signal time is in milliseconds for signalT, seconds for
+   barT -- the normaliser (hg-forward.js barOf) accepts either because
+   gold desks picked different conventions across hg-v977..v980. We pass
+   signalT through where present so barOf's own conversion runs; a plan
+   that carries only barT lands at line :signalT undefined. */
+function readSignalT(o){
+  var st = o && o.signalT;
+  if (typeof st !== 'number' || !isFinite(st) || st <= 0) return undefined;
+  return st;
+}
+function readBarT(o){
+  var bt = o && o.barT;
+  if (typeof bt !== 'number' || !isFinite(bt) || bt <= 0) return undefined;
+  return bt;
+}
 function rowOf(o){
   if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
   if (o.vetoed === true || o.demoted === true || o.dropped === true || o.aside === true) return null;
@@ -128,7 +150,10 @@ function rowOf(o){
   var stop = num(o.stop != null ? o.stop : o.stopLoss);
   var t1 = num(o.t1 != null ? o.t1 : (o.tp1 != null ? o.tp1 : (o.tp != null ? o.tp : o.takeProfit)));
   if (!ordered(side, entry, stop, t1)) return null;
-  return { side: side, entry: entry, stop: stop, t1: t1, grade: o.grade || null };
+  return {
+    side: side, entry: entry, stop: stop, t1: t1, grade: o.grade || null,
+    barT: readBarT(o), signalT: readSignalT(o)
+  };
 }
 function pushItem(snap, item, rows){
   if (!item || typeof item !== 'object') return;
@@ -229,7 +254,16 @@ function oneVote(rows){
     var d = Math.abs(r.entry - mid);
     if (d < bestD){ bestD = d; best = r; }
   });
-  return { split: false, side: side, entry: best.entry, stop: best.stop, t1: best.t1 };
+  /* hg-v1389: the chosen row's own signal-bar fields ride on the vote.
+     Three-state: a desk whose plan carried neither records neither (never
+     fabricated). This is what makes the forward record settleable on the
+     bar the plan was JUDGED on rather than the floor of the scan clock
+     (hg-v978). */
+  return {
+    split: false, side: side,
+    entry: best.entry, stop: best.stop, t1: best.t1,
+    barT: best.barT, signalT: best.signalT
+  };
 }
 
 var UNREAD_WHY = {
@@ -544,7 +578,15 @@ function hgGoldConfluenceRead(win, extra){
       votes.push({ desk: d.label, id: d.id, state: 'split', note: 'published both long and short, so it is not one vote.' });
       return;
     }
-    votes.push({ desk: d.label, id: d.id, state: 'setup', side: v.side, entry: v.entry, stop: v.stop, t1: v.t1 });
+    /* hg-v1389: carry the plan's own signal-bar fields through the vote
+       model. recordConfluence reads these back on the ready plan and
+       passes them to hgFwdRecordScan so the ledger dates on the bar the
+       plan was judged on (hg-v978), not the floor of the scan clock. */
+    votes.push({
+      desk: d.label, id: d.id, state: 'setup',
+      side: v.side, entry: v.entry, stop: v.stop, t1: v.t1,
+      barT: v.barT, signalT: v.signalT
+    });
   });
   return votes;
 }
@@ -751,6 +793,24 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   base.deskCount = priced.length;
   base.offChart = off;
   base.desks = priced.map(function(v){ return v.desk; });
+  /* hg-v1389: the signal-bar fields of the plan whose entry sits nearest
+     the median ride onto base so recordConfluence can hand them to
+     hgFwdRecordScan. Nearest-median rather than median-of-barTs because
+     each plan is one setup, and the plan the ledger needs to date on is
+     the one that LED to the median -- not an average across different
+     mint instants. A desk whose plan carried neither leaves both absent;
+     hg-forward's barOf then falls back to flooring the scan clock to the
+     15m grid (unchanged from current behaviour). */
+  var midE = median(priced.map(function(v){ return v.entry; }));
+  var leader = priced[0], bestD = Infinity;
+  priced.forEach(function(v){
+    var d = Math.abs(v.entry - midE);
+    if (d < bestD){ bestD = d; leader = v; }
+  });
+  if (leader){
+    if (typeof leader.barT === 'number' && isFinite(leader.barT) && leader.barT > 0) base.barT = leader.barT;
+    if (typeof leader.signalT === 'number' && isFinite(leader.signalT) && leader.signalT > 0) base.signalT = leader.signalT;
+  }
   if (through >= 0.85){
     base.reason = 'The live IUX price has already travelled most of the way to the target. The entry is not moved up to ' + fmt(px) + '.';
     return base;
@@ -770,15 +830,73 @@ function recordConfluence(win, built){
   if (!win || typeof win.hgFwdRecordScan !== 'function') return;
   var key = built.side + '|' + built.entry + '|' + built.stop + '|' + built.t1;
   if (key === lastFwdKey) return;
+  /* hg-v1389: the fields hg-v978/v980/v953 named as the record's minimum
+     honest payload. Each is read from what the module already has in hand
+     at this call site; a desk that marks nothing records nothing (hg-v989
+     three-state). WHAT THIS FIXES:
+
+     - barT (hg-v978): without it, hg-forward.js barOf falls back to flooring
+       the scan clock to the 15m grid, which is the CURRENT FORMING BAR's
+       open time. Settlement walks strictly after barT, so the first bar
+       of the trade (the forming bar that closes) is SKIPPED. The vote model
+       propagated the median plan's own signal bar through from each gold
+       desk's cand -- so the record now dates on the bar the plan was
+       JUDGED on, exactly as hg-v978 fixed on the seven home desks.
+
+     - mark (hg-v980): without it, hgFwdOrderType returns null and the
+       fill-aware pass stands aside, so a limit the tape never reached is
+       settled as a market win. The CONFLUENCE entry is a MEDIAN that is
+       by construction OFF the live IUX price (which is what makes it a
+       resting plan), so this bite is specifically live on this desk. The
+       live IUX px is already on built.mark.
+
+     - goldShut (hg-v953): a CONFLUENCE scan can be run on cached snapshots
+       during the gold weekend (Fri 22 UTC - Sun 22 UTC). hg-v953 wires this
+       mark on every gold desk's mint; the mark is RECORD-ONLY (gates
+       nothing here, hg-v966 refused), so the forward ledger can separate
+       weekend-formed CONFLUENCE records from the rest.
+
+     WHAT THIS DOES NOT ADD, said rather than hidden:
+
+     - feed (hg-v979): CONFLUENCE's median plan is multi-feed by
+       construction (one XM, one Delta XAUT, one Yahoo), so naming any one
+       feed on the record would HOLD it waiting for bars under that label
+       forever (hg-v979's own rule). Fail-open (feed absent -> ledger
+       settles on any gold bars) is the honest answer and the current
+       behaviour; both left unchanged.
+
+     - fundingPct (hg-v985): XAUUSD has no funding. hg-v985 itself says
+       "no funding on an OMNIGOLD record, said rather than hidden: this
+       desk never fetches the Binance PAXG leg". Same applies here.
+
+     No new weight, no gate reads any of these, no setup leaves any board.
+     Only the hg-v1358 forward LEDGER record changes shape -- the panel,
+     the vote tallies and the handoff are untouched (asserted). */
+  var cand = {
+    sym: 'XAUUSD',
+    dir: built.side,
+    entry: built.entry,
+    stop: built.stop,
+    t1: built.t1,
+    ticket: true
+  };
+  if (typeof built.mark === 'number' && isFinite(built.mark) && built.mark > 0) cand.mark = built.mark;
+  if (typeof built.barT === 'number' && isFinite(built.barT) && built.barT > 0) cand.barT = built.barT;
+  if (typeof built.signalT === 'number' && isFinite(built.signalT) && built.signalT > 0) cand.signalT = built.signalT;
+  /* hg-v953 gold weekend mark. hgInGoldWeekend takes seconds; built.at is
+     ms. Fail-open on absent helper or junk clock -- undefined is honest
+     ("not recorded") rather than coerced to false. */
+  if (typeof win.hgInGoldWeekend === 'function'){
+    var atSec = (typeof built.at === 'number' && isFinite(built.at) && built.at > 0) ? Math.floor(built.at / 1000) : NaN;
+    if (isFinite(atSec)){
+      try{
+        var shut = win.hgInGoldWeekend(atSec);
+        cand.goldShut = (shut === true) ? true : (shut === false ? false : undefined);
+      }catch(eW){}
+    }
+  }
   try{
-    win.hgFwdRecordScan('CONFLUENCE', '15m', [{
-      sym: 'XAUUSD',
-      dir: built.side,
-      entry: built.entry,
-      stop: built.stop,
-      t1: built.t1,
-      ticket: true
-    }]);
+    win.hgFwdRecordScan('CONFLUENCE', '15m', [cand]);
     lastFwdKey = key;
   }catch(e){}
 }

@@ -350,9 +350,14 @@ const mutations = [
     check: src => /fundingPct: c\.fundingPct \};/.test(src)
   },
   // M5: break the sw.js shell entry for candle-forecast-intel.js.
+  // hg-v1389: upstream's hg-v1384..v1388 merge moved candle-forecast-intel.js
+  // to the END of its line (comma, newline) rather than inline (comma, space,
+  // next entry). The original pattern matched only the inline form. The new
+  // pattern handles BOTH forms so the mutation is behaviourally caught no
+  // matter where in the HG_SHELL array the entry lands.
   {
     name: 'M5: drop candle-forecast-intel.js from HG_SHELL',
-    patch: s => s.replace("'./candle-forecast-intel.js', ", ''),
+    patch: s => s.replace(/,?\s*'\.\/candle-forecast-intel\.js',?\s*/, ' '),
     file: 'sw.js',
     check: src => src.indexOf("'./candle-forecast-intel.js'") > -1
   },

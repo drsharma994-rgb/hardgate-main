@@ -302,8 +302,16 @@ const EXPECTED_GROUPS = {
   /* hg-v1329: 'candle-forecast' appended. The CANDLE FORECAST tab joined the GOLD
      group and this hand-kept list had drifted behind it — the same "a list kept by
      hand goes stale" mechanism the comment above this block describes, caught this
-     time by the assertion rather than by a user noticing a missing tab. */
-  gold:       ['super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric', '80percent', 'candle-forecast'],
+     time by the assertion rather than by a user noticing a missing tab.
+     hg-v1389: 'gold-confluence' PREPENDED. The CONFLUENCE tab shipped on origin/main
+     at hg-v1384 as the first entry in the GOLD group (so it opens by default and
+     reads every other gold desk below it), and this list had drifted behind it on
+     ORIGIN/MAIN too — the hand-kept-list-goes-stale mechanism named three lines
+     up, now in a THIRD place: upstream shipped the live group AND the guard that
+     tests it in the same five-pack sprint and did not reconcile them. The guard
+     caught it when my pack added gold-confluence to sw.js's HG_SHELL and ran the
+     full suite. */
+  gold:       ['gold-confluence', 'super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric', '80percent', 'candle-forecast'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };

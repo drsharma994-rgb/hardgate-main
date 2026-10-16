@@ -258,7 +258,15 @@ console.log('== 6) the census, derived by call shape: every record writer carrie
       const before = src.slice(Math.max(0, m.index - 30), m.index);
       if (/function\s+$/.test(before) || /=\s*function\s*$/.test(src.slice(m.index, m.index + 40))) continue;
       if (/hgFwdRecordScan = function/.test(src.slice(m.index, m.index + 40))) continue;
-      const span = src.slice(m.index, m.index + 900);
+      /* hg-v1389: the lookforward used to be 900 chars, which silently reads
+         a writer as bare the moment its record literal grows past that count
+         -- the mirror of the hg-v1295 lookback defect ("silently reads a
+         writer as bare once a pack adds lines between its record literal's
+         declaration and the call"). SUPER:GOLD's record (super-gold.js, hg-v1361)
+         grew past 900 chars when it added perfect/perfectPlus/chased/chaseCode/
+         reads/fundingPct, pushing `mark: c.mark` to offset 1081 inside the
+         literal. Bumped to 3000 (matches the lookback magnitude). */
+      const span = src.slice(m.index, m.index + 3000);
       const tab = (span.match(/\(\s*('[^']+'|[A-Za-z_$][\w$]*)/) || [])[1];
       /* hg-v1295: the lookback used to be a hard 3000 chars, which silently
          reads a writer as bare once a pack adds lines between its record
