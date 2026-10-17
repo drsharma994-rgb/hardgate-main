@@ -635,6 +635,9 @@ a global hard refresh.
     pick.row.omniPrincipal = pick.row.omniPrincipal || win.omniPrincipal;
     if (pick.row.missing == null && Array.isArray(win.missing)) pick.row.missing = win.missing.slice();
     if ((pick.row.gateMeta == null || !pick.row.gateMeta.length) && Array.isArray(win.gateMeta)) pick.row.gateMeta = win.gateMeta;
+    /* The scored board, so a later pine refusal can crown the next
+       survivor. Not a vote and not a record field. */
+    pick.board = btc;
     return pick;
   }
 
@@ -1136,15 +1139,26 @@ a global hard refresh.
      quiet fundamental board is "quiet", not a confirmation. */
   function hgObtcAccuracyParts(row, confirmed){
     row = row || {};
-    var eng = String(row.engine || row.strategy || '');
+    var fams = Array.isArray(row.pineFamilies) ? row.pineFamilies : [];
+    var oppose = Array.isArray(row.pineOppose) ? row.pineOppose : [];
+    var cores = Array.isArray(row.coreAgree) ? row.coreAgree : [];
+    var indA = Array.isArray(row.indAgree) ? row.indAgree : [];
+    /* hg-v1397: the +10 is the ten-core book agreeing with this direction,
+       not the letters PINE in an engine name. At rank time the book has
+       not run, so the weight is 0 until pineFamilies is stamped. An
+       opposing core, or a pine refusal, scores 0. One agreeing family
+       still needs a second house core or a fresh indicator — the same
+       bar that already keeps a ticket. */
+    var pineOn = row.pineRefused !== true && oppose.length === 0 && fams.length > 0
+      && (fams.length >= 2 || cores.length >= 1 || indA.length >= 1);
     return [
       { key: 'gates',      label: 'house gates CLEAN',        weight: row.clean ? 20 : 0,
         on: !!row.clean, detail: row.clean ? 'every gate cleared' : 'not 7/7 CLEAN' },
       { key: 'sibling',    label: 'independent opposite family', weight: confirmed ? 15 : 0,
         on: !!confirmed, detail: confirmed ? 'an opposite-family sibling agrees on symbol AND direction'
                                           : 'no sibling confirmation from the opposite family' },
-      { key: 'pine',       label: 'pine-led',                  weight: eng.indexOf('PINE') >= 0 ? 10 : 0,
-        on: eng.indexOf('PINE') >= 0, detail: eng.indexOf('PINE') >= 0 ? 'the pick is a pine-led engine' : null },
+      { key: 'pine',       label: 'pine book agreed',          weight: pineOn ? 10 : 0,
+        on: pineOn, detail: pineOn ? 'the ten-core book agreed with this direction' : null },
       { key: 'flow',       label: 'taker flow WITH',           weight: row.takerFlowWith ? 10 : 0,
         on: !!row.takerFlowWith, detail: row.takerFlowWith ? 'Binance taker CVD slope agrees with the direction'
                                                           : 'taker flow unread or not aligned' },
@@ -1491,6 +1505,145 @@ a global hard refresh.
       oppose: 0,
       demoted: !!(r.demoted), vetoed: !!(r.vetoed)
     };
+  }
+
+  /* hg-v1397: RANK AFTER THE BOOK.
+     The accuracy pick used to award +10 because the engine name contained
+     PINE, and it did that before the ten cores had run. A refused winner
+     then kept the crown, so the next candidate was never tried. The +10
+     now comes only from hgObtcAccuracyParts once the book has stamped an
+     agreement. This walk runs after that book. A tape-regime veto is the
+     tape, not this engine, so it does not hand the crown around. A
+     tape-wide pine refusal (the cores, an indicator, the 1h, the 1d, or
+     no fresh core) closes that direction and the other direction is
+     tried. The first survivor that still clears the ticket gate is the
+     crown. If the book refuses every candidate, the original watch stays. */
+  function hgObtcPlanKey(r){
+    if (!r) return '';
+    return [r.sym, r.dir, r.entry, r.stop, r.engine || r.strategy || ''].join('|');
+  }
+
+  function hgObtcFindTape(row, all){
+    var want = hgObtcPlanKey(row);
+    var i, c, loose = null;
+    for (i = 0; i < (all || []).length; i++){
+      c = all[i];
+      if (!c) continue;
+      if (hgObtcPlanKey(c) === want) return c;
+      if (!loose && c.sym === row.sym && String(c.dir || '').toLowerCase() === String(row.dir || '').toLowerCase()
+          && c.entry === row.entry && c.stop === row.stop) loose = c;
+    }
+    return loose;
+  }
+
+  function hgObtcTapeWideRefusal(row){
+    var n = String((row && row.pineNote) || '');
+    return n.indexOf('PINE AGAINST') === 0
+      || n.indexOf('INDICATOR AGAINST') === 0
+      || n.indexOf('1h PINE AGAINST') === 0
+      || n.indexOf('1d PINE AGAINST') === 0
+      || n.indexOf('no fresh pine') === 0
+      || n.indexOf('TAPE REGIME') === 0;
+  }
+
+  function hgObtcPartsSum(parts){
+    var s = 0, i;
+    for (i = 0; i < (parts || []).length; i++) s += +parts[i].weight || 0;
+    return s;
+  }
+
+  function hgObtcRescoreAccuracy(row){
+    if (!row) return 0;
+    var confirmed = row.crossValidation === 'PASSED: confirmed by opposite family engine';
+    var parts = hgObtcAccuracyParts(row, confirmed);
+    row.accuracyParts = parts;
+    row.accuracyScore = hgObtcPartsSum(parts);
+    return row.accuracyScore;
+  }
+
+  function hgObtcTripleGate(pick){
+    if (!pick || !pick.row) return pick;
+    var row = pick.row;
+    if (row.pineRefused === true || row.regimeRefused === true){
+      pick.tier = 'near';
+      return pick;
+    }
+    var confirmed = row.crossValidation === 'PASSED: confirmed by opposite family engine';
+    var score = +row.accuracyScore;
+    if (!(confirmed && row.clean === true && isFinite(score) && score >= 30)){
+      row.demoted = true;
+      row.watchOnly = true;
+      row.clean = false;
+      row.near = true;
+      row.nearClean = true;
+      pick.tier = 'near';
+    } else {
+      pick.tier = 'clean';
+    }
+    return pick;
+  }
+
+  function hgObtcReCrownAfterPine(pick, all){
+    if (!pick || !pick.row) return pick;
+    if (pick.row.regimeRefused === true){
+      hgObtcRescoreAccuracy(pick.row);
+      return pick;
+    }
+    if (pick.row.pineRefused !== true){
+      hgObtcRescoreAccuracy(pick.row);
+      return pick;
+    }
+    var board = Array.isArray(pick.board) ? pick.board : [];
+    var ranked = board.slice().sort(function(a, b){
+      var ds = (+b.accuracyScore || 0) - (+a.accuracyScore || 0);
+      if (ds) return ds;
+      return String((a && a.engine) || '').localeCompare(String((b && b.engine) || ''));
+    });
+    var refusedDir = String(pick.row.dir || '').toLowerCase();
+    var tapeWide = hgObtcTapeWideRefusal(pick.row);
+    var seen = {};
+    var watchFallback = null;
+    seen[hgObtcPlanKey(pick.row)] = 1;
+    var i, row, src, next;
+    for (i = 0; i < ranked.length; i++){
+      row = ranked[i];
+      if (!row || seen[hgObtcPlanKey(row)]) continue;
+      seen[hgObtcPlanKey(row)] = 1;
+      if (tapeWide && String(row.dir || '').toLowerCase() === refusedDir) continue;
+      if (!hgObtcIsBtc(row.sym) || !hgObtcHasLevels(row)) continue;
+      src = hgObtcFindTape(row, all);
+      if (!src || !src._rows || src._rows.length < 20) continue;
+      next = { row: row, tier: row.clean ? 'clean' : 'near', source: 'pine-recrown', board: board };
+      try{
+        hgObtcApplyPineAccuracy(next, src._rows, all, src._rows1, src._rows1d, src._rows15);
+      }catch(eRc){ continue; }
+      if (next.row.regimeRefused === true){
+        hgObtcRescoreAccuracy(pick.row);
+        return pick;
+      }
+      if (next.row.pineRefused === true){
+        if (hgObtcTapeWideRefusal(next.row)){
+          refusedDir = String(next.row.dir || '').toLowerCase();
+          tapeWide = true;
+        }
+        continue;
+      }
+      hgObtcRescoreAccuracy(next.row);
+      hgObtcTripleGate(next);
+      if (next.tier === 'clean' && next.row.clean === true){
+        next.row.pineRecrowned = true;
+        if (next.row.pineNote) next.row.pineNote += ' · previous crown stood down by the book; this is the next survivor';
+        return next;
+      }
+      if (!watchFallback) watchFallback = next;
+    }
+    if (watchFallback){
+      watchFallback.row.pineRecrowned = true;
+      if (watchFallback.row.pineNote) watchFallback.row.pineNote += ' · previous crown stood down by the book; this is the next survivor';
+      return watchFallback;
+    }
+    hgObtcRescoreAccuracy(pick.row);
+    return pick;
   }
 
   /* hg-v1295: the directional FUNDAMENTAL / SENTIMENT verdict the card
@@ -3120,6 +3273,21 @@ a global hard refresh.
            are handed to the accuracy gate — the daily as an opposing-only
            lock, the 15m as a disclosed read. Both were unread before. */
         try{ hgObtcApplyPineAccuracy(pick, winnerRows, all, match && match._rows1, match && match._rows1d, match && match._rows15); }catch(ePine){}
+        /* hg-v1397: the book has now spoken. Rescore the +10 from that
+           agreement, and if this crown was refused, take the next survivor.
+           The board is a walk aid — it is not part of the card or the record. */
+        try{
+          var again = hgObtcReCrownAfterPine(pick, all);
+          if (again && again.row && again !== pick){
+            pick = again;
+            match = all.filter(function(c){
+              return c && c.sym === pick.row.sym && c.dir === pick.row.dir
+                && c.entry === pick.row.entry && c.stop === pick.row.stop;
+            })[0] || match;
+            if (match && match._rows) winnerRows = match._rows;
+          }
+        }catch(eRc){}
+        if (pick && pick.board) delete pick.board;
         /* hg-v1051: ENTRY-EDGE REFINEMENT — the pick's entry is snapped
            to the structure edge the house exact-entry seam prices (edge
            signal / swing enrichment on the winner's own tape), then
@@ -3891,6 +4059,7 @@ a global hard refresh.
   W.hgObtcIndBook = hgObtcIndBook;
   W.hgObtcHouseMarkReads = hgObtcHouseMarkReads;
   W.hgObtcApplyPineAccuracy = hgObtcApplyPineAccuracy;
+  W.hgObtcReCrownAfterPine = hgObtcReCrownAfterPine;
   W.hgObtcHtfLockOn = hgObtcHtfLockOn;      /* hg-v1295: the daily-lock lever */
   /* hg-v1057: the accuracy-pack seams, exported so the test drives the real
      computation rather than a re-implementation */

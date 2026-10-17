@@ -430,6 +430,11 @@
       "version": "hg-v1396",
       "built": "2026-10-17T15:20:00Z",
       "note": "OMNIBTC writes TSI, VWAP, choppiness and the ATR regime onto the forward book as reads, not votes. A zero, a tie, a mixed chop, or a normal ATR regime stays unread. The forward section says the standing Pine states are not promoted until a settled split separates one. The ten cores still decide a ticket."
+    },
+    {
+      "version": "hg-v1397",
+      "built": "2026-10-17T15:55:00Z",
+      "note": "OMNIBTC scores the pine +10 only when the ten-core book agrees with the direction, not because the engine name contains PINE. A pine-refused crown is handed to the next survivor the book accepts. If every candidate is refused, the original watch stays. The ten cores still decide a ticket."
     }
   ]
 }
