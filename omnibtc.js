@@ -54,6 +54,12 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              leaves a watch. A standing bias is not a fresh
                              signal. A script that did not fire is not a
                              vote. A script that is not loaded stays unread.
+                             hg-v1395: the standing side of TTM Squeeze,
+                             Weekly AVWAP, HalfTrend, Range Filter, NW
+                             Envelope and VuManChu is recorded and printed
+                             on the card. It does not vote. TSI, choppiness,
+                             the ATR regime and a 20-bar VWAP are disclosed
+                             on the indicator bank and do not vote.
   HTF ACCURACY LOCK ........ hg-v1295: the SAME ten cores also run on the 1d
                              tape the desk already loads. A fresh daily core
                              the other way demotes the crown to a watch
@@ -117,13 +123,13 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              line exists for it, so it is disclosed like the
                              EMA stack and never votes; a missing side stays
                              UNCHECKED.
-  RECORD BANK +2 ........... hg-v1300: Balanced Price Range (ICT/SMC
-                             structure) and Heikin Ashi (smoothed trend)
-                             join the record-only pine bank — states the
-                             shared reader already derived and BTC never
-                             recorded. RECORDED, never scored; promotion to
-                             the voting book stays dormant until the
-                             ledger's own read split measures them.
+  RECORD BANK +6 ........... hg-v1395: the standing side of TTM
+                             Squeeze, Weekly AVWAP, HalfTrend, Range Filter,
+                             NW Envelope and VuManChu joins the record-only
+                             bank. The ten cores still vote only on a fresh
+                             event. These states are shown and recorded,
+                             never scored. MACD, Donchian and session VWAP
+                             stay out.
   REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
                              accepted a taker series and was never fed one —
                              the candle-approximated stand-in answered for the
@@ -726,6 +732,19 @@ a global hard refresh.
        never scored, and a key the reader leaves null stays UNREAD. */
     { key: 'bpr',         id: 'bpr-break',          label: 'Balanced Price Range',  family: 'structure' },
     { key: 'heikin',      id: 'heikin-ashi',        label: 'Heikin Ashi',           family: 'trend' },
+    /* hg-v1395: standing states the shared reader already derives. The ten-core
+       book votes the FRESH event of these same series (a flip inside five
+       bars). The state is which side the series is on right now. Recording
+       it does not grow pineFamilies and does not demote a crown — the vote
+       vectors below never read this table. A null from the reader stays
+       UNREAD. MACD, Donchian and session VWAP stay out: the first two already
+       vote as fresh indicator crosses, and BTC has no FX session for the third. */
+    { key: 'squeeze',          id: 'ttm-squeeze',        label: 'TTM Squeeze',     family: 'momentum' },
+    { key: 'wavwap',           id: 'weekly-avwap-side',  label: 'Weekly AVWAP side', family: 'value' },
+    { key: 'halftrend',        id: 'halftrend-side',     label: 'HalfTrend side',  family: 'trend' },
+    { key: 'rangefilter',      id: 'range-filter-side',  label: 'Range Filter side', family: 'trend' },
+    { key: 'nwenvelope',       id: 'nw-envelope-side',   label: 'NW Envelope side', family: 'value' },
+    { key: 'vumanchuCipher',   id: 'vumanchu-state',     label: 'VuManChu state',  family: 'momentum' },
     /* the voting book already reads Donchian and MACD as fresh indicator
        crosses, so they are NOT duplicated here (hg-v949 second-copy rule). */
     /* the four primitives the gold reader also derives are deliberately left
@@ -2594,6 +2613,29 @@ a global hard refresh.
     return html;
   }
 
+  /* Standing pine states for the card. The plan's own direction decides
+     with versus against. Nothing here is fed back into the ticket. */
+  function hgObtcPineStateHtml(row){
+    var rec = row && row.pineRecord;
+    if (!rec || typeof rec !== 'object') return '';
+    var dir = String(row.dir || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') return '';
+    var withL = [], againstL = [], unread = 0, i, spec, v;
+    for (i = 0; i < OBTC_PINE_RECORD.length; i++){
+      spec = OBTC_PINE_RECORD[i];
+      v = rec[spec.id];
+      if (v !== 'long' && v !== 'short'){ unread++; continue; }
+      if (v === dir) withL.push(spec.label);
+      else againstL.push(spec.label);
+    }
+    if (!withL.length && !againstL.length) return '';
+    var h = '<div class="note" data-obtc-pine-state="1">PINE STATE — recorded, not a vote. ';
+    if (withL.length) h += 'With the plan: ' + esc(withL.join(', ')) + '. ';
+    if (againstL.length) h += 'Against the plan: ' + esc(againstL.join(', ')) + '. ';
+    h += unread + ' unread.</div>';
+    return h;
+  }
+
   function detailHtml(pick, omniInfo){
     if (!pick || !pick.row || !hgObtcHasLevels(pick.row)) return waitHtml();
     var r = pick.row;
@@ -2607,6 +2649,10 @@ a global hard refresh.
     if (r.venue) html += ' · ' + esc(String(r.venue).toUpperCase());
     html += clean ? ' · ticket' : ' · watch only</div></div>';
     if (r.pineNote) html += '<div class="note" data-obtc-pine="1">' + esc(r.pineNote) + '</div>';
+    /* hg-v1395: the standing pine states. Named with or against the plan.
+       A port the reader left null is counted unread, never given a side.
+       This line is not a vote. */
+    html += hgObtcPineStateHtml(r);
     /* hg-v1303: the confirmatory read — what independent evidence confirmed
        this, what disagreed, and what was never read. Readout only. */
     html += hgObtcConfirmatoryHtml(r);
@@ -2648,6 +2694,70 @@ a global hard refresh.
     }
     html += '</div>';
     return html;
+  }
+
+  /* House reads the contract report does not print. Each is disclosed.
+     None is pushed into the indicator vote book, so an opposing TSI or
+     a VWAP lean cannot demote the crown and cannot mint a ticket. */
+  function hgObtcAppendHouseReads(list, rows){
+    if (!Array.isArray(list)) return;
+    function has(label){
+      var i;
+      for (i = 0; i < list.length; i++) if (list[i] && list[i].label === label) return true;
+      return false;
+    }
+    function push(label, value, note){
+      if (has(label)) return;
+      list.push({ label: label, value: value, note: note || '' });
+    }
+    var closes = null, i, c, n;
+    if (rows && rows.length){
+      closes = [];
+      for (i = 0; i < rows.length; i++){
+        c = rows[i] && +rows[i].c;
+        if (!isFinite(c)){ closes = null; break; }
+        closes.push(c);
+      }
+    }
+    n = closes ? closes.length : 0;
+    if (n >= 40 && typeof W.tsi === 'function'){
+      try{
+        var ts = W.tsi(closes, 13, 25);
+        var tv = ts && +ts[ts.length - 1];
+        if (isFinite(tv)){
+          push('TSI 13/25 (4h)', tv.toFixed(1),
+            (tv > 0 ? 'above zero' : (tv < 0 ? 'below zero' : 'at zero')) + ' — disclosed, not a vote');
+        } else push('TSI 13/25 (4h)', 'UNREAD', 'the series did not finish');
+      }catch(eTs){ push('TSI 13/25 (4h)', 'UNREAD', 'the series did not finish'); }
+    } else push('TSI 13/25 (4h)', 'UNCHECKED', 'needs a TSI read and 40 closes');
+    if (rows && rows.length >= 20 && typeof W.hgChoppiness === 'function'){
+      try{
+        var ch = W.hgChoppiness(rows, 14);
+        var cv = ch && +ch[ch.length - 1];
+        if (isFinite(cv)){
+          var cn = cv >= 61.8 ? 'choppy' : (cv <= 38.2 ? 'trending' : 'mixed');
+          push('Choppiness 14 (4h)', cv.toFixed(1), cn + ' — disclosed, not a vote');
+        } else push('Choppiness 14 (4h)', 'UNREAD', 'no range in the window');
+      }catch(eCh){ push('Choppiness 14 (4h)', 'UNREAD', 'the series did not finish'); }
+    } else push('Choppiness 14 (4h)', 'UNCHECKED', 'needs choppiness and 20 bars');
+    if (rows && rows.length >= 40 && typeof W.volRegime === 'function'){
+      try{
+        var vr = W.volRegime(rows, 50);
+        if (vr === 'COMPRESSING' || vr === 'NORMAL' || vr === 'EXPANDING'){
+          push('ATR regime (4h)', vr, 'current ATR against its own median — disclosed, not a vote');
+        } else push('ATR regime (4h)', 'UNREAD', 'no regime');
+      }catch(eVr){ push('ATR regime (4h)', 'UNREAD', 'the series did not finish'); }
+    } else push('ATR regime (4h)', 'UNCHECKED', 'needs volRegime and 40 bars');
+    if (rows && rows.length >= 20 && typeof W.vwapAt === 'function'){
+      try{
+        var vw = W.vwapAt(rows, rows.length - 1, 20);
+        var px = +rows[rows.length - 1].c;
+        if (isFinite(vw) && isFinite(px) && vw > 0){
+          var side = px > vw ? 'above' : (px < vw ? 'below' : 'at');
+          push('VWAP 20 (4h)', side + ' ' + vw.toFixed(1), 'rolling typical-price VWAP — disclosed, not a vote');
+        } else push('VWAP 20 (4h)', 'UNREAD', 'no volume on the window');
+      }catch(eVw){ push('VWAP 20 (4h)', 'UNREAD', 'the series did not finish'); }
+    } else push('VWAP 20 (4h)', 'UNCHECKED', 'needs a VWAP read and 20 bars');
   }
 
   function indicatorsHtml(indicators){
@@ -3568,6 +3678,7 @@ a global hard refresh.
           }
         }catch(eFwd2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFwd2); }catch(eW){} }
       }
+      try{ hgObtcAppendHouseReads(indicators, winnerRows || r4); }catch(eHi){}
       var nClean = all.filter(function(c){ return c.clean; }).length;
       var stat = pick
         ? ('BTC · ' + legs.length + ' venue' + (legs.length === 1 ? '' : 's')

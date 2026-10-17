@@ -53,15 +53,19 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const SRC = read('omnibtc.js');
 
 /* The expected bank: ledger id -> the pineGoldLayerStates key it reads.
-   hg-v1300 added the last two: BPR and Heikin Ashi, states the shared
-   reader already derived and BTC never recorded. */
+   hg-v1300 added BPR and Heikin Ashi. hg-v1395 records the standing side
+   of the six reader states the ten-core book only votes when they fire
+   fresh. They stay out of the voting table. */
 const EXPECTED = {
   'supertrend': 'supertrend', 'psar-flip': 'psar', 'hull-turn': 'hullma', 'qqe': 'qqe',
   'stoch-cross': 'stoch', 'ema-cross-rsi': 'emacross', 'fisher-zero': 'fisher',
   'trix-cross': 'trix', 'williams-reentry': 'williams', 'cci-reentry': 'cci',
   'keltner-pullback': 'keltner', 'chandelier-exit': 'chandelier', 'ichimoku': 'ichimoku',
   'adx-di': 'adx', 'aroon-cross': 'aroon', 'efficiency': 'efficiency', 'ote': 'ote',
-  'bpr-break': 'bpr', 'heikin-ashi': 'heikin'
+  'bpr-break': 'bpr', 'heikin-ashi': 'heikin',
+  'ttm-squeeze': 'squeeze', 'weekly-avwap-side': 'wavwap', 'halftrend-side': 'halftrend',
+  'range-filter-side': 'rangefilter', 'nw-envelope-side': 'nwenvelope',
+  'vumanchu-state': 'vumanchuCipher'
 };
 const IDS = Object.keys(EXPECTED);
 
@@ -75,13 +79,18 @@ console.log('== 1) the record bank is declared, separate from the voting table =
   const votIds = [...SRC.slice(vot, rec).matchAll(/\{ id: '([a-z0-9-]+)'/g)].map(m => m[1]);
   ok(votIds.length === 10, 'the voting table is untouched at exactly 10 ports (got ' + votIds.length + ')');
   const recBody = SRC.slice(rec, SRC.indexOf('function hgObtcPineRecordBook'));
-  const rows = [...recBody.matchAll(/\{ key: '([a-z]+)',\s*id: '([a-z0-9-]+)'/g)].map(m => [m[2], m[1]]);
+  const rows = [...recBody.matchAll(/\{ key: '([A-Za-z]+)',\s*id: '([a-z0-9-]+)'/g)].map(m => [m[2], m[1]]);
   ok(rows.length === IDS.length, 'the record bank holds exactly ' + IDS.length + ' rows (got ' + rows.length + ')');
   for (const [id, key] of rows){
     ok(EXPECTED[id] !== undefined, 'record row id is expected: ' + id);
     ok(EXPECTED[id] === key, id + ' reads the shared reader key ' + key);
   }
   for (const id of IDS) ok(rows.some(r => r[0] === id), 'bank carries ' + id);
+  for (const id of ['ttm-squeeze', 'weekly-avwap-side', 'halftrend-side', 'range-filter-side', 'nw-envelope-side', 'vumanchu-state']){
+    ok(votIds.indexOf(id) < 0, id + ' is recorded and is not a voting core');
+  }
+  ok(!rows.some(r => r[1] === 'macd' || r[1] === 'donchian' || r[1] === 'sessvwap'),
+    'MACD, Donchian and session VWAP stay out of the record bank');
 }
 
 console.log('== 2) the bank CALLS the shared reader, and never reimplements it ==');
@@ -124,6 +133,13 @@ console.log('== 3) the bank is READ-ONLY: it can never cast a vote ==');
   }
   ok(/fams = hgObtcFamilies\(agreeItems\)/.test(gate), 'fams comes from agreeItems, never the record bank');
   ok(/cores = hgObtcCoreAgree\(cands, pick\.row\)/.test(gate), 'cores comes from the house strategies, never the record bank');
+  const indFn = SRC.slice(SRC.indexOf('function hgObtcIndBook'), SRC.indexOf('function hgObtcEngulfDir'));
+  ok(!/tsi\(|vwapAt\(|hgChoppiness\(|volRegime\(/.test(indFn),
+    'TSI, VWAP, choppiness and the ATR regime are not indicator votes');
+  ok(/function hgObtcAppendHouseReads/.test(SRC) && /disclosed, not a vote/.test(SRC),
+    'the house reads are disclosed and say they are not a vote');
+  ok(/data-obtc-pine-state/.test(SRC) && /recorded, not a vote/.test(SRC),
+    'the card prints the standing pine state and says it is not a vote');
 }
 
 console.log('== 4) the three-state contract, DRIVEN on real tapes ==');

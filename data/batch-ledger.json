@@ -420,6 +420,11 @@
       "version": "hg-v1394",
       "built": "2026-10-16T16:10:00Z",
       "note": "CONFLUENCE scans when the tab opens and no longer stands aside just because the venue spread was not read. A Gold Ultra crown still votes when the count did not fire. The Gold Pine top card is the vote. Super Gold counts when Scalp and Swing published nothing. A cached or proxied IUX quote is used when the live read fails. Three crowned plans are still required, and a measured spread under 1.20R is still a watch."
+    },
+    {
+      "version": "hg-v1395",
+      "built": "2026-10-17T15:00:00Z",
+      "note": "OMNIBTC records the standing side of TTM Squeeze, Weekly AVWAP, HalfTrend, Range Filter, NW Envelope and VuManChu, and prints that state on the card. Those reads do not vote. TSI, choppiness, the ATR regime and a 20-bar VWAP are disclosed on the indicator bank and do not vote. The ten pine cores still decide a ticket. MACD, Donchian and session VWAP stay out of the record bank."
     }
   ]
 }
