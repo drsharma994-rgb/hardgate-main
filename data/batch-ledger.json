@@ -425,6 +425,11 @@
       "version": "hg-v1395",
       "built": "2026-10-17T15:00:00Z",
       "note": "OMNIBTC records the standing side of TTM Squeeze, Weekly AVWAP, HalfTrend, Range Filter, NW Envelope and VuManChu, and prints that state on the card. Those reads do not vote. TSI, choppiness, the ATR regime and a 20-bar VWAP are disclosed on the indicator bank and do not vote. The ten pine cores still decide a ticket. MACD, Donchian and session VWAP stay out of the record bank."
+    },
+    {
+      "version": "hg-v1396",
+      "built": "2026-10-17T15:20:00Z",
+      "note": "OMNIBTC writes TSI, VWAP, choppiness and the ATR regime onto the forward book as reads, not votes. A zero, a tie, a mixed chop, or a normal ATR regime stays unread. The forward section says the standing Pine states are not promoted until a settled split separates one. The ten cores still decide a ticket."
     }
   ]
 }

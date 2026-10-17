@@ -195,6 +195,26 @@ console.log('== 4) the three-state contract, DRIVEN on real tapes ==');
   for (const k of Object.keys(up.states)) ok(IDS.includes(k), 'state key is a declared bank id: ' + k);
   /* and never the raw reader key */
   for (const raw of ['hullma', 'emacross', 'psar']) ok(!Object.keys(up.states).includes(raw), 'raw reader key is mapped to the ledger id, not leaked: ' + raw);
+
+  /* hg-v1396: the disclosed house reads are ledger marks, not votes. */
+  const marks = ctx.hgObtcHouseMarkReads;
+  ok(typeof marks === 'function', 'hgObtcHouseMarkReads is exported');
+  const upM = marks(mk('up'), 'long');
+  ok(upM['ind:tsiWith'] === true, 'a clean up tape is TSI-with a long (got ' + upM['ind:tsiWith'] + ')');
+  ok(upM['ind:vwapWith'] === true, 'a clean up tape is VWAP-with a long');
+  ok(upM['ind:choppy'] === false, 'a clean up tape is not choppy');
+  ok(!('ind:atrExpand' in upM), 'a normal ATR regime is absent, not a false');
+  const dnM = marks(mk('down'), 'short');
+  ok(dnM['ind:tsiWith'] === true, 'the same tape flipped is TSI-with a short');
+  ok(dnM['ind:vwapWith'] === true, 'and VWAP-with a short');
+  const against = marks(mk('up'), 'short');
+  ok(against['ind:tsiWith'] === false, 'an up tape is TSI-against a short — false, not absent');
+  ok(Object.keys(marks(mk('up', 10), 'long')).length === 0, 'a thin tape invents no house mark');
+  ok(Object.keys(marks(null, 'long')).length === 0, 'a null tape invents no house mark');
+  ok(!('ind:tsiWith' in marks(mk('up'), 'sideways')), 'a direction that is not long or short writes nothing');
+  const gate = SRC.slice(SRC.indexOf('function hgObtcApplyPineAccuracy'), SRC.indexOf('function hgObtcPerfectCandidate'));
+  ok(!gate.includes('ind:tsiWith') && !gate.includes('hgObtcHouseMarkReads'),
+    'the accuracy gate does not read the house marks');
 }
 
 console.log('== 5) the marks reach the forward ledger, and gate nothing ==');
@@ -202,7 +222,10 @@ console.log('== 5) the marks reach the forward ledger, and gate nothing ==');
   const ln = SRC.indexOf("W.hgFwdRecordScan('OMNIBTC'");
   ok(ln > 0, 'the OMNIBTC record call exists');
   const lit = SRC.slice(Math.max(0, ln - 7000), ln);
-  ok(/pick\.row\.pineRecord/.test(lit), 'the record literal reads the crown row\'s record states');
+  ok(/hgObtcHouseMarkReads\(winnerRows/.test(lit), 'the record literal also stamps the house marks');
+  ok(/hm\[hk\] !== true && hm\[hk\] !== false/.test(lit), 'only a real boolean house mark is written');
+  ok(/data-obtc-pine-measure/.test(SRC), 'the forward section says the standing states are not promoted');
+  ok(/None is promoted/.test(SRC), 'the measurement line does not promote a port');
   ok(/fwdRow\['pine:' \+ rk\]/.test(lit), 'and writes them under the pine: namespace');
   ok(/if \(rv === 'long' \|\| rv === 'short'\)/.test(lit), 'only a readable side is written');
   ok(/Object\.prototype\.hasOwnProperty\.call/.test(lit), 'the loop guards against prototype keys');

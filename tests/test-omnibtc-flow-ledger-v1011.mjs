@@ -143,7 +143,7 @@ console.log('== the crowned pick joins the forward book ==');
   ok(Array.isArray(r.rows4h) && r.rows4h.length === 220 && r.rows4h[0].t === R4[0].t,
      'the winner leg\'s own 4h tape rides — the central regime mark needs the series the desk held');
   ok(cap.rec.opts && cap.rec.opts.horizonBars === 20, 'the house default 20-bar horizon, like every 4h writer');
-  ok(ui.fwd.innerHTML === 'FWD:OMNIBTC', 'the book renders under the card after the scan');
+  ok(ui.fwd.innerHTML.indexOf('FWD:OMNIBTC') >= 0, 'the book renders under the card after the scan');
 }
 
 console.log('== a watch-tier pick records marked for what it is ==');
@@ -168,7 +168,7 @@ console.log('== WAIT records nothing — an empty scan invents no history ==');
   const stat = await W.hgObtcRunScan(ui);
   ok(/no engine produced a ticket|WAIT/i.test(stat), 'the desk waited: ' + stat);
   ok(cap.rec === undefined, 'no crown, no record — the book never mints a row the desk did not stand behind');
-  ok(ui.fwd.innerHTML === 'FWD:OMNIBTC', 'the book still renders on a WAIT — the accumulating record is the point');
+  ok(ui.fwd.innerHTML.indexOf('FWD:OMNIBTC') >= 0, 'the book still renders on a WAIT — the accumulating record is the point');
 }
 
 console.log('== the mount wires the panel ==');
@@ -180,7 +180,7 @@ console.log('== the mount wires the panel ==');
   reg.mount(pane);
   ok(pane._html.indexOf('id="obtcFwd"') >= 0 && pane._html.indexOf('FORWARD — DOES THE CROWN PAY?') >= 0,
      'the mount carries the FORWARD section with its own container');
-  ok(stubs['#obtcFwd'] && stubs['#obtcFwd'].innerHTML === 'FWD:OMNIBTC',
+  ok(stubs['#obtcFwd'] && stubs['#obtcFwd'].innerHTML.indexOf('FWD:OMNIBTC') >= 0,
      'the book paints on mount — records from previous sessions are the point of a ledger');
 }
 

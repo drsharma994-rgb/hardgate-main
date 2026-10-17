@@ -2636,6 +2636,42 @@ a global hard refresh.
     return h;
   }
 
+  /* The settled book is the only thing that can release a standing pine
+     state into the vote. This line reports whether any have settled. It
+     does not promote one, and it does not print a hit rate off a short
+     sample. */
+  function hgObtcPineMeasureHtml(){
+    var h = '<div class="note" data-obtc-pine-measure="1">PINE STANDING STATES — recorded on each new crown, not a vote. A port joins the ten cores only after its own settled split separates. ';
+    var sp = null, n = 0, k, e;
+    try{ if (gfn('hgFwdReadSplit')) sp = W.hgFwdReadSplit('OMNIBTC'); }catch(eSp){ sp = null; }
+    if (!sp || !sp.reads){
+      h += 'The settled split is not loaded, so nothing is promoted.</div>';
+      return h;
+    }
+    for (k in sp.reads){
+      if (!Object.prototype.hasOwnProperty.call(sp.reads, k)) continue;
+      if (String(k).indexOf('pine:') !== 0) continue;
+      e = sp.reads[k];
+      if (e && e.yes && e.no && ((+e.yes.n || 0) + (+e.no.n || 0)) > 0) n++;
+    }
+    if (!n) h += 'No settled record carries one yet, so none is promoted.';
+    else h += n + ' standing state' + (n === 1 ? '' : 's') + ' already have settled marks under FORWARD. None is promoted from this line.';
+    h += '</div>';
+    return h;
+  }
+
+  function hgObtcAttachPineMeasure(el){
+    if (!el) return;
+    var note = hgObtcPineMeasureHtml();
+    var html = String(el.innerHTML || '');
+    var mark = 'data-obtc-pine-measure="1"';
+    if (html.indexOf(mark) >= 0){
+      el.innerHTML = html.replace(/<div class="note" data-obtc-pine-measure="1">[\s\S]*?<\/div>/, note);
+      return;
+    }
+    el.innerHTML = html + note;
+  }
+
   function detailHtml(pick, omniInfo){
     if (!pick || !pick.row || !hgObtcHasLevels(pick.row)) return waitHtml();
     var r = pick.row;
@@ -2696,9 +2732,62 @@ a global hard refresh.
     return html;
   }
 
-  /* House reads the contract report does not print. Each is disclosed.
-     None is pushed into the indicator vote book, so an opposing TSI or
-     a VWAP lean cannot demote the crown and cannot mint a ticket. */
+  /* House reads the contract report does not print, and the same reads as
+     forward marks. The marks are booleans on the ledger only. None is
+     pushed into the indicator vote book, so an opposing TSI or a VWAP
+     lean cannot demote the crown and cannot mint a ticket.
+     A zero, a tie, a mixed chop, or a normal ATR regime is absent —
+     neither side, never a guessed false. */
+  function hgObtcHouseMarkReads(rows, dir){
+    var out = {};
+    dir = String(dir || '').toLowerCase();
+    if ((dir !== 'long' && dir !== 'short') || !rows || !rows.length) return out;
+    var closes = [], i, c;
+    for (i = 0; i < rows.length; i++){
+      c = rows[i] && +rows[i].c;
+      if (!isFinite(c)) return out;
+      closes.push(c);
+    }
+    if (closes.length >= 40 && typeof W.tsi === 'function'){
+      try{
+        var ts = W.tsi(closes, 13, 25);
+        var tv = ts && +ts[ts.length - 1];
+        if (isFinite(tv) && tv !== 0){
+          var tsiLong = tv > 0;
+          out['ind:tsiWith'] = (dir === 'long') ? tsiLong : !tsiLong;
+        }
+      }catch(eTs){}
+    }
+    if (rows.length >= 20 && typeof W.hgChoppiness === 'function'){
+      try{
+        var ch = W.hgChoppiness(rows, 14);
+        var cv = ch && +ch[ch.length - 1];
+        if (isFinite(cv)){
+          if (cv >= 61.8) out['ind:choppy'] = true;
+          else if (cv <= 38.2) out['ind:choppy'] = false;
+        }
+      }catch(eCh){}
+    }
+    if (rows.length >= 40 && typeof W.volRegime === 'function'){
+      try{
+        var vr = W.volRegime(rows, 50);
+        if (vr === 'EXPANDING') out['ind:atrExpand'] = true;
+        else if (vr === 'COMPRESSING') out['ind:atrExpand'] = false;
+      }catch(eVr){}
+    }
+    if (rows.length >= 20 && typeof W.vwapAt === 'function'){
+      try{
+        var vw = W.vwapAt(rows, rows.length - 1, 20);
+        var px = +rows[rows.length - 1].c;
+        if (isFinite(vw) && vw > 0 && isFinite(px) && px !== vw){
+          var above = px > vw;
+          out['ind:vwapWith'] = (dir === 'long') ? above : !above;
+        }
+      }catch(eVw){}
+    }
+    return out;
+  }
+
   function hgObtcAppendHouseReads(list, rows){
     if (!Array.isArray(list)) return;
     function has(label){
@@ -2859,6 +2948,7 @@ a global hard refresh.
        module absent leaves the mount's note standing, never a throw. */
     if (ui.fwd){
       try{ if (gfn('hgFwdPanelHTML')) ui.fwd.innerHTML = W.hgFwdPanelHTML('OMNIBTC') || ''; }catch(eFp){}
+      hgObtcAttachPineMeasure(ui.fwd);
     }
     if (ui.ind) ui.ind.innerHTML = indicatorsHtml(snap && snap.indicators);
     if (ui.ledger){
@@ -3601,13 +3691,24 @@ a global hard refresh.
                  port agrees WITH the plan direction, false when it opposes,
                  absent when the reader left it UNREAD (never a guessed side). */
               reads: (function(){
-                var pr = pick.row && pick.row.pineRecord, out = {}, rk;
-                if (!pr || typeof pr !== 'object') return undefined;
-                var rd = String(pick.row.dir || '').toLowerCase();
-                for (rk in pr){
-                  if (!Object.prototype.hasOwnProperty.call(pr, rk)) continue;
-                  if (pr[rk] !== 'long' && pr[rk] !== 'short') continue;
-                  out['pine:' + rk + 'With'] = (pr[rk] === rd);
+                var pr = pick.row && pick.row.pineRecord, out = {}, rk, hk, hm;
+                if (pr && typeof pr === 'object'){
+                  var rd = String(pick.row.dir || '').toLowerCase();
+                  for (rk in pr){
+                    if (!Object.prototype.hasOwnProperty.call(pr, rk)) continue;
+                    if (pr[rk] !== 'long' && pr[rk] !== 'short') continue;
+                    out['pine:' + rk + 'With'] = (pr[rk] === rd);
+                  }
+                }
+                /* hg-v1396: the disclosed house reads, same seam, still not a
+                   vote. Absent stays absent — a normal ATR regime, a mixed
+                   chop, a TSI at zero, or a price sitting on VWAP is not
+                   written as false. */
+                hm = hgObtcHouseMarkReads(winnerRows, pick.row && pick.row.dir);
+                for (hk in hm){
+                  if (!Object.prototype.hasOwnProperty.call(hm, hk)) continue;
+                  if (hm[hk] !== true && hm[hk] !== false) continue;
+                  out[hk] = hm[hk];
                 }
                 return Object.keys(out).length ? out : undefined;
               })(),
@@ -3763,6 +3864,7 @@ a global hard refresh.
     /* hg-v1011: the forward book renders on mount too — records from
        previous sessions are the point of an accumulating ledger. */
     try{ if (ui.fwd && gfn('hgFwdPanelHTML')) ui.fwd.innerHTML = W.hgFwdPanelHTML('OMNIBTC') || ui.fwd.innerHTML; }catch(eFm){}
+    hgObtcAttachPineMeasure(ui.fwd);
     if (__obtc.snap) paint(ui, __obtc.snap);
   }
 
@@ -3787,6 +3889,7 @@ a global hard refresh.
   W.hgObtcPick = hgObtcPick;
   W.hgObtcPineBook = hgObtcPineBook;
   W.hgObtcIndBook = hgObtcIndBook;
+  W.hgObtcHouseMarkReads = hgObtcHouseMarkReads;
   W.hgObtcApplyPineAccuracy = hgObtcApplyPineAccuracy;
   W.hgObtcHtfLockOn = hgObtcHtfLockOn;      /* hg-v1295: the daily-lock lever */
   /* hg-v1057: the accuracy-pack seams, exported so the test drives the real
