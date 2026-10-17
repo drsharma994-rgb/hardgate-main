@@ -515,6 +515,7 @@ W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
+W.tmIndependentSum = tmIndependentSum;
 W.trendmxGateEval = trendmxGateEval;
 W.trendmxClassify = trendmxClassify;
 W.hgTrendMatrixAlign = hgTrendMatrixAlign;   /* hg-v995 */

@@ -17,6 +17,9 @@
       if (isFinite(out.adx) && out.adx >= 25) out.comps.adxPt = sgn(trendSum);
     }
 
+    /* hg-v1398: adxPt stays inside this number so a recorded tmScore is
+       still the same five-leg sum. It does not create the side. tmDirOf
+       reads the four legs above, which can oppose each other. */
     out.score = out.comps.d1Trend + out.comps.d1Cross + out.comps.h4Cascade +
                 out.comps.cloud + out.comps.adxPt;
   }catch(e){
@@ -346,12 +349,31 @@ var TM_STOP_ATR = 1.5, TM_T1_R = 2, TM_T2_R = 3.5, TM_ATR_LEN = 14;
 var TM_MAJORITY = 2;   // |composite| >= 2 = the row's own majority signal
 var TM_MIN_RR = (typeof W.CG_SWING_RR_MIN === 'number') ? W.CG_SWING_RR_MIN : 2.0;
 
-/* majority direction from the row's own composite score; an explicit
-   lowercase/uppercase dir always wins over the score. */
+/* majority direction. An explicit dir always wins.
+   hg-v1398: when all four independent legs are numbers, the side is their
+   sum, not the five-leg score. ADX cannot oppose; it only echoes that sum,
+   and one real leg plus the echo used to clear |score| >= 2. The stored
+   score still includes the echo. A row with no comps, or with a comps bag
+   that does not carry the four legs, still reads the score — that is the
+   number other desks already stored. */
+function tmIndependentSum(inp){
+  var c = inp && inp.comps;
+  if (!c || typeof c !== 'object') return null;
+  var keys = ['d1Trend', 'd1Cross', 'h4Cascade', 'cloud'];
+  var s = 0, i, v;
+  for (i = 0; i < 4; i++){
+    v = c[keys[i]];
+    if (typeof v !== 'number' || !isFinite(v)) return null;
+    s += v;
+  }
+  return s;
+}
 function tmDirOf(inp){
   var dir = (inp && typeof inp.dir === 'string') ? inp.dir.toLowerCase() : null;
   if (dir === 'long' || dir === 'short') return dir;
-  var sc = (inp && typeof inp.score === 'number' && isFinite(inp.score)) ? inp.score : 0;
+  var indep = tmIndependentSum(inp);
+  var sc = (indep !== null) ? indep
+    : ((inp && typeof inp.score === 'number' && isFinite(inp.score)) ? inp.score : 0);
   if (sc >= TM_MAJORITY) return 'long';
   if (sc <= -TM_MAJORITY) return 'short';
   return null;

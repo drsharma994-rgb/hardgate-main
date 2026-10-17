@@ -105,10 +105,10 @@ console.log('== 1) the classes separate on their own criteria ==');
          'the conviction item carries its conviction verdict; the clean item does not pretend one');
   /* every exclusion the old board had, per row */
   const vetoed = mkRow(w, 'VETUSDT', 'long', { gate: { gatesPassed: 7, gatesTotal: 7, clean7: true, veto: 'regime', label: 'regime veto' } });
-  const noDir = mkRow(w, 'NODUSDT', 'long', { score: 0, gate: gate7() });
+  const noDir = mkRow(w, 'NODUSDT', 'long', { score: 0, comps: { d1Trend: 0, d1Cross: 0, h4Cascade: 0, cloud: 0, adxPt: 0 }, gate: gate7() });
   const noPlan = mkRow(w, 'NPLUSDT', 'long', { rows4h: [], gate: gate7() });
   const noGate = mkRow(w, 'NGTUSDT', 'long', { gate: null });
-  const weak = mkRow(w, 'WEKUSDT', 'long', { score: 1 });   /* majority bar is |2| — no dir either */
+  const weak = mkRow(w, 'WEKUSDT', 'long', { score: 1, comps: { d1Trend: 1, d1Cross: 0, h4Cascade: 0, cloud: 0, adxPt: 0 } });   /* one leg is not a side */
   const out2 = w.trendmxLimitClasses([vetoed, noDir, noPlan, noGate, weak]);
   assert(out2.clean.length === 0 && out2.conv.length === 0 && out2.heldClean === 0 && out2.heldConv === 0,
          'veto / no-majority / no-plan / no-gate / sub-majority rows qualify for NEITHER class — the old board\'s bars, per row');
