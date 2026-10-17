@@ -162,6 +162,15 @@ unreadable stay silent — fewer than 40 daily bars or a volume-deaf feed
 pullback does NOT false-fire: divergence needs price at a NEW 20-bar
 extreme, which a pullback by definition is not. The 20-bar windows are
 stated PRIORS; the ledger earns them a measured verdict.
+
+THE ADMISSION FLOOR (hg-v1399) — one measured expectancy bar at every
+admission seam (the class desks, the ticket claim, the PERFECT badge):
+stop ≥ 2% of entry, no fresh cross riding with the majority, the 1D cloud
+not against it, and a bare |2| majority only with 3 gates behind it. Read
+off the hg-v1160 replay walk (n=1953 settled, +0.086R expectancy on the
+kept cohort, both halves agree); fail-open on absent marks (hg-v989);
+held rows stay visible and record ticket:false. The composite, tmDirOf,
+the 2/4 conviction bars and the gate tally internals are untouched.
 ========================================================================= */
 (function(){
 'use strict';
@@ -4190,9 +4199,53 @@ function tmRecordReads(r, dir){
    one rule (trendmxRowTier) that already caps a row at NEAR under every
    witness and the post-gate veto. The crown recorder (hg-v1039) claimed
    ticket:true on every 7/7 row the board itself showed as NEAR; both sites
-   read this now. */
+   read this now. hg-v1399: the ticket ALSO clears the admission floor — a
+   7/7 clean on a sub-2% stop or a fresh-cross/cloud-against read is not a
+   ticket the desk would mint on its own boards. */
 function tmTicketClaim(r, plan){
-  return trendmxRowTier(r, plan) === 'clean';
+  return trendmxRowTier(r, plan) === 'clean' && tmAdmissionFloor(r, plan).ok;
+}
+/* hg-v1399: THE ADMISSION FLOOR — the measured expectancy bar every admission
+   seam now shares. Read off the hg-v1160 replay walk (n=1953 settled, both
+   halves of the median-tISO split agree): the cohorts these four clauses
+   veto resolved −0.19…−0.25R in BOTH halves while the kept cohort improved
+   in both (combo B: avg −0.0473R → +0.038R, ~36.5% of admissions filtered;
+   an expectancy filter, win rate flat by design). The four clauses:
+     ① stopPct ≥ 2% of entry — the plan-geometry floor; a tighter stop is a
+       noise-catcher. FAILS OPEN when the plan never priced (no plan, no
+       entry/stop): a mark that never spoke vetoes nothing.
+     ② reads['tm:freshCross'] !== true — a fresh GOLDEN/DEATH cross riding
+       WITH the majority measured toxic both halves (direction-agnostic).
+     ③ reads['tm:cloud'] !== false — the 1D Ichimoku cloud AGAINST the
+       majority was the worst cluster on the tape.
+     ④ |composite| = 2 (a bare 2-of-4 majority) admits only with
+       gatesPassed ≥ 3 standing behind it; |≥3| rows are unaffected.
+   ②③ read the hg-v1159 leg marks through tmLegReads and FAIL OPEN on the
+   hg-v989 third state: a live row whose reads bag carries no fresh-cross or
+   cloud mark yet is NOT vetoed by that clause — absent is absent, never a
+   guessed false. Nothing here re-weights the composite, moves a majority
+   bar or touches the conviction 2/4 bars; it is a veto at the admission
+   seams only (trendmxLimitClasses, tmTicketClaim, trendmxPerfectState),
+   and every vetoed row stays visible and is recorded ticket:false — the
+   desk shows its vetoes (the hg-v1159 measurability rule). */
+function tmAdmissionFloor(r, plan){
+  var why = [];
+  if (!r) return { ok: false, why: ['noRow'] };
+  var dir = tmDirOf(r);
+  /* ① the stop-geometry floor — fail-open when no priced stop is in hand */
+  var pe = plan ? +plan.entry : NaN, ps = plan ? +plan.stop : NaN;
+  if (isFinite(pe) && pe > 0 && isFinite(ps) && ps > 0){
+    if (Math.abs(pe - ps) / pe * 100 < 2) why.push('stop<2%');
+  }
+  /* ②③ the fresh-cross / cloud leg marks — fail-open on the absent third state */
+  var legs = tmLegReads(r, dir);
+  if (legs['tm:freshCross'] === true) why.push('freshCross');
+  if (legs['tm:cloud'] === false) why.push('cloudAgainst');
+  /* ④ the bare-majority floor — a |2| composite needs 3 gates with it */
+  var sc = Math.abs(+r.score);
+  var gp = (r.gate && isFinite(+r.gate.gatesPassed)) ? +r.gate.gatesPassed : 0;
+  if (!(sc >= 3) && gp < 3) why.push('bare|2|<3gates');
+  return { ok: why.length === 0, why: why };
 }
 /* hg-v1160: WHICH READS SEPARATE, ON THIS DESK'S OWN REPLAY. HG_TM_FACTOR_SEP
    is written by scripts/trendmx-factor-separation.mjs off the walk that
@@ -7483,6 +7536,16 @@ function trendmxPerfectState(r){
   if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
     try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
   }
+  /* hg-v1399: PERFECT never contradicts the admission floor — a fresh cross
+     riding with the majority or the 1D cloud against it disqualifies the
+     badge, and the stop-≥2% geometry bar applies when a priced plan is in
+     hand (r.plan); absent marks abstain (hg-v989), so a row the marks have
+     not landed on yet is never disqualified here. The |composite|/gates
+     clause of the floor is already implied (PERFECT is |5| + 7/7). Chop is
+     deliberately NOT added: the hg-v1160 replay measured chop-flagged rows
+     positive in H1 — a veto there would veto winners. Annotation-only, as
+     before: nothing here moves a tier, a plan or a desk. */
+  if (!tmAdmissionFloor(r, r.plan).ok) return false;
   return true;
 }
 
@@ -7576,7 +7639,7 @@ function trendmxLimitClasses(rows){
      witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
      · volume hg-v1020). */
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
-              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 } },
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0 } },
               /* hg-v1154: the post-gate-vetoed rows, kept so they are RECORDED (ticket:false) and never shown */
               heldPostGate: [],
               /* hg-v1159: the rows the four witnesses held off, kept for the same reason (heldBy names the witness) */
@@ -7655,6 +7718,22 @@ function trendmxLimitClasses(rows){
       if (isClean){ out.heldClean++; out.heldWhy.clean.postgate++; }
       else { out.heldConv++; out.heldWhy.conv.postgate++; }
       out.heldPostGate.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean });
+      continue;
+    }
+    /* hg-v1399: THE ADMISSION FLOOR — the measured expectancy bar (tmAdmissionFloor,
+       hg-v1160 replay, both halves agree): stop under 2% of entry, a fresh cross
+       riding with the majority, the 1D cloud against it, or a bare |2| majority
+       without 3 gates. A floored row is held off BOTH class desks exactly like a
+       witness-held row — counted and named under its own heldWhy key, kept with
+       its plan so the record below carries it ticket:false, still painting in the
+       matrix. Absent marks abstain (hg-v989): a live row the marks have not landed
+       on yet is never vetoed here. The composite, the majority bar and the
+       conviction 2/4 bars are untouched — this is a veto, not a re-weight. */
+    var tmFloor = tmAdmissionFloor(r, plan);
+    if (!tmFloor.ok){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.floor++; }
+      else { out.heldConv++; out.heldWhy.conv.floor++; }
+      out.heldWitness.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean, heldBy: 'floor', floorWhy: tmFloor.why });
       continue;
     }
     var item = { row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir) };
@@ -7737,6 +7816,7 @@ function trendmxHeldBits(held, why){
   if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
   if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
   if (w.postgate) bits.push('the SWING post-gate rule refused the row — flow trap, BTC relative strength or stale momentum on the free feeds (hg-v1154); recorded, not shown');
+  if (w.floor) bits.push('the admission floor refused the row — stop under 2% of entry, a fresh cross with the majority, the 1D cloud against it, or a bare |2| majority without 3 gates (hg-v1399); recorded, not shown');
   if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   return bits;
 }
@@ -7760,6 +7840,7 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     if (w2.vol) tags.push('volume trend against');
     if (w2.fund) tags.push('fundamental headwind');
     if (w2.postgate) tags.push('SWING post-gate rule refused the row (recorded, not shown; hg-v1154)');
+    if (w2.floor) tags.push('admission floor (stop ≥2% · no fresh cross · cloud with · |2| needs 3 gates; hg-v1399)');
     if (!tags.length) tags.push('taker flow against');
     heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }
@@ -9585,6 +9666,8 @@ W.tmCandleRead = tmCandleRead;             /* hg-v1336: the one call into hgCfCa
 W.tmCandleMarks = tmCandleMarks;           /* hg-v1336: the three-state marks tmRecordReads folds into each record */
 W.tmCandleChipHtml = tmCandleChipHtml;     /* hg-v1336: the pattern chip the matrix row paints beside the gate chip */
 W.tmTicketClaim = tmTicketClaim;           /* hg-v1159: the ticket claim is the board's clean tier */
+W.tmAdmissionFloor = tmAdmissionFloor;     /* hg-v1399: the measured admission floor every seam shares */
+W.trendmxPineMarks = trendmxPineMarks;     /* hg-v1399: the 13 record-only Pine ports, exported (the pin was always the mark home; the export was missing) */
 W.tmValidSetup = tmValidSetup;             /* hg-v1160: the replay harness asks the desk's own plan validity rule */
 W.HG_TM_FACTOR_SEP = HG_TM_FACTOR_SEP;     /* hg-v1160: read by the panel, the drift guard and nothing else */
 W.tmFactorSepHtml = tmFactorSepHtml;       /* hg-v1160: the replay panel, measured or not */

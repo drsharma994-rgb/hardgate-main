@@ -162,6 +162,15 @@ unreadable stay silent — fewer than 40 daily bars or a volume-deaf feed
 pullback does NOT false-fire: divergence needs price at a NEW 20-bar
 extreme, which a pullback by definition is not. The 20-bar windows are
 stated PRIORS; the ledger earns them a measured verdict.
+
+THE ADMISSION FLOOR (hg-v1399) — one measured expectancy bar at every
+admission seam (the class desks, the ticket claim, the PERFECT badge):
+stop ≥ 2% of entry, no fresh cross riding with the majority, the 1D cloud
+not against it, and a bare |2| majority only with 3 gates behind it. Read
+off the hg-v1160 replay walk (n=1953 settled, +0.086R expectancy on the
+kept cohort, both halves agree); fail-open on absent marks (hg-v989);
+held rows stay visible and record ticket:false. The composite, tmDirOf,
+the 2/4 conviction bars and the gate tally internals are untouched.
 ========================================================================= */
 (function(){
 'use strict';

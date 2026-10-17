@@ -78,7 +78,7 @@ function trendmxLimitClasses(rows){
      witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
      · volume hg-v1020). */
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
-              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 } },
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0 } },
               /* hg-v1154: the post-gate-vetoed rows, kept so they are RECORDED (ticket:false) and never shown */
               heldPostGate: [],
               /* hg-v1159: the rows the four witnesses held off, kept for the same reason (heldBy names the witness) */
@@ -157,6 +157,22 @@ function trendmxLimitClasses(rows){
       if (isClean){ out.heldClean++; out.heldWhy.clean.postgate++; }
       else { out.heldConv++; out.heldWhy.conv.postgate++; }
       out.heldPostGate.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean });
+      continue;
+    }
+    /* hg-v1399: THE ADMISSION FLOOR — the measured expectancy bar (tmAdmissionFloor,
+       hg-v1160 replay, both halves agree): stop under 2% of entry, a fresh cross
+       riding with the majority, the 1D cloud against it, or a bare |2| majority
+       without 3 gates. A floored row is held off BOTH class desks exactly like a
+       witness-held row — counted and named under its own heldWhy key, kept with
+       its plan so the record below carries it ticket:false, still painting in the
+       matrix. Absent marks abstain (hg-v989): a live row the marks have not landed
+       on yet is never vetoed here. The composite, the majority bar and the
+       conviction 2/4 bars are untouched — this is a veto, not a re-weight. */
+    var tmFloor = tmAdmissionFloor(r, plan);
+    if (!tmFloor.ok){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.floor++; }
+      else { out.heldConv++; out.heldWhy.conv.floor++; }
+      out.heldWitness.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean, heldBy: 'floor', floorWhy: tmFloor.why });
       continue;
     }
     var item = { row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir) };
@@ -239,6 +255,7 @@ function trendmxHeldBits(held, why){
   if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
   if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
   if (w.postgate) bits.push('the SWING post-gate rule refused the row — flow trap, BTC relative strength or stale momentum on the free feeds (hg-v1154); recorded, not shown');
+  if (w.floor) bits.push('the admission floor refused the row — stop under 2% of entry, a fresh cross with the majority, the 1D cloud against it, or a bare |2| majority without 3 gates (hg-v1399); recorded, not shown');
   if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   return bits;
 }
@@ -262,6 +279,7 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     if (w2.vol) tags.push('volume trend against');
     if (w2.fund) tags.push('fundamental headwind');
     if (w2.postgate) tags.push('SWING post-gate rule refused the row (recorded, not shown; hg-v1154)');
+    if (w2.floor) tags.push('admission floor (stop ≥2% · no fresh cross · cloud with · |2| needs 3 gates; hg-v1399)');
     if (!tags.length) tags.push('taker flow against');
     heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }

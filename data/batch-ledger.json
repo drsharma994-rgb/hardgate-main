@@ -440,6 +440,11 @@
       "version": "hg-v1398",
       "built": "2026-10-17T16:39:00Z",
       "note": "TREND MATRIX keeps the five-leg score and takes the side from the four legs that can disagree. One leg plus the ADX echo is not a plan. Two independent legs still are. The 4h cascade is not a new hard gate."
+    },
+    {
+      "version": "hg-v1399",
+      "built": "2026-10-17T20:30:00Z",
+      "note": "TREND MATRIX admission floor, measured on the hg-v1160 replay: stop at least 2% of entry, no fresh cross riding with the majority, the 1D cloud not against it, a bare |2| majority needs three gates. Fail-open on absent reads; floored rows paint, name the reason, record ticket:false. +0.086R expectancy on the kept cohort, both halves agree."
     }
   ]
 }

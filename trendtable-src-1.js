@@ -237,9 +237,53 @@ function tmRecordReads(r, dir){
    one rule (trendmxRowTier) that already caps a row at NEAR under every
    witness and the post-gate veto. The crown recorder (hg-v1039) claimed
    ticket:true on every 7/7 row the board itself showed as NEAR; both sites
-   read this now. */
+   read this now. hg-v1399: the ticket ALSO clears the admission floor — a
+   7/7 clean on a sub-2% stop or a fresh-cross/cloud-against read is not a
+   ticket the desk would mint on its own boards. */
 function tmTicketClaim(r, plan){
-  return trendmxRowTier(r, plan) === 'clean';
+  return trendmxRowTier(r, plan) === 'clean' && tmAdmissionFloor(r, plan).ok;
+}
+/* hg-v1399: THE ADMISSION FLOOR — the measured expectancy bar every admission
+   seam now shares. Read off the hg-v1160 replay walk (n=1953 settled, both
+   halves of the median-tISO split agree): the cohorts these four clauses
+   veto resolved −0.19…−0.25R in BOTH halves while the kept cohort improved
+   in both (combo B: avg −0.0473R → +0.038R, ~36.5% of admissions filtered;
+   an expectancy filter, win rate flat by design). The four clauses:
+     ① stopPct ≥ 2% of entry — the plan-geometry floor; a tighter stop is a
+       noise-catcher. FAILS OPEN when the plan never priced (no plan, no
+       entry/stop): a mark that never spoke vetoes nothing.
+     ② reads['tm:freshCross'] !== true — a fresh GOLDEN/DEATH cross riding
+       WITH the majority measured toxic both halves (direction-agnostic).
+     ③ reads['tm:cloud'] !== false — the 1D Ichimoku cloud AGAINST the
+       majority was the worst cluster on the tape.
+     ④ |composite| = 2 (a bare 2-of-4 majority) admits only with
+       gatesPassed ≥ 3 standing behind it; |≥3| rows are unaffected.
+   ②③ read the hg-v1159 leg marks through tmLegReads and FAIL OPEN on the
+   hg-v989 third state: a live row whose reads bag carries no fresh-cross or
+   cloud mark yet is NOT vetoed by that clause — absent is absent, never a
+   guessed false. Nothing here re-weights the composite, moves a majority
+   bar or touches the conviction 2/4 bars; it is a veto at the admission
+   seams only (trendmxLimitClasses, tmTicketClaim, trendmxPerfectState),
+   and every vetoed row stays visible and is recorded ticket:false — the
+   desk shows its vetoes (the hg-v1159 measurability rule). */
+function tmAdmissionFloor(r, plan){
+  var why = [];
+  if (!r) return { ok: false, why: ['noRow'] };
+  var dir = tmDirOf(r);
+  /* ① the stop-geometry floor — fail-open when no priced stop is in hand */
+  var pe = plan ? +plan.entry : NaN, ps = plan ? +plan.stop : NaN;
+  if (isFinite(pe) && pe > 0 && isFinite(ps) && ps > 0){
+    if (Math.abs(pe - ps) / pe * 100 < 2) why.push('stop<2%');
+  }
+  /* ②③ the fresh-cross / cloud leg marks — fail-open on the absent third state */
+  var legs = tmLegReads(r, dir);
+  if (legs['tm:freshCross'] === true) why.push('freshCross');
+  if (legs['tm:cloud'] === false) why.push('cloudAgainst');
+  /* ④ the bare-majority floor — a |2| composite needs 3 gates with it */
+  var sc = Math.abs(+r.score);
+  var gp = (r.gate && isFinite(+r.gate.gatesPassed)) ? +r.gate.gatesPassed : 0;
+  if (!(sc >= 3) && gp < 3) why.push('bare|2|<3gates');
+  return { ok: why.length === 0, why: why };
 }
 /* hg-v1160: WHICH READS SEPARATE, ON THIS DESK'S OWN REPLAY. HG_TM_FACTOR_SEP
    is written by scripts/trendmx-factor-separation.mjs off the walk that

@@ -394,6 +394,16 @@ function trendmxPerfectState(r){
   if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
     try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
   }
+  /* hg-v1399: PERFECT never contradicts the admission floor — a fresh cross
+     riding with the majority or the 1D cloud against it disqualifies the
+     badge, and the stop-≥2% geometry bar applies when a priced plan is in
+     hand (r.plan); absent marks abstain (hg-v989), so a row the marks have
+     not landed on yet is never disqualified here. The |composite|/gates
+     clause of the floor is already implied (PERFECT is |5| + 7/7). Chop is
+     deliberately NOT added: the hg-v1160 replay measured chop-flagged rows
+     positive in H1 — a veto there would veto winners. Annotation-only, as
+     before: nothing here moves a tier, a plan or a desk. */
+  if (!tmAdmissionFloor(r, r.plan).ok) return false;
   return true;
 }
 
