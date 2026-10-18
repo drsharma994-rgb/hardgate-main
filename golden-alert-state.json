@@ -597,7 +597,7 @@
       "expired": true
     },
     "S": {
-      "at": "2026-10-18T12:20:17.953Z",
+      "at": "2026-10-18T14:10:55.818Z",
       "score": 4,
       "fresh": true,
       "ago": 6,
@@ -653,7 +653,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-18T12:20:35.248Z",
+  "lastRunAt": "2026-10-18T14:11:14.053Z",
   "scanned": 504,
   "cards": 0
 }
