@@ -244,7 +244,16 @@ const MACRO_ALL = { silverTrend: 'RISING', gsRatioTrend: 'FALLING', vixTrend: 'R
 /* a detector stubbed to fire on the tape in hand: the REAL table, the REAL
    builder, the REAL desk seams run; only whether the bar fired is fixed */
 function stubFire(dir){
-  return function(rows){ const c = rows[rows.length - 1].c; const risk = 6;
+  /* hg-v1400 recalibration (tape-only, v1399 pattern): the hg-v1400 admission
+     floor vetoes a scalp row whose stop is under 0.3% of entry, and this
+     stub's old risk=6 on a ~2313 tape priced 0.26% — so the §4 release card
+     lost its handoff button to the new floor, not to any release defect.
+     risk 6 → 8 prices 0.35% (over the floor), keeps the R:R at exactly 2.0
+     and every level relation (sidesOk, the one-builder equality at §2, the
+     record-carries-levels check at §3) unchanged. Mutation proof after the
+     wiggle: breaking the release (pineGoldRecordJudge never sets
+     recordReleased) still turns §4 RED; revert → GREEN. No assertion moved. */
+  return function(rows){ const c = rows[rows.length - 1].c; const risk = 8;
     const stop = dir === 'long' ? c - risk : c + risk;
     return { dir, newLong: dir === 'long', newShort: dir === 'short', barsAgo: 0, price: c, entry: c, stop,
              t1: dir === 'long' ? c + 2 * risk : c - 2 * risk, t2: dir === 'long' ? c + 3.5 * risk : c - 3.5 * risk, recordOnly: true }; };

@@ -401,7 +401,11 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
   var kzFn = gfn('goldKillzone');
   if (kzFn){
     try{
-      var kz = kzFn(Date.now());
+      /* hg-v1400: read the signal bar the caller is judging (opts.now, the
+         same read the fix-lock clause below already honors) — the wall clock
+         re-scored the same bar differently on every re-run (hg-v952/v963).
+         Absent opts.now: Date.now(), exactly as before. */
+      var kz = kzFn(fin(+opts.now) ? +opts.now : Date.now());
       if (mode === 'scalp'){
         if (kz.weight >= 3){ timePts += 2; families.session = true; factors.push({ cat: 'Timing', ok: true, pts: 2, note: kz.label }); }
         else if (kz.weight >= 1){ timePts += 1; families.session = true; factors.push({ cat: 'Timing', ok: true, pts: 1, note: kz.label }); }
