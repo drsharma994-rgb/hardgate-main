@@ -46031,6 +46031,7 @@ a global hard refresh.
           }
         }catch(eAn){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAn); }catch(eWan){} }
         hgObtcPerfectFormation(pick, pfReads);
+        pick.row.perfectReads = pfReads;   /* the ledger reads the same bag the predicate consumed */
         /* hg-v1300: FUNDAMENTALS & FEED surface — the hg-v1297/v1299 ind: marks
            and the hg-v1293/v1295 pine: marks were computed only inside the
            fwdRow builder (for the ledger), never stashed on the live row for
@@ -46050,7 +46051,6 @@ a global hard refresh.
           pfReads.indMarks = liveIndMarks;
           pfReads.pineMarks = livePineMarks;
         }catch(eLm){}
-        pick.row.perfectReads = pfReads;   /* the ledger reads the same bag the predicate consumed */
         /* hg-v1060: THE TWO GRID SETUPS — each grid stands on its own:
            the real matrix when it prints (CLEAN), the near matrix when it
            nearly does (NEAR), else the honest ATR ladder (DRAFT). A grid
