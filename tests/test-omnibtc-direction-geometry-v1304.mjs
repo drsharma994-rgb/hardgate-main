@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/* hg-v1403 note: the §version pins were re-pinned hg-v1304 -> hg-v1403 at
+   the hg-v1403 restore (the pack lands at hg-v1403). All behavior pins
+   unchanged; mutation proof re-run at hg-v1403 (wrong-side plans still
+   fail all three sites). */
 /* hg-v1304 — direction geometry invariant at the three OMNIBTC engine
    ingest sites, closing the hg-v1303 medium-confidence defensive gap (a).
 
@@ -387,10 +391,13 @@ console.log('\n[§7] ship stamps align');
   const sw = read('sw.js');
   const tt = read('trendtable.js');
 
-  ok(/version:\s*'hg-v1304'/.test(bs), "build-stamp.js version: 'hg-v1304'");
-  ok(/HG_CACHE\s*=\s*'hg-v1304'/.test(sw), "sw.js HG_CACHE = 'hg-v1304'");
-  ok(/hg-v1304/.test(tt), 'trendtable.js stamped hg-v1304');
-  ok(/\?v=1304/.test(tt), 'trendtable.js uses ?v=1304');
+  /* hg-v1403: version pins re-pinned hg-v1304 -> hg-v1403 (the pack lands
+     at hg-v1403; 'Sister suites re-pinned' convention). Behavior pins
+     above unchanged. */
+  ok(/version:\s*'hg-v1403'/.test(bs), "build-stamp.js version: 'hg-v1403' (re-pinned hg-v1403)");
+  ok(/HG_CACHE\s*=\s*'hg-v1403'/.test(sw), "sw.js HG_CACHE = 'hg-v1403' (re-pinned hg-v1403)");
+  ok(/hg-v1403/.test(tt), 'trendtable.js stamped hg-v1403 (re-pinned hg-v1403)');
+  ok(/\?v=1403/.test(tt), 'trendtable.js uses ?v=1403 (re-pinned hg-v1403)');
 }
 
 /* ---------- summary ---------- */

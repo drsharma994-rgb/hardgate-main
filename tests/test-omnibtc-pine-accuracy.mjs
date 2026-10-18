@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 /* OMNIBTC crown stays a ticket only when fresh pine cores agree.
-   A script that did not fire is not a vote. An unloaded bank is unread. */
+   A script that did not fire is not a vote. An unloaded bank is unread.
+   hg-v1403 recalibration (authorized, mutation-proven): the hg-v1292
+   one-family tiebreaks (PINE + CORE / PINE + INDICATOR) measured -0.076R
+   net on the hg-v1294 walker's first bake (75 tickets, negative in both
+   halves; the 2+-family cohort ran +0.153R, positive both halves) and are
+   WATCHES now; MACD histogram is veto-only (-0.234R as a confirm). The
+   four tiebreak-as-ticket fixtures below now assert the demoted watch with
+   the same note wording; every refusal/family/level assertion unchanged. */
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -89,8 +96,10 @@ console.log('== one fresh pine plus a second house strategy is enough ==');
   W.pineRangeFilter = function(){ return { dir: 'long', newLong: true }; };
   const other = { sym: 'BTCUSD', dir: 'long', entry: 101, stop: 91, t1: 121, engine: 'SQUEEZE fired' };
   const pick = W.hgObtcApplyPineAccuracy(crown(), bars(280), [other]);
-  ok(pick.tier === 'clean' && /PINE \+ CORE/i.test(pick.row.pineNote || ''),
-    'one fresh pine and a second core keep the ticket (' + pick.row.pineNote + ')');
+  /* hg-v1403: the tiebreak is a watch now (measured -0.076R on the walk);
+     the note keeps the PINE + CORE wording so the card says why */
+  ok(pick.tier === 'near' && /PINE \+ CORE/i.test(pick.row.pineNote || ''),
+    'one fresh pine and a second core is a watch under the hg-v1403 two-family minimum (' + pick.row.pineNote + ')');
   const same = W.hgObtcApplyPineAccuracy(crown(), bars(280), [
     { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120, engine: 'SWING clean plan' }
   ]);
@@ -155,8 +164,9 @@ console.log('== a fresh indicator cross is a second read; a lean is not ==');
     return { up: rows.map(function(){ return 200; }), lo: rows.map(function(){ return 50; }) };
   };
   const crossed = W.hgObtcApplyPineAccuracy(crown(), bars(280), []);
-  ok(crossed.tier === 'clean' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /EMA 20\/50/.test(crossed.row.pineNote || ''),
-    'one fresh pine plus a fresh EMA cross keeps the ticket (' + crossed.row.pineNote + ')');
+  /* hg-v1403: the indicator tiebreak is a watch now (measured -0.076R on the walk) */
+  ok(crossed.tier === 'near' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /EMA 20\/50/.test(crossed.row.pineNote || ''),
+    'one fresh pine plus a fresh EMA cross is a watch under hg-v1403 (' + crossed.row.pineNote + ')');
 
   W.macdHist = function(vals){
     return vals.map(function(_, i){ return i >= vals.length - 2 ? -1 : 1; });
@@ -234,8 +244,9 @@ console.log('== a fresh engulfing body is one indicator vote and does not mint a
   const crossed = W.hgObtcApplyPineAccuracy(crown(), bull, []);
   /* Same bar as EMA / MACD / Donchian: one fresh pine family plus one fresh
      indicator keeps the ticket. The engulfing body does not mint a stop. */
-  ok(crossed.tier === 'clean' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /Engulfing/.test(crossed.row.pineNote || ''),
-    'one fresh pine plus a bullish engulf keeps the ticket without a new stop ('
+  /* hg-v1403: tiebreak demoted to watch; the engulfing body still mints no stop */
+  ok(crossed.tier === 'near' && /PINE \+ INDICATOR/i.test(crossed.row.pineNote || '') && /Engulfing/.test(crossed.row.pineNote || ''),
+    'one fresh pine plus a bullish engulf is a watch under hg-v1403, without a new stop ('
     + crossed.row.pineNote + ')');
   ok(crossed.row.entry === 100 && crossed.row.stop === 90 && crossed.row.t1 === 120,
     'the engulfing read does not replace ENTRY / STOP / T1');
@@ -283,8 +294,8 @@ console.log('== RSI votes only on a fresh cross of 50; a sweep is a wick back in
   };
   const flat = bars(280);
   const crossed = W.hgObtcApplyPineAccuracy(crown(), flat, []);
-  ok(crossed.tier === 'clean' && /RSI 14/.test(crossed.row.pineNote || ''),
-    'one fresh pine plus an RSI cross of 50 keeps the ticket (' + crossed.row.pineNote + ')');
+  ok(crossed.tier === 'near' && /RSI 14/.test(crossed.row.pineNote || ''),
+    'one fresh pine plus an RSI cross of 50 is a watch under hg-v1403 (' + crossed.row.pineNote + ')');
   ok(crossed.row.entry === 100 && crossed.row.stop === 90 && crossed.row.t1 === 120,
     'RSI does not replace ENTRY / STOP / T1');
 
@@ -297,8 +308,8 @@ console.log('== RSI votes only on a fresh cross of 50; a sweep is a wick back in
   const sweep = bars(280);
   sweep[279] = { t: 279, o: 100, h: 101, l: 90, c: 100.5, v: 2 };
   const swept = W.hgObtcApplyPineAccuracy(crown(), sweep, []);
-  ok(swept.tier === 'clean' && /Liquidity sweep/.test(swept.row.pineNote || ''),
-    'a wick through the prior ten lows that closes back inside is one indicator vote (' + swept.row.pineNote + ')');
+  ok(swept.tier === 'near' && /Liquidity sweep/.test(swept.row.pineNote || ''),
+    'a wick through the prior ten lows that closes back inside is a watch under hg-v1403 (' + swept.row.pineNote + ')');
   ok(swept.row.entry === 100 && swept.row.stop === 90,
     'the sweep does not mint a new stop');
   const broke = bars(280);

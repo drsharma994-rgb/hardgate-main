@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+/* hg-v1403 note: the ind: / combined key-count pins (§1) and the §10
+   doctrine-word pins were re-pinned 13 -> 17 ind / 25 -> 29 combined because
+   hg-v1396's disclosed house marks (hgObtcHouseMarkReads: ind:tsiWith /
+   ind:vwapWith / ind:choppy / ind:atrExpand) shipped AFTER this suite was
+   written and are pinned GREEN by test-omnibtc-pine-record-bank-v1293. The
+   stale counts contradict surviving shipped reality (verifier-approved
+   hg-v1403 amendment). Mutation proof re-run: remove any one emitted ind:
+   key -> RED; revert -> GREEN. No other assertion relaxed. */
 /* hg-v1301 — OMNIBTC mempool fee regime mark guard.
 
    Adds one new free: mark (free:mempoolFeeHigh) through the hg-v1297 one home
@@ -54,8 +62,8 @@ function bootHelpers(){
   return ctx;
 }
 
-/* ---------- §1: key count is 25 (11 free + 13 ind + 1 new = 25, hg-v1301 adds one) ---------- */
-console.log('\n[§1] key count 24 → 25 (ONE HOME grows by one, hg-v949)');
+/* ---------- §1: key count is 29 (11 free + 13 ind + 1 new + 4 hg-v1396 house = 29; re-pinned hg-v1403) ---------- */
+console.log('\n[§1] key count 24 → 25 → 29 (ONE HOME grows; hg-v1403 recount for hg-v1396)');
 {
   const src = read('omnibtc.js');
   const freeRe = /out\s*\[\s*'free:(\w+)'\s*\]/g;
@@ -65,8 +73,8 @@ console.log('\n[§1] key count 24 → 25 (ONE HOME grows by one, hg-v949)');
   while ((m = freeRe.exec(src))) freeSet.add(m[1]);
   while ((m = indRe.exec(src))) indSet.add(m[1]);
   ok(freeSet.size === 12, `free: keys count === 12 (was 11, hg-v1301 adds mempoolFeeHigh) [got ${freeSet.size}]`);
-  ok(indSet.size === 13, `ind: keys count === 13 (unchanged) [got ${indSet.size}]`);
-  ok(freeSet.size + indSet.size === 25, `combined free: + ind: keys === 25`);
+  ok(indSet.size === 17, `ind: keys count === 17 (13 + 4 hg-v1396 house reads — re-pinned hg-v1403) [got ${indSet.size}]`);
+  ok(freeSet.size + indSet.size === 29, `combined free: + ind: keys === 29 (re-pinned hg-v1403)`);
   ok(freeSet.has('mempoolFeeHigh'), 'free:mempoolFeeHigh is in the key set');
 }
 
@@ -221,7 +229,7 @@ console.log('\n[§6] HG_OBTC_MARKS_GROUPS (hg-v1300 panel) surfaces free:mempool
   ok(/'free:mempoolFeeHigh'/.test(body), "free:mempoolFeeHigh key is in the groups literal");
   ok(/Mempool fee regime \(hg-v1301, onchain\.js\)/.test(body), 'label names hg-v1301 and the one home');
 
-  // 25 free: + ind: keys = 25 (12 free + 13 ind). Pine lives in its own group.
+  // 29 free: + ind: keys = 29 (12 free + 17 ind, hg-v1403 recount). Pine lives in its own group.
   const freeInGroups = (body.match(/'free:(\w+)'/g) || []).length;
   const indInGroups = (body.match(/'ind:(\w+)'/g) || []).length;
   ok(freeInGroups === 12, `12 free: entries in HG_OBTC_MARKS_GROUPS (was 11) [got ${freeInGroups}]`);
@@ -281,8 +289,8 @@ console.log('\n[§10] doctrine comment self-check (hg-v1297/v1299/v1301)');
 {
   const src = read('omnibtc.js');
   ok(/Twelve three-state free: marks/.test(src), 'doctrine says "Twelve three-state free: marks"');
-  ok(/thirteen\s+three-state ind: marks/.test(src), 'doctrine says "thirteen three-state ind: marks"');
-  ok(/twenty-five keys/.test(src), 'doctrine says "twenty-five keys"');
+  ok(/seventeen\s+three-state ind: marks/.test(src), 'doctrine says "seventeen three-state ind: marks" (re-pinned hg-v1403)');
+  ok(/twenty-nine keys/.test(src), 'doctrine says "twenty-nine keys" (re-pinned hg-v1403)');
   ok(/hg-v1301 mempool fee regime/.test(src), 'doctrine names hg-v1301 mempool fee regime');
   ok(/FEE_SPIKE_MULT=3/.test(src) || /FEE_SPIKE_MULT = 3/.test(src),
     'doctrine quotes FEE_SPIKE_MULT = 3 (hg-v949 one home citation)');

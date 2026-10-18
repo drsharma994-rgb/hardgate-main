@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+/* hg-v1403 note: the ind: key-count pin below was re-pinned 13 -> 17 because
+   hg-v1396's disclosed house marks (hgObtcHouseMarkReads: ind:tsiWith /
+   ind:vwapWith / ind:choppy / ind:atrExpand) shipped AFTER this suite was
+   written and are pinned GREEN by test-omnibtc-pine-record-bank-v1293. The
+   stale 13 count contradicts surviving shipped reality (verifier-approved
+   hg-v1403 amendment, same shape as the pine-nine 10 -> 13 amendment).
+   Mutation proof re-run: remove any one emitted ind: key -> RED; revert ->
+   GREEN. No other assertion relaxed. */
 /* hg-v1299: OMNIBTC gains two more free: marks (btcGoldCorr, curveSlopeTrend)
    and three more ind: marks (sma50With, sma200With, parkHigh) through the
    same hg-v1297 one home. Tenth OMNIBTC improvement ask this cycle; the hg-v1294
@@ -77,7 +85,7 @@ console.log('== 1) hg-v1297 count was 19, hg-v1299 is 24 (ONE HOME, hg-v949) =='
   const freeKeys = Array.from(new Set((src.match(/out\['free:(\w+)'\]/g) || []).map(s => s.match(/free:(\w+)/)[1])));
   const indKeys = Array.from(new Set((src.match(/out\['ind:(\w+)'\]/g) || []).map(s => s.match(/ind:(\w+)/)[1])));
   ok(freeKeys.length === 12, 'omnibtc.js emits exactly 12 free: keys (was 11 before hg-v1301 added mempoolFeeHigh)');
-  ok(indKeys.length === 13, 'omnibtc.js emits exactly 13 ind: keys (was 10 before hg-v1299)');
+  ok(indKeys.length === 17, 'omnibtc.js emits exactly 17 ind: keys (13 marks + 4 hg-v1396 house reads — re-pinned hg-v1403; was 10 before hg-v1299)');
   ok(freeKeys.includes('btcGoldCorr'), 'free:btcGoldCorr emitted');
   ok(freeKeys.includes('curveSlopeTrend'), 'free:curveSlopeTrend emitted');
   ok(indKeys.includes('sma50With'), 'ind:sma50With emitted');
@@ -256,7 +264,7 @@ console.log('== 6) hg-v1297/v1299/v1301 doctrine comment stamps 12 free + 13 ind
   const src = read('omnibtc.js');
   ok(/Twelve three-state free: marks/.test(src), 'doctrine says twelve free marks (was eleven before hg-v1301)');
   ok(/thirteen\s+three-state ind: marks/.test(src), 'doctrine says thirteen ind marks');
-  ok(/twenty-five keys/.test(src), 'doctrine says twenty-five keys total (hg-v1301)');
+  ok(/twenty-nine keys/.test(src), 'doctrine says twenty-nine keys total (re-pinned hg-v1403; hg-v1396 house marks)');
   ok(/hg-v1299\s+BTC-gold corr/.test(src), 'doctrine names hg-v1299 BTC-gold corr');
   ok(/hg-v1299\s+SMA50 \/\s+SMA200 \/\s+Parkinson20/.test(src), 'doctrine names hg-v1299 SMA/Parkinson');
 }

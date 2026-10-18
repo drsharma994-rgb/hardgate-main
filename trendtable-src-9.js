@@ -315,7 +315,7 @@ function tmStructureDir(rows){
    five). All four already exist in pinemath.js and were read by nothing on
    this desk. Record-only like the five; nothing scores on them. */
 function trendmxPineMarks(rows){
-  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null };
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null, supertrend: null, macd: null, cci: null };
   try{
     if (!Array.isArray(rows) || rows.length < 30) return out;
     if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
@@ -328,6 +328,15 @@ function trendmxPineMarks(rows){
     if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
     if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
     if (typeof W.pineSmcCore === 'function'){ var sc = W.pineSmcCore(rows, { includeContext: true }); if (sc && sc.dir) out.smc = String(sc.dir).toLowerCase(); }
+    /* hg-v1295 (restored hg-v1403): three more bar-only Pine state readers.
+       Record-only like the ten above; the forward ledger measures each
+       separation out of sample. Supertrend/MACD/CCI are distinct from
+       HalfTrend/Squeeze/Cipher respectively (ATR-band flip vs
+       amplitude-pivot flip, signal-line cross vs BB-in-KC release,
+       extreme re-entry vs WaveTrend). */
+    if (typeof W.pineSupertrend === 'function'){ var st = W.pineSupertrend(rows, {}); if (st && st.dir) out.supertrend = String(st.dir).toLowerCase(); }
+    if (typeof W.pineMacd === 'function'){ var md = W.pineMacd(rows, {}); if (md && md.dir) out.macd = String(md.dir).toLowerCase(); }
+    if (typeof W.pineCci === 'function'){ var cc = W.pineCci(rows, {}); if (cc && cc.dir) out.cci = String(cc.dir).toLowerCase(); }
   }catch(e){ }
   return out;
 }

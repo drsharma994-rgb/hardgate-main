@@ -460,6 +460,11 @@
       "version": "hg-v1402",
       "built": "2026-10-18T06:30:00Z",
       "note": "OMNIGOLD formation floor: all three of regime-fit/htf-confirm/hurst-regime must pass on the card ledger or the card stands aside naming the reason (kept +0.047R/+0.040R XM vs dropped -0.115R/-0.175R, both halves of the fresh hg-v752 walk window); stop floor 0.5% -> 1.0% of entry (sub-floor cohort -1.469R/-1.809R spot, -0.118R/-0.148R XM, both halves; pure 0.5-1.0% band -0.378R/-0.419R spot). Fail-open on absent reads; floored cards paint and record not-formed. Kind-name vetoes refused (toxicity is cost, not direction); 2R target kept after sweep re-check failed to reproduce."
+    },
+    {
+      "version": "hg-v1403",
+      "built": "2026-10-18T06:30:00Z",
+      "note": "OMNIBTC restores the v1299-v1305 pack lost in merge resolution (tests had stayed pinned): free-feed/indicator mark readers (12 free + 13 ind), FUNDAMENTALS & FEED panel, LEGS_PIN refresh pin, v1303 four defects, v1304 direction geometry at three ingest sites, v1305 direction-aware measured-rank verdicts, hgObtcPineMarks + HG_OBTC_WALK replay literal; trendmxPineMarks restored to 13 ports. First walker bake on 5,000 BTC 4h bars (n=4779, 72 tickets). Measured gate change: two independent fresh pine families required for a ticket; one-family tiebreaks demoted to watch (-0.076R both halves vs +0.153R for 2+ families on the 2000-bar tail); MACD histogram veto-only (-0.234R as confirm). Honesty: 5000-bar separation +0.109R overall (tickets +0.0625R vs held -0.0464R) but the premium is H2-only there (H1 tickets -0.159R vs held -0.035R); ~73% of former tickets stand aside; forward ledger decides. Suite amendments (mutation-proven, same commit): v1299/v1301 count re-pins 13->17/25->29 (hg-v1396 house marks postdate them), pine-nine 10->13, pine-accuracy fixtures, v1304 version re-pin, walker bake-state."
     }
   ]
 }

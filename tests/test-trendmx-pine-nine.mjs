@@ -37,7 +37,11 @@ console.log('== 1) pinemath.js exports VuManChu Cipher B, Range Filter, NW envel
 
 /* ====================================================================
    § 2 trendmxPineMarks (lifted from source, hg-v967: never export to test)
-   returns 9 keys, each three-state; the four new ports are called
+   returns 13 keys, each three-state; the four new ports are called
+   hg-v1403: keys re-pinned 10 -> 13 — supertrend/macd/cci restored (the
+   hg-v1295 three bar-only readers, lost in the v1305-era merges; the
+   OMNIBTC walker's thirteen-port pin demands them). Amended in the same
+   commit as the restore, mutation proof re-run (drop any one key -> RED).
    ==================================================================== */
 console.log('== 2) trendmxPineMarks reads all nine ports and each is three-state (long / short / null) ==');
 {
@@ -58,34 +62,40 @@ console.log('== 2) trendmxPineMarks reads all nine ports and each is three-state
   assert(/W\.pineNwEnvelope\s*\(/.test(body),     'trendmxPineMarks calls W.pineNwEnvelope');
   assert(/W\.pineWeeklyAvwap\s*\(/.test(body),    'trendmxPineMarks calls W.pineWeeklyAvwap');
   assert(/W\.pineSmcCore\s*\(/.test(body),          'trendmxPineMarks calls W.pineSmcCore');
+  assert(/W\.pineSupertrend\s*\(/.test(body),        'trendmxPineMarks calls W.pineSupertrend (hg-v1403)');
+  assert(/W\.pineMacd\s*\(/.test(body),              'trendmxPineMarks calls W.pineMacd (hg-v1403)');
+  assert(/W\.pineCci\s*\(/.test(body),               'trendmxPineMarks calls W.pineCci (hg-v1403)');
   /* and the result lands on the right output key */
   assert(/out\.cipher\s*=/.test(body),   'trendmxPineMarks writes out.cipher');
   assert(/out\.rfilter\s*=/.test(body),  'trendmxPineMarks writes out.rfilter');
   assert(/out\.nwenv\s*=/.test(body),    'trendmxPineMarks writes out.nwenv');
   assert(/out\.wavwap\s*=/.test(body),   'trendmxPineMarks writes out.wavwap');
   assert(/out\.smc\s*=/.test(body),        'trendmxPineMarks writes out.smc');
+  assert(/out\.supertrend\s*=/.test(body), 'trendmxPineMarks writes out.supertrend (hg-v1403)');
+  assert(/out\.macd\s*=/.test(body),       'trendmxPineMarks writes out.macd (hg-v1403)');
+  assert(/out\.cci\s*=/.test(body),        'trendmxPineMarks writes out.cci (hg-v1403)');
   const W = loadModules(['indicators.js', 'indicators2.js', 'pinemath.js', 'pinesmf.js', 'pinemsb.js', 'pinesqz.js']);
   /* lift the function into W's sandbox so its W.pineXxx references bind */
   vm.runInNewContext(match[0] + '\nG.trendmxPineMarks = trendmxPineMarks;', W, { filename: 'lifted-trendmxPineMarks' });
   assert(typeof W.trendmxPineMarks === 'function', 'lifted trendmxPineMarks runs in sandbox');
   /* a thin tape (< 30 bars) returns all nine keys as null — the bar
      floor is 30, so a tape of 29 rows must also return all nulls */
-  const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap', 'smc'];
+  const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap', 'smc', 'supertrend', 'macd', 'cci'];
   for (const n of [5, 10, 29]){
     const thin = Array.from({length: n}, (_, i) => ({t: i*14400, o: 100 + i*0.1, h: 100.5 + i*0.1, l: 99.5 + i*0.1, c: 100 + i*0.1, v: 100}));
     const out = W.trendmxPineMarks(thin);
     assert(out && expected.every(k => out[k] === null),
-      'a thin tape of ' + n + ' bars returns all nine keys as null — hg-v989 three-state, 30-bar floor');
+      'a thin tape of ' + n + ' bars returns all thirteen keys as null — hg-v989 three-state, 30-bar floor');
   }
   /* an empty / non-array returns the same nine keys as null, never throws */
   const outEmpty = W.trendmxPineMarks([]);
-  assert(outEmpty && expected.every(k => outEmpty[k] === null), 'empty rows returns all nine keys as null, never a throw');
+  assert(outEmpty && expected.every(k => outEmpty[k] === null), 'empty rows returns all thirteen keys as null, never a throw');
   const outNull = W.trendmxPineMarks(null);
-  assert(outNull && expected.every(k => outNull[k] === null), 'null rows returns all nine keys as null, never a throw');
+  assert(outNull && expected.every(k => outNull[k] === null), 'null rows returns all thirteen keys as null, never a throw');
   /* every expected key is present on the output shape (hg-v955: a field nothing writes is ornamental) */
   const outKeys = Object.keys(outEmpty || {}).sort().join(',');
   assert(outKeys === expected.slice().sort().join(','),
-    'output shape carries exactly the ten keys (' + outKeys + ')');
+    'output shape carries exactly the thirteen keys (' + outKeys + ')');
 }
 
 /* ====================================================================
@@ -107,7 +117,7 @@ console.log('== 3) each of the nine marks reads long / short / null on a real ta
     x = c;
   }
   const marks = W.trendmxPineMarks(rising);
-  const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap', 'smc'];
+  const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap', 'smc', 'supertrend', 'macd', 'cci'];
   for (const k of expected){
     const v = marks[k];
     assert(v === null || v === 'long' || v === 'short',
