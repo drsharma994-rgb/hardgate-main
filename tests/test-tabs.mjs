@@ -311,7 +311,7 @@ const EXPECTED_GROUPS = {
      tests it in the same five-pack sprint and did not reconcile them. The guard
      caught it when my pack added gold-confluence to sw.js's HG_SHELL and ran the
      full suite. */
-  gold:       ['gold-confluence', 'super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric', '80percent', 'candle-forecast'],
+  gold:       ['gold-confluence', 'super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'puregold', 'tauric', '80percent', 'candle-forecast'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };

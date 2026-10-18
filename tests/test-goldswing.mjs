@@ -858,7 +858,7 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
      CONFLUENCE tab AT THE HEAD of the GOLD nav group (so it opens by default
      and reads every other gold desk below it) and did not update this pin.
      This caught the drift when the full suite ran. */
-  assert(/tabs:\['gold-confluence','super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent','candle-forecast'\]/.test(gLine),
+  assert(/tabs:\['gold-confluence','super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','puregold','tauric','80percent','candle-forecast'\]/.test(gLine),
          'GOLD group: CONFLUENCE first (hg-v1384), then super desk, then swing/scalp — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');

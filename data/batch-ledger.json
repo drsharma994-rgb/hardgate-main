@@ -445,6 +445,11 @@
       "version": "hg-v1399",
       "built": "2026-10-17T20:30:00Z",
       "note": "TREND MATRIX admission floor, measured on the hg-v1160 replay: stop at least 2% of entry, no fresh cross riding with the majority, the 1D cloud not against it, a bare |2| majority needs three gates. Fail-open on absent reads; floored rows paint, name the reason, record ticket:false. +0.086R expectancy on the kept cohort, both halves agree."
+    },
+    {
+      "version": "hg-v1400",
+      "built": "2026-10-18T02:04:00Z",
+      "note": "PURE GOLD is a gold-group tab. It enters only on a fresh EMA 21/55 cross inside 17:30–21:30 IST. Stop is 1.5 ATR and target is 3 ATR from the signal close. The entry is the next bar open, unread when that bar is not in the tape. A standing stack is not a cross."
     }
   ]
 }
