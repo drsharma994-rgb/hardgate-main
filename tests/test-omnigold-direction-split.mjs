@@ -124,7 +124,7 @@ console.log('\n== nothing folds any more: each label carries its own record ==')
 console.log('\n== un-pooling RAISES the bar — it does not let anything through ==');
 {
   const m = ctx.hgOgReplayFamilySize();
-  ok(m === 54, `the family counts every record tested (${m})`);
+  ok(m === 55, `the family counts every record tested (${m} — hg-v1402: P4-ADRX crossed the 40-trade bar on the re-walk)`);
   ok(ctx.hgOgFamilyZ(m) > ctx.hgOgFamilyZ(53),
      'so admitting to one more comparison makes the bar harder, not easier');
 

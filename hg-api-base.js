@@ -48,7 +48,7 @@
     if (old && old.parentNode) old.parentNode.removeChild(old);   /* hg-v1154: a detached or stubbed node has no parent */
     var s = document.createElement('script');
     s.id = id;
-    s.setAttribute('data-v', '1401');
+    s.setAttribute('data-v', '1402');
     s.src = src;
     s.async = false;
     (document.head || document.documentElement).appendChild(s);
@@ -57,6 +57,6 @@
      deploy) and neither file was precached — a first-visit OFFLINE client lost
      the whole Shiva desk while the stale cachebuster hid it. Both files are
      in HG_SHELL now, and the cache-bump check scans runtime literals here. */
-  add('hgShivaDesk', 'shivagold.js?v=1401');
-  add('hgShivaNav', 'shiva-nav.js?v=1401');
+  add('hgShivaDesk', 'shivagold.js?v=1402');
+  add('hgShivaNav', 'shiva-nav.js?v=1402');
 })();

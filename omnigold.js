@@ -301,8 +301,27 @@ terse status, and never launches a first-time scan on a global refresh.
      direction — "DO NOT TIGHTEN A FAR STOP" — and it holds symmetrically:
      pushing a tight stop out to satisfy a floor invents a risk distance the
      setup never argued for and falsifies the R:R printed on the card. The
-     two honest answers are decline, or trade the stop the structure gave. */
-  var GOLD_STOP_MIN_PCT = 0.005;
+     two honest answers are decline, or trade the stop the structure gave.
+
+     hg-v1402 RAISES the floor to 1.0% — on the cost argument again, and on a
+     fresh out-of-window walk this time. The hg-v752 walk's window rolled
+     forward five months (2026-05-04..2026-10-18, n=8,562 settled, median
+     split 2026-07-29) and the sub-floor cohorts resolved negative in BOTH
+     halves at BOTH venue costs:
+       stop <1.0% of entry (the whole dropped cohort, 6,933 rows):
+         PAXG -1.469R / -1.809R    XM -0.118R / -0.148R
+       the pure 0.5-1.0% band alone (strict reading — it was above the old
+       floor, so it is the cohort this raise actually declines):
+         PAXG -0.378R / -0.419R    XM -0.024R / -0.069R
+       kept >=1.0%: PAXG -0.152R / -0.268R   XM +0.016R / -0.096R
+       (and the old 0.50% floor validates out-of-window: sub-0.5% PAXG
+        -2.056R / -2.405R, both halves)
+     The arithmetic is unchanged: at the PAXG round trip (0.26%) a stop
+     inside 1.0% of entry pays at least 26% of 1R in fees before the idea
+     speaks; cost-drag prices the same wall at the live venue and is the
+     load-bearing gate. The interval honesty above stands untouched — no
+     GROSS claim is made for either floor. */
+  var GOLD_STOP_MIN_PCT = 0.01;
   /* STRONGEST prefers a ticket whose named level is actually in reach.
      A 4H FVG 6×ATR behind the market is a real limit, not the trade to
      float first when a sweep 1.5×ATR away already has a ticket.
@@ -5147,11 +5166,12 @@ terse status, and never launches a first-time scan on a global refresh.
          The pooled book is the MOST overlapping population this desk has —
          every mechanic firing on the same bar is one trade wearing several
          names. The in-sample replay measures the same thing at an effective
-         n of 3,111 from 7,670 rows, a ratio of 0.406, and z scales with the
+         n of 2,442 from 8,053 rows on the hg-v1402 walk, a ratio of 0.303,
+         and z scales with the
          square root of n: uncorrected, a pooled reading is inflated by
-         about 1.57x, so a +1.96σ bar is really +1.25σ.
+         about 1.82x, so a +1.96σ bar is really +1.08σ.
 
-         Measured on the log's OWN records rather than borrowing 0.406 —
+         Measured on the log's OWN records rather than borrowing 0.303 —
          importing a constant measured on one population into another is the
          error hgOgEffN exists to fix. Null when the records cannot answer
          it, and the gate then refuses to promote rather than assuming
@@ -5630,7 +5650,11 @@ terse status, and never launches a first-time scan on a global refresh.
          is built, and stamped on the card. A throwing check is a
          fail-closed not-formed, never a silently tradable card. */
       var formation;
-      try { formation = hgOgFormation({ kind: hit.kind, horizon: cfg.label, plan: plan, dir: hit.dir }); }
+      /* hg-v1402: pass the gate ledger too — the stack-3 signal floor inside
+         hgOgFormation reads it. Without this the clause abstained at the one
+         seam that matters (the evaluate path) and bound only on callers that
+         happened to carry gates. */
+      try { formation = hgOgFormation({ kind: hit.kind, horizon: cfg.label, plan: plan, dir: hit.dir, gates: gates }); }
       catch (eFm) {
         formation = { formed: false, drag: null, failClosed: true,
           reasons: ['formation check threw — fail closed: ' + ((eFm && eFm.message) || eFm)] };
@@ -6960,9 +6984,9 @@ terse status, and never launches a first-time scan on a global refresh.
      Every interval this desk prints treats its replay rows as independent
      trades. They are not. Measured on the walk (scripts/backtest-omnigold-
      results.json, and scripts/omnigold-evidence-bake.mjs which computes
-     this number): the desk publishes 59.4 plans a day on ONE instrument,
-     9.34 per 4h bar, with a time-weighted mean of 55 positions open at
-     once and a peak of 109. Fifty-five simultaneous gold positions is one
+     this number): the desk publishes 48.2 plans a day on ONE instrument,
+     9.34 per 4h bar, with a time-weighted mean of 56 positions open at
+     once and a peak of 108. Fifty-six simultaneous gold positions is one
      bet repeated, not fifty-five independent draws.
 
      Clustering the per-trade R by week — positions run up to five days, so
@@ -6981,7 +7005,7 @@ terse status, and never launches a first-time scan on a global refresh.
      population, whose rows are simultaneous by construction. A sequential
      book — one position at a time — already has effN == n and callers pass
      overlapping:false for it. */
-  var OG_EFF_N_RATIO = 0.406;   /* 3111.1 / 7670, week-clustered */
+  var OG_EFF_N_RATIO = 0.303;   /* hg-v1402 re-walk: 2442.4 / 8053, week-clustered (was 0.406 = 3111.1/7670) */
 
   function hgOgEffN(n, overlapping){
     n = fin(n);
@@ -7000,7 +7024,9 @@ terse status, and never launches a first-time scan on a global refresh.
      EDGE. hgOgEdgeProofPanelHtml computes a z against breakeven on THE SAME
      baked rows and was using the raw count, so the panel that exists to
      report how far the best mechanic sits from the bar was overstating
-     every distance by 1/sqrt(0.406) = 1.57x.
+     every distance by 1/sqrt(0.406) = 1.57x on the ratio then in force
+     (the hg-v1402 re-walk moved the ratio to 0.303, inflation 1.82x — the
+     direction of the correction is what this paragraph records).
 
      It cut both ways, which is the honest description of a sample that is
      smaller than it looks: the best kind read +1.71σ where the effective
@@ -7151,7 +7177,8 @@ terse status, and never launches a first-time scan on a global refresh.
     wins = fin(wins); n = fin(n);
     if (!wf || !(n > 0) || wins < 0 || wins > n) return null;
     /* A MEASURED ratio when the caller has one, the replay constant when it
-       asks for `overlapping`. The two must not be confused: 0.406 was
+       asks for `overlapping`. The two must not be confused: the replay ratio
+       (0.303 on the hg-v1402 walk; 0.406 on the one before) was
        measured on the in-sample walk and belongs to it, which is the whole
        reason hgFwdOverlap exists for the forward log. */
     var ratio = NaN;
@@ -7214,7 +7241,7 @@ terse status, and never launches a first-time scan on a global refresh.
 
      The measured-edge gate already answers this for the horizon book, from
      the log's own barT and horizonBars rather than by borrowing the replay's
-     0.406, and states the rule it acts on:
+     ratio (0.303 on the hg-v1402 walk), and states the rule it acts on:
 
        "NO MEASUREMENT, NO PROMOTION. Treating an unmeasurable overlap as 1.0
         is precisely the assumption that inflates the statistic."
@@ -8308,65 +8335,71 @@ terse status, and never launches a first-time scan on a global refresh.
     fit: { verdict: 'not-predictive', testAUC: 0.5044,
            topDecileLift: 1.051, bottomDecileLift: 0.635 },
     kinds: {
-      'ROUND-MAGNET': [620, 0.3403, -0.834, 0.036, 0.630, 587, 0.3169, -0.109, -0.043],
-      'STOCHRSI-TURN': [434, 0.3249, -0.689, 0.026, 0.487, 425, 0.3318, -0.04, 0.015],
-      'P8-RANGE': [358, 0.2542, -2.163, -0.235, 1.177, 323, 0.1765, -0.613, -0.47],
-      'CCI-EXTREME': [328, 0.3323, -0.748, 0.023, 0.521, 322, 0.3385, -0.033, 0.027],
-      'P9-VOLBAR': [315, 0.2952, -1.487, -0.112, 0.982, 274, 0.2007, -0.499, -0.397],
-      'PD-EQUILIBRIUM': [288, 0.3090, -5.158, -0.073, 2.311, 237, 0.1603, -0.926, -0.519],
-      'THREE-BAR': [279, 0.3513, -3.732, 0.054, 2.087, 207, 0.1208, -0.927, -0.638],
-      'ADR-FADE': [210, 0.3476, -1.260, 0.043, 1.353, 161, 0.1988, -0.498, -0.404],
-      'MMOVE': [206, 0.3107, -0.236, 0.088, 0.233, 177, 0.3559, 0.059, 0.084],
-      'P6-FAIL': [197, 0.3909, -1.670, 0.203, 0.914, 182, 0.3736, -0.02, 0.123],
-      'PIN-REJECT': [192, 0.3646, -3.838, 0.094, 2.208, 138, 0.1232, -0.94, -0.63],
-      'SWEEP-V2': [189, 0.2963, -1.600, -0.087, 0.688, 172, 0.2558, -0.329, -0.22],
-      'PIVOT-REJECT': [171, 0.2749, -1.126, -0.168, 0.610, 159, 0.2327, -0.373, -0.303],
-      'PO3': [162, 0.2963, -0.841, -0.071, 0.484, 148, 0.2905, -0.185, -0.126],
-      'FVG-HVN': [161, 0.2484, -0.680, -0.135, 0.336, 145, 0.2621, -0.204, -0.162],
-      'P4-LAF': [156, 0.3782, -0.653, 0.141, 0.578, 150, 0.3333, -0.057, 0],
-      'FVG-FILL': [155, 0.2774, -0.387, 0.027, 0.286, 132, 0.2955, -0.069, -0.038],
-      'WEEKLY-OPEN': [154, 0.3312, -0.936, 0.020, 0.639, 140, 0.3, -0.159, -0.09],
-      'KZ-JUDAS': [150, 0.2800, -1.992, -0.160, 0.924, 140, 0.2429, -0.414, -0.271],
-      'ORB': [146, 0.2740, -0.346, 0.028, 0.236, 125, 0.296, -0.049, -0.02],
-      'P5-VWAP': [139, 0.2806, -0.805, -0.120, 0.406, 133, 0.2857, -0.188, -0.135],
-      'NR7-BREAK': [139, 0.2590, -0.539, -0.107, 0.280, 119, 0.2857, -0.164, -0.131],
-      'FIB-618': [132, 0.2955, -0.635, -0.064, 0.391, 127, 0.2992, -0.131, -0.087],
-      'P7-SCALP': [132, 0.3409, -0.884, 0.054, 0.680, 127, 0.3543, -0.01, 0.063],
-      'INSIDE-BREAK': [122, 0.2869, -0.446, 0.018, 0.294, 108, 0.3148, -0.034, 0.002],
-      'AVWAP-RECLAIM': [118, 0.3305, -0.460, 0.046, 0.321, 112, 0.3304, -0.043, -0.005],
-      'MFI-SQUAT': [117, 0.2821, -0.627, -0.041, 0.367, 105, 0.2952, -0.12, -0.077],
-      'EMA50-HOLD': [116, 0.2586, -0.893, -0.144, 0.434, 109, 0.2752, -0.201, -0.144],
-      'ENGULF-LEVEL': [114, 0.3421, -3.175, 0.026, 1.571, 95, 0.2211, -0.572, -0.337],
-      'DI-CROSS': [112, 0.2321, -0.485, -0.118, 0.241, 96, 0.2813, -0.112, -0.083],
-      'HA-FLIP': [109, 0.2936, -0.415, 0.052, 0.295, 97, 0.3196, -0.011, 0.025],
-      'TREND-RECLAIM': [106, 0.3491, -0.369, 0.121, 0.344, 99, 0.3636, 0.055, 0.092],
-      'ICHI-KUMO': [106, 0.2358, -0.453, -0.106, 0.236, 89, 0.2697, -0.161, -0.134],
-      'STRUCT-BOS': [105, 0.3048, -0.202, 0.145, 0.213, 87, 0.3448, 0.082, 0.109],
-      'SPRING': [104, 0.1923, -1.429, -0.382, 0.523, 97, 0.1649, -0.554, -0.477],
-      'RIBBON-PULLBACK': [103, 0.2524, -0.563, -0.070, 0.286, 88, 0.2614, -0.168, -0.132],
-      'P6-COMP': [95, 0.2526, -0.320, -0.018, 0.227, 82, 0.3293, 0.019, 0.042],
-      'UTAD': [91, 0.3846, -1.043, 0.154, 0.644, 83, 0.3494, -0.045, 0.048],
-      'ASIA-BREAK': [90, 0.2222, -0.461, -0.042, 0.233, 75, 0.2667, -0.073, -0.042],
-      'LONDON-FIX': [89, 0.2022, -0.547, -0.189, 0.256, 69, 0.2464, -0.233, -0.205],
-      'BOS-RETEST': [85, 0.3059, -0.392, 0.067, 0.233, 74, 0.3378, 0.003, 0.037],
-      'ER-IGNITION': [81, 0.2593, -1.339, -0.222, 0.626, 74, 0.1892, -0.504, -0.432],
-      'PDL-SWEEP': [81, 0.2222, -1.452, -0.333, 0.716, 80, 0.2, -0.484, -0.4],
-      'PDH-SWEEP': [75, 0.3467, -0.955, 0.054, 0.648, 67, 0.3284, -0.095, -0.013],
-      'VWAP-REVERT': [65, 0.3077, -0.658, -0.041, 0.346, 63, 0.3175, -0.089, -0.041],
-      'VWAP-BAND': [63, 0.2381, -0.890, -0.286, 0.487, 57, 0.2281, -0.359, -0.316],
-      'P5-WYCK': [58, 0.2241, -0.693, -0.219, 0.352, 56, 0.25, -0.231, -0.195],
-      'EQL-SWEEP': [53, 0.2075, -1.168, -0.366, 0.625, 53, 0.2264, -0.383, -0.322],
-      'NY-OPEN-DRIVE': [51, 0.2157, -0.358, -0.025, 0.216, 41, 0.2683, -0.051, -0.025],
-      'SQUEEZE-FIRE': [50, 0.3200, -0.328, 0.108, 0.258, 45, 0.3556, 0.075, 0.108],
-      'P5-DRIVE': [48, 0.3333, -0.226, 0.228, 0.307, 41, 0.3902, 0.18, 0.215],
-      'RSI-DIVERGE': [46, 0.3696, -1.931, 0.123, 1.379, 39, 0.2308, -0.457, -0.309],
-      'CUSUM-SHIFT': [45, 0.2444, -0.237, 0.041, 0.247, 32, 0.3438, 0.071, 0.092],
+      'ROUND-MAGNET': [620, 0.3403, -0.834, 0.036, 0.630, 560, 0.3, -0.163, -0.096],
+      'STOCHRSI-TURN': [434, 0.3249, -0.689, 0.026, 0.487, 414, 0.3333, -0.04, 0.014],
+      'P8-RANGE': [358, 0.2542, -2.163, -0.235, 1.177, 326, 0.1871, -0.609, -0.438],
+      'CCI-EXTREME': [328, 0.3323, -0.748, 0.023, 0.521, 321, 0.3396, -0.046, 0.025],
+      'P9-VOLBAR': [315, 0.2952, -1.487, -0.112, 0.982, 292, 0.2055, -0.498, -0.383],
+      'PD-EQUILIBRIUM': [288, 0.3090, -5.158, -0.073, 2.311, 243, 0.2181, -0.808, -0.346],
+      'THREE-BAR': [279, 0.3513, -3.732, 0.054, 2.087, 216, 0.1343, -0.908, -0.597],
+      'ADR-FADE': [210, 0.3476, -1.260, 0.043, 1.353, 172, 0.2267, -0.418, -0.32],
+      'MMOVE': [206, 0.3107, -0.236, 0.088, 0.233, 170, 0.3471, 0.044, 0.07],
+      'P6-FAIL': [197, 0.3909, -1.670, 0.203, 0.914, 177, 0.3446, -0.102, 0.039],
+      'PIN-REJECT': [192, 0.3646, -3.838, 0.094, 2.208, 147, 0.1565, -0.911, -0.531],
+      'SWEEP-V2': [189, 0.2963, -1.600, -0.087, 0.688, 191, 0.288, -0.249, -0.133],
+      'PIVOT-REJECT': [171, 0.2749, -1.126, -0.168, 0.610, 181, 0.2541, -0.335, -0.237],
+      'PO3': [162, 0.2963, -0.841, -0.071, 0.484, 156, 0.2885, -0.185, -0.127],
+      'FVG-HVN': [161, 0.2484, -0.680, -0.135, 0.336, 160, 0.25, -0.254, -0.203],
+      /* hg-v1402: P4-ADRX crossed the 40-trade bar on the re-walk (it was
+         below it on the old one, 3 settled). Both halves of this row are
+         the hg-v1402 window (2026-05-04..2026-10-18): 159 settled, 35.2%
+         wins, -0.590R at PAXG against +0.007R at XM on the gate-clear read
+         — the whole gap is cost, not direction. */
+      'P4-ADRX': [159, 0.3522, -0.59, 0.057, 0.488, 159, 0.3522, 0.007, 0.057],
+      'P4-LAF': [156, 0.3782, -0.653, 0.141, 0.578, 150, 0.3333, -0.065, 0],
+      'FVG-FILL': [155, 0.2774, -0.387, 0.027, 0.286, 144, 0.2986, -0.067, -0.029],
+      'WEEKLY-OPEN': [154, 0.3312, -0.936, 0.020, 0.639, 156, 0.2821, -0.211, -0.142],
+      'KZ-JUDAS': [150, 0.2800, -1.992, -0.160, 0.924, 139, 0.2374, -0.432, -0.288],
+      'ORB': [146, 0.2740, -0.346, 0.028, 0.236, 121, 0.3306, 0.029, 0.06],
+      'P5-VWAP': [139, 0.2806, -0.805, -0.120, 0.406, 150, 0.28, -0.205, -0.137],
+      'NR7-BREAK': [139, 0.2590, -0.539, -0.107, 0.280, 120, 0.275, -0.189, -0.156],
+      'FIB-618': [132, 0.2955, -0.635, -0.064, 0.391, 135, 0.3185, -0.089, -0.034],
+      'P7-SCALP': [132, 0.3409, -0.884, 0.054, 0.680, 130, 0.3462, -0.032, 0.042],
+      'INSIDE-BREAK': [122, 0.2869, -0.446, 0.018, 0.294, 109, 0.3486, 0.062, 0.1],
+      'AVWAP-RECLAIM': [118, 0.3305, -0.460, 0.046, 0.321, 119, 0.3025, -0.121, -0.079],
+      'MFI-SQUAT': [117, 0.2821, -0.627, -0.041, 0.367, 106, 0.3113, -0.085, -0.03],
+      'EMA50-HOLD': [116, 0.2586, -0.893, -0.144, 0.434, 108, 0.287, -0.178, -0.111],
+      'ENGULF-LEVEL': [114, 0.3421, -3.175, 0.026, 1.571, 108, 0.2315, -0.583, -0.306],
+      'DI-CROSS': [112, 0.2321, -0.485, -0.118, 0.241, 97, 0.2474, -0.222, -0.192],
+      'HA-FLIP': [109, 0.2936, -0.415, 0.052, 0.295, 96, 0.3021, -0.07, -0.036],
+      'TREND-RECLAIM': [106, 0.3491, -0.369, 0.121, 0.344, 106, 0.3774, 0.084, 0.141],
+      'ICHI-KUMO': [106, 0.2358, -0.453, -0.106, 0.236, 93, 0.2581, -0.16, -0.129],
+      'STRUCT-BOS': [105, 0.3048, -0.202, 0.145, 0.213, 92, 0.3152, -0.001, 0.029],
+      'SPRING': [104, 0.1923, -1.429, -0.382, 0.523, 111, 0.2252, -0.413, -0.319],
+      'RIBBON-PULLBACK': [103, 0.2524, -0.563, -0.070, 0.286, 86, 0.2442, -0.207, -0.169],
+      'P6-COMP': [95, 0.2526, -0.320, -0.018, 0.227, 82, 0.3537, 0.039, 0.077],
+      'UTAD': [91, 0.3846, -1.043, 0.154, 0.644, 71, 0.3521, -0.028, 0.067],
+      'ASIA-BREAK': [90, 0.2222, -0.461, -0.042, 0.233, 72, 0.2917, -0.037, -0.005],
+      'LONDON-FIX': [89, 0.2022, -0.547, -0.189, 0.256, 68, 0.2353, -0.27, -0.241],
+      'BOS-RETEST': [85, 0.3059, -0.392, 0.067, 0.233, 74, 0.2838, -0.135, -0.094],
+      'ER-IGNITION': [81, 0.2593, -1.339, -0.222, 0.626, 79, 0.2405, -0.358, -0.278],
+      'PDL-SWEEP': [81, 0.2222, -1.452, -0.333, 0.716, 88, 0.2159, -0.441, -0.352],
+      'PDH-SWEEP': [75, 0.3467, -0.955, 0.054, 0.648, 67, 0.2985, -0.203, -0.102],
+      'VWAP-REVERT': [65, 0.3077, -0.658, -0.041, 0.346, 75, 0.3067, -0.125, -0.073],
+      'VWAP-BAND': [63, 0.2381, -0.890, -0.286, 0.487, 61, 0.2295, -0.369, -0.311],
+      'P5-WYCK': [58, 0.2241, -0.693, -0.219, 0.352, 63, 0.2857, -0.155, -0.116],
+      'EQL-SWEEP': [53, 0.2075, -1.168, -0.366, 0.625, 64, 0.2813, -0.244, -0.156],
+      'NY-OPEN-DRIVE': [51, 0.2157, -0.358, -0.025, 0.216, 42, 0.3333, 0.07, 0.105],
+      'SQUEEZE-FIRE': [50, 0.3200, -0.328, 0.108, 0.258, 42, 0.3095, -0.027, 0.009],
+      'P5-DRIVE': [48, 0.3333, -0.226, 0.228, 0.307, 48, 0.3333, -0.021, 0.022],
+      'RSI-DIVERGE': [46, 0.3696, -1.931, 0.123, 1.379, 45, 0.2222, -0.492, -0.333],
+      'CUSUM-SHIFT': [45, 0.2444, -0.237, 0.041, 0.247, 35, 0.3429, 0.1, 0.121],
       'EQH-SWEEP': [42, 0.3571, -0.971, 0.071, 0.612, 41, 0.3659, 0.016, 0.098]
     },
     /* hg-v918 — THE ONE POSITION A PERSON ACTUALLY HOLDS, AT BOTH ENDS.
 
        Every table above counts each plan the scan formed. This walk forms
-       59.4 a day on one instrument and holds a time-weighted 57 at once, so
+       48.2 a day on one instrument and holds a time-weighted 56 at once, so
        those tables describe a book nobody could run. sequentialByCell in the
        evidence file is the honest one — walk the plans in time order, take
        one when flat, hold it to its own exit, skip whatever fires while it
@@ -8381,7 +8414,7 @@ terse status, and never launches a first-time scan on a global refresh.
        It is the obvious thing to gate, and gating it would be wrong.
 
        IT IS ONE END OF AN INTERVAL. The bake computes those cells on
-       `formed`, its LOWER bound: 1,751 of 7,734 settled rows resolved on
+       `formed`, its LOWER bound: 1,859 of 8,201 settled rows resolved on
        their own fill bar, OHLC cannot say whether the entry printed before
        the exit, and the lower bound deletes those wins while keeping those
        losses. scripts/omnigold-evidence-bake.mjs states the rule in its own
@@ -8455,31 +8488,30 @@ terse status, and never launches a first-time scan on a global refresh.
        [n, grossR] per band at each bound, from the evidence file's
        sequentialByStopBand / sequentialByStopBandUpper. */
     stopBandGross: {
-      '<0.133': { lo: [30, -0.6], hi: [18, 0.5] },
-      '<0.16': { lo: [17, -0.4706], hi: [11, 0.9091] },
-      '<0.32': { lo: [79, -0.0506], hi: [48, 0.5] },
-      '<0.5': { lo: [41, -0.1951], hi: [36, 0.25] },
-      '<0.867': { lo: [62, -0.1093], hi: [47, -0.0166] },
-      '<1.733': { lo: [36, -0.0796], hi: [36, -0.0326] },
-      '>=1.733': { lo: [10, 0.0128], hi: [11, 0.0262] }
+      '<0.133': { lo: [33, -0.2727], hi: [25, 1.04] },
+      '<0.16': { lo: [20, -0.4], hi: [12, 0.25] },
+      '<0.32': { lo: [73, -0.0137], hi: [63, 0.5714] },
+      '<0.5': { lo: [49, -0.0816], hi: [45, 0] },
+      '<0.867': { lo: [60, -0.0296], hi: [48, -0.0371] },
+      '<1.733': { lo: [29, -0.1981], hi: [37, 0.078] }
     },
     /* What the ceiling costs the book at each venue, measured on the replay.
        Share of rows the cost gate alone vetoes — stable across the fill
-       bounds (95.9% / 44.4% at the lower one), because the bound deletes
-       rows without changing anyone's stop. */
+       bounds (96.8% / 50.4% at the lower one), because the bound deletes
+       rows without changing anyone's stop. hg-v1402 re-walk window
+       (2026-05-04..2026-10-18): 0.187/0.970/0.004/0.536 — the old window
+       read 0.164/0.961/0.001/0.474; the shape (PAXG vetoes nearly all
+       scalp) is unchanged. */
     costCeilingVeto: {
-      SCALP: { XM: 0.164, PAXG: 0.961 },
-      SWING: { XM: 0.001, PAXG: 0.474 }
+      SCALP: { XM: 0.187, PAXG: 0.970 },
+      SWING: { XM: 0.004, PAXG: 0.536 }
     },
     sequentialCells: {
-      'SCALP/FAIR': { lo: [210, 0.2414, -0.3434], hi: [156, 0.404, 0.1449] },
-      'SCALP/STRONG': { lo: [37, 0.3889, 0.1491], hi: [24, 0.4167, 0.2122] },
-      'SCALP/WEAK': { lo: [15, 0.2857, -0.0873], hi: [12, 0.5, 0.4932] },
-      'SWING/FAIR': { lo: [10, 0.3, -0.1325], hi: [10, 0.4, 0.1731] }
+      'SCALP/FAIR': { lo: [144, 0.259, -0.2846], hi: [129, 0.3852, 0.0876] },
+      'SCALP/STRONG': { lo: [97, 0.3021, -0.1997], hi: [82, 0.4691, 0.3334] }
     },
     sequentialTicketHorizon: {
-      'SCALP': { lo: [73, 0.3971, 0.1484], hi: [54, 0.4902, 0.4155] },
-      'SWING': { lo: [32, 0.2581, -0.2399], hi: [35, 0.4412, 0.3166] }
+
     },
     /* THE OTHER SIDE OF THE 40-TRADE BAR.
 
@@ -8500,10 +8532,15 @@ terse status, and never launches a first-time scan on a global refresh.
        From scripts/omnigold-replay-evidence.json sequentialBake
        .kindBelowThreshold — baked, never hand-counted. */
     kindsBelowBar: { minN: 40, counts: {
-      'VALUE': 29, 'VOL-EXPANSION': 26, 'P8-VPINBO': 25, 'P6-ZFADE': 23,
-      'PWH-SWEEP': 22, 'PWL-SWEEP': 22, 'ABSORB': 14, 'OB-RETEST': 12,
-      'P5-TURT': 7, 'P4-ADRX': 3, 'POC-REVERT': 2,
-      'COMPRESSION-BREAK': 1, 'DONCHIAN-DRIVE': 1
+      /* hg-v1402 re-walk (2026-05-04..2026-10-18). P4-ADRX graduated to the
+         measured table above (159 settled). DONCHIAN-DRIVE fired twice and
+         survived ZERO filters — a 0 here is the honest count, baked by
+         scripts/omnigold-evidence-bake.mjs (seen-but-zeroed kinds are now
+         carried, not dropped from both maps). */
+      'EQH-SWEEP': 39, 'SWEEP-OB': 28, 'VALUE': 39, 'POC-REVERT': 6,
+      'P8-VPINBO': 28, 'PWH-SWEEP': 13, 'ABSORB': 17, 'PWL-SWEEP': 29,
+      'OB-RETEST': 11, 'P5-TURT': 6, 'VOL-EXPANSION': 34, 'P6-ZFADE': 24,
+      'DONCHIAN-DRIVE': 0, 'COMPRESSION-BREAK': 1
     } },
     /* hg-v700 refresh note: the ENGINE cohort collapsed from 277 to 3 settled
        trades — the hg-v699 GOLD SCALP overhaul (stop floor + edge suppressions)
@@ -9322,7 +9359,7 @@ terse status, and never launches a first-time scan on a global refresh.
       /* and what the book it belongs to actually did to an account */
       + hgOgBookExperienceHtml()
       /* hg-v918: LAST, because it reframes every table above it. Everything
-         higher counts all 59.4 plans a day this walk forms; these rows count
+         higher counts all 48.2 plans a day this walk forms; these rows count
          the one a person could hold, at both ends of the fill interval. The
          sequential book has been in the committed evidence since the v12 bake
          and nothing has ever rendered it. */
@@ -9487,9 +9524,9 @@ terse status, and never launches a first-time scan on a global refresh.
      expressing it in R. What it is NOT is venue-neutral in what it demands
      of a chart: at PAXG a gold scalp needs a $78 stop, and the same rule
      asks $6 at XM. On the replay that gap is the whole desk — the ceiling
-     alone vetoes 96.1% of scalp rows and 47.4% of swing rows at PAXG,
-     against 16.4% and 0.1% at XM (stable at both fill bounds: 95.9% /
-     44.4%). PAXG is the fail-closed default, so a reader who has never
+     alone vetoes 97.0% of scalp rows and 53.6% of swing rows at PAXG,
+     against 18.7% and 0.4% at XM (stable at both fill bounds: 96.8% /
+     50.4%). PAXG is the fail-closed default, so a reader who has never
      touched the venue selector is running the strict one and reading an
      empty scan as a quiet market.
 
@@ -9570,54 +9607,61 @@ terse status, and never launches a first-time scan on a global refresh.
      the whole story.
 
      Sequential ticket book — one position at a time, ticket-only, which is
-     the only book a person can actually run — over 2026-03-29..2026-09-12,
-     priced at XM:
+     the only book a person can actually run — over 2026-05-04..2026-10-18
+     (the hg-v1402 re-walk), priced at XM:
 
-         final +3.2R     peak +4.2R     MAX DRAWDOWN 18.3R
-         longest losing streak 7        the hole ran 01 Apr -> 21 May
-
-     At 1% risk a trade that is an 18% account drawdown, held for seven
-     weeks, to finish +3%. A flat expectancy is not harmless — that shape
-     is exactly what people abandon at the bottom, and a card that reports
-     only the win rate helps them do it.
+         THE GATED BOOK IS EMPTY. Under the current gate set (1.0% stop
+         floor + hard venue cost ceilings) not one sequential ticket
+         survives the walk — zero trades, at either venue. The UNGATED
+         sequential book (every formed plan, one at a time) is the only
+         equity curve left to quote: final -50.6R, peak +7.1R, MAX
+         DRAWDOWN 63.6R, longest losing streak 12, the hole ran
+         15 May -> 05 Oct. At 1% risk a trade, that is a 64% account
+         drawdown to finish -51%. The gates withholding everything is not
+         a bug to route around; it is the measurement.
 
      Numbers from scripts/omnigold-evidence-bake.mjs (bake.experience),
      which computes them on the SEQUENTIAL book because a drawdown only
      means anything walked in the order the trades were taken. Running it
      on the overlapping firehose would draw a curve nobody ever rode. */
   var HG_OG_BOOK_EXPERIENCE = {
-    window: '2026-03-29..2026-09-12',
+    window: '2026-05-04..2026-10-18',
     src: 'scripts/omnigold-evidence-bake.mjs',
     /* THE GATE SET MATTERS, and getting it wrong here shipped a wrong
        number for a day. hg-v754 quoted the raw ticket book from a walk
        generated 2026-09-12 — before GOLD_STOP_MIN_PCT and the hard
-       venue-priced cost gate landed on 2026-09-16. Those numbers described
-       a system this tab no longer runs, and they overstated the drawdown
-       2.2x at XM (18.3R against 8.2R) and 8.5x at PAXG (83R against 9.8R).
+       venue-priced cost gate landed on 2026-09-16. hg-v1402 re-walked and
+       re-baked: the walk's own ticket flag is EMPTY offline (the hg-v1003
+       institutional macro lock fails closed without live DXY/US10Y feeds —
+       a walk-environment fact, named so it is not mistaken for the desk
+       going silent live), and the gate proxy below agrees: with the raised
+       1.0% floor no sequential ticket survives either venue.
+       Old -> new: XM maxDD 8.21R -> 0 (n 58 -> 0), PAXG maxDD 9.81R -> 0
+       (n 34 -> 0). The hole did not heal; the book stopped taking trades
+       that dig it.
 
-       The rows below are the ticket book with the CURRENT gates applied to
-       that walk. It is a PROXY, and `proxy` says so: a genuine re-walk
-       would change which setups formed at all, not merely which of them
-       survived the ledger. Re-run scripts/backtest-omnigold.mjs and this
-       bake to replace it with the real thing. */
-    gateSet: 'hg-v752 (stop floor + hard venue cost)',
+       The rows below apply the CURRENT gate predicate to the walk rows.
+       It remains a PROXY, and `proxy` says so: the predicate re-checks
+       stops and costs on the plans the walk formed; it does not re-run
+       formation itself. */
+    gateSet: 'hg-v752 + hg-v1402 (1.0% stop floor + hard venue cost)',
     proxy: true,
     /* [finalR, peakR, maxDrawdownR, longestLosingStreak, n, from, to] */
-    ticketsXm:   [  1.66,  9.34,   8.21, 6,  58, '2026-04-01', '2026-05-21'],
-    ticketsPaxg: [ -6.09,  1.90,   9.81, 7,  34, '2026-04-01', '2026-05-15'],
+    ticketsXm:   [  0.00,  0.00,   0.00, 0,   0, '—', '—'],
+    ticketsPaxg: [  0.00,  0.00,   0.00, 0,   0, '—', '—'],
     /* every plan formed, one at a time — pre-gate, kept for contrast */
-    allXm:       [-69.30,  0.00,  73.40, 16, 275, '2026-03-27', '2026-09-03']
+    allXm:       [-50.63,  7.06,  63.56, 12, 273, '2026-05-15', '2026-10-05']
   };
 
   /* HOW OFTEN DOES THIS KIND OF ENTRY EVEN HAPPEN?
 
      A resting order is not a trade until price comes to it, and the rate
-     at which that happens is not uniform. Measured over the walk's 9,435
-     published plans:
+     at which that happens is not uniform. Measured over the hg-v1402
+     walk's 10,304 published plans (2026-05-04..2026-10-18):
 
          BUY        100.0%      SELL        100.0%   (at the market)
-         BUY_LIMIT   79.2%      SELL_LIMIT   75.3%
-         BUY_STOP    43.7%      SELL_STOP    52.5%
+         BUY_LIMIT   80.6%      SELL_LIMIT   75.0%
+         BUY_STOP    49.7%      SELL_STOP    53.6%
 
      MORE THAN HALF OF BREAKOUT ENTRIES NEVER TRIGGER, and nothing in this
      app said so. A mechanic whose record looks respectable on the trades
@@ -9631,8 +9675,8 @@ terse status, and never launches a first-time scan on a global refresh.
      idea lost". Numbers from scripts/omnigold-evidence-bake.mjs (bake.fills). */
   var HG_OG_FILL_RATES = {
     'BUY': 1.0, 'SELL': 1.0,
-    'BUY_LIMIT': 0.792, 'SELL_LIMIT': 0.753,
-    'BUY_STOP': 0.437, 'SELL_STOP': 0.525
+    'BUY_LIMIT': 0.806, 'SELL_LIMIT': 0.750,
+    'BUY_STOP': 0.497, 'SELL_STOP': 0.536
   };
 
   /* The order type a plan implies, priced against the live mark — the same
@@ -10153,6 +10197,29 @@ terse status, and never launches a first-time scan on a global refresh.
       var row = xm ? HG_OG_BOOK_EXPERIENCE.ticketsXm : HG_OG_BOOK_EXPERIENCE.ticketsPaxg;
       var venue = xm ? 'XM' : 'PAXG';
       var fin0 = row[0], peak = row[1], dd = row[2], streak = row[3], n = row[4];
+      /* hg-v1402: the gated book can be EMPTY (n=0 — no ticket survives the
+         current gates on the walk). Render that as the finding it is,
+         never as a 0.0R-drawdown fiction. */
+      if (!n){
+        var all = HG_OG_BOOK_EXPERIENCE.allXm || [];
+        return '<div class="note warn og-book-experience" style="margin:8px 0;padding:6px 8px;'
+          + 'border:1px solid #f59e0b;border-left:3px solid #f59e0b;border-radius:4px;'
+          + 'background:rgba(245,158,11,0.06);font-size:0.85em">'
+          + '<b>WHAT HOLDING IT FELT LIKE</b> — ticket-only, one position at a time, over '
+          + esc(HG_OG_BOOK_EXPERIENCE.window) + ': <b>no ticket survives the current gate set</b> '
+          + '(0 trades at either venue — the 1.0% stop floor and the venue cost ceilings '
+          + 'withhold every sequential ticket on this walk). The ungated one-at-a-time book '
+          + 'finished <b>' + (all[0] >= 0 ? '+' : '') + Number(all[0]).toFixed(1) + 'R</b> after a <b>'
+          + Number(all[2]).toFixed(1) + 'R drawdown</b> (' + all[4] + ' trades). '
+          + (HG_OG_BOOK_EXPERIENCE.proxy
+            ? '<div class="dim" style="font-size:0.9em;margin-top:3px">'
+              + esc('Proxy: ' + HG_OG_BOOK_EXPERIENCE.gateSet + ' applied to a '
+                  + HG_OG_BOOK_EXPERIENCE.window.slice(-10) + ' walk, not a re-walk — '
+                  + 'a fresh walk would change which setups formed, not only which survived.')
+              + '</div>'
+            : '')
+          + '</div>';
+      }
       return '<div class="note warn og-book-experience" style="margin:8px 0;padding:6px 8px;'
         + 'border:1px solid #f59e0b;border-left:3px solid #f59e0b;border-radius:4px;'
         + 'background:rgba(245,158,11,0.06);font-size:0.85em">'
@@ -10300,8 +10367,8 @@ terse status, and never launches a first-time scan on a global refresh.
      hgOgVenueCostNoteHtml only renders when the venue DIFFERS from the
      replay's PAXG, so on the fail-closed default it says nothing at all —
      exactly the case where the cost gate is doing the most work. On the
-     replay the ceiling alone vetoes 96.1% of scalp rows at PAXG against
-     16.4% at XM, and a reader who has never opened the venue selector reads
+     replay the ceiling alone vetoes 97.0% of scalp rows at PAXG against
+     18.7% at XM, and a reader who has never opened the venue selector reads
      that as a quiet market rather than as their venue.
 
      Never a verdict and never a gate: this panel moves nothing, it states
@@ -10458,10 +10525,10 @@ terse status, and never launches a first-time scan on a global refresh.
      number this desk refuses everywhere else. It states the age and what the
      walk cannot have seen. */
   var HG_OG_WALK = {
-    from: '2026-03-29T14:00:00.000Z',
-    to: '2026-09-12T04:00:00.000Z',
-    generated: '2026-09-12T07:15:34.424Z',
-    trades: 9897,
+    from: '2026-05-04T16:00:00.000Z',
+    to: '2026-10-18T06:00:00.000Z',
+    generated: '2026-10-18T08:54:17.654Z',
+    trades: 10306,
     src: 'scripts/backtest-omnigold-results.json'
   };
 
@@ -10637,9 +10704,9 @@ terse status, and never launches a first-time scan on a global refresh.
      the only result in the whole evidence base that is positive at both fill
      bounds — the hg-v918 bar.
 
-     THE WALK PUBLISHES 59.4 PLANS A DAY ON ONE INSTRUMENT and holds a
-     time-weighted 57 at once. Every headline table on this tab describes that
-     book. Nobody can run it, and it is not 57 bets: it is ONE bet on gold at
+     THE WALK PUBLISHES 48.2 PLANS A DAY ON ONE INSTRUMENT and holds a
+     time-weighted 56 at once. Every headline table on this tab describes that
+     book. Nobody can run it, and it is not 56 bets: it is ONE bet on gold at
      57x size. That half of the argument needs no statistics.
 
      The other half is the sequential book — walk the plans in time order,
@@ -10816,7 +10883,7 @@ terse status, and never launches a first-time scan on a global refresh.
       why: free
         ? 'no gold conviction is live — this desk takes one position at a time'
         : (nHold + ' gold conviction' + (nHold === 1 ? ' is' : 's are') + ' already live'
-           + ' — HELD. The walk publishes 59.4 plans a day on one instrument and holds 57'
+           + ' — HELD. The walk publishes 48.2 plans a day on one instrument and holds 56'
            + ' at once, which is one bet at 57x size; taken one at a time the SCALP ticket'
            + ' book is +0.148R at the conservative fill bound and +0.416R at the other,'
            + ' against -0.116R all at once. hgOgSetOneAtATime(false) turns this off.') };
@@ -10824,6 +10891,47 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* The panel. Renders only while something is actually held — a standing
      lecture about concentration on an empty book is noise. */
+  /* hg-v1402 — the sequential ticket claim reads the baked map at RENDER
+     time now (the numbers above were written in, and a re-bake could not
+     move them — hg-v754's staleness bug in miniature). When the baked map
+     is EMPTY, as it is on the hg-v1402 walk (the gated ticket book took no
+     trades), the panel says that and quotes nothing — a claim whose
+     population is gone must not keep rendering as if it were live. */
+  function hgOgSequentialTicketClaimHtml(){
+    try{
+      var T = (typeof HG_OG_REPLAY_EVIDENCE !== 'undefined' && HG_OG_REPLAY_EVIDENCE)
+        ? HG_OG_REPLAY_EVIDENCE.sequentialTicketHorizon : null;
+      var s = T && T.SCALP, w = T && T.SWING;
+      if (s && w && isFinite(fin(s.lo && s.lo[2])) && isFinite(fin(w.lo && w.lo[2]))){
+        var z = null;
+        try {
+          var be3 = 1 / 3;
+          if (s.lo[0] > 0) z = (fin(s.lo[1]) - be3) / Math.sqrt(be3 * (1 - be3) / s.lo[0]);
+        } catch (eZ) { z = null; }
+        return '<div style="margin-top:4px">This walk publishes <b>48.2 plans a day</b> on one '
+          + 'instrument and holds <b>56 at once</b> &mdash; which is not 56 bets, it is one bet '
+          + 'on gold at 57&times; size. Taken one at a time instead, the SCALP ticket book is '
+          + '<b>' + (s.lo[2] >= 0 ? '+' : '') + s.lo[2].toFixed(3) + 'R</b> at the conservative fill bound and <b>'
+          + (s.hi[2] >= 0 ? '+' : '') + s.hi[2].toFixed(3) + 'R</b> at the other. '
+          + 'It is the only read in this desk&rsquo;s evidence that is positive at <b>both</b> bounds.</div>'
+          + '<div style="margin-top:4px;opacity:.85">The limit, stated: at the conservative end '
+          + 'that is n=' + s.lo[0] + ' at <b>' + (z === null ? 'an unverified' : (z >= 0 ? '+' : '') + z.toFixed(2))
+          + '&sigma;</b> &mdash; positive, <b>not significant</b>, and it '
+          + 'clears no bar this desk applies to a mechanic. SWING disagrees between the two bounds '
+          + '(' + w.lo[2].toFixed(3) + ' / +' + w.hi[2].toFixed(3) + ') and carries no verdict, so nothing is claimed for it. The '
+          + 'concentration argument above stands without either. '
+          + '<code>hgOgSetOneAtATime(false)</code> turns this off.</div>';
+      }
+      return '<div style="margin-top:4px">This walk publishes <b>48.2 plans a day</b> on one '
+        + 'instrument and holds <b>56 at once</b> &mdash; which is not 56 bets, it is one bet '
+        + 'on gold at 57&times; size. The sequential SCALP ticket book that once read positive '
+        + 'at <b>both</b> bounds (the hg-v918 walk) is <b>empty on the hg-v1402 walk</b>: the '
+        + 'current gates (1.0% stop floor + venue cost ceilings) withhold every sequential '
+        + 'ticket, so there is no gated book to quote and none is quoted. The concentration '
+        + 'argument above stands without it. '
+        + '<code>hgOgSetOneAtATime(false)</code> turns this off.</div>';
+    }catch(e){ return ''; }
+  }
   function hgOgOneAtATimeHtml(open){
     try{
       if (!OG_ONE_AT_A_TIME) return '';
@@ -10836,18 +10944,7 @@ terse status, and never launches a first-time scan on a global refresh.
         + (o.n === 1 ? ' is' : 's are') + ' live</b>, so new tickets are <b>HELD</b>. '
         + 'Cards keep their levels, gates and reasoning; none of them is hidden and no '
         + 'threshold moved.'
-        + '<div style="margin-top:4px">This walk publishes <b>59.4 plans a day</b> on one '
-        + 'instrument and holds <b>57 at once</b> &mdash; which is not 57 bets, it is one bet '
-        + 'on gold at 57&times; size. Taken one at a time instead, the SCALP ticket book is '
-        + '<b>+0.148R</b> at the conservative fill bound and <b>+0.416R</b> at the other, '
-        + 'against <b>&minus;0.116R</b> for the all-at-once book. It is the only read in this '
-        + 'desk&rsquo;s evidence that is positive at <b>both</b> bounds.</div>'
-        + '<div style="margin-top:4px;opacity:.85">The limit, stated: at the conservative end '
-        + 'that is n=73 at <b>+1.16&sigma;</b> &mdash; positive, <b>not significant</b>, and it '
-        + 'clears no bar this desk applies to a mechanic. SWING disagrees between the two bounds '
-        + '(&minus;0.240 / +0.317) and carries no verdict, so nothing is claimed for it. The '
-        + 'concentration argument above stands without either. '
-        + '<code>hgOgSetOneAtATime(false)</code> turns this off.</div>'
+        + hgOgSequentialTicketClaimHtml()
         + hgOgHoldingRowsHtml(o) + '</div>';
     }catch(e){ return ''; }
   }
@@ -11080,7 +11177,7 @@ terse status, and never launches a first-time scan on a global refresh.
         + row(sc) + row(sw) + '</table>'
         + (here === 'PAXG'
            ? '<div class="dim" style="margin-top:4px">PAXG is the fail-closed default. The same rule asks '
-             + '0.133% (SCALP) and 0.067% (SWING) at XM, where it vetoed 16.4% and 0.1% instead. '
+             + '0.133% (SCALP) and 0.067% (SWING) at XM, where it vetoed 18.7% and 0.4% instead. '
              + 'An empty scan here may be the venue rather than the tape.</div>'
            : '')
         + '<div class="dim" style="margin-top:4px">Whether a tighter stop buys better gross is NOT settled — '
@@ -11252,9 +11349,9 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!body) return '';
       return '<div class="og-seqcells" style="font-size:11px;margin-top:8px;line-height:1.5">'
         + '<div style="font-weight:600">ONE POSITION AT A TIME — the book a person could actually hold</div>'
-        + '<div class="dim">This walk forms 59.4 plans a day and holds 57 at once; every other table on '
+        + '<div class="dim">This walk forms 48.2 plans a day and holds 56 at once; every other table on '
         + 'this tab counts all of them. These rows take one plan when flat and hold it to its own exit. '
-        + 'Each is shown at BOTH ends of the fill-ambiguity interval — 1,751 of 7,734 settled rows '
+        + 'Each is shown at BOTH ends of the fill-ambiguity interval — 1,859 of 8,201 settled rows '
         + 'resolved on their own fill bar and OHLC cannot say whether the entry printed first. '
         + 'A cell is read as losing only when both ends agree, and none here does.</div>'
         + '<table style="margin-top:4px;border-collapse:collapse"><tr class="dim">'
@@ -11683,9 +11780,12 @@ terse status, and never launches a first-time scan on a global refresh.
   /* THE FORMATION VERDICT, at plan construction, for every OMNIGOLD setup —
      scan cards ({ kind, horizon, plan }) and engine setups
      ({ strategy|stratKey, entry, stop }) alike.
-     -> { formed, venue, drag, reasons[], stopFloor?, kindDemotion?,
-          unDemoted? }.
+     -> { formed, venue, drag, reasons[], stopFloor?, stack3Floor?,
+          kindDemotion?, unDemoted? }.
        - STOP FLOOR: venueRt / stopDistPct > 0.125 -> not formed.
+       - STACK-3 SIGNAL FLOOR (hg-v1402): setup.gates carries the ledger and
+         fewer than 3 of regime-fit/htf-confirm/hurst-regime PASS (with all
+         three evaluated) -> not formed. Absent/unevaluated reads abstain.
        - KIND DEMOTION: measured-toxic per hgOgKindDemotion -> not formed,
          UNLESS the kind's live forward ledger reads 'has paid' (the same
          read the FORWARD table renders) — then unDemoted carries both the
@@ -11719,6 +11819,44 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'R of 1R before the idea speaks (' + vc.venue + ' '
         + fin(vc.rtCostPct).toFixed(3) + '% RT vs ' + drag.stopPct.toFixed(2) + '% stop)');
     }
+    /* hg-v1402 — STACK-3 SIGNAL FLOOR. The three gates the ledger audit
+       (header, WHAT A GATE AUDIT FOUND) measured earning their keep on BOTH
+       horizons — regime-fit (+3.0/+4.5), htf-confirm (+3.3/+5.5),
+       hurst-regime (+6.4/+2.8) — must ALL pass, or the setup does not form.
+       Measured on the hg-v752 walk, fresh window (2026-05-04..2026-10-18,
+       8,562 settled, median split 2026-07-29): the gateConf==3 cohort nets
+       +0.047R/+0.040R at XM and -0.464R/-0.691R at PAXG in the two time
+       halves, against the dropped cohort's -0.115R/-0.175R (XM) and
+       -1.321R/-1.726R (PAXG) — the dropped side loses in BOTH halves at BOTH
+       venues, the kept side improves in both (the hg-v1399 admissibility
+       rule). 1,384 of 8,562 settled rows (16%) clear the bar.
+       This is a formation clause, NOT a new hgOgGates key — the baked gate
+       fingerprint does not move. It reads the ledger the caller already
+       computed (setup.gates), so it costs zero new computation.
+       FAIL OPEN (hg-v989 third state): no gates array, or fewer than three
+       of the three keys evaluated (pass===true/false; UNCHECKED/absent is
+       not a fail), is NO VERDICT — an engine-side caller or a degraded boot
+       abstains rather than inventing a veto. */
+    try {
+      var s3gates = setup.gates;
+      if (s3gates && s3gates.length){
+        var s3Eval = 0, s3Pass = 0, s3i, s3g;
+        for (s3i = 0; s3i < s3gates.length; s3i++){
+          s3g = s3gates[s3i];
+          if (!s3g || (s3g.key !== 'regime-fit' && s3g.key !== 'htf-confirm'
+                       && s3g.key !== 'hurst-regime')) continue;
+          if (s3g.pass === true || s3g.pass === false){
+            s3Eval++; if (s3g.pass === true) s3Pass++;
+          }
+        }
+        if (s3Eval >= 3 && s3Pass < 3){
+          out.formed = false;
+          out.stack3Floor = { evaluated: s3Eval, passed: s3Pass };
+          out.reasons.push('weak-signal floor (' + s3Pass
+            + '/3 measured-positive gates — regime-fit/htf-confirm/hurst-regime)');
+        }
+      }
+    } catch (eS3) { /* a malformed ledger is no verdict — abstain, formed unchanged */ }
     var dem = kind ? hgOgKindDemotion(kind, vc) : null;
     if (dem){
       var paid = hgOgForwardPaid(kind, setup.horizon);

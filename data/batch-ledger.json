@@ -455,6 +455,11 @@
       "version": "hg-v1401",
       "built": "2026-10-18T03:00:00Z",
       "note": "GOLD PINE admission floor: scalp stop >= 0.3% of entry (census-measured, negative both halves at both cost models), the MOST PROBABLE pin honors the handoff R:R floor, killzone/fix-lock read the signal bar. Swing stop floor measured and refused (mixed halves). No weights moved."
+    },
+    {
+      "version": "hg-v1402",
+      "built": "2026-10-18T06:30:00Z",
+      "note": "OMNIGOLD formation floor: all three of regime-fit/htf-confirm/hurst-regime must pass on the card ledger or the card stands aside naming the reason (kept +0.047R/+0.040R XM vs dropped -0.115R/-0.175R, both halves of the fresh hg-v752 walk window); stop floor 0.5% -> 1.0% of entry (sub-floor cohort -1.469R/-1.809R spot, -0.118R/-0.148R XM, both halves; pure 0.5-1.0% band -0.378R/-0.419R spot). Fail-open on absent reads; floored cards paint and record not-formed. Kind-name vetoes refused (toxicity is cost, not direction); 2R target kept after sweep re-check failed to reproduce."
     }
   ]
 }

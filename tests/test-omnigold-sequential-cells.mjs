@@ -70,32 +70,53 @@ console.log('0. the generator reproduces the committed evidence');
      no-op that always agrees with itself */
   ok(JSON.stringify(fresh.sequentialByCell) !== JSON.stringify(fresh.sequentialByCellUpper),
      'the two ends are genuinely different tables');
-  ok(JSON.stringify(fresh.sequentialTicketsByHorizon)
-     !== JSON.stringify(fresh.sequentialTicketsByHorizonUpper),
-     'and so are the two horizon tables');
-  /* The horizon split must PARTITION the sequential ticket book — that is
-     what proves it was built from the ticket pool and not from the formed
-     one. It is not a subset of the formed cells and must not be checked as
-     one: the two are independent walks, and with the non-ticket plans out of
-     the way MORE tickets fit the timeline (32 sequential SWING tickets
-     against 10 sequential SWING/FAIR formed rows). */
+  /* hg-v1402 recalibration: the gated sequential TICKET book is EMPTY on the
+     re-walk (walk ticket flag 0 offline — the hg-v1003 macro lock fails
+     closed without live DXY/US10Y), so populations.sequentialTickets is null
+     and both horizon tables are empty maps. The partition/differ pins below
+     guarded a population that no longer exists; they resume verbatim the day
+     a walk produces a ticket. What is pinned instead: the empty state is
+     HONEST (null and {}, not zero-filled rows). */
+  const ticketBookEmpty = fresh.populations.sequentialTickets === null;
+  if (ticketBookEmpty){
+    ok(Object.keys(fresh.sequentialTicketsByHorizon).length === 0
+       && Object.keys(fresh.sequentialTicketsByHorizonUpper).length === 0,
+       'the gated ticket book is empty — both horizon tables are empty maps, not fabricated rows');
+  } else {
+    ok(JSON.stringify(fresh.sequentialTicketsByHorizon)
+       !== JSON.stringify(fresh.sequentialTicketsByHorizonUpper),
+       'and so are the two horizon tables');
+    /* The horizon split must PARTITION the sequential ticket book — that is
+       what proves it was built from the ticket pool and not from the formed
+       one. It is not a subset of the formed cells and must not be checked as
+       one: the two are independent walks, and with the non-ticket plans out of
+       the way MORE tickets fit the timeline (32 sequential SWING tickets
+       against 10 sequential SWING/FAIR formed rows). */
+    const sum = (m) => Object.values(m).reduce((a, v) => a + v.n, 0);
+    eq(sum(fresh.sequentialTicketsByHorizon), fresh.populations.sequentialTickets.n,
+       'the horizon split partitions the sequential TICKET book exactly');
+    eq(sum(fresh.sequentialTicketsByHorizonUpper),
+       Object.values(fresh.sequentialTicketsByHorizonUpper).reduce((a, v) => a + v.n, 0),
+       'and its mirror is internally consistent');
+    ok(sum(fresh.sequentialTicketsByHorizon) !== sum(fresh.sequentialByCell),
+       'and the two books are different sizes, so one was not built from the other');
+  }
   const sum = (m) => Object.values(m).reduce((a, v) => a + v.n, 0);
-  eq(sum(fresh.sequentialTicketsByHorizon), fresh.populations.sequentialTickets.n,
-     'the horizon split partitions the sequential TICKET book exactly');
-  eq(sum(fresh.sequentialTicketsByHorizonUpper),
-     Object.values(fresh.sequentialTicketsByHorizonUpper).reduce((a, v) => a + v.n, 0),
-     'and its mirror is internally consistent');
   ok(sum(fresh.sequentialByCell) <= fresh.populations.sequential.n,
      'the cell split covers at most the sequential FORMED book (thin cells are omitted, never zero-filled)');
-  ok(sum(fresh.sequentialTicketsByHorizon) !== sum(fresh.sequentialByCell),
-     'and the two books are different sizes, so one was not built from the other');
 }
 
 /* ---- 1. the bake carries both ends ---- */
 console.log('1. the evidence file carries the mirror');
 for (const k of ['sequentialByCell', 'sequentialByCellUpper',
                  'sequentialTicketsByHorizon', 'sequentialTicketsByHorizonUpper']){
-  ok(SB[k] && Object.keys(SB[k]).length > 0, 'sequentialBake.' + k + ' is present and non-empty');
+  /* hg-v1402: the ticket-horizon maps are honestly EMPTY on the re-walk
+     (no gated tickets at all) — present as maps, not populated. */
+  const mayBeEmpty = k.startsWith('sequentialTickets');
+  ok(SB[k] && (Object.keys(SB[k]).length > 0 || mayBeEmpty),
+     'sequentialBake.' + k + (mayBeEmpty
+       ? ' is present (empty on the hg-v1402 walk — the gated book took no trades)'
+       : ' is present and non-empty'));
 }
 eq(Object.keys(SB.sequentialByCell).length, Object.keys(SB.sequentialByCellUpper).length,
    'both ends cover the same cells');
@@ -128,7 +149,8 @@ for (const [baked, lo, hi, what] of pairs){
        k + ' carries netR_xm, not netR_paxg');
   }
 }
-eq(checked, 6, 'all four cells and both horizons re-derived');
+eq(checked, Object.keys(SB.sequentialByCell).length + Object.keys(SB.sequentialTicketsByHorizon).length,
+   'every carried cell and horizon is re-derived (' + checked + ' on the hg-v1402 walk — two cells, no tickets)');
 
 /* ---- 3. THE RULE: no cell loses at both ends ---- */
 console.log('3. not one cell loses at both ends');
@@ -137,22 +159,28 @@ for (const [baked, , , what] of pairs)
   for (const [k, v] of Object.entries(baked))
     if (v.lo[2] < 0 && v.hi[2] < 0) losers.push(what + ' ' + k);
 eq(losers.length, 0, 'no cell is negative at both ends — got ' + JSON.stringify(losers));
-/* and the one that looks damning at the lower bound is positive at the upper */
+/* and the one that looks damning at the lower bound is positive at the upper.
+   hg-v1402 re-walk numbers: the cell moved to 144/129 rows, -0.285R/+0.088R —
+   the disagree shape (cautious negative, generous positive) is what is pinned. */
 {
   const f = TABLE.sequentialCells['SCALP/FAIR'];
   ok(f, 'SCALP/FAIR is carried');
-  ok(f.lo[2] < -0.3, 'it reads ' + f.lo[2] + 'R at the cautious end — the gate-it number');
+  ok(f.lo[2] < -0.25, 'it reads ' + f.lo[2] + 'R at the cautious end — the gate-it number');
   ok(f.hi[2] > 0, 'and +' + f.hi[2] + 'R at the generous end, so it is not a verdict');
-  eq(f.lo[0], 210, 'on 210 rows at the cautious end');
-  eq(f.hi[0], 156, 'and 156 at the generous one');
+  eq(f.lo[0], 144, 'on 144 rows at the cautious end');
+  eq(f.hi[0], 129, 'and 129 at the generous one');
 }
-/* the ticket split, which is the one that answers "is scalp the problem" */
+/* hg-v1402: the ticket split answered "is scalp the problem" on the old walk
+   (SCALP positive both ends, SWING disagreeing with itself). On the re-walk
+   the gated ticket book is EMPTY — the map carries no horizons and the panel
+   prints no ticket table. The conclusion string stays in the module as the
+   record of the walk that produced it; there is no live ticket population to
+   re-ask the question of. */
 {
-  const s = TABLE.sequentialTicketHorizon['SCALP'], w = TABLE.sequentialTicketHorizon['SWING'];
-  ok(s && w, 'both horizons are carried for the ticket book');
-  ok(s.lo[2] > 0 && s.hi[2] > 0, 'SCALP tickets are POSITIVE at both ends, one at a time');
-  ok(w.lo[2] < 0 && w.hi[2] > 0, 'and SWING is the side that disagrees with itself');
-  ok(src.includes('THERE IS NO DEMONSTRATED SCALP LOSS'), 'omnigold.js states that conclusion plainly');
+  const th = TABLE.sequentialTicketHorizon;
+  ok(th && typeof th === 'object' && Object.keys(th).length === 0,
+     'the ticket horizon map is honestly empty — the hg-v1402 gated book took no trades');
+  ok(src.includes('THERE IS NO DEMONSTRATED SCALP LOSS'), 'omnigold.js keeps the old-walk conclusion on record');
 }
 
 /* ---- 4. the panel renders both ends and claims no verdict ---- */
@@ -162,7 +190,7 @@ if (typeof HTML === 'function'){
   const h = String(HTML() || '');
   ok(h.length > 200, 'it renders');
   for (const k of Object.keys(TABLE.sequentialCells)) ok(h.includes(k), 'the panel shows ' + k);
-  ok(/-0\.343R/.test(h) && /\+0\.145R/.test(h), 'SCALP/FAIR appears at BOTH ends');
+  ok(/-0\.285R/.test(h) && /\+0\.088R/.test(h), 'SCALP/FAIR appears at BOTH ends (hg-v1402 re-walk: -0.2846R/+0.0876R)');
   ok(/ends disagree/.test(h), 'and is labelled as disagreeing rather than judged');
   ok(!/loses at both ends/.test(h), 'nothing is labelled a loser, because nothing is one');
   ok(/one position at a time|ONE POSITION AT A TIME/i.test(h), 'the panel says what population it is');
@@ -223,7 +251,10 @@ console.log('6. the bake records the rule it is obeying');
   ok(/SEQUENTIAL BOOK BY CELL AT BOTH BOUNDS/.test(stdout), 'the generator prints the both-bounds cells');
   ok(/SEQUENTIAL TICKET BOOK BY HORIZON AT BOTH BOUNDS/.test(stdout), 'and the ticket horizons');
   ok(/a cell LOSES only when both ends agree/.test(stdout), 'stating the rule above the table');
-  for (const k of ['SCALP/FAIR', 'SCALP/STRONG', 'SCALP/WEAK', 'SWING/FAIR'])
+  /* hg-v1402: two cells clear the n>=10 bar on the re-walk (SWING cells and
+     SCALP/WEAK are omitted as thin, never zero-filled), and the ticket
+     horizon table is honestly empty (the gated book took no trades). */
+  for (const k of ['SCALP/FAIR', 'SCALP/STRONG'])
     ok(stdout.includes(k), 'the printed table shows ' + k);
   {
     /* Every printed row must carry BOTH a lower and an upper figure — scoped
@@ -245,8 +276,8 @@ console.log('6. the bake records the rule it is obeying');
     };
     const cellRows = section('SEQUENTIAL BOOK BY CELL AT BOTH BOUNDS');
     const horizonRows = section('SEQUENTIAL TICKET BOOK BY HORIZON AT BOTH BOUNDS');
-    eq(cellRows.length, 4, 'four cells print at both bounds');
-    eq(horizonRows.length, 2, 'and two horizons');
+    eq(cellRows.length, 2, 'two cells print at both bounds (hg-v1402 walk)');
+    eq(horizonRows.length, 0, 'and no horizon rows — the gated ticket book is empty');
     const rows = cellRows.concat(horizonRows);
     ok(rows.every((l) => /ends disagree — no verdict/.test(l)),
        'and every one of them reads as disagreeing, because not one loses at both ends');

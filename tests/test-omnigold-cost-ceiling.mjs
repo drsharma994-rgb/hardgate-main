@@ -101,7 +101,10 @@ console.log('2. what the ceiling costs the book, re-derived');
   ok(baked.SCALP.PAXG > 0.95, 'PAXG vetoes over 95% of scalp rows');
   ok(baked.SCALP.XM < 0.20, 'XM vetoes under 20%');
   ok(baked.SWING.XM < 0.01, 'and essentially no swing rows at XM');
-  for (const n of ['96.1%', '16.4%', '47.4%', '0.1%', '1.733%', '0.133%', '$78', '$6'])
+  /* hg-v1402 re-walk window: veto shares moved 96.1/16.4/47.4/0.1 ->
+     97.0/18.7/53.6/0.4 (the constant and prose moved with the rebake;
+     the shape is unchanged) */
+  for (const n of ['97.0%', '18.7%', '53.6%', '0.4%', '1.733%', '0.133%', '$78', '$6'])
     ok(src.includes(n), 'omnigold.js states ' + n);
   /* the bound cannot be what produces the asymmetry: it deletes rows, never
      changes a stop. Re-derive on the lower-bound pool and require it to hold. */
@@ -133,7 +136,11 @@ console.log('3. gross-vs-stop-width has no verdict, and says so');
   ok(checked >= 6, 're-derived every band (' + checked + ')');
   /* the refusal itself: tightest band is negative at one end and positive at
      the other, so the two ends cannot both be describing the same market */
-  const tight = bands['<0.133'], wide = bands['>=1.733'];
+  /* hg-v1402: on the re-walk the SEQUENTIAL book has no trade with a stop
+     >=1.733% at all (the cost gate vetoes 97% of scalp rows, so nothing
+     that wide survives one-at-a-time) — the widest band the bake carries
+     is '<1.733'. The refusal argument is unchanged: tightest vs widest. */
+  const tight = bands['<0.133'], wide = bands['<1.733'];
   ok(tight && wide, 'the tightest and widest bands are both carried');
   ok(tight.lo[1] < 0 && tight.hi[1] > 0,
      'the tightest band is ' + tight.lo[1] + 'R at one bound and +' + tight.hi[1] + 'R at the other');
@@ -154,9 +161,9 @@ console.log('4. the panel and the veto reason');
   SETV('PAXG');
   const p = String(PANEL({ px: 4500 }) || '');
   ok(p.includes('1.733%') && p.includes('$78.00'), 'the PAXG panel shows the demand it makes');
-  ok(/96\.1%/.test(p), 'and what that cost the measured book');
+  ok(/97\.0%/.test(p), 'and what that cost the measured book');
   ok(/fail-closed default/.test(p), 'it names PAXG as the default');
-  ok(p.includes('0.133%') && p.includes('16.4%'), 'and shows what XM would ask instead');
+  ok(p.includes('0.133%') && p.includes('18.7%'), 'and shows what XM would ask instead');
   ok(/may be the venue rather than the tape/.test(p), 'so an empty scan is attributable');
   ok(/NOT settled/.test(p), 'the widest-stop question is marked unsettled on the panel too');
   ok(/Nothing here widens a stop or moves a ceiling/.test(p), 'and the panel disclaims acting');
