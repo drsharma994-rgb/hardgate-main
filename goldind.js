@@ -1766,10 +1766,13 @@ var HG_GOLD_DESK_BREAKEVEN = {
              plannedRr: 1.50, breakevenPct: 40.0, winLowerPct: 43.4, winUpperPct: 44.4,
              edgeLowerPts: 3.4, edgeUpperPts: 4.4, verdict: "clears",
              bothTouch: 23, bothTouchPct: 0.9, timeout: 91, timeoutPct: 3.7 },
-    omnigold: { tf: "1h", published: 9897, filled: 8132, unfilled: 1765, unfilledPct: 17.8,
-             plannedRr: 2.00, breakevenPct: 33.3, winLowerPct: 30.4, winUpperPct: 38.6,
-             edgeLowerPts: -3.0, edgeUpperPts: 5.3, verdict: "flips",
-             bothTouch: 672, bothTouchPct: 8.3, timeout: 398, timeoutPct: 4.9 }
+    /* hg-v1404: omnigold half re-derived from the hg-v1402 walk
+       (scripts/desk-breakeven.mjs). The sign structure is unchanged: the
+       edge still flips between the fill bounds. */
+    omnigold: { tf: "1h", published: 10306, filled: 8564, unfilled: 1742, unfilledPct: 16.9,
+             plannedRr: 2.00, breakevenPct: 33.3, winLowerPct: 31.1, winUpperPct: 39.4,
+             edgeLowerPts: -2.3, edgeUpperPts: 6.1, verdict: "flips",
+             bothTouch: 716, bothTouchPct: 8.4, timeout: 363, timeoutPct: 4.2 }
 };
 
 /* Which desk a caller is asking about, tolerantly — the tabs spell it several

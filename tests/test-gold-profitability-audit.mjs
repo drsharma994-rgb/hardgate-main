@@ -75,7 +75,11 @@ function ok(label, pass, detail){
    other way, exactly the mechanics named in the pack. */
 (() => {
   const artifact = JSON.parse(readFileSync(resolve(ROOT, 'scripts/omnigold-replay-evidence.json'), 'utf8'));
-  const RATIO = 0.406;
+  /* hg-v1404: the overlap ratio follows the bake — 0.303 on the hg-v1402
+     walk (2442.4/8053 week-clustered), was 0.406. The stronger deflation
+     shrinks every z, which is why two of the six flips below no longer
+     reach -2σ. */
+  const RATIO = 0.303;
   const effN = n => Math.max(1, n * RATIO);
   const BE = 1 / 3;
   const whole = artifact.perKind || {};
@@ -94,12 +98,19 @@ function ok(label, pass, detail){
     if (fV && !wV) flipsIn.push(k);
     if (wV && !fV) flipsOut.push(k);
   }
-  ok('S1.11 exactly 6 ticket->VETO flips on committed JSON',
-    flipsIn.length === 6, `got ${flipsIn.length}: ${flipsIn.join(',')}`);
+  /* hg-v1404 recalibration: with the 0.303 ratio the flip set is FIVE —
+     ADR-FADE and SPRING no longer reach -2σ on the gate-clear read (pinned
+     OUT below), and P8-RANGE flips IN (its whole-walk z moved to -1.75σ
+     while the gate-clear read still fails) — measured, not silent. */
+  ok('S1.11 exactly 5 ticket->VETO flips on committed JSON',
+    flipsIn.length === 5, `got ${flipsIn.length}: ${flipsIn.join(',')}`);
   ok('S1.12 zero VETO->ticket flips',
     flipsOut.length === 0, `got ${flipsOut.length}: ${flipsOut.join(',')}`);
-  for (const m of ['THREE-BAR','P9-VOLBAR','PD-EQUILIBRIUM','ADR-FADE','PIN-REJECT','SPRING']){
+  for (const m of ['THREE-BAR','P8-RANGE','P9-VOLBAR','PD-EQUILIBRIUM','PIN-REJECT']){
     ok(`S1.10 ${m} would flip ticket->VETO under hgOgReplayZOnFormed`, flipsIn.includes(m));
+  }
+  for (const m of ['ADR-FADE','SPRING']){
+    ok(`S1.10b ${m} no longer flips under the 0.303 ratio (hg-v1404)`, !flipsIn.includes(m));
   }
 })();
 

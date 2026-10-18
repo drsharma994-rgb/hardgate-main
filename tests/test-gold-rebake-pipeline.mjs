@@ -106,7 +106,9 @@ console.log('3. the literal writer');
 
     let og = readFileSync(join(ROOT, 'omnigold.js'), 'utf8');
     const ogBefore = og;
-    og = og.replace("'SCALP/FAIR': { lo: [210, 0.2414, -0.3434], hi: [156, 0.404, 0.1449] }",
+    /* hg-v1404: the needle follows the regenerated cell (hg-v1402 walk:
+       144/129 rows, -0.2846/+0.0876 — was 210/156, -0.3434/+0.1449) */
+    og = og.replace("'SCALP/FAIR': { lo: [144, 0.259, -0.2846], hi: [129, 0.3852, 0.0876] }",
                     "'SCALP/FAIR': { lo: [1, 0.1, -9.9], hi: [1, 0.1, 9.9] }");
     ok(og !== ogBefore, 'the omnigold fixture actually corrupted a cell');
     writeFileSync(join(ROOT, 'omnigold.js'), og);

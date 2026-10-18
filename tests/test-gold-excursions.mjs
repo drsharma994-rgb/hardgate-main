@@ -126,13 +126,25 @@ console.log('\n5. both harnesses use the SHARED rule and EMIT it');
      'each harness folds through it in exactly one place');
 }
 
-console.log('\n6. and the artifacts will carry it on the next bake');
+console.log('\n6. and the artifacts carry it now (hg-v1404 recalibration)');
 {
-  /* the committed books predate this, which is the finding, not a failure */
+  /* the hg-v1402 walk regenerated the book WITH excursions, so the old
+     honest-negative inverted into the affirmative pin: every settled row
+     carries mfeR/maeR through the shared rule. */
   const og = JSON.parse(fs.readFileSync(root + 'scripts/backtest-omnigold-results.json', 'utf8'));
   const has = Object.keys(og.trades[0]).some(k => /^ma[ef]R$/.test(k));
-  ok(!has, 'the COMMITTED OMNIGOLD book has no excursions — that is what this pack fixes, '
-         + 'and it stays true until a re-bake can fetch');
+  ok(has, 'the COMMITTED OMNIGOLD book carries excursions (mfeR/maeR) — the hg-v1402 re-bake landed them');
+  const settled = og.trades.filter(r => typeof r.rMultiple === 'number');
+  ok(settled.every(r => 'mfeR' in r && 'maeR' in r),
+     'every settled row CARRIES the pair (' + settled.length + ' rows)');
+  const withExc = settled.filter(r => typeof r.mfeR === 'number' && typeof r.maeR === 'number');
+  const nulled = settled.filter(r => r.mfeR === null);
+  ok(withExc.length === 6891 && nulled.length === 1673,
+     'numeric on ' + withExc.length + ', explicit null on ' + nulled.length + ' — and the nulls are declared, not absent');
+  ok(nulled.every(r => r.barsHeld === 0),
+     'every null is a fill-bar resolution (barsHeld 0) — no path to measure, stated as null rather than invented');
+  ok(withExc.every(r => r.mfeR >= -1e-9 && r.maeR >= -1e-9),
+     'and both are stored as non-negative magnitudes (MAE is the SIZE of the adverse move, not a signed number)');
 }
 
 if (process.exitCode) console.error('\n' + passed + ' passed, but this file FAILED — see above');

@@ -86,8 +86,15 @@ export function renderBlock(rows, co, artifact){
   const lines = rows.map((r) => "    { kind: '" + r.kind + "', n: " + r.n
     + ', settled: ' + r.settled + ', winRate: ' + r.winRate + ', grossR: ' + r.grossR
     + ', netXm: ' + r.netXm + ', tCluster: ' + r.tCluster + ' }').join(',\n');
+  /* hg-v1404: the roster derives from sequentialBake.formedByKind, so the
+     window label must name THAT section's walk. The artifact's top-level
+     window field is the frozen hg-v699 section's and stamping it beside
+     fresh numbers mislabels the measurement. hg-v754: the label follows
+     the section the numbers came from. */
+  const rosterWindow = (artifact && artifact.sequentialBake && artifact.sequentialBake.window)
+    ? String(artifact.sequentialBake.window) : String(artifact.window);
   return 'var HG_MILLI_ROSTER = {\n'
-    + "    window: '" + String(artifact.window) + "', minN: " + MIN_N + ', minRr: ' + MIN_RR + ',\n'
+    + "    window: '" + rosterWindow + "', minN: " + MIN_N + ', minRr: ' + MIN_RR + ',\n'
     + '    cohortN: ' + co.n + ', cohortGross: ' + co.gross + ', cohortNet: ' + co.net + ',\n'
     + '    maxAbsT: ' + co.maxAbsT + ',\n'
     + '    kinds: [\n' + lines + '\n    ]\n  };';

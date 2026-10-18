@@ -96,17 +96,28 @@ console.log('\n== the walk records it, normalised two ways ==');
   ok(/!\(tr\.fillBarRange > 0\)/.test(src), 'and so does a zero-range bar');
 }
 
-console.log('\n== the current artifact cannot answer it yet, and says so ==');
+console.log('\n== the shipped artifact answers it now (hg-v1404 recalibration) ==');
 {
-  /* the honest state: the shipped walk predates this field. The test asserts
-     that rather than pretending the question is answered. */
+  /* the hg-v1402 walk regenerated the artifact with depth on every pending
+     fill, so the old honest-negative pin inverted. Pinned from the artifact:
+     5,447 of 10,306 rows carry fillDepthR (the rest are market fills and
+     unfilled pending orders, which correctly read null), median depth
+     0.331R, and the kiss — a bar that stops exactly at the order — is real
+     but rare (0.55% of reads are exactly 0). */
   const walk = JSON.parse(fs.readFileSync(
     path.join(ROOT, 'scripts', 'backtest-omnigold-results.json'), 'utf8'));
   const withDepth = walk.trades.filter(r => typeof r.fillDepthR === 'number');
-  ok(withDepth.length === 0,
-     'no row in the shipped artifact carries fill depth — it was generated before this existed');
-  ok(walk.trades.length > 1000,
-     'so the question stands open on ' + walk.trades.length + ' rows until the next walk runs');
+  ok(withDepth.length > 5000,
+     'the shipped artifact carries fill depth on its pending fills (' + withDepth.length + ' rows)');
+  const marketWithDepth = walk.trades.filter(r =>
+    (r.orderType === 'BUY' || r.orderType === 'SELL') && typeof r.fillDepthR === 'number');
+  ok(marketWithDepth.length === 0,
+     'and market rows still carry none — depth is a pending-fill property, not a number for everything');
+  const depthR = withDepth.map(r => r.fillDepthR).sort((a, b) => a - b);
+  ok(depthR[Math.floor(depthR.length / 2)] > 0 && depthR[Math.floor(depthR.length / 2)] < 1,
+     'median depth sits inside (0, 1)R (' + depthR[Math.floor(depthR.length / 2)] + 'R)');
+  ok(withDepth.every(r => typeof r.fillDepthBar === 'number'),
+     'and every depth reading carries its bar-range normalisation');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

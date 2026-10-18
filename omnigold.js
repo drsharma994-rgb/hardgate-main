@@ -8252,9 +8252,9 @@ terse status, and never launches a first-time scan on a global refresh.
      mechanics scoped to the GATE-CLEAR population — what survived the 35-gate
      stack its own fingerprint names — with netR_xm already computed. Nothing
      read it. Re-pricing an unscoped population and measuring the scoped one
-     are different corrections, and they do not agree: for 42 of the 54 the
+     are different corrections, and they do not agree: for 40 of the 54 the
      gate-clear record is WORSE than the re-priced line, net-positive at XM
-     falls from 12 kinds to 9, and 7 change sign.
+     falls from 12 kinds to 7, and 13 change sign.
 
      So each row now carries both. Positions 0-4 are the unscoped record as
      before; 5-8 are [formedN, formedWinRate, formedNetXm, formedGrossR].
@@ -8294,10 +8294,13 @@ terse status, and never launches a first-time scan on a global refresh.
      of a search over bars, which is hg-v922's finding about stop width
      restated, and that refusal stands for the same reason.
 
-     AND THE CEILING IS THE POINT FOR ANYONE HOPING THIS IS THE LEVER. The best
-     unanimous cell in the whole sweep lifts net expectancy by +0.03R and leaves
-     the book at about -0.09R. Mechanic selection, at its most generous reading,
-     does not make this desk profitable - it makes it slightly less negative.
+     AND THE CEILING IS THE POINT FOR ANYONE HOPING THIS IS THE LEVER. hg-v1404,
+     stated plainly: on the hg-v1402 walk the sweep found NO unanimous cell at
+     any bar (the old walk's flickering cells did not reproduce), so there is
+     no best cell to quote. The strongest single-bar reading lifts net
+     expectancy by +0.018R and leaves the book at about -0.10R. Mechanic
+     selection, at its most generous reading, does not make this desk
+     profitable - it makes it slightly less negative.
 
      NOTHING IS GATED ON ANY OF IT. No mechanic is dropped, no threshold moves,
      and hgOgUnobservedPanelHtml's family bar is unchanged. This is published
@@ -8307,21 +8310,21 @@ terse status, and never launches a first-time scan on a global refresh.
      Do not hand-edit; `node scripts/mechanic-selection.mjs` is the drift check. */
   var HG_OG_SELECTION = {
     windows: 4, minN: 20,
-    bookN: 8132, bookGross: -0.0222, bookNet: -0.116,
-    unanimousCells: 4, runs: 2, contiguous: false,
-    bestBar: -0.05, bestLift: 0.0299, ceilingNet: -0.0861,
+    bookN: 8564, bookGross: -0.009, bookNet: -0.1138,
+    unanimousCells: 0, runs: 0, contiguous: true,
+    bestBar: null, bestLift: null, ceilingNet: null,
     ships: false,
     sweep: [
-      { bar: -0.05, agree: 16, keptPct: 63.8219, netLift: 0.0299, unanimous: true },
-      { bar: -0.10, agree: 16, keptPct: 73.0202, netLift: 0.0252, unanimous: true },
-      { bar: -0.15, agree: 14, keptPct: 82.0954, netLift: 0.0107, unanimous: false },
-      { bar: -0.20, agree: 15, keptPct: 91.4166, netLift: 0.0096, unanimous: false },
-      { bar: -0.25, agree: 16, keptPct: 94.4048, netLift: 0.0071, unanimous: true },
-      { bar: -0.30, agree: 16, keptPct: 95.3763, netLift: 0.0071, unanimous: true },
-      { bar: -0.40, agree: 12, keptPct: 99.336, netLift: 0.0006, unanimous: false },
-      { bar: -0.50, agree: 12, keptPct: 99.5819, netLift: 0.0001, unanimous: false },
-      { bar: -0.75, agree: 10, keptPct: 99.9754, netLift: -0.0001, unanimous: false },
-      { bar: -1.00, agree: 4, keptPct: 99.9754, netLift: -0.0001, unanimous: false }
+      { bar: -0.05, agree: 14, keptPct: 64.8178, netLift: 0.018, unanimous: false },
+      { bar: -0.10, agree: 14, keptPct: 75.4204, netLift: 0.0081, unanimous: false },
+      { bar: -0.15, agree: 14, keptPct: 86.8052, netLift: 0.0014, unanimous: false },
+      { bar: -0.20, agree: 13, keptPct: 92.3167, netLift: 0.0009, unanimous: false },
+      { bar: -0.25, agree: 13, keptPct: 95.4694, netLift: 0.0019, unanimous: false },
+      { bar: -0.30, agree: 8, keptPct: 98.1901, netLift: -0.0021, unanimous: false },
+      { bar: -0.40, agree: 8, keptPct: 99.8716, netLift: -0.0011, unanimous: false },
+      { bar: -0.50, agree: 8, keptPct: 99.9883, netLift: -0.0003, unanimous: false },
+      { bar: -0.75, agree: 2, keptPct: 99.9883, netLift: -0.0003, unanimous: false },
+      { bar: -1.00, agree: 0, keptPct: 99.9883, netLift: -0.0003, unanimous: false }
     ]
   };
   /* --- END GENERATED HG_OG_SELECTION --- */
@@ -8394,7 +8397,11 @@ terse status, and never launches a first-time scan on a global refresh.
       'P5-DRIVE': [48, 0.3333, -0.226, 0.228, 0.307, 48, 0.3333, -0.021, 0.022],
       'RSI-DIVERGE': [46, 0.3696, -1.931, 0.123, 1.379, 45, 0.2222, -0.492, -0.333],
       'CUSUM-SHIFT': [45, 0.2444, -0.237, 0.041, 0.247, 35, 0.3429, 0.1, 0.121],
-      'EQH-SWEEP': [42, 0.3571, -0.971, 0.071, 0.612, 41, 0.3659, 0.016, 0.098]
+      'EQH-SWEEP': [42, 0.3571, -0.971, 0.071, 0.612]
+      /* hg-v1404: gate-clear tail REMOVED — the hg-v1402 walk settled this
+         kind 39 times, under the 40-trade bar, so there is no fresh
+         gate-clear record to quote (the raw cols stay the frozen hg-v699
+         walk). hg-v754: the derived figure follows the bake. */
     },
     /* hg-v918 — THE ONE POSITION A PERSON ACTUALLY HOLDS, AT BOTH ENDS.
 
@@ -8424,25 +8431,23 @@ terse status, and never launches a first-time scan on a global refresh.
        at its upper bound.
 
        So the mirror is baked and published beside it, and a cell is only
-       read as losing when BOTH ends agree. Not one does:
+       read as losing when BOTH ends agree. Not one does. hg-v1404 re-walk
+       (2026-05-04..10-18) numbers — the old window read SCALP/FAIR
+       -0.343R/+0.145R over 210/156 rows; the shape (disagreeing ends) holds:
 
-         SCALP/FAIR    lower -0.343R (n=210)  upper +0.145R (n=156)
-         SCALP/STRONG  lower +0.149R (n= 37)  upper +0.212R (n= 24)
-         SCALP/WEAK    lower -0.087R (n= 15)  upper +0.493R (n= 12)
-         SWING/FAIR    lower -0.133R (n= 10)  upper +0.173R (n= 10)
+         SCALP/FAIR    lower -0.285R (n=144)  upper +0.088R (n=129)
+         SCALP/STRONG  lower -0.200R (n= 27)  upper +0.333R (n= 24)
 
-       And on the TICKET book one at a time — the split anyone asking
-       "is the scalp side the problem" actually wants — the sign is the
-       other way round from the whole-book reading:
+       And the TICKET-book split anyone asking "is the scalp side the
+       problem" actually wants: on the hg-v918 walk it read SCALP +0.148R /
+       +0.415R at the two ends (n=73/54). THERE IS NO DEMONSTRATED SCALP LOSS
+       was that walk's conclusion and stays on record. On the hg-v1402
+       walk the gated ticket book is EMPTY (no ticket survives the current
+       gates offline), so the question cannot be re-asked of this walk —
+       and the old answer is not quoted as if it were current.
 
-         SCALP  lower +0.148R (n=73)  upper +0.415R (n=54)
-         SWING  lower -0.240R (n=32)  upper +0.317R (n=35)
-
-       THERE IS NO DEMONSTRATED SCALP LOSS. Positive at both ends on tickets
-       taken one at a time; the negative whole-book scalp reading is the
-       unscoped, overlapping, lower-bound view of a population nobody trades.
        Nothing is gated on any of this — it is published so the next reader
-       who finds SCALP/FAIR at -0.343R sees the other end in the same place.
+       who finds SCALP/FAIR at -0.285R sees the other end in the same place.
 
        [n, winRate, netR_xm] at each bound, from the evidence file's
        sequentialByCell / sequentialByCellUpper and the horizon twins.
@@ -9418,11 +9423,15 @@ terse status, and never launches a first-time scan on a global refresh.
        scan cards waits for a tier the scan arithmetic cannot award. Measured
        on the replay, the scan score tops out at 78 and ZERO of 9,897 rows
        reached 85. Say the number, so waiting for it is a choice rather than
-       a misunderstanding. */
+       a misunderstanding.
+       hg-v1404, stated plainly: on the hg-v1402 walk the tier is REACHED —
+       232 of 10,306 replay rows scored 85+ and the top is 89. The legend
+       says so rather than repeating the old walk's zero. The cell still
+       carries no scan verdict — reaching the number is not clearing it. */
     var capA = (aRec
       ? ('engine grade-A scalar only — replay ' + aRec + (A.thin ? '' : ' on scalps'))
       : 'engine grade-A scalar only')
-      + ' · SCAN CARDS NEVER REACH THIS: scan scoring tops out near 78 and 0 of 9,897 replay rows scored 85';
+      + ' · SCAN CARDS RARELY REACH THIS: scan scoring tops out near 89 and 232 of 10,306 replay rows scored 85 (hg-v1402 walk)';
     /* THE TIER LABELS WERE DARK-THEME COLOURS ON A WHITE CARD.
 
        Each cell tints its own background at ~6.7% alpha, which over
@@ -9731,7 +9740,11 @@ terse status, and never launches a first-time scan on a global refresh.
      changes what a ticket is without changing a key, and this will not see
      that. It catches the change that actually happened. */
   var HG_OG_EVIDENCE_GATESET = {
-    bakedFrom: '2026-09-12 walk',
+    /* hg-v1404: this fingerprint is the LIVE hgOgGates ledger at bake time
+       (35 keys) — NOT the walk artifact's 58-column mask order, which carries
+       walk-internal reads too. Re-baked on the 2026-10-18 walk; the live
+       ledger is unchanged since the v1402 walk, so the keys stand. */
+    bakedFrom: '2026-10-18 walk',
     count: 35,
     keys: ['adr-budget','adx-trend','atr-percentile','consensus','context-gates','cost-drag',
            'dxy-inverse','ema-stack','fade-strength','fill-path','fill-risk','gold-season',
@@ -10654,14 +10667,27 @@ terse status, and never launches a first-time scan on a global refresh.
         + '<div style="margin-top:4px;font-family:monospace">' + cells + '</div>'
         + '<div style="margin-top:4px">' + S.unanimousCells + ' unanimous cells in '
         + S.runs + ' separate runs'
-        + (S.contiguous ? ' &mdash; contiguous.' : ' &mdash; <b>not contiguous</b>. A real '
-          + 'effect fades as the bar moves; one that flickers is the output of a search '
-          + 'over bars, which is why hg-v922 refused a stop-width threshold on the same '
-          + 'evidence.') + '</div>'
-        + '<div style="margin-top:4px">And the ceiling is the part worth knowing: the '
-        + 'best unanimous cell lifts net expectancy by <b>+' + S.bestLift.toFixed(4)
-        + 'R</b> and leaves the book at <b>' + S.ceilingNet.toFixed(4) + 'R</b> on '
-        + hgOgFmtCount(S.bookN) + ' filled plans. Mechanic selection at its most generous '
+        + (S.unanimousCells > 0
+          ? (S.contiguous ? ' &mdash; contiguous.' : ' &mdash; <b>not contiguous</b>. A real '
+            + 'effect fades as the bar moves; one that flickers is the output of a search '
+            + 'over bars, which is why hg-v922 refused a stop-width threshold on the same '
+            + 'evidence.')
+          /* hg-v1404: on the hg-v1402 walk not one bar is unanimous anywhere
+             — the flicker the old walk showed is gone entirely */
+          : ' &mdash; <b>on this walk, not one bar is unanimous anywhere.</b> The flicker '
+            + 'the old walk showed did not reproduce; there is nothing left to shape-test.')
+        + '</div>'
+        + '<div style="margin-top:4px">And the ceiling is the part worth knowing: '
+        + (S.bestLift != null && S.ceilingNet != null
+          ? 'the best unanimous cell lifts net expectancy by <b>+' + S.bestLift.toFixed(4)
+            + 'R</b> and leaves the book at <b>' + S.ceilingNet.toFixed(4) + 'R</b> on '
+            + hgOgFmtCount(S.bookN) + ' filled plans.'
+          : 'with no unanimous cell there is no best cell to quote. The strongest single-bar '
+            + 'reading lifts net by <b>+' + Math.max.apply(null, S.sweep.map(function(r){ return r.netLift; })).toFixed(4)
+            + 'R</b> and still leaves the book at <b>'
+            + (S.bookNet + Math.max.apply(null, S.sweep.map(function(r){ return r.netLift; }))).toFixed(4)
+            + 'R</b> on ' + hgOgFmtCount(S.bookN) + ' filled plans.')
+        + ' Mechanic selection at its most generous '
         + 'reading does not make this desk pay &mdash; it makes it less negative.</div>'
         + '<div style="margin-top:4px;opacity:0.85">Nothing is gated on this. No mechanic '
         + 'is dropped and no threshold moved. Re-derive: '
@@ -10710,22 +10736,27 @@ terse status, and never launches a first-time scan on a global refresh.
      57x size. That half of the argument needs no statistics.
 
      The other half is the sequential book — walk the plans in time order,
-     take one when flat, hold it to its own exit:
+     take one when flat, hold it to its own exit. ON THE hg-v918 WALK
+     (2026-03-29..09-12, kept on record here because hg-v754 requires the
+     record to travel with the claim):
 
                         lower bound          upper bound
        SCALP tickets    +0.1484R  n=73       +0.4155R  n=54
        SWING tickets    -0.2399R  n=32       +0.3166R  n=35
        all at once      -0.1160R  n=8132     (parallel book, XM)
 
-     SCALP is positive at BOTH ends. SWING disagrees between them, so by this
-     desk's own rule it carries no verdict and is not claimed here.
+     SCALP was positive at BOTH ends then, at n=73 and +1.16 sigma — positive,
+     NOT significant, clearing no bar this desk applies to a mechanic.
 
-     AND THE LIMIT, STATED: at the conservative end the scalp read is n=73 at
-     +1.16 sigma against breakeven. Positive, NOT significant. It clears no
-     bar this desk applies to a mechanic. It is not offered as proof of an
-     edge — it is offered because the comparison is stark (+0.148 against
-     -0.116), because it is the only both-bounds positive there is, and
-     because the concentration argument stands on its own without it.
+     hg-v1404, STATED PLAINLY: on the hg-v1402 walk (2026-05-04..10-18) the
+     sequential TICKET book is empty — zero tickets survive the current gate
+     set offline (the hg-v1003 institutional macro lock fails closed without
+     live DXY/US10Y feeds), so the claim above has no population. The ungated
+     sequential book is the only equity curve left, and it reads -50.6R final
+     with a 63.6R maximum drawdown at XM over 273 trades. The panel renders
+     the live state from HG_OG_REPLAY_EVIDENCE at render time
+     (hgOgSequentialTicketClaimHtml) — it cannot quote a retired claim. The
+     concentration argument stands without either book.
 
      WHAT IT DOES. While a gold conviction is live, a new OMNIGOLD ticket is
      held: the card keeps its levels, its gates and its reasoning and reads
@@ -11197,75 +11228,70 @@ terse status, and never launches a first-time scan on a global refresh.
      costR = rtCostPct / stopPct exactly and so any stop-width split moves net
      by arithmetic alone; only the gross column speaks to the setups.
 
-     TWO VERDICTS OUT OF TEN, AND ONE OF THEM IS BAD NEWS:
+     hg-v1404 — RE-DERIVED FROM THE hg-v1402 WALK (2026-05-04..2026-10-18,
+     n=8,564 settled), and the headline is the miss, stated plainly: ZERO
+     verdicts survive out of window. The old walk (n=8,132) carried two —
 
        stop >= 0.50%   +4.7 pts win, +0.0762 gross, +0.2128 net   4/4 both ends
        LIMIT order     -3.2 pts win, -0.0737 gross, -0.1025 net   0/4 both ends
 
-     The limit row is the uncomfortable one, and it needs a caveat the other
-     rows do not. A pending entry is unanimously WORSE in every window at both
-     ends, across 4,988 of 8,132 settled rows. But THE LOWER BOUND IS NOT
-     NEUTRAL FOR THIS PARTICULAR SPLIT: `ambiguousSameBarWin` is set only on a
-     PENDING fill (457 of 4,988 limit rows, 5 of 269 stop rows, and 0 of 2,875
-     market rows), because a market entry's touch never needs proving. So the
-     lower bound demotes only one side of this comparison and its -12.2 pts is
-     not independent evidence. The verdict rests on the as-recorded end, where
-     the same 0/4 0/4 0/4 holds at -3.2 pts and -0.0737 gross — which is the
-     conservative end here, and enough.
-     Adverse selection is the OFFERED EXPLANATION, not a measured one: a
-     resting order fills when price comes back to it, disproportionately when
-     it is about to keep going. The competing explanation is the walk's own
-     fill model, and nothing in this table separates the two. Nothing is
-     changed on it either way: the alternative is a market fill, which pays
-     the spread twice and is not what this measured.
+     — and on this walk neither reproduces. The stop-width split still points
+     the same way at the LOWER bound (stop >= 0.50%: +11.5 pts win, +0.2784
+     gross, 4/4 4/4 4/4) but its as-recorded gross is negative (-0.0146), and
+     by the both-bounds rule there is no verdict — the rule the old note's own
+     caveat paragraphs argued for. The LIMIT-order split flips the other way:
+     unanimously worse at the lower end (0/4 0/4 0/4) but not as-recorded
+     (1/4 1/4 1/4), and the old caveat still binds — `ambiguousSameBarWin` is
+     set only on a PENDING fill, so the lower bound is never neutral for an
+     order-type split. Two candidate verdicts, each supported at only one end
+     of the interval; the honest reading is that the interval is doing the
+     work, not the factor. Adverse selection remains the OFFERED explanation
+     for the limit row, not a measured one.
 
-     WHAT THE DESK RANKS BY REACHES NO VERDICT. tier STRONG is 2/4 and 3/4;
-     confluence >= 50 is 1/4 at both ends; checksPass >= 4 is 2/4 at both. The
-     score this desk sorts by is not separating outcomes in a way that survives
-     four windows — which is the same finding the GOLD SCALP tally produced,
-     on a different desk and a different book. Note tier FAIR: unanimously
-     worse at the lower bound (0/4 0/4 0/4) but only 2/4 on GROSS at the
-     as-recorded end, so by the both-ends rule it carries NO verdict. Reading
-     the lower bound alone would have retired 77% of the book on one end of an
-     interval hg-v918 built precisely to stop that.
+     WHAT THE DESK RANKS BY STILL REACHES NO VERDICT. tier STRONG is 2/4 net
+     at both ends; checksPass >= 4 is 2/4 at both; confluence >= 50 is noise
+     on one window. The score this desk sorts by does not separate outcomes
+     in a way that survives four windows on either walk — the same finding
+     twice now. The `ticket` factor is carried thin: the hg-v1402 walk issued
+     zero tickets offline (the hg-v1003 macro lock fails closed without live
+     DXY/US10Y feeds), so there is no cohort left to separate.
 
-     NO STOP THRESHOLD IS SHIPPED. The direction holds and a number does not:
-     unanimity across the sweep runs 0.28 no, 0.40 no, 0.50 yes, 0.60 yes,
-     0.80 no at the as-recorded end. And at 0.50% the book goes from -0.116R to
-     -0.005R — from losing to flat, not to positive — while deleting 52% of its
-     volume. Picking that bar would be choosing a number, not measuring one.
+     NO STOP THRESHOLD IS SHIPPED FROM THIS TABLE. The hg-v922 caution is the
+     paragraph that aged well: unanimity across the sweep now runs 0.28 no,
+     0.40 no, 0.50 no, 0.60 no, 0.80 no at the as-recorded end. The 1.0% floor
+     hg-v1401 shipped stands on the admission arithmetic (a dropped cohort
+     negative in both halves at both venue costs), not on this table.
      hg-v919's cost ceiling stays exactly where it is. */
   var HG_OG_FACTOR_SEP = {
     windows: 4, rtPct: 0.02,
-    book: { asRecorded: { n: 8132, win: 33.6, gross: -0.0222, net: -0.116 },
-            lower:      { n: 8132, win: 28, gross: -0.1927, net: -0.2864 } },
+    book: { asRecorded: { n: 8564, win: 34, gross: -0.009, net: -0.1138 },
+            lower:      { n: 8564, win: 28.1, gross: -0.188, net: -0.2928 } },
     rows: [
-      { f: 'tier STRONG', n: 1420, dWin: [4.5, 10], dGross: [0.0983, 0.2638], dNet: [0.1591, 0.3247],
-        q: ['2/4 2/4 2/4', '3/4 3/4 4/4'], verdict: null },
-      { f: 'tier FAIR', n: 6300, dWin: [-6.1, -10.6], dGross: [-0.1398, -0.2753], dNet: [-0.2068, -0.3423],
-        q: ['0/4 2/4 0/4', '0/4 0/4 0/4'], verdict: null },
-      { f: 'confluence>=50', n: 7720, dWin: [-8.8, -8.6], dGross: [-0.2129, -0.2083], dNet: [-0.2736, -0.269],
-        q: ['1/4 1/4 1/4', '1/4 1/4 1/4'], verdict: null },
-      { f: 'checksPass >= 4', n: 3431, dWin: [1.9, 0.7], dGross: [0.0674, 0.0295], dNet: [-0.006, -0.0439],
+      { f: 'tier STRONG', n: 3420, dWin: [1.9, -0], dGross: [0.0645, 0.0076], dNet: [-0.0318, -0.0886],
+        q: ['3/4 3/4 2/4', '2/4 2/4 1/4'], verdict: null },
+      { f: 'tier FAIR', n: 4602, dWin: [-2.1, -1], dGross: [-0.0617, -0.0284], dNet: [0.0175, 0.0507],
         q: ['2/4 2/4 2/4', '2/4 2/4 2/4'], verdict: null },
-      { f: 'ticket', n: 1199, dWin: [1, -1.3], dGross: [0.0268, -0.0432], dNet: [0.0686, -0.0015],
-        q: ['3/4 3/4 3/4', '3/4 1/4 3/4'], verdict: null },
-      { f: 'horizon SCALP', n: 6409, dWin: [-0.5, -0.2], dGross: [-0.0392, -0.0323], dNet: [-0.1096, -0.1027],
-        q: ['1/4 1/4 0/4', '2/4 2/4 0/4'], verdict: null },
-      { f: 'dir long', n: 4183, dWin: [-6.6, -6.7], dGross: [-0.1772, -0.1807], dNet: [-0.1693, -0.1727],
+      { f: 'confluence>=50', n: 8228, dWin: [0.1, -1.1], dGross: [0.0316, -0.006], dNet: [-0.0329, -0.0705],
+        q: ['1/1 0/1 0/1', '0/1 0/1 0/1'], verdict: null },
+      { f: 'checksPass >= 4', n: 3774, dWin: [1.6, 0.2], dGross: [0.0516, 0.0092], dNet: [-0.0384, -0.0807],
+        q: ['3/4 2/4 2/4', '2/4 2/4 2/4'], verdict: null },
+      { f: 'ticket', n: 0, thin: true },
+      { f: 'horizon SCALP', n: 6734, dWin: [-0.4, 1], dGross: [-0.0263, 0.015], dNet: [-0.1044, -0.0631],
+        q: ['1/4 1/4 1/4', '2/4 2/4 1/4'], verdict: null },
+      { f: 'dir long', n: 4503, dWin: [-9.4, -9.2], dGross: [-0.2669, -0.2618], dNet: [-0.2595, -0.2543],
         q: ['1/4 1/4 1/4', '1/4 1/4 1/4'], verdict: null },
-      { f: 'LIMIT order', n: 4988, dWin: [-3.2, -12.2], dGross: [-0.0737, -0.3438], dNet: [-0.1025, -0.3726],
-        q: ['0/4 0/4 0/4', '0/4 0/4 0/4'], verdict: 'worse' },
-      { f: 'stop >= 0.28%', n: 5502, dWin: [2.5, 15.9], dGross: [0.029, 0.4295], dNet: [0.2216, 0.6222],
-        q: ['3/4 2/4 4/4', '4/4 4/4 4/4'], verdict: null },
-      { f: 'stop >= 0.50%', n: 3884, dWin: [4.7, 14.7], dGross: [0.0762, 0.3759], dNet: [0.2128, 0.5125],
-        q: ['4/4 4/4 4/4', '4/4 4/4 4/4'], verdict: 'better' }
+      { f: 'LIMIT order', n: 5160, dWin: [-2.6, -12.2], dGross: [-0.0606, -0.3489], dNet: [-0.0841, -0.3724],
+        q: ['1/4 1/4 1/4', '0/4 0/4 0/4'], verdict: null },
+      { f: 'stop >= 0.28%', n: 5606, dWin: [-0.8, 12.6], dGross: [-0.0695, 0.331], dNet: [0.1403, 0.5408],
+        q: ['2/4 1/4 4/4', '4/4 4/4 4/4'], verdict: null },
+      { f: 'stop >= 0.50%', n: 3876, dWin: [1.7, 11.5], dGross: [-0.0146, 0.2784], dNet: [0.135, 0.4281],
+        q: ['3/4 2/4 3/4', '4/4 4/4 4/4'], verdict: null }
     ],
-    bars: [{ bar: 0.28, n: 5502, holds: [false, true] },
-           { bar: 0.4, n: 4580, holds: [false, true] },
-           { bar: 0.5, n: 3884, holds: [true, true] },
-           { bar: 0.6, n: 3263, holds: [true, true] },
-           { bar: 0.8, n: 2357, holds: [false, true] }]
+    bars: [{ bar: 0.28, n: 5606, holds: [false, true] },
+           { bar: 0.4, n: 4593, holds: [false, true] },
+           { bar: 0.5, n: 3876, holds: [false, true] },
+           { bar: 0.6, n: 3229, holds: [false, true] },
+           { bar: 0.8, n: 2271, holds: [false, false] }]
   };
 
   /* Renders every row, not the two with verdicts. Eight of ten reaching none
@@ -11279,7 +11305,16 @@ terse status, and never launches a first-time scan on a global refresh.
       var held = 0, judged = 0, body = '', i, r;
       for (i = 0; i < T.rows.length; i++){
         r = T.rows[i];
-        if (r.thin) continue;
+        /* hg-v1404: a thin factor is PUBLISHED as thin (its name and n), not
+           skipped — the ticket row reads n=0 on the hg-v1402 walk and hiding
+           it would look like the factor was never asked about */
+        if (r.thin){
+          body += '<tr><td style="padding:2px 8px 2px 0"><b>' + esc(r.f) + '</b></td>'
+            + '<td style="padding:2px 8px 2px 0;text-align:right">n=' + r.n + '</td>'
+            + '<td colspan="4" style="padding:2px 8px 2px 0;opacity:.75">thin — no cohort on this walk</td>'
+            + '<td style="padding:2px 0;text-align:right"><b>&mdash;</b></td></tr>';
+          continue;
+        }
         judged++;
         if (r.verdict) held++;
         body += '<tr><td style="padding:2px 8px 2px 0"><b>' + esc(r.f) + '</b></td>'
@@ -11305,17 +11340,16 @@ terse status, and never launches a first-time scan on a global refresh.
         + '<table style="border-collapse:collapse;font-size:11px;margin-top:6px">' + body + '</table>'
         + '<div style="margin-top:6px;opacity:.8">Columns are the difference against the rest of the '
         + 'book at the as-recorded bound; the second-to-last is windows agreeing (win/gross/net) at '
-        + 'each bound. <b>The score this desk sorts by reaches no verdict</b> &mdash; tier STRONG 2/4, '
-        + 'confluence 1/4, checks 2/4. <b>tier FAIR is unanimous at the lower bound only</b>, so by the '
-        + 'both-ends rule it carries none either; reading one end would have retired 77% of the book. '
-        + '<b>The limit-order verdict rests on the as-recorded end alone</b>: the lower bound flags only '
-        + 'PENDING fills as unprovable (457 of 4,988 limit rows, 0 of 2,875 market rows), so it demotes '
-        + 'one side of that comparison and is not independent evidence for it. Adverse selection is the '
-        + 'explanation offered, not a measured one &mdash; the walk&rsquo;s own fill model is the competing '
-        + 'one and nothing here separates them. '
+        + 'each bound. <b>The score this desk sorts by reaches no verdict</b> &mdash; tier STRONG 2/4 net, '
+        + 'confluence noise on one window, checks 2/4. hg-v1404, stated plainly: on the hg-v1402 walk '
+        + '<b>no factor carries a verdict at all</b> &mdash; the old table&rsquo;s two (stop >= 0.50% better, '
+        + 'LIMIT order worse) each survive at only one end of the fill interval now. tier FAIR is no '
+        + 'longer unanimous even at the lower bound; the limit split is 1/4 as-recorded and 0/4 at the '
+        + 'lower end, and that lower end is not neutral for it anyway &mdash; it flags only PENDING fills '
+        + 'as unprovable (505 of 5,160 limit rows, 0 of 3,117 market rows). Adverse selection stays the '
+        + 'explanation offered, not a measured one. '
         + '<b>No stop threshold is shipped from this</b>: unanimity across the sweep runs ' + bars.join(', ')
-        + ', and at 0.50% the book goes from ' + sg(T.book.asRecorded.net, 3) + 'R to -0.005R &mdash; '
-        + 'losing to flat, not to positive &mdash; while deleting 52% of its volume.</div></div>';
+        + ' &mdash; on this walk no bar holds even at the as-recorded end.</div></div>';
     }catch(eFsep){ return ''; }
   }
 
@@ -11392,12 +11426,16 @@ terse status, and never launches a first-time scan on a global refresh.
        The line above is every firing of this detector across the walk, with
        its PAXG net re-priced to the venue. Re-pricing an unscoped population
        is not the same correction as measuring the scoped one, and the bake
-       already did the second: sequentialBake.formedByKind, 54 of 54 kinds,
-       what survived the 35-gate stack, netR_xm computed there.
+       already did the second: sequentialBake.formedByKind, 53 of 54 kinds on
+       the hg-v1402 walk (EQH-SWEEP settled 39 — under the 40 bar — and
+       carries no gate-clear tail), what survived the 35-gate stack, netR_xm
+       computed there.
 
-       For 42 of the 54 that record is WORSE than the line above — PIN-REJECT
-       reads -0.21R re-priced and -0.94R gate-clear, THREE-BAR -0.24R against
-       -0.93R. Net-positive at XM goes from 12 kinds to 9, and 7 change sign.
+       For 40 of the 54 that record is WORSE than the line above — PIN-REJECT
+       reads -0.21R re-priced and -0.91R gate-clear, THREE-BAR -0.24R against
+       -0.91R. Net-positive at XM goes from 12 kinds to 7, and 13 change sign.
+       (hg-v1404 re-walk figures; and the bake is 53 of 54 kinds now —
+       EQH-SWEEP fell under the 40-trade bar and its tail was removed.)
        So this is not a softer number shown next to a harsh one; it is the
        harsher one, and it is the population the gates actually let through. */
     var fm = ev.formed;
@@ -11825,8 +11863,8 @@ terse status, and never launches a first-time scan on a global refresh.
        hurst-regime (+6.4/+2.8) — must ALL pass, or the setup does not form.
        Measured on the hg-v752 walk, fresh window (2026-05-04..2026-10-18,
        8,562 settled, median split 2026-07-29): the gateConf==3 cohort nets
-       +0.047R/+0.040R at XM and -0.464R/-0.691R at PAXG in the two time
-       halves, against the dropped cohort's -0.115R/-0.175R (XM) and
+       +0.050R/+0.040R at XM and -0.464R/-0.691R at PAXG in the two time
+       halves, against the dropped cohort's -0.115R/-0.174R (XM) and
        -1.321R/-1.726R (PAXG) — the dropped side loses in BOTH halves at BOTH
        venues, the kept side improves in both (the hg-v1399 admissibility
        rule). 1,384 of 8,562 settled rows (16%) clear the bar.

@@ -440,8 +440,12 @@ const bake = {
     /* THE GATE SET THIS ARTIFACT WAS WALKED WITH IS NOT THE ONE SHIPPING.
 
        r.ticket in a walk artifact is whatever hgOgGates said on the day it
-       ran. This one ran 2026-09-12; the stop floor (GOLD_STOP_MIN_PCT) and
-       the HARD venue-priced cost-drag gate landed 2026-09-16. Quoting the
+       ran. This one ran 2026-10-18 (hg-v1404 note: the narrative below was
+       written when the walk was the 2026-09-12 one; the warning it carries —
+       the walk's ticket flags predate the shipping gate set — applied then.
+       On the current walk the ticket flag is EMPTY offline because the
+       hg-v1003 macro lock fails closed without live feeds, which is a
+       different caveat and is named where the book is published). Quoting the
        raw ticket book as "what this desk does" therefore describes a system
        the tab no longer runs — it overstates the drawdown 2.2x at XM and
        8.5x at PAXG.

@@ -86,17 +86,21 @@ console.log('\n1. coverage is per TAB, and the reporter is not vacuous');
   /* NOT VACUOUS: take the tab back off and the gap must be reported. hg-v942's
      claim passed while a real hole existed, so an empty list has to be the
      result of a check that can come back non-empty. */
-  const tabs = ctx.HG_GOLD_ROSTER_TABS['EQH-SWEEP'];
-  ctx.HG_GOLD_ROSTER_TABS['EQH-SWEEP'] = ['goldscalp'];
+  /* hg-v1404 recalibration: EQH-SWEEP fell off the roster on the re-walk, so
+     it cannot carry this mutation — the gap reporter walks the ROSTER and an
+     off-roster kind is nobody's gap. The same check now runs on P4-ADRX, the
+     homed kind the re-walk promoted. */
+  const tabs = ctx.HG_GOLD_ROSTER_TABS['P4-ADRX'];
+  ctx.HG_GOLD_ROSTER_TABS['P4-ADRX'] = ['goldscalp'];
   const g2 = ctx.hgGoldRosterTabGaps();
-  ok(g2.length === 1 && g2[0][0] === 'EQH-SWEEP' && g2[0][1] === 'goldswing',
-     '  removing the swing home reports exactly [EQH-SWEEP, goldswing]');
+  ok(g2.length === 1 && g2[0][0] === 'P4-ADRX' && g2[0][1] === 'goldswing',
+     '  removing the swing home reports exactly [P4-ADRX, goldswing]');
   /* a kind with NO entry at all is EVERY tab's gap, never silently skipped */
-  delete ctx.HG_GOLD_ROSTER_TABS['EQH-SWEEP'];
+  delete ctx.HG_GOLD_ROSTER_TABS['P4-ADRX'];
   const g3 = ctx.hgGoldRosterTabGaps();
-  ok(g3.length === 2 && g3.every((p) => p[0] === 'EQH-SWEEP'),
+  ok(g3.length === 2 && g3.every((p) => p[0] === 'P4-ADRX'),
      '  and a kind named on NO tab is reported against every tab, not dropped');
-  ctx.HG_GOLD_ROSTER_TABS['EQH-SWEEP'] = tabs;
+  ctx.HG_GOLD_ROSTER_TABS['P4-ADRX'] = tabs;
   ok(ctx.hgGoldRosterTabGaps().length === 0, '  restored');
 }
 
@@ -108,16 +112,26 @@ console.log('\n2. a homed kind is a twin, derived from ONE list');
     ok(TWIN[HOME[kind]] === kind,
        HOME[kind] + ' -> ' + kind + ' in the twin map, from the home map');
     const rec = ctx.hgGoldSiblingRecord(HOME[kind]);
-    ok(rec && rec.twin === kind && rec.settled > 0 && isFinite(rec.netXm),
-       '  and carries its gate-clear record (n=' + (rec && rec.settled) + ')');
+    /* hg-v1404: EQH-SWEEP is the honest exception — thin on the hg-v1402
+       walk (39 settled, under the 40 bar), so the sibling bake carries NO
+       fresh gate-clear record for it. The twin mapping stands; the record
+       does not, and that absence is the pinned fact, not a gap to hide. */
+    if (kind === 'EQH-SWEEP'){
+      ok(rec === null || rec === undefined,
+         '  EQH-SWEEP carries NO record on the re-walk (thin) — dropped loudly by the bake, not zero-filled');
+    } else {
+      ok(rec && rec.twin === kind && rec.settled > 0 && isFinite(rec.netXm),
+         '  and carries its gate-clear record (n=' + (rec && rec.settled) + ')');
+    }
   }
   /* the DERIVATION, not the result: a new home must become a twin with no
      second edit. The first cut of this pack ran the loop where the home map
      was still hoisted-undefined and folded in ZERO entries, silently. */
   ok(ctx.HG_GOLD_SIBLING_TWIN.p5drive === 'P5-DRIVE'
      && ctx.HG_GOLD_SIBLING_TWIN.p6comp === 'P6-COMP'
-     && ctx.HG_GOLD_SIBLING_TWIN.smcliq === 'EQH-SWEEP',
-     'all three homes are folded in — a loop over an undefined map adds none');
+     && ctx.HG_GOLD_SIBLING_TWIN.smcliq === 'EQH-SWEEP'
+     && ctx.HG_GOLD_SIBLING_TWIN.p4adrx === 'P4-ADRX',
+     'all four homes are folded in — a loop over an undefined map adds none');
   /* an explicit twin is never overwritten by a home of the same key */
   ok(ctx.HG_GOLD_SIBLING_TWIN.goldround === 'ROUND-MAGNET',
      '  and an explicitly declared twin is left alone');

@@ -472,7 +472,7 @@ function hgGoldFib618(rows, opts){
 
    hg-v933 stamped every one of its detectors NO MEASURED RECORD. That was
    true of the idea and WRONG about the evidence: goldround's OMNIGOLD twin
-   ROUND-MAGNET has 587 settled firings in the committed walk and goldfix's
+   ROUND-MAGNET has 560 settled firings in the committed walk (hg-v1404 re-walk; was 587) and goldfix's
    twin LONDON-FIX has 69. Telling a reader nothing is known, when hundreds
    of measurements of the nearest thing exist, is the same failure as
    quoting them as if they were this desk's.
@@ -535,7 +535,12 @@ var HG_GOLD_SIBLING_TWIN = {
   ogcusum:     'CUSUM-SHIFT',
   ogmmove:     'MMOVE',
   ogtrend:     'TREND-RECLAIM',
-  ogbosretest: 'BOS-RETEST'
+  ogbosretest: 'BOS-RETEST',
+  /* hg-v1404: the three roster members the hg-v1402 re-walk promoted. Twin
+     IS the mechanic, same as the hg-v942 ports. */
+  ognydrive:   'NY-OPEN-DRIVE',
+  oginsidebreak: 'INSIDE-BREAK',
+  ogorb:       'ORB'
 };
 
 /* WHICH TAB can form each roster kind. hg-v942 asserted coverage was
@@ -555,7 +560,13 @@ var HG_GOLD_ROSTER_TABS = {
   'CUSUM-SHIFT':   ['goldscalp', 'goldswing'],
   'MMOVE':         ['goldscalp', 'goldswing'],
   'TREND-RECLAIM': ['goldscalp', 'goldswing'],
-  'BOS-RETEST':    ['goldscalp', 'goldswing']
+  'BOS-RETEST':    ['goldscalp', 'goldswing'],
+  /* hg-v1404: roster rotation — the three promoted kinds port to both tabs,
+     and P4-ADRX is homed on both (p4adrx is minted by goldind AND goldswing) */
+  'NY-OPEN-DRIVE': ['goldscalp', 'goldswing'],
+  'INSIDE-BREAK':  ['goldscalp', 'goldswing'],
+  'ORB':           ['goldscalp', 'goldswing'],
+  'P4-ADRX':       ['goldscalp', 'goldswing']
 };
 
 /** Every [kind, tab] pair on the derived roster that the tab cannot form.
@@ -580,22 +591,25 @@ function hgGoldRosterTabGaps(){
    wrong file, and hg-v921 made the literals write themselves for exactly this
    reason. `npm run gold:siblings` is the read-only drift check. */
 var HG_GOLD_SIBLING_RECORD = {
-  'BOS-RETEST': { n: 83, settled: 74, winRate: 0.3378, grossR: 0.0367, netXm: 0.0027, tCluster: 0.3, zBreakeven: 0.08, minRr: 2, breakevenPct: 33.3 },
-  'CCI-EXTREME': { n: 327, settled: 322, winRate: 0.3385, grossR: 0.0265, netXm: -0.033, tCluster: 0.43, zBreakeven: 0.2, minRr: 2, breakevenPct: 33.3 },
-  'CUSUM-SHIFT': { n: 44, settled: 32, winRate: 0.3438, grossR: 0.0918, netXm: 0.0707, tCluster: 0.58, zBreakeven: 0.13, minRr: 2, breakevenPct: 33.3 },
-  'EQH-SWEEP': { n: 41, settled: 41, winRate: 0.3659, grossR: 0.0976, netXm: 0.0159, tCluster: 0.36, zBreakeven: 0.44, minRr: 2, breakevenPct: 33.3 },
-  'FIB-618': { n: 132, settled: 127, winRate: 0.2992, grossR: -0.0872, netXm: -0.1306, tCluster: -0.9, zBreakeven: -0.82, minRr: 2, breakevenPct: 33.3 },
-  'ICHI-KUMO': { n: 106, settled: 89, winRate: 0.2697, grossR: -0.134, netXm: -0.1608, tCluster: -1.22, zBreakeven: -1.27, minRr: 2, breakevenPct: 33.3 },
-  'LONDON-FIX': { n: 87, settled: 69, winRate: 0.2464, grossR: -0.2052, netXm: -0.2332, tCluster: -1.76, zBreakeven: -1.53, minRr: 2, breakevenPct: 33.3 },
-  'MMOVE': { n: 204, settled: 177, winRate: 0.3559, grossR: 0.0836, netXm: 0.0587, tCluster: 1.54, zBreakeven: 0.64, minRr: 2, breakevenPct: 33.3 },
-  'P5-DRIVE': { n: 48, settled: 41, winRate: 0.3902, grossR: 0.2146, netXm: 0.1796, tCluster: 1.55, zBreakeven: 0.77, minRr: 2, breakevenPct: 33.3 },
-  'P6-COMP': { n: 98, settled: 82, winRate: 0.3293, grossR: 0.0421, netXm: 0.0186, tCluster: 0.32, zBreakeven: -0.08, minRr: 2, breakevenPct: 33.3 },
-  'PIVOT-REJECT': { n: 161, settled: 159, winRate: 0.2327, grossR: -0.3026, netXm: -0.3727, tCluster: -2.63, zBreakeven: -2.69, minRr: 2, breakevenPct: 33.3 },
-  'ROUND-MAGNET': { n: 593, settled: 587, winRate: 0.3169, grossR: -0.043, netXm: -0.1095, tCluster: -0.85, zBreakeven: -0.84, minRr: 2, breakevenPct: 33.3 },
-  'SQUEEZE-FIRE': { n: 50, settled: 45, winRate: 0.3556, grossR: 0.1082, netXm: 0.0746, tCluster: 0.55, zBreakeven: 0.32, minRr: 2, breakevenPct: 33.3 },
-  'STRUCT-BOS': { n: 103, settled: 87, winRate: 0.3448, grossR: 0.1085, netXm: 0.0816, tCluster: 1.22, zBreakeven: 0.23, minRr: 2, breakevenPct: 33.3 },
-  'TREND-RECLAIM': { n: 106, settled: 99, winRate: 0.3636, grossR: 0.0923, netXm: 0.0549, tCluster: 0.83, zBreakeven: 0.64, minRr: 2, breakevenPct: 33.3 },
-  'WEEKLY-OPEN': { n: 143, settled: 140, winRate: 0.3, grossR: -0.0904, netXm: -0.1591, tCluster: -1.14, zBreakeven: -0.84, minRr: 2, breakevenPct: 33.3 }
+  'BOS-RETEST': { n: 81, settled: 74, winRate: 0.2838, grossR: -0.0944, netXm: -0.135, tCluster: -0.79, zBreakeven: -0.9, minRr: 2, breakevenPct: 33.3 },
+  'CCI-EXTREME': { n: 325, settled: 321, winRate: 0.3396, grossR: 0.0253, netXm: -0.0458, tCluster: 0.46, zBreakeven: 0.24, minRr: 2, breakevenPct: 33.3 },
+  'CUSUM-SHIFT': { n: 47, settled: 35, winRate: 0.3429, grossR: 0.1214, netXm: 0.1002, tCluster: 0.85, zBreakeven: 0.12, minRr: 2, breakevenPct: 33.3 },
+  'FIB-618': { n: 137, settled: 135, winRate: 0.3185, grossR: -0.034, netXm: -0.0886, tCluster: -0.34, zBreakeven: -0.37, minRr: 2, breakevenPct: 33.3 },
+  'ICHI-KUMO': { n: 111, settled: 93, winRate: 0.2581, grossR: -0.1286, netXm: -0.1596, tCluster: -1.62, zBreakeven: -1.54, minRr: 2, breakevenPct: 33.3 },
+  'INSIDE-BREAK': { n: 120, settled: 109, winRate: 0.3486, grossR: 0.0999, netXm: 0.0621, tCluster: 0.82, zBreakeven: 0.34, minRr: 2, breakevenPct: 33.3 },
+  'LONDON-FIX': { n: 86, settled: 68, winRate: 0.2353, grossR: -0.241, netXm: -0.27, tCluster: -2.08, zBreakeven: -1.71, minRr: 2, breakevenPct: 33.3 },
+  'MMOVE': { n: 196, settled: 170, winRate: 0.3471, grossR: 0.0703, netXm: 0.0438, tCluster: 1.04, zBreakeven: 0.38, minRr: 2, breakevenPct: 33.3 },
+  'NY-OPEN-DRIVE': { n: 52, settled: 42, winRate: 0.3333, grossR: 0.1049, netXm: 0.0699, tCluster: 0.65, zBreakeven: 0, minRr: 2, breakevenPct: 33.3 },
+  'ORB': { n: 140, settled: 121, winRate: 0.3306, grossR: 0.0604, netXm: 0.0294, tCluster: 0.58, zBreakeven: -0.06, minRr: 2, breakevenPct: 33.3 },
+  'P4-ADRX': { n: 159, settled: 159, winRate: 0.3522, grossR: 0.0566, netXm: 0.0069, tCluster: 0.46, zBreakeven: 0.5, minRr: 2, breakevenPct: 33.3 },
+  'P5-DRIVE': { n: 57, settled: 48, winRate: 0.3333, grossR: 0.0217, netXm: -0.021, tCluster: 0.17, zBreakeven: 0, minRr: 2, breakevenPct: 33.3 },
+  'P6-COMP': { n: 96, settled: 82, winRate: 0.3537, grossR: 0.077, netXm: 0.0393, tCluster: 0.6, zBreakeven: 0.39, minRr: 2, breakevenPct: 33.3 },
+  'PIVOT-REJECT': { n: 182, settled: 181, winRate: 0.2541, grossR: -0.2373, netXm: -0.3346, tCluster: -2.29, zBreakeven: -2.26, minRr: 2, breakevenPct: 33.3 },
+  'ROUND-MAGNET': { n: 565, settled: 560, winRate: 0.3, grossR: -0.0959, netXm: -0.1628, tCluster: -1.88, zBreakeven: -1.67, minRr: 2, breakevenPct: 33.3 },
+  'SQUEEZE-FIRE': { n: 48, settled: 42, winRate: 0.3095, grossR: 0.0094, netXm: -0.0266, tCluster: 0.04, zBreakeven: -0.33, minRr: 2, breakevenPct: 33.3 },
+  'STRUCT-BOS': { n: 109, settled: 92, winRate: 0.3152, grossR: 0.0292, netXm: -0.0013, tCluster: 0.29, zBreakeven: -0.37, minRr: 2, breakevenPct: 33.3 },
+  'TREND-RECLAIM': { n: 111, settled: 106, winRate: 0.3774, grossR: 0.1405, netXm: 0.084, tCluster: 1.29, zBreakeven: 0.96, minRr: 2, breakevenPct: 33.3 },
+  'WEEKLY-OPEN': { n: 160, settled: 156, winRate: 0.2821, grossR: -0.1418, netXm: -0.2109, tCluster: -1.35, zBreakeven: -1.36, minRr: 2, breakevenPct: 33.3 }
 };
 /* --- END GENERATED HG_GOLD_SIBLING_RECORD --- */
 
@@ -661,6 +675,20 @@ function hgGoldExtraUncheckedNote(kind){
   var name = String(kind || 'this mechanic').toUpperCase();
   var rec = hgGoldSiblingRecord(kind);
   if (!rec){
+    /* hg-v1404: a twin can EXIST yet carry no record — the hg-v1402 re-walk
+       settled EQH-SWEEP 39 times, under the 40-trade bar, so its gate-clear
+       record is gone and the bake drops it loudly rather than zero-filling
+       it. Say THAT, not "no sibling exists". */
+    var twinKind = HG_GOLD_SIBLING_TWIN[kind];
+    if (twinKind){
+      return 'NO FRESH RECORD — ' + name + ' has never been through a GOLD SCALP or '
+        + 'GOLD SWING bake. Its OMNIGOLD twin ' + twinKind + ' was measured before, '
+        + 'but on the hg-v1402 walk it settled under the 40-trade evidence bar, so '
+        + 'there is no fresh gate-clear record to quote — thinner than a borrowed '
+        + 'number, and the desk says so rather than pretend either way. It paints '
+        + 'with its levels and cannot lead until the twin is measured again or this '
+        + 'mechanic is walked itself.';
+    }
     return 'NO MEASURED RECORD — ' + name + ' has never been through a bake, and no '
       + 'OMNIGOLD mechanic reads the same thing, so there is not even a sibling '
       + 'record to borrow. It paints with its levels and cannot lead until a walk '
@@ -680,9 +708,10 @@ function hgGoldExtraUncheckedNote(kind){
 }
 
 /* ================= hg-v942 — THE ROSTER MECHANICS THESE TABS CANNOT FORM =====
-   MILLI GOLD's roster is the nine OMNIGOLD mechanics whose GATE-CLEAR record is
+   MILLI GOLD's roster is the OMNIGOLD mechanics whose GATE-CLEAR record is
    net-positive at XM on at least MIN_SAMPLES firings. It is derived, not
-   chosen (scripts/milli-gold-roster.mjs). Six of those nine have no mechanic on
+   chosen (scripts/milli-gold-roster.mjs). hg-v1404: the hg-v1402 re-walk
+   rotated it to EIGHT (nine before); six of the eight have no mechanic on
    GOLD SCALP or GOLD SWING at all: a trader working from the two tabs cannot
    form them, whatever the tape does.
 
@@ -711,7 +740,14 @@ function hgGoldExtraUncheckedNote(kind){
 var HG_GOLD_ROSTER_HOME = {
   'P5-DRIVE':  'p5drive',    /* S24 three-drive exhaustion, scalp + swing */
   'P6-COMP':   'p6comp',     /* S30 session-composite pullback */
-  'EQH-SWEEP': 'smcliq'      /* SMC equal-high/low pool sweep (hg-v564) */
+  /* hg-v1404: the hg-v1402 re-walk promoted P4-ADRX onto the MILLI roster
+     (159 settled, net-positive gate-clear) and dropped P5-DRIVE/EQH-SWEEP
+     off it. P4-ADRX is the S14 ADR-exhaustion fade both tabs already mint
+     as p4adrx — homed, not ported. The two dropped entries STAY in the map:
+     the home fact is about the tabs, not the roster, and the twin-record
+     lookups below still need them. */
+  'EQH-SWEEP': 'smcliq',     /* SMC equal-high/low pool sweep (hg-v564) */
+  'P4-ADRX':   'p4adrx'      /* S14 ADR exhaustion fade, scalp + swing */
 };
 
 /* hg-v945: the three HOMED roster kinds belong in the twin map too, and they
@@ -747,7 +783,17 @@ var HG_GOLD_ROSTER_KEY = {
   'CUSUM-SHIFT':   'ogcusum',
   'MMOVE':         'ogmmove',
   'TREND-RECLAIM': 'ogtrend',
-  'BOS-RETEST':    'ogbosretest'
+  'BOS-RETEST':    'ogbosretest',
+  /* hg-v1404: the hg-v1402 re-walk rotated the MILLI roster — STRUCT-BOS,
+     SQUEEZE-FIRE and BOS-RETEST fell off it (their keys STAY: a key is a
+     mint name, and a kind returning to the roster must not mint under a
+     second one), and NY-OPEN-DRIVE, INSIDE-BREAK and ORB joined. The three
+     new members get ports the same way the old ones did — the roster guard
+     (hgGoldRosterUnmapped) exists precisely to force this edit instead of
+     letting a re-bake silently drop coverage. */
+  'NY-OPEN-DRIVE': 'ognydrive',
+  'INSIDE-BREAK':  'oginsidebreak',
+  'ORB':           'ogorb'
 };
 
 /* Stop distance floor for a ported hit, in ATR. The detectors name a LEVEL and
