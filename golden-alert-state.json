@@ -597,7 +597,7 @@
       "expired": true
     },
     "S": {
-      "at": "2026-10-19T14:09:46.783Z",
+      "at": "2026-10-19T16:00:38.794Z",
       "score": 4,
       "fresh": true,
       "ago": 7,
@@ -613,7 +613,7 @@
       "expired": true
     },
     "BAT": {
-      "at": "2026-10-19T10:28:24.415Z",
+      "at": "2026-10-19T16:00:38.153Z",
       "score": 4,
       "fresh": true,
       "ago": 6,
@@ -645,15 +645,15 @@
       "expired": true
     },
     "AXL": {
-      "at": "2026-10-17T23:25:40.454Z",
-      "score": 4,
+      "at": "2026-10-19T16:00:40.439Z",
+      "score": 5,
       "fresh": true,
-      "ago": 1,
+      "ago": 3,
       "crossDay": "2026-10-15",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-19T14:10:03.895Z",
+  "lastRunAt": "2026-10-19T16:00:58.651Z",
   "scanned": 505,
   "cards": 0
 }
