@@ -621,7 +621,7 @@
       "expired": true
     },
     "NIGHT": {
-      "at": "2026-10-19T04:56:19.297Z",
+      "at": "2026-10-19T06:46:58.591Z",
       "score": 3,
       "fresh": true,
       "ago": 5,
@@ -653,7 +653,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-19T04:56:33.021Z",
+  "lastRunAt": "2026-10-19T06:47:18.084Z",
   "scanned": 504,
   "cards": 0
 }
