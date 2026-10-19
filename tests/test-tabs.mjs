@@ -291,7 +291,7 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
    index.html). Spec updated to match. */
 const EXPECTED_GROUPS = {
   overview:   ['brain', 'book', 'trade', 'log', 'signallog', 'setupconfirm', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
-  crypto:     ['combi', 'omnibtc', 'omnipresent', 'omniroute', 'dexscreener', 'best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis', 'cryptoultra', 'cryptoscan', 'cryptoverse', 'ninetypercent'],
+  crypto:     ['combi', 'omnibtc', 'omnipresent', 'omniroute', 'dexscreener', 'best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis', 'cryptoultra', 'cryptoscan', 'cryptoverse', 'ninetypercent', 'syndicate'],
   /* v749 added optigold, newgold and golddirection. They were in NO group
      at all, so HG_GROUP_FALLBACK filed three gold desks under TOOLS next to
      the risk sizer and the search box; index.html says so where the list is

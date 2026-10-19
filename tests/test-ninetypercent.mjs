@@ -476,7 +476,7 @@ console.log('\n10. end to end, through the real tab');
 console.log('\n11. wired into the page');
 {
   ok(/<script src="ninetypercent\.js\?v=\d+"><\/script>/.test(HTML), 'the script tag is present');
-  ok(/'cryptoverse','ninetypercent'\]/.test(HTML), 'and the tab is in the CRYPTO nav group');
+  ok(/'cryptoverse','ninetypercent','syndicate'\]/.test(HTML), 'and the tab is in the CRYPTO nav group');
   ok(Math.abs(S.__npBreakeven(2) - 1 / 3) < 1e-9, 'breakeven at 2R is 33%');
   ok(!isFinite(S.__npBreakeven(0)), 'and a non-positive R:R has none rather than a made-up one');
 }
