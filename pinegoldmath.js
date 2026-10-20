@@ -2049,6 +2049,104 @@ function pineGoldEfficiency(rows, opts){
     return { dir: null, er: now.er };
   }catch(e){ return { dir: null }; }
 }
+function pgrEmaSeries(values, n){
+  var out = new Array(values.length), k = 2 / (n + 1), prev = null;
+  for (var i = 0; i < values.length; i++){
+    var v = pgrNum(values[i]);
+    if (!isFinite(v)){ out[i] = NaN; continue; }
+    if (prev == null){
+      if (i < n - 1){ out[i] = NaN; continue; }
+      var s = 0, ok = true;
+      for (var j = i - n + 1; j <= i; j++){
+        var x = pgrNum(values[j]);
+        if (!isFinite(x)) ok = false;
+        else s += x;
+      }
+      prev = ok ? s / n : null;
+      out[i] = prev == null ? NaN : prev;
+    } else {
+      prev = (v * k) + (prev * (1 - k));
+      out[i] = prev;
+    }
+  }
+  return out;
+}
+function pgrSideOf(a, b){
+  if (!isFinite(a) || !isFinite(b)) return null;
+  var scale = Math.max(1, Math.abs(a), Math.abs(b));
+  if (Math.abs(a - b) <= scale * 1e-8) return null;
+  return a > b ? 'long' : 'short';
+}
+/* Vortex, DEMA 21/55, 20-bar regression slope, Elder Ray, EMA 50/200,
+   Chande momentum, close against the Bollinger midline, and choppiness.
+   A missing read stays null. Equality stays null. These cannot mint. */
+function pineGoldFormRead(rows){
+  var blank = { vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null };
+  if (!rows || rows.length < 60) return blank;
+  var i = rows.length - 1, c = pgrNum(rows[i].c);
+  if (!isFinite(c)) return blank;
+  var closes = rows.map(function(r){ return pgrNum(r.c); });
+  if (i >= 14){
+    var up = 0, down = 0, range = 0, k;
+    for (k = i - 13; k <= i; k++){
+      up += Math.abs(pgrNum(rows[k].h) - pgrNum(rows[k - 1].l));
+      down += Math.abs(pgrNum(rows[k].l) - pgrNum(rows[k - 1].h));
+      var pc = pgrNum(rows[k - 1].c);
+      range += Math.max(pgrNum(rows[k].h) - pgrNum(rows[k].l), Math.abs(pgrNum(rows[k].h) - pc), Math.abs(pgrNum(rows[k].l) - pc));
+    }
+    if (range > 0) blank.vortex = pgrSideOf(up / range, down / range);
+    var sum = 0, hi = -Infinity, lo = Infinity;
+    for (k = i - 13; k <= i; k++){
+      var prevC = pgrNum(rows[k - 1].c);
+      sum += Math.max(pgrNum(rows[k].h) - pgrNum(rows[k].l), Math.abs(pgrNum(rows[k].h) - prevC), Math.abs(pgrNum(rows[k].l) - prevC));
+      hi = Math.max(hi, pgrNum(rows[k].h));
+      lo = Math.min(lo, pgrNum(rows[k].l));
+    }
+    if (hi > lo && sum > 0) blank.chop = (100 * Math.log(sum / (hi - lo)) / Math.LN10) / (Math.log(14) / Math.LN10);
+  }
+  var e21 = pgrEmaSeries(closes, 21), e55 = pgrEmaSeries(closes, 55);
+  var d21 = pgrEmaSeries(e21, 21), d55 = pgrEmaSeries(e55, 55);
+  if (isFinite(e21[i]) && isFinite(d21[i]) && isFinite(e55[i]) && isFinite(d55[i])){
+    blank.dema = pgrSideOf((2 * e21[i]) - d21[i], (2 * e55[i]) - d55[i]);
+  }
+  var e13 = pgrEmaSeries(closes, 13);
+  if (isFinite(e13[i])){
+    var bull = pgrNum(rows[i].h) - e13[i], bear = pgrNum(rows[i].l) - e13[i];
+    if (bull > 0 && bear > 0) blank.elder = 'long';
+    else if (bull < 0 && bear < 0) blank.elder = 'short';
+  }
+  if (rows.length >= 200){
+    var e50 = pgrEmaSeries(closes, 50), e200 = pgrEmaSeries(closes, 200);
+    blank.ribbon = pgrSideOf(e50[i], e200[i]);
+  }
+  if (i >= 20){
+    var n = 20, sumX = ((n - 1) * n) / 2, sumX2 = ((n - 1) * n * (2 * n - 1)) / 6;
+    var den = (n * sumX2) - (sumX * sumX), sumY = 0, sumXY = 0, t;
+    for (t = 0; t < n; t++){
+      var y = closes[i - n + 1 + t];
+      sumY += y; sumXY += t * y;
+    }
+    if (den !== 0 && isFinite(sumY)){
+      var slope = ((n * sumXY) - (sumX * sumY)) / den;
+      if (slope > 0) blank.linreg = 'long';
+      else if (slope < 0) blank.linreg = 'short';
+    }
+    var mean = 0;
+    for (t = i - 19; t <= i; t++) mean += closes[t];
+    mean /= 20;
+    blank.boll = pgrSideOf(c, mean);
+  }
+  if (i >= 14){
+    var gain = 0, loss = 0, u;
+    for (u = i - 13; u <= i; u++){
+      var d = closes[u] - closes[u - 1];
+      if (d > 0) gain += d;
+      else if (d < 0) loss -= d;
+    }
+    if (gain + loss > 0) blank.cmo = pgrSideOf(gain - loss, 0);
+  }
+  return blank;
+}
 function pineGoldBlocksLead(states, dir){
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
@@ -2069,15 +2167,30 @@ function pineGoldBlocksLead(states, dir){
   }
   if (read2 >= 3 && oppose2 >= 3 && oppose2 > agree2) return 'QQE, squeeze, weekly AVWAP and efficiency against';
   if (states.squeezeOn === true && isFinite(states.efficiencyEr) && states.efficiencyEr < 0.22 && withN < PINE_GOLD_MAJORITY) return 'squeeze on with no trend efficiency';
-  /* The record-only layers already have a side on this bar (allLong / allShort).
-     They still cannot lead. They can only stop a ticket when most of the ones
-     that actually read a side point the other way. One script cannot do it. */
+  return null;
+}
+/* hg-v1407: GOLD PINE only. The wider record-layer stack and seven more Pine
+   reads cannot mint a ticket. This desk holds a lead when most of the
+   record-layer sides oppose it, when choppiness is a range, or when at least
+   five of the formation reads have a side and more of them oppose than agree.
+   Other gold desks do not call this. */
+function pineGoldFormHold(states, dir){
+  if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
   var stackWith = dir === 'long' ? states.allLong : states.allShort;
   var stackAgainst = dir === 'long' ? states.allShort : states.allLong;
   var stackRead = states.readable || 0;
   if (stackRead >= 12 && stackAgainst >= 8 && stackAgainst > stackWith){
     return 'wider Pine stack against (' + stackAgainst + ' of ' + stackRead + ')';
   }
+  if (isFinite(states.chop) && states.chop > 61.8) return 'choppiness is a range (' + states.chop.toFixed(1) + ')';
+  var formIds = PINE_GOLD_FORM_IDS, fw = 0, fa = 0, fr = 0, fi;
+  if (!formIds) return null;
+  for (fi = 0; fi < formIds.length; fi++){
+    var fv = states[formIds[fi]];
+    if (fv === dir){ fw++; fr++; }
+    else if (fv === 'long' || fv === 'short'){ fa++; fr++; }
+  }
+  if (fr >= 5 && fa > fw) return 'formation Pine scripts disagree (' + fw + ' with, ' + fa + ' against)';
   return null;
 }
 
@@ -4274,6 +4387,8 @@ function pineGoldLayerStates(rows){
               /* hg-v1207 */ ote: null,
               /* hg-v1220 record-only scored layers */ halftrend: null, rangefilter: null, nwenvelope: null,
               /* hg-v1220 state-only (not in the record-layer table) */ vumanchuCipher: null,
+              /* hg-v1407 formation family: state only, cannot mint a ticket */
+              vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -4541,6 +4656,14 @@ function pineGoldLayerStates(rows){
         }
       }
     }catch(eVc){}
+    try{
+      var formed = pineGoldFormRead(rows);
+      if (formed){
+        out.vortex = formed.vortex; out.dema = formed.dema; out.linreg = formed.linreg;
+        out.elder = formed.elder; out.ribbon = formed.ribbon; out.cmo = formed.cmo;
+        out.boll = formed.boll; out.chop = formed.chop;
+      }
+    }catch(eForm){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
       var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
@@ -4563,6 +4686,14 @@ var PINE_GOLD_MAJORITY = 3;
    layer and does NOT join readable/allLong/allShort counts or the
    majority bar (PINE_GOLD_MAJORITY_IDS). */
 var PINE_GOLD_STATE_ONLY_IDS = ['vumanchuCipher'];
+/* hg-v1407: seven more Pine states. Not in the record-layer table, so they
+   cannot mint a card. pineGoldBlocksLead holds a ticket when choppiness is a
+   range, or when five of them read a side and more oppose than agree. */
+var PINE_GOLD_FORM_IDS = ['vortex', 'dema', 'linreg', 'elder', 'ribbon', 'cmo', 'boll'];
+var PINE_GOLD_FORM_LABEL = {
+  vortex: 'Vortex', dema: 'DEMA 21/55', linreg: 'Linreg 20', elder: 'Elder Ray',
+  ribbon: 'EMA 50/200', cmo: 'CMO 14', boll: 'Bollinger mid'
+};
 function pineGoldPineMarks(states, dir){
   var m = {};
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return m;
@@ -4573,6 +4704,10 @@ function pineGoldPineMarks(states, dir){
   PINE_GOLD_STATE_ONLY_IDS.forEach(function(id){
     var v = states[id];
     if (v === 'long' || v === 'short') m['pine:' + id + 'With'] = (v === dir);
+  });
+  PINE_GOLD_FORM_IDS.forEach(function(id){
+    var fv = states[id];
+    if (fv === 'long' || fv === 'short') m['pine:' + id + 'With'] = (fv === dir);
   });
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
   var againstN = dir === 'long' ? states.agreeShort : states.agreeLong;
@@ -4606,12 +4741,18 @@ function pineGoldStackLineHtml(states, marks){
       var label = id === 'vumanchuCipher' ? 'VuManChu' : id;
       cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — state read, not scored') + '" style="border-style:dashed"><b>' + e(label) + '</b> ' + e(tag) + '</span>';
     });
+    PINE_GOLD_FORM_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — can hold a lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
     var mj = marks['pine:majorityWith'];
     var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. Nothing here is scored and it gates nothing.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE, Vortex, DEMA, linreg, Elder Ray, the 50/200 ribbon, CMO and Bollinger hold a lead when five of them read and more oppose than agree, the wider record-layer stack holds a lead the same way, and choppiness above 61.8 holds a lead on its own.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }
@@ -4674,6 +4815,7 @@ G.pineGoldSqueezeFire = pineGoldSqueezeFire;
 G.pineGoldWeeklyAvwap = pineGoldWeeklyAvwap;
 G.pineGoldEfficiency = pineGoldEfficiency;
 G.pineGoldBlocksLead = pineGoldBlocksLead;
+G.pineGoldFormHold = pineGoldFormHold;
 G.pineGoldTapeVeto = pineGoldTapeVeto;
 G.pineGoldIbVeto = pineGoldIbVeto;
 G.pineGoldCvdVeto = pineGoldCvdVeto;
@@ -4786,7 +4928,7 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries,
     /* hg-v1171 */
     pineGoldWilliamsReentry, pineGoldTrixCross, pineGoldFisherZero,
-    pineGoldAdxDi, pineGoldHeikin, pineGoldSessVwap, pineGoldBlocksLead, pineGoldTapeVeto,
+    pineGoldAdxDi, pineGoldHeikin, pineGoldSessVwap, pineGoldBlocksLead, pineGoldFormHold, pineGoldTapeVeto,
     pineGoldQqe, pineGoldSqueezeFire, pineGoldWeeklyAvwap, pineGoldEfficiency,
     pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries,
     /* hg-v1202 */

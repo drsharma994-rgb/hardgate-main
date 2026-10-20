@@ -957,13 +957,14 @@ function runGoldPineScan(bars, ctx){
     }
   }catch(eFS){}
   try{
-    var blk = gfn('pineGoldBlocksLead'), stFn = gfn('pineGoldLayerStates'), tape = gfn('pineGoldTapeVeto');
+    var blk = gfn('pineGoldBlocksLead'), formHold = gfn('pineGoldFormHold'), stFn = gfn('pineGoldLayerStates'), tape = gfn('pineGoldTapeVeto');
     function holdPine(list, rows, mode){
       if (!list || !rows || !rows.length) return;
       var ps = stFn ? stFn(rows) : null;
       for (var z = 0; z < list.length; z++){
         if (!list[z] || list[z].recordOnly || list[z].demoted) continue;
         var why = (blk && ps && ps.ok === true) ? blk(ps, list[z].dir) : null;
+        if (!why && formHold && ps && ps.ok === true) why = formHold(ps, list[z].dir);
         if (!why && tape){
           try{
             why = tape(rows, list[z].dir, { mode: mode, now: Date.now(), macro: macro, silverRows: W.__hgSilverRows || null });
