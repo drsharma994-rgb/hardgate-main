@@ -871,6 +871,14 @@ function runGoldPineScan(bars, ctx){
   /* hg-v1162: every row carries the marks before it is recorded */
   gpMarkReads(swing, 'swing', bars, scanCtx);
   gpMarkReads(scalp, 'scalp', bars, scanCtx);
+  /* hg-v1420: the r2 measured reads (gp:er20ok / gp:d1with) join the reads
+     bag through the SAME marking seam, additively, once per scan per lane —
+     record-only marks, never gates (hg-v966 refused by construction). The
+     bag line in hgGpRecord stays byte-untouched (test-gold-pine-80pct-feeds
+     §6 rides it verbatim); a row the ranker already marked keeps its marks
+     and gains only the new keys (no key collides). */
+  gpR2MarkReads(swing, 'swing', bars);
+  gpR2MarkReads(scalp, 'scalp', bars);
 
   /* v694: stamp solidity, record fires, then reorder so proven-winning
      kinds lead and proven-losing kinds are vetoed/killed. The reordered
@@ -1214,9 +1222,84 @@ function gpAdmissionFloor(s){
   var e = +s.entry, st = +s.stop;
   if (!fin(e) || !fin(st) || e <= 0 || e === st) return { ok: true };
   if (Math.abs(e - st) / e * 100 < 0.3){
-    return { ok: false, why: 'stop under 0.3% of entry — the round trip is a multiple of the risk' };
+    /* hg-v1420: the pinned prefix is verbatim (the r2 venue audit is appended,
+       never reworded — test-goldpine-admission-floor §1 is a prefix match). */
+    return { ok: false, why: 'stop under 0.3% of entry — the round trip is a multiple of the risk'
+      + '; at XM costs the floor is 15x the round trip, at PAXG taker only 1.15x, and even the kept cohort settled negative at taker (census r2) — the venue, not the floor, is the remaining lever' };
   }
   return { ok: true };
+}
+
+/* hg-v1420: THE R2 MEASURED READS — record-only three-state marks, NOT gates.
+   Accuracy round 2 (impl-brief-r2.md, census r2 @ hg-v1417 reproducing the
+   v1401 walk 119/119) measured two candidate vetoes and REFUSED both under
+   the hg-v966 both-halves rule: an ER(20)>=0.30 entry veto (swing: the veto's
+   dropped cohort resolved +0.560R/-0.055R @XM by half — mixed, and the
+   ER-passing cohort was the WORST first-half cohort on the desk; scalp: kept
+   cohort n=1 in the second half) and a 1d close-vs-EMA(150) counter-regime
+   veto (dropped cohort +0.246R/-0.242R @XM by half — mixed). The house shape
+   for a measured-but-refused read is a record-only mark the forward ledger
+   judges out of sample (hg-v1164, the hg-v1417 cf:htfWith precedent), so both
+   reads ride every record in the reads bag and the REPLAY READ SPLIT decides.
+   Nothing anywhere gates on these marks; the suite sweeps the gate seams.
+
+   Third state throughout (hg-v989): a read that never landed is ABSENT, not
+   false. er20ok rides both lanes on the signal timeframe (4h swing / 15m
+   scalp) through the desk's own pineGoldEfficiency with the measured len 20;
+   d1with rides swing rows only (candidate 5 was measured swing-only) and
+   needs the desk's own ema plus 160 closed daily bars. */
+function gpR2Marks(s, bars){
+  var out = {};
+  try{
+    var mode = s && s.mode;
+    var sig = (String(mode) === 'swing') ? (bars && bars.rows4h) : (bars && bars.rows15m);
+    var efFn = gfn('pineGoldEfficiency');
+    if (efFn && sig && sig.length >= 27){
+      var ef = efFn(sig, { len: 20 });
+      if (ef && isFinite(+ef.er)) out['gp:er20ok'] = (+ef.er >= 0.30);
+    }
+  }catch(eGpEr){}
+  try{
+    if (s && String(s.mode) === 'swing' && (s.dir === 'long' || s.dir === 'short')){
+      var d = bars && bars.rows1d, emaFn = gfn('ema');
+      if (emaFn && d && d.length >= 160){
+        var closes = [];
+        for (var i = 0; i < d.length; i++) closes.push(+d[i].c);
+        var e150 = emaFn(closes, 150);
+        var last = (e150 && e150.length) ? +e150[e150.length - 1] : NaN;
+        var cl = +d[d.length - 1].c;
+        if (isFinite(last) && isFinite(cl) && cl > 0){
+          var above = cl > last;
+          out['gp:d1with'] = (s.dir === 'long') ? above : !above;
+        }
+      }
+    }
+  }catch(eGpD1){}
+  return out;
+}
+
+/* hg-v1420: the r2 marking seam — stamps the gp:er20ok / gp:d1with marks
+   into each row's reads bag, beside gpMarkReads (one home for read marks,
+   hg-v949), additively (the hg-v1288 goldShut precedent: a new key, never a
+   rewritten line). A row without a bag gets one only when a mark landed;
+   a row the ranker already marked keeps every mark it has. Marks only:
+   score, tier, sort order, the leader and every gate are untouched. */
+function gpR2MarkReads(list, mode, bars){
+  try{
+    if (!Array.isArray(list) || !list.length) return 0;
+    var marked = 0;
+    for (var i = 0; i < list.length; i++){
+      var s = list[i];
+      if (!s || (s.dir !== 'long' && s.dir !== 'short')) continue;
+      var r2 = gpR2Marks(s, bars), keys = Object.keys(r2);
+      if (!keys.length) continue;
+      var bag = (s.freeReads && typeof s.freeReads === 'object') ? s.freeReads : {};
+      for (var k = 0; k < keys.length; k++) bag[keys[k]] = r2[keys[k]];
+      s.freeReads = bag;
+      marked++;
+    }
+    return marked;
+  }catch(eGpR2){ return 0; }
 }
 
 
@@ -1496,6 +1579,15 @@ function mount(el){
          ahead of everything drawn from it. */
       /* hg-v913: this desk reads the records it writes. */
       var tapeNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldpine') : '');
+      /* hg-v1420: the ledger's read split for the r2 marks (gp:er20ok /
+         gp:d1with). Display only — the shared renderer paints NOTHING until
+         settled records carry a mark (hg-forward.js:3442), and nothing here
+         or anywhere gates on the split. */
+      try{
+        if (typeof W.hgFwdReadSplitHtml === 'function'){
+          tapeNote += (W.hgFwdReadSplitHtml('GOLDPINE:swing') || '') + (W.hgFwdReadSplitHtml('GOLDPINE:scalp') || '');
+        }
+      }catch(eGpSplit){}
       if (typeof W.hgGoldTapeNotes === 'function'){
         [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
           var rws = bars && bars[L[0]];
@@ -1635,6 +1727,11 @@ W.gpWeekendVerdict = gpWeekendVerdict;
    drive them as units — a guard that cannot reach the rule proves nothing. */
 W.gpAdmissionFloor = gpAdmissionFloor;
 W.gpMayLead = gpMayLead;
+/* hg-v1420: the r2 record-mark helper and seam, exported so the pin suite
+   can drive them as units — a guard that cannot reach the rule proves
+   nothing. */
+W.gpR2Marks = gpR2Marks;
+W.gpR2MarkReads = gpR2MarkReads;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh,
                  fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml,
