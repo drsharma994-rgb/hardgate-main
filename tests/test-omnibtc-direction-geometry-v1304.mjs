@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/* hg-v1418 note: the §version pins ride the current tree stamp again
+   (hg-v1417 -> hg-v1418) after the hg-v1418 OMNIBTC cost-floor bump re-stamped
+   build-stamp/sw/trendtable — 'Sister suites re-pinned'
+   convention. Behavior pins unchanged. */
 /* hg-v1417 note: the §version pins ride the current tree stamp again
    (hg-v1416 -> hg-v1417) after the hg-v1417 CANDLE FORECAST admission-floor bump re-stamped
    build-stamp/sw/trendtable — 'Sister suites re-pinned'
@@ -407,10 +411,10 @@ console.log('\n[§7] ship stamps align');
      hg-v1404 at the hg-v1404 bump; 'Sister suites re-pinned' convention).
      Behavior pins
      above unchanged. */
-  ok(/version:\s*'hg-v1417'/.test(bs), "build-stamp.js version: 'hg-v1417' (re-pinned hg-v1417)");
-  ok(/HG_CACHE\s*=\s*'hg-v1417'/.test(sw), "sw.js HG_CACHE = 'hg-v1417' (re-pinned hg-v1417)");
-  ok(/hg-v1417/.test(tt), 'trendtable.js stamped hg-v1417 (re-pinned hg-v1417)');
-  ok(/\?v=1417/.test(tt), 'trendtable.js uses ?v=1417 (re-pinned hg-v1417)');
+  ok(/version:\s*'hg-v1418'/.test(bs), "build-stamp.js version: 'hg-v1418' (re-pinned hg-v1418)");
+  ok(/HG_CACHE\s*=\s*'hg-v1418'/.test(sw), "sw.js HG_CACHE = 'hg-v1418' (re-pinned hg-v1418)");
+  ok(/hg-v1418/.test(tt), 'trendtable.js stamped hg-v1418 (re-pinned hg-v1418)');
+  ok(/\?v=1418/.test(tt), 'trendtable.js uses ?v=1418 (re-pinned hg-v1418)');
 }
 
 /* ---------- summary ---------- */

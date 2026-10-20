@@ -21,6 +21,10 @@
    asserts summary.n > 0 with the ticket key present — the 400-bar
    synthetic fixture mints ZERO tickets by design under the hg-v1403
    two-family minimum (real tape mints 72).
+   hg-v1418 re-bake (the cost-floor stand-down, documentation only — no
+   assertion moved): the same 5000-bar route now settles 71 tickets at
+   +0.0382R vs held -0.0466R (H1 -0.1710 / H2 +0.2416) — the floor vetoed
+   exactly one ticket, a +1.79R winner, disclosed in AGENTS.md.
 */
 import fs from 'node:fs';
 import vm from 'node:vm';

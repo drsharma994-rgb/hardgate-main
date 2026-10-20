@@ -1,5 +1,5 @@
 /* =========================================================================
-HARDGATE — omnibtc.js (v13-5)
+HARDGATE — omnibtc.js (v13-6)
 OMNIBTC — Bitcoin only. Every house strategy and indicator bank is pointed
 at BTC, then the desk keeps ONE most-probable setup.
 
@@ -63,6 +63,23 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              on the card. It does not vote. TSI, choppiness,
                              the ATR regime and a 20-bar VWAP are disclosed
                              on the indicator bank and do not vote.
+  COST FLOOR ............... hg-v1418: a crown whose planned stop is under
+                             4× the 0.20% round-trip taker cost (0.80% of
+                             entry) is a WATCH, never a ticket — friction
+                             alone would eat more than 0.25R of planned
+                             risk. Measured on the 5000-bar walker re-bake:
+                             the sub-floor cohort (n=551) resolved -0.269R,
+                             negative in BOTH halves (H1 -0.273 / H2 -0.267),
+                             and -0.612R at true taker cost. Demote, never
+                             hide; unreadable geometry is no verdict; second
+                             stand-down, after TAPE REGIME. Honesty: it
+                             vetoes exactly 1 of 72 walk tickets — a +1.79R
+                             winner — so walk ticket netR moves +0.0625R ->
+                             +0.0382R; the fixture is SWING-shaped and the
+                             live target is SCALP tight stops. Lever:
+                             `window.HG_OBTC_COST_FLOOR = false` or
+                             localStorage `hg_obtc_cost_floor = '0'`;
+                             default ON.
   HTF ACCURACY LOCK ........ hg-v1295: the SAME ten cores also run on the 1d
                              tape the desk already loads. A fresh daily core
                              the other way demotes the crown to a watch
@@ -1809,6 +1826,77 @@ a global hard refresh.
     return null;
   }
 
+  /* hg-v1418: THE COST FLOOR — a stand-down this desk measured and never
+     applied.
+     ------------------------------------------------------------------
+     On the hg-v1403 walker's 5000-bar bake (n=4779 settled rows,
+     scripts/backtest-omnibtc-results.json), the cohort of candidates whose
+     planned stop sits under 4x the venue round-trip taker cost resolved
+     -0.273R — negative in BOTH chronological halves (H1 -0.257 / H2 -0.290,
+     n=548, direction-balanced 302 long / 246 short, 68% stop-outs vs 43% in
+     the population). Re-costed at the true 0.20% taker round trip the walk
+     under-costs, the same cohort resolves -0.616R (H1 -0.622 / H2 -0.610):
+     the case is arithmetic, not a fitted parameter. Cross-window (2000-bar
+     walk): -0.248R, both halves negative.
+     The floor is the wide05 hard line cost <= 0.25R: Binance taker 0.10% a
+     side, round trip HG_OBTC_COST_RT = 0.0020, so a stop under
+     4 x HG_OBTC_COST_RT = 0.0080 of entry pays more than a quarter of
+     planned risk to friction alone. Every wider floor (1.04% / 1.33%) was
+     measured and refused — it destroys documented winning tickets.
+     Doctrine identical to the hg-v1296 regime gate above: DEMOTE, do not
+     hide — the crown keeps its card, its levels and its note; THREE-STATE —
+     a missing, non-finite or inverted entry/stop is not a verdict and never
+     demotes; WITHHOLD-ONLY — it fires before the vote vectors are built and
+     can never add to fams/agree/oppose/cores/indAgree (the hg-v966 trap);
+     ORDER — second among the stand-downs, after TAPE REGIME (the regime
+     suite pins the regime veto first) and above the loaded-bank guard,
+     because this veto reads plan geometry alone and an unloaded pine bank
+     must not be able to mask it.
+     HONESTY: on the walk this floor vetoes exactly 1 of 72 tickets — a
+     +1.789R winner (t=1785772800 short, stopPct 0.38%) — so ticket netR
+     moves +0.0625R -> +0.0382R on that fixture. The walk is SWING-shaped;
+     the real target is live SCALP-family tight stops the fixture barely
+     mints. The forward ledger decides.
+     Lever (the hg-v1156 chain shape): `window.HG_OBTC_COST_FLOOR = false`
+     or localStorage `hg_obtc_cost_floor = '0'` disables it. Default ON,
+     read live per scan so a console flip needs no reload. An unreadable
+     lever is ON (the safe side). */
+  function hgObtcCostFloorOn(){
+    try{
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_COST_FLOOR === false) return false;
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_COST_FLOOR === true) return true;
+      if (W && W.localStorage){
+        var v = W.localStorage.getItem('hg_obtc_cost_floor');
+        if (v === '0' || v === 'false') return false;
+      }
+    }catch(eLv){}
+    return true;
+  }
+
+  /* The named constants, with the derivation: Binance taker 0.10% a side
+     -> round trip 0.20%; the floor is 4x the round trip (the wide05
+     "cost <= 0.25R" hard floor), 0.80% of entry. */
+  var HG_OBTC_COST_RT = 0.0020;
+  var HG_OBTC_COST_FLOOR_PCT = 4 * HG_OBTC_COST_RT;   /* 0.0080 of entry */
+
+  /* Returns null when the plan geometry is unreadable — missing, non-finite
+     or inverted entry/stop, or a zero-width stop (three-state: an unreadable
+     geometry is NOT a verdict, never an invented refusal). Returns the
+     refusal reason only on a real veto. */
+  function hgObtcCostFloorWhy(row){
+    if (!row) return null;
+    var e = +row.entry, s = +row.stop;
+    if (!isFinite(e) || !isFinite(s) || e <= 0) return null;
+    var d = String(row.dir || '').toLowerCase();
+    if (d === 'long' && s >= e) return null;
+    if (d === 'short' && s <= e) return null;
+    var stopPct = Math.abs(e - s) / e;
+    if (!(stopPct > 0)) return null;
+    if (stopPct >= HG_OBTC_COST_FLOOR_PCT) return null;
+    return 'COST FLOOR — stop ' + (stopPct * 100).toFixed(2)
+      + '% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk';
+  }
+
   /* hg-v1303: THE CONFIRMATORY SETUP.
      ------------------------------------------------------------------
      WHAT WAS WRONG. The desk already assembled an independent-evidence
@@ -2077,6 +2165,20 @@ a global hard refresh.
         pick.row.regimeRefused = true;
         return hgObtcDemoteWatch(pick, 'TAPE REGIME — ' + rgWhy
           + '. Watch only, not a ticket.');
+      }
+    }
+    /* hg-v1418: the cost-floor stand-down, SECOND among the stand-downs —
+       after TAPE REGIME (the regime suite pins the regime veto first) and
+       above the loaded-bank guard on purpose: this veto reads the plan's
+       entry/stop geometry and nothing in the pine bank, so an unloaded bank
+       must not be able to mask it. Unreadable geometry -> null -> no
+       refusal (three-state). Withhold-only: it returns before the vote
+       vectors below exist, so it can never add to them. */
+    if (hgObtcCostFloorOn()){
+      var cfWhy = hgObtcCostFloorWhy(pick.row);
+      if (cfWhy){
+        pick.row.costFloorRefused = true;
+        return hgObtcDemoteWatch(pick, cfWhy + '. Watch only, not a ticket.');
       }
     }
     if (!book.loaded){
@@ -3083,8 +3185,8 @@ a global hard refresh.
     "n": 4779,
     "measured": true,
     "span": {
-      "from": 1720339200,
-      "to": 1792324800,
+      "from": 1720454400,
+      "to": 1792440000,
       "bars": 5000
     },
     "horizonBars": 20,
@@ -3105,23 +3207,23 @@ a global hard refresh.
       "hg-v1403 TWO-FAMILY MINIMUM: the hg-v1292 PINE + CORE / PINE + INDICATOR tiebreaks are watches (measured -0.076R on the walk); MACD histogram is veto-only (-0.234R as a confirm)",
       "hg-v1293 ten pine* three-state marks on every record for the hg-v1065 PERFECT COHORT SPLIT and hg-v989 read-split"
     ],
-    "note": "4779 rows settled across the walk · 72 tickets at net +0.063R per ticket · 4707 held (watch) at net -0.046R per held. The hg-v1291/v1292 gate decides ticket vs watch; the walk measures whether the ticket population earns its claim.",
+    "note": "4779 rows settled across the walk · 71 tickets at net +0.038R per ticket · 4708 held (watch) at net -0.047R per held. The hg-v1291/v1292 gate decides ticket vs watch; the walk measures whether the ticket population earns its claim.",
     "summary": {
       "n": 4779,
-      "nTicket": 72,
-      "nHeld": 4707,
+      "nTicket": 71,
+      "nHeld": 4708,
       "nSkipped": 0,
       "ticket": {
-        "n": 72,
-        "win": 0.1111111111111111,
-        "netR": 0.062527,
-        "grossR": 0.088203
+        "n": 71,
+        "win": 0.09859154929577464,
+        "netR": 0.038205,
+        "grossR": 0.061277
       },
       "held": {
-        "n": 4707,
-        "win": 0.17930741448905885,
-        "netR": -0.046379,
-        "grossR": 0.010503
+        "n": 4708,
+        "win": 0.17990654205607476,
+        "netR": -0.046594,
+        "grossR": 0.010472
       }
     },
     "limitations": [
@@ -3135,318 +3237,6 @@ a global hard refresh.
     "rows": [
       {
         "idx": 220,
-        "t": 1723507200,
-        "dir": "short",
-        "entry": 59040,
-        "stop": 61910.697375,
-        "t1": 53298.60524999999,
-        "tier": "near",
-        "ticket": false,
-        "pineAgree": [],
-        "pineOppose": [],
-        "pineFamilies": [],
-        "indAgree": [],
-        "indOppose": [],
-        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
-        "pineRefused": true,
-        "pineMarks": {
-          "lor": null,
-          "ht": null,
-          "sqz": null,
-          "smf": "long",
-          "msb": null,
-          "cipher": null,
-          "rfilter": "long",
-          "nwenv": null,
-          "wavwap": null,
-          "smc": "long",
-          "supertrend": null,
-          "macd": null,
-          "cci": null
-        },
-        "outcome": {
-          "status": "timeout",
-          "bars": 20,
-          "grossR": 0.222942,
-          "netR": 0.206489,
-          "bothTouch": false
-        }
-      },
-      {
-        "idx": 221,
-        "t": 1723521600,
-        "dir": "short",
-        "entry": 59238.05,
-        "stop": 61910.697375,
-        "t1": 53892.75525,
-        "tier": "near",
-        "ticket": false,
-        "pineAgree": [],
-        "pineOppose": [],
-        "pineFamilies": [],
-        "indAgree": [],
-        "indOppose": [],
-        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
-        "pineRefused": true,
-        "pineMarks": {
-          "lor": null,
-          "ht": null,
-          "sqz": null,
-          "smf": null,
-          "msb": null,
-          "cipher": null,
-          "rfilter": "long",
-          "nwenv": null,
-          "wavwap": null,
-          "smc": "long",
-          "supertrend": null,
-          "macd": null,
-          "cci": null
-        },
-        "outcome": {
-          "status": "timeout",
-          "bars": 20,
-          "grossR": 0.436642,
-          "netR": 0.41891,
-          "bothTouch": false
-        }
-      },
-      {
-        "idx": 222,
-        "t": 1723536000,
-        "dir": "short",
-        "entry": 58830,
-        "stop": 60800.075999999994,
-        "t1": 54889.84800000001,
-        "tier": "near",
-        "ticket": false,
-        "pineAgree": [],
-        "pineOppose": [],
-        "pineFamilies": [],
-        "indAgree": [],
-        "indOppose": [],
-        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
-        "pineRefused": true,
-        "pineMarks": {
-          "lor": null,
-          "ht": null,
-          "sqz": null,
-          "smf": null,
-          "msb": null,
-          "cipher": null,
-          "rfilter": "long",
-          "nwenv": null,
-          "wavwap": "long",
-          "smc": "long",
-          "supertrend": null,
-          "macd": null,
-          "cci": null
-        },
-        "outcome": {
-          "status": "stop",
-          "bars": 2,
-          "grossR": -0.999995,
-          "netR": -1.023884,
-          "bothTouch": false
-        }
-      },
-      {
-        "idx": 223,
-        "t": 1723550400,
-        "dir": "short",
-        "entry": 59472.26,
-        "stop": 60749.450999999994,
-        "t1": 56917.87800000002,
-        "tier": "near",
-        "ticket": false,
-        "pineAgree": [],
-        "pineOppose": [],
-        "pineFamilies": [],
-        "indAgree": [],
-        "indOppose": [],
-        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
-        "pineRefused": true,
-        "pineMarks": {
-          "lor": null,
-          "ht": null,
-          "sqz": null,
-          "smf": null,
-          "msb": null,
-          "cipher": null,
-          "rfilter": "long",
-          "nwenv": null,
-          "wavwap": null,
-          "smc": "long",
-          "supertrend": null,
-          "macd": null,
-          "cci": null
-        },
-        "outcome": {
-          "status": "stop",
-          "bars": 1,
-          "grossR": -1.000008,
-          "netR": -1.03726,
-          "bothTouch": false
-        }
-      },
-      {
-        "idx": 224,
-        "t": 1723564800,
-        "dir": "short",
-        "entry": 60820.15,
-        "stop": 61627.298624999996,
-        "t1": 59205.85275000001,
-        "tier": "near",
-        "ticket": false,
-        "pineAgree": [],
-        "pineOppose": [],
-        "pineFamilies": [],
-        "indAgree": [],
-        "indOppose": [],
-        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
-        "pineRefused": true,
-        "pineMarks": {
-          "lor": null,
-          "ht": "long",
-          "sqz": null,
-          "smf": "long",
-          "msb": null,
-          "cipher": null,
-          "rfilter": "long",
-          "nwenv": null,
-          "wavwap": null,
-          "smc": "long",
-          "supertrend": null,
-          "macd": null,
-          "cci": null
-        },
-        "outcome": {
-          "status": "stop",
-          "bars": 5,
-          "grossR": -0.999988,
-          "netR": -1.060269,
-          "bothTouch": true
-        }
-      },
-      {
-        "idx": 225,
-        "t": 1723579200,
-        "dir": "long",
-        "entry": 60587.15,
-        "stop": 57593.011375,
-        "t1": 66575.42725000001,
-        "tier": "near",
-        "ticket": false,
-        "pineAgree": [],
-        "pineOppose": [],
-        "pineFamilies": [],
-        "indAgree": [],
-        "indOppose": [],
-        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
-        "pineRefused": true,
-        "pineMarks": {
-          "lor": null,
-          "ht": null,
-          "sqz": null,
-          "smf": null,
-          "msb": null,
-          "cipher": null,
-          "rfilter": "long",
-          "nwenv": null,
-          "wavwap": "short",
-          "smc": "long",
-          "supertrend": null,
-          "macd": "long",
-          "cci": null
-        },
-        "outcome": {
-          "status": "stop",
-          "bars": 11,
-          "grossR": -1.000003,
-          "netR": -1.016192,
-          "bothTouch": false
-        }
-      },
-      {
-        "idx": 226,
-        "t": 1723593600,
-        "dir": "long",
-        "entry": 60952.83,
-        "stop": 57593.011375,
-        "t1": 67672.46725,
-        "tier": "near",
-        "ticket": false,
-        "pineAgree": [],
-        "pineOppose": [],
-        "pineFamilies": [],
-        "indAgree": [],
-        "indOppose": [],
-        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
-        "pineRefused": true,
-        "pineMarks": {
-          "lor": null,
-          "ht": null,
-          "sqz": null,
-          "smf": "long",
-          "msb": null,
-          "cipher": null,
-          "rfilter": "long",
-          "nwenv": null,
-          "wavwap": null,
-          "smc": "long",
-          "supertrend": null,
-          "macd": null,
-          "cci": null
-        },
-        "outcome": {
-          "status": "stop",
-          "bars": 10,
-          "grossR": -1,
-          "netR": -1.014513,
-          "bothTouch": false
-        }
-      },
-      {
-        "idx": 227,
-        "t": 1723608000,
-        "dir": "long",
-        "entry": 60914.02,
-        "stop": 57752.77375,
-        "t1": 67236.51249999998,
-        "tier": "near",
-        "ticket": false,
-        "pineAgree": [],
-        "pineOppose": [],
-        "pineFamilies": [],
-        "indAgree": [],
-        "indOppose": [],
-        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
-        "pineRefused": true,
-        "pineMarks": {
-          "lor": null,
-          "ht": null,
-          "sqz": null,
-          "smf": null,
-          "msb": null,
-          "cipher": null,
-          "rfilter": "long",
-          "nwenv": null,
-          "wavwap": "short",
-          "smc": "long",
-          "supertrend": null,
-          "macd": null,
-          "cci": null
-        },
-        "outcome": {
-          "status": "stop",
-          "bars": 6,
-          "grossR": -1,
-          "netR": -1.015415,
-          "bothTouch": false
-        }
-      },
-      {
-        "idx": 228,
         "t": 1723622400,
         "dir": "long",
         "entry": 61296.87,
@@ -3485,7 +3275,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 229,
+        "idx": 221,
         "t": 1723636800,
         "dir": "long",
         "entry": 59435.69,
@@ -3524,7 +3314,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 230,
+        "idx": 222,
         "t": 1723651200,
         "dir": "long",
         "entry": 58891.13,
@@ -3563,7 +3353,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 231,
+        "idx": 223,
         "t": 1723665600,
         "dir": "short",
         "entry": 58683.39,
@@ -3602,7 +3392,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 232,
+        "idx": 224,
         "t": 1723680000,
         "dir": "short",
         "entry": 58442.98,
@@ -3641,7 +3431,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 233,
+        "idx": 225,
         "t": 1723694400,
         "dir": "short",
         "entry": 58060.37,
@@ -3685,7 +3475,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 234,
+        "idx": 226,
         "t": 1723708800,
         "dir": "short",
         "entry": 58745.36,
@@ -3726,7 +3516,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 235,
+        "idx": 227,
         "t": 1723723200,
         "dir": "short",
         "entry": 59682.84,
@@ -3771,7 +3561,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 236,
+        "idx": 228,
         "t": 1723737600,
         "dir": "short",
         "entry": 57047.46,
@@ -3782,20 +3572,18 @@ a global hard refresh.
         "pineAgree": [
           "MSB / OB",
           "Squeeze Momentum",
-          "SMC Core",
-          "Range Filter"
+          "SMC Core"
         ],
         "pineOppose": [],
         "pineFamilies": [
           "structure",
-          "momentum",
-          "trend"
+          "momentum"
         ],
         "indAgree": [
           "Donchian 20"
         ],
         "indOppose": [],
-        "pineNote": "PINE CONFIRM — MSB / OB, Squeeze Momentum, SMC Core, Range Filter · Donchian 20 crossed the same way · 1d tape too thin to read",
+        "pineNote": "PINE CONFIRM — MSB / OB, Squeeze Momentum, SMC Core · Donchian 20 crossed the same way · 1d tape too thin to read",
         "pineRefused": false,
         "pineMarks": {
           "lor": null,
@@ -3804,7 +3592,7 @@ a global hard refresh.
           "smf": null,
           "msb": "short",
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "short",
@@ -3821,7 +3609,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 237,
+        "idx": 229,
         "t": 1723752000,
         "dir": "short",
         "entry": 57541.06,
@@ -3833,7 +3621,6 @@ a global hard refresh.
           "SMC Core"
         ],
         "pineOppose": [
-          "Range Filter",
           "Weekly AVWAP"
         ],
         "pineFamilies": [
@@ -3843,7 +3630,7 @@ a global hard refresh.
         "indOppose": [
           "Liquidity sweep"
         ],
-        "pineNote": "PINE AGAINST — Range Filter, Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "pineNote": "PINE AGAINST — Weekly AVWAP fired the other way. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -3869,7 +3656,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 238,
+        "idx": 230,
         "t": 1723766400,
         "dir": "short",
         "entry": 57890,
@@ -3914,7 +3701,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 239,
+        "idx": 231,
         "t": 1723780800,
         "dir": "short",
         "entry": 58456.99,
@@ -3957,7 +3744,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 240,
+        "idx": 232,
         "t": 1723795200,
         "dir": "short",
         "entry": 58400,
@@ -4002,7 +3789,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 241,
+        "idx": 233,
         "t": 1723809600,
         "dir": "short",
         "entry": 58071.06,
@@ -4045,7 +3832,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 242,
+        "idx": 234,
         "t": 1723824000,
         "dir": "short",
         "entry": 59683.39,
@@ -4057,11 +3844,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram, RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.36% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -4087,7 +3871,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 243,
+        "idx": 235,
         "t": 1723838400,
         "dir": "short",
         "entry": 58874.6,
@@ -4128,7 +3912,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 244,
+        "idx": 236,
         "t": 1723852800,
         "dir": "short",
         "entry": 59158.37,
@@ -4169,7 +3953,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 245,
+        "idx": 237,
         "t": 1723867200,
         "dir": "short",
         "entry": 59248,
@@ -4210,7 +3994,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 246,
+        "idx": 238,
         "t": 1723881600,
         "dir": "short",
         "entry": 59137.12,
@@ -4251,7 +4035,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 247,
+        "idx": 239,
         "t": 1723896000,
         "dir": "short",
         "entry": 59388.11,
@@ -4290,7 +4074,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 248,
+        "idx": 240,
         "t": 1723910400,
         "dir": "long",
         "entry": 59473.19,
@@ -4329,7 +4113,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 249,
+        "idx": 241,
         "t": 1723924800,
         "dir": "long",
         "entry": 59491.99,
@@ -4368,7 +4152,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 250,
+        "idx": 242,
         "t": 1723939200,
         "dir": "long",
         "entry": 59337.42,
@@ -4409,7 +4193,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 251,
+        "idx": 243,
         "t": 1723953600,
         "dir": "long",
         "entry": 59573.39,
@@ -4450,7 +4234,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 252,
+        "idx": 244,
         "t": 1723968000,
         "dir": "long",
         "entry": 60024.01,
@@ -4500,7 +4284,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 253,
+        "idx": 245,
         "t": 1723982400,
         "dir": "long",
         "entry": 59863.99,
@@ -4543,7 +4327,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 254,
+        "idx": 246,
         "t": 1723996800,
         "dir": "long",
         "entry": 59708.38,
@@ -4586,7 +4370,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 255,
+        "idx": 247,
         "t": 1724011200,
         "dir": "long",
         "entry": 58427.35,
@@ -4594,18 +4378,12 @@ a global hard refresh.
         "t1": 58522.63735,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "SMC Core"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "structure"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.08% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -4631,7 +4409,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 256,
+        "idx": 248,
         "t": 1724025600,
         "dir": "long",
         "entry": 58736.85,
@@ -4679,7 +4457,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 257,
+        "idx": 249,
         "t": 1724040000,
         "dir": "short",
         "entry": 58502.19,
@@ -4727,7 +4505,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 258,
+        "idx": 250,
         "t": 1724054400,
         "dir": "short",
         "entry": 58396.95,
@@ -4770,7 +4548,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 259,
+        "idx": 251,
         "t": 1724068800,
         "dir": "short",
         "entry": 58539.24,
@@ -4780,7 +4558,6 @@ a global hard refresh.
         "ticket": false,
         "pineAgree": [],
         "pineOppose": [
-          "Lorentzian",
           "Weekly AVWAP"
         ],
         "pineFamilies": [],
@@ -4790,10 +4567,10 @@ a global hard refresh.
         "indOppose": [
           "Engulfing"
         ],
-        "pineNote": "PINE AGAINST — Lorentzian, Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "pineNote": "PINE AGAINST — Weekly AVWAP fired the other way. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
-          "lor": "long",
+          "lor": null,
           "ht": null,
           "sqz": null,
           "smf": null,
@@ -4816,7 +4593,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 260,
+        "idx": 252,
         "t": 1724083200,
         "dir": "short",
         "entry": 58967.53,
@@ -4829,7 +4606,7 @@ a global hard refresh.
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "no fresh pine script on this 4h tape (9 of 10 cores ran). Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -4855,7 +4632,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 261,
+        "idx": 253,
         "t": 1724097600,
         "dir": "short",
         "entry": 59438.5,
@@ -4894,7 +4671,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 262,
+        "idx": 254,
         "t": 1724112000,
         "dir": "short",
         "entry": 60619.18,
@@ -4903,17 +4680,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Squeeze Momentum"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "Donchian 20",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — Squeeze Momentum fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.55% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -4939,7 +4710,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 263,
+        "idx": 255,
         "t": 1724126400,
         "dir": "long",
         "entry": 60924.33,
@@ -4984,7 +4755,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 264,
+        "idx": 256,
         "t": 1724140800,
         "dir": "long",
         "entry": 60518.82,
@@ -4993,19 +4764,17 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Lorentzian"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [
           "EMA 20/50",
           "RSI 14"
         ],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — Lorentzian fired the other way. Watch only, not a ticket.",
+        "pineNote": "no fresh pine script on this 4h tape (9 of 10 cores ran). Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
-          "lor": "short",
+          "lor": null,
           "ht": null,
           "sqz": null,
           "smf": null,
@@ -5028,7 +4797,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 265,
+        "idx": 257,
         "t": 1724155200,
         "dir": "long",
         "entry": 58825.53,
@@ -5071,7 +4840,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 266,
+        "idx": 258,
         "t": 1724169600,
         "dir": "long",
         "entry": 59511.99,
@@ -5086,7 +4855,7 @@ a global hard refresh.
           "EMA 20/50"
         ],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "no fresh pine script on this 4h tape (9 of 10 cores ran). Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -5112,7 +4881,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 267,
+        "idx": 259,
         "t": 1724184000,
         "dir": "long",
         "entry": 59013.8,
@@ -5121,16 +4890,18 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [],
+        "pineOppose": [
+          "Lorentzian"
+        ],
         "pineFamilies": [],
         "indAgree": [
           "EMA 20/50"
         ],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "PINE AGAINST — Lorentzian fired the other way. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
-          "lor": null,
+          "lor": "short",
           "ht": null,
           "sqz": null,
           "smf": null,
@@ -5153,7 +4924,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 268,
+        "idx": 260,
         "t": 1724198400,
         "dir": "long",
         "entry": 59320,
@@ -5194,7 +4965,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 269,
+        "idx": 261,
         "t": 1724212800,
         "dir": "short",
         "entry": 59712,
@@ -5233,7 +5004,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 270,
+        "idx": 262,
         "t": 1724227200,
         "dir": "long",
         "entry": 59361.14,
@@ -5272,7 +5043,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 271,
+        "idx": 263,
         "t": 1724241600,
         "dir": "long",
         "entry": 59511.8,
@@ -5311,7 +5082,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 272,
+        "idx": 264,
         "t": 1724256000,
         "dir": "long",
         "entry": 61570,
@@ -5358,7 +5129,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 273,
+        "idx": 265,
         "t": 1724270400,
         "dir": "long",
         "entry": 61156.03,
@@ -5401,7 +5172,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 274,
+        "idx": 266,
         "t": 1724284800,
         "dir": "long",
         "entry": 60548.9,
@@ -5440,7 +5211,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 275,
+        "idx": 267,
         "t": 1724299200,
         "dir": "long",
         "entry": 60984.31,
@@ -5481,7 +5252,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 276,
+        "idx": 268,
         "t": 1724313600,
         "dir": "long",
         "entry": 61336.09,
@@ -5524,7 +5295,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 277,
+        "idx": 269,
         "t": 1724328000,
         "dir": "long",
         "entry": 60407.4,
@@ -5563,7 +5334,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 278,
+        "idx": 270,
         "t": 1724342400,
         "dir": "long",
         "entry": 60308,
@@ -5602,7 +5373,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 279,
+        "idx": 271,
         "t": 1724356800,
         "dir": "long",
         "entry": 60375.84,
@@ -5641,7 +5412,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 280,
+        "idx": 272,
         "t": 1724371200,
         "dir": "long",
         "entry": 60593.31,
@@ -5680,7 +5451,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 281,
+        "idx": 273,
         "t": 1724385600,
         "dir": "long",
         "entry": 61069.27,
@@ -5719,7 +5490,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 282,
+        "idx": 274,
         "t": 1724400000,
         "dir": "long",
         "entry": 60741.68,
@@ -5728,14 +5499,16 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [],
+        "pineOppose": [
+          "Lorentzian"
+        ],
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "PINE AGAINST — Lorentzian fired the other way. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
-          "lor": null,
+          "lor": "short",
           "ht": null,
           "sqz": null,
           "smf": null,
@@ -5758,7 +5531,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 283,
+        "idx": 275,
         "t": 1724414400,
         "dir": "long",
         "entry": 61533.05,
@@ -5768,7 +5541,6 @@ a global hard refresh.
         "ticket": false,
         "pineAgree": [],
         "pineOppose": [
-          "Lorentzian",
           "Weekly AVWAP"
         ],
         "pineFamilies": [],
@@ -5776,10 +5548,10 @@ a global hard refresh.
         "indOppose": [
           "Liquidity sweep"
         ],
-        "pineNote": "PINE AGAINST — Lorentzian, Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "pineNote": "PINE AGAINST — Weekly AVWAP fired the other way. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
-          "lor": "short",
+          "lor": null,
           "ht": null,
           "sqz": null,
           "smf": null,
@@ -5802,7 +5574,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 284,
+        "idx": 276,
         "t": 1724428800,
         "dir": "long",
         "entry": 63628.84,
@@ -5845,7 +5617,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 285,
+        "idx": 277,
         "t": 1724443200,
         "dir": "long",
         "entry": 64037.24,
@@ -5888,7 +5660,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 286,
+        "idx": 278,
         "t": 1724457600,
         "dir": "long",
         "entry": 63832.01,
@@ -5931,7 +5703,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 287,
+        "idx": 279,
         "t": 1724472000,
         "dir": "long",
         "entry": 64315,
@@ -5972,7 +5744,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 288,
+        "idx": 280,
         "t": 1724486400,
         "dir": "long",
         "entry": 63905.01,
@@ -6013,7 +5785,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 289,
+        "idx": 281,
         "t": 1724500800,
         "dir": "long",
         "entry": 63976,
@@ -6054,7 +5826,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 290,
+        "idx": 282,
         "t": 1724515200,
         "dir": "long",
         "entry": 64210.6,
@@ -6095,7 +5867,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 291,
+        "idx": 283,
         "t": 1724529600,
         "dir": "long",
         "entry": 64157.01,
@@ -6138,7 +5910,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 292,
+        "idx": 284,
         "t": 1724544000,
         "dir": "long",
         "entry": 64101.01,
@@ -6177,7 +5949,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 293,
+        "idx": 285,
         "t": 1724558400,
         "dir": "long",
         "entry": 63868.26,
@@ -6216,7 +5988,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 294,
+        "idx": 286,
         "t": 1724572800,
         "dir": "long",
         "entry": 63873.91,
@@ -6255,7 +6027,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 295,
+        "idx": 287,
         "t": 1724587200,
         "dir": "long",
         "entry": 64132.16,
@@ -6294,7 +6066,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 296,
+        "idx": 288,
         "t": 1724601600,
         "dir": "long",
         "entry": 64187.41,
@@ -6335,7 +6107,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 297,
+        "idx": 289,
         "t": 1724616000,
         "dir": "long",
         "entry": 64220,
@@ -6379,7 +6151,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 298,
+        "idx": 290,
         "t": 1724630400,
         "dir": "long",
         "entry": 64114.99,
@@ -6422,7 +6194,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 299,
+        "idx": 291,
         "t": 1724644800,
         "dir": "long",
         "entry": 63627.01,
@@ -6430,18 +6202,12 @@ a global hard refresh.
         "t1": 64104.65701,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Weekly AVWAP"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.38% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -6467,7 +6233,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 300,
+        "idx": 292,
         "t": 1724659200,
         "dir": "long",
         "entry": 63859,
@@ -6512,7 +6278,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 301,
+        "idx": 293,
         "t": 1724673600,
         "dir": "long",
         "entry": 63532.53,
@@ -6520,16 +6286,12 @@ a global hard refresh.
         "t1": 64539.12252999999,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Weekly AVWAP"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "only Weekly AVWAP fired fresh, and no second house strategy has levels this way. Watch only.",
+        "pineNote": "COST FLOOR — stop 0.79% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -6555,7 +6317,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 302,
+        "idx": 294,
         "t": 1724688000,
         "dir": "long",
         "entry": 63342.99,
@@ -6594,7 +6356,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 303,
+        "idx": 295,
         "t": 1724702400,
         "dir": "long",
         "entry": 62834,
@@ -6633,7 +6395,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 304,
+        "idx": 296,
         "t": 1724716800,
         "dir": "long",
         "entry": 62970,
@@ -6672,7 +6434,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 305,
+        "idx": 297,
         "t": 1724731200,
         "dir": "long",
         "entry": 62902.31,
@@ -6711,7 +6473,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 306,
+        "idx": 298,
         "t": 1724745600,
         "dir": "long",
         "entry": 62417,
@@ -6750,7 +6512,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 307,
+        "idx": 299,
         "t": 1724760000,
         "dir": "long",
         "entry": 61709.13,
@@ -6758,21 +6520,12 @@ a global hard refresh.
         "t1": 62269.50424999999,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Weekly AVWAP"
-        ],
-        "pineOppose": [
-          "SMC Core"
-        ],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "Donchian 20",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.45% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -6798,7 +6551,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 308,
+        "idx": 300,
         "t": 1724774400,
         "dir": "long",
         "entry": 62102.01,
@@ -6837,7 +6590,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 309,
+        "idx": 301,
         "t": 1724788800,
         "dir": "short",
         "entry": 59415,
@@ -6878,7 +6631,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 310,
+        "idx": 302,
         "t": 1724803200,
         "dir": "short",
         "entry": 59629.01,
@@ -6917,7 +6670,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 311,
+        "idx": 303,
         "t": 1724817600,
         "dir": "short",
         "entry": 58600.98,
@@ -6956,7 +6709,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 312,
+        "idx": 304,
         "t": 1724832000,
         "dir": "short",
         "entry": 59935,
@@ -6997,7 +6750,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 313,
+        "idx": 305,
         "t": 1724846400,
         "dir": "short",
         "entry": 59000,
@@ -7040,7 +6793,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 314,
+        "idx": 306,
         "t": 1724860800,
         "dir": "short",
         "entry": 58898.85,
@@ -7085,7 +6838,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 315,
+        "idx": 307,
         "t": 1724875200,
         "dir": "short",
         "entry": 59034.9,
@@ -7126,7 +6879,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 316,
+        "idx": 308,
         "t": 1724889600,
         "dir": "short",
         "entry": 59141.1,
@@ -7167,7 +6920,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 317,
+        "idx": 309,
         "t": 1724904000,
         "dir": "short",
         "entry": 59583.88,
@@ -7208,7 +6961,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 318,
+        "idx": 310,
         "t": 1724918400,
         "dir": "short",
         "entry": 60067.06,
@@ -7247,7 +7000,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 319,
+        "idx": 311,
         "t": 1724932800,
         "dir": "short",
         "entry": 60779.99,
@@ -7288,7 +7041,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 320,
+        "idx": 312,
         "t": 1724947200,
         "dir": "short",
         "entry": 59258,
@@ -7327,7 +7080,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 321,
+        "idx": 313,
         "t": 1724961600,
         "dir": "short",
         "entry": 59359.01,
@@ -7366,7 +7119,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 322,
+        "idx": 314,
         "t": 1724976000,
         "dir": "short",
         "entry": 59032.01,
@@ -7405,7 +7158,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 323,
+        "idx": 315,
         "t": 1724990400,
         "dir": "short",
         "entry": 59271.1,
@@ -7444,7 +7197,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 324,
+        "idx": 316,
         "t": 1725004800,
         "dir": "short",
         "entry": 59396,
@@ -7485,7 +7238,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 325,
+        "idx": 317,
         "t": 1725019200,
         "dir": "short",
         "entry": 58094.99,
@@ -7530,7 +7283,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 326,
+        "idx": 318,
         "t": 1725033600,
         "dir": "short",
         "entry": 58700.02,
@@ -7571,7 +7324,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 327,
+        "idx": 319,
         "t": 1725048000,
         "dir": "short",
         "entry": 59123.99,
@@ -7610,7 +7363,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 328,
+        "idx": 320,
         "t": 1725062400,
         "dir": "short",
         "entry": 59232.01,
@@ -7649,7 +7402,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 329,
+        "idx": 321,
         "t": 1725076800,
         "dir": "short",
         "entry": 59095,
@@ -7688,7 +7441,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 330,
+        "idx": 322,
         "t": 1725091200,
         "dir": "short",
         "entry": 59120.99,
@@ -7727,7 +7480,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 331,
+        "idx": 323,
         "t": 1725105600,
         "dir": "short",
         "entry": 59006.54,
@@ -7766,7 +7519,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 332,
+        "idx": 324,
         "t": 1725120000,
         "dir": "short",
         "entry": 58856,
@@ -7805,7 +7558,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 333,
+        "idx": 325,
         "t": 1725134400,
         "dir": "short",
         "entry": 58973.99,
@@ -7844,7 +7597,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 334,
+        "idx": 326,
         "t": 1725148800,
         "dir": "short",
         "entry": 58524.21,
@@ -7883,7 +7636,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 335,
+        "idx": 327,
         "t": 1725163200,
         "dir": "short",
         "entry": 58478.64,
@@ -7922,7 +7675,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 336,
+        "idx": 328,
         "t": 1725177600,
         "dir": "short",
         "entry": 58240.52,
@@ -7961,7 +7714,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 337,
+        "idx": 329,
         "t": 1725192000,
         "dir": "short",
         "entry": 58217,
@@ -8000,7 +7753,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 338,
+        "idx": 330,
         "t": 1725206400,
         "dir": "short",
         "entry": 58514,
@@ -8039,7 +7792,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 339,
+        "idx": 331,
         "t": 1725220800,
         "dir": "short",
         "entry": 57301.86,
@@ -8061,7 +7814,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "short",
@@ -8078,7 +7831,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 340,
+        "idx": 332,
         "t": 1725235200,
         "dir": "short",
         "entry": 57742.01,
@@ -8117,7 +7870,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 341,
+        "idx": 333,
         "t": 1725249600,
         "dir": "short",
         "entry": 57547.99,
@@ -8156,7 +7909,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 342,
+        "idx": 334,
         "t": 1725264000,
         "dir": "short",
         "entry": 58422.01,
@@ -8195,7 +7948,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 343,
+        "idx": 335,
         "t": 1725278400,
         "dir": "short",
         "entry": 58537.99,
@@ -8234,7 +7987,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 344,
+        "idx": 336,
         "t": 1725292800,
         "dir": "short",
         "entry": 58439.99,
@@ -8273,7 +8026,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 345,
+        "idx": 337,
         "t": 1725307200,
         "dir": "short",
         "entry": 59132.13,
@@ -8312,7 +8065,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 346,
+        "idx": 338,
         "t": 1725321600,
         "dir": "short",
         "entry": 59110.99,
@@ -8351,7 +8104,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 347,
+        "idx": 339,
         "t": 1725336000,
         "dir": "short",
         "entry": 59112,
@@ -8390,7 +8143,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 348,
+        "idx": 340,
         "t": 1725350400,
         "dir": "short",
         "entry": 59072,
@@ -8429,7 +8182,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 349,
+        "idx": 341,
         "t": 1725364800,
         "dir": "short",
         "entry": 57725,
@@ -8468,7 +8221,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 350,
+        "idx": 342,
         "t": 1725379200,
         "dir": "short",
         "entry": 58046,
@@ -8507,7 +8260,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 351,
+        "idx": 343,
         "t": 1725393600,
         "dir": "short",
         "entry": 57487.73,
@@ -8548,7 +8301,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 352,
+        "idx": 344,
         "t": 1725408000,
         "dir": "short",
         "entry": 56653.98,
@@ -8556,16 +8309,12 @@ a global hard refresh.
         "t1": 50237.54875000001,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Range Filter"
-        ],
+        "pineAgree": [],
         "pineOppose": [
           "NW Envelope",
           "Weekly AVWAP"
         ],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineFamilies": [],
         "indAgree": [
           "Donchian 20",
           "RSI 14"
@@ -8580,7 +8329,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": "long",
           "wavwap": "long",
           "smc": "short",
@@ -8597,7 +8346,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 353,
+        "idx": 345,
         "t": 1725422400,
         "dir": "short",
         "entry": 56746,
@@ -8628,7 +8377,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": "long",
           "smc": "short",
@@ -8645,7 +8394,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 354,
+        "idx": 346,
         "t": 1725436800,
         "dir": "short",
         "entry": 56573,
@@ -8667,7 +8416,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "short",
@@ -8684,7 +8433,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 355,
+        "idx": 347,
         "t": 1725451200,
         "dir": "short",
         "entry": 58134,
@@ -8695,13 +8444,12 @@ a global hard refresh.
         "pineAgree": [],
         "pineOppose": [
           "Smart Money Flow",
-          "HalfTrend",
-          "Range Filter"
+          "HalfTrend"
         ],
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — Smart Money Flow, HalfTrend, Range Filter fired the other way. Watch only, not a ticket.",
+        "pineNote": "PINE AGAINST — Smart Money Flow, HalfTrend fired the other way. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -8727,7 +8475,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 356,
+        "idx": 348,
         "t": 1725465600,
         "dir": "short",
         "entry": 58058.01,
@@ -8766,7 +8514,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 357,
+        "idx": 349,
         "t": 1725480000,
         "dir": "short",
         "entry": 57970.9,
@@ -8807,7 +8555,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 358,
+        "idx": 350,
         "t": 1725494400,
         "dir": "short",
         "entry": 57135.42,
@@ -8815,13 +8563,9 @@ a global hard refresh.
         "t1": 52612.65999999999,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Range Filter"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
         "indOppose": [
           "MACD histogram"
@@ -8835,7 +8579,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "short",
@@ -8852,7 +8596,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 359,
+        "idx": 351,
         "t": 1725508800,
         "dir": "short",
         "entry": 57155.1,
@@ -8874,7 +8618,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "short",
@@ -8891,7 +8635,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 360,
+        "idx": 352,
         "t": 1725523200,
         "dir": "short",
         "entry": 56698.01,
@@ -8913,7 +8657,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "short",
@@ -8930,7 +8674,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 361,
+        "idx": 353,
         "t": 1725537600,
         "dir": "short",
         "entry": 55976.01,
@@ -8939,7 +8683,8 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [
-          "HalfTrend"
+          "HalfTrend",
+          "Range Filter"
         ],
         "pineOppose": [
           "Lorentzian",
@@ -8976,7 +8721,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 362,
+        "idx": 354,
         "t": 1725552000,
         "dir": "short",
         "entry": 56060.01,
@@ -9017,7 +8762,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 363,
+        "idx": 355,
         "t": 1725566400,
         "dir": "short",
         "entry": 56180,
@@ -9060,7 +8805,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 364,
+        "idx": 356,
         "t": 1725580800,
         "dir": "short",
         "entry": 56588,
@@ -9069,11 +8814,13 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [],
+        "pineOppose": [
+          "Range Filter"
+        ],
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "PINE AGAINST — Range Filter fired the other way. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -9082,7 +8829,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "short",
@@ -9099,7 +8846,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 365,
+        "idx": 357,
         "t": 1725595200,
         "dir": "short",
         "entry": 55804.29,
@@ -9107,11 +8854,15 @@ a global hard refresh.
         "t1": 50293.895,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [],
+        "pineAgree": [
+          "Range Filter"
+        ],
         "pineOppose": [
           "Weekly AVWAP"
         ],
-        "pineFamilies": [],
+        "pineFamilies": [
+          "trend"
+        ],
         "indAgree": [
           "Engulfing"
         ],
@@ -9142,7 +8893,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 366,
+        "idx": 358,
         "t": 1725609600,
         "dir": "short",
         "entry": 55999.09,
@@ -9181,7 +8932,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 367,
+        "idx": 359,
         "t": 1725624000,
         "dir": "short",
         "entry": 54045.01,
@@ -9228,7 +8979,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 368,
+        "idx": 360,
         "t": 1725638400,
         "dir": "short",
         "entry": 53534.28,
@@ -9271,7 +9022,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 369,
+        "idx": 361,
         "t": 1725652800,
         "dir": "short",
         "entry": 53962.97,
@@ -9313,7 +9064,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 370,
+        "idx": 362,
         "t": 1725667200,
         "dir": "short",
         "entry": 53818.91,
@@ -9352,7 +9103,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 371,
+        "idx": 363,
         "t": 1725681600,
         "dir": "short",
         "entry": 54286,
@@ -9391,7 +9142,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 372,
+        "idx": 364,
         "t": 1725696000,
         "dir": "short",
         "entry": 54326,
@@ -9430,7 +9181,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 373,
+        "idx": 365,
         "t": 1725710400,
         "dir": "short",
         "entry": 54780,
@@ -9469,7 +9220,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 374,
+        "idx": 366,
         "t": 1725724800,
         "dir": "short",
         "entry": 54404.01,
@@ -9508,7 +9259,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 375,
+        "idx": 367,
         "t": 1725739200,
         "dir": "short",
         "entry": 54160.86,
@@ -9547,7 +9298,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 376,
+        "idx": 368,
         "t": 1725753600,
         "dir": "short",
         "entry": 54402.99,
@@ -9588,7 +9339,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 377,
+        "idx": 369,
         "t": 1725768000,
         "dir": "short",
         "entry": 54436.25,
@@ -9629,7 +9380,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 378,
+        "idx": 370,
         "t": 1725782400,
         "dir": "short",
         "entry": 54556.08,
@@ -9670,7 +9421,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 379,
+        "idx": 371,
         "t": 1725796800,
         "dir": "short",
         "entry": 53687,
@@ -9711,7 +9462,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 380,
+        "idx": 372,
         "t": 1725811200,
         "dir": "short",
         "entry": 54337.01,
@@ -9753,7 +9504,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 381,
+        "idx": 373,
         "t": 1725825600,
         "dir": "short",
         "entry": 54869.95,
@@ -9799,7 +9550,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 382,
+        "idx": 374,
         "t": 1725840000,
         "dir": "short",
         "entry": 55115,
@@ -9808,14 +9559,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "SMC Core",
-          "Weekly AVWAP"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — SMC Core, Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.51% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -9841,7 +9589,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 383,
+        "idx": 375,
         "t": 1725854400,
         "dir": "short",
         "entry": 54974.01,
@@ -9850,14 +9598,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "SMC Core",
-          "Weekly AVWAP"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — SMC Core, Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.77% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -9883,7 +9628,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 384,
+        "idx": 376,
         "t": 1725868800,
         "dir": "short",
         "entry": 55264.87,
@@ -9891,23 +9636,12 @@ a global hard refresh.
         "t1": 54629.34513000001,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Lorentzian",
-          "Weekly AVWAP"
-        ],
-        "pineOppose": [
-          "HalfTrend",
-          "SMC Core"
-        ],
-        "pineFamilies": [
-          "trend",
-          "value"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — HalfTrend, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.57% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": "short",
@@ -9933,7 +9667,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 385,
+        "idx": 377,
         "t": 1725883200,
         "dir": "short",
         "entry": 55386,
@@ -9942,16 +9676,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "SMC Core",
-          "Weekly AVWAP"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — SMC Core, Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.80% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -9977,7 +9706,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 386,
+        "idx": 378,
         "t": 1725897600,
         "dir": "short",
         "entry": 57089.54,
@@ -9986,17 +9715,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Squeeze Momentum",
-          "SMC Core"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "Donchian 20",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — Squeeze Momentum, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.23% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -10005,7 +9728,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10022,7 +9745,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 387,
+        "idx": 379,
         "t": 1725912000,
         "dir": "short",
         "entry": 57042,
@@ -10051,7 +9774,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": "short",
           "wavwap": "short",
           "smc": "long",
@@ -10068,7 +9791,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 388,
+        "idx": 380,
         "t": 1725926400,
         "dir": "long",
         "entry": 56524.74,
@@ -10096,7 +9819,7 @@ a global hard refresh.
           "smf": "long",
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10113,7 +9836,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 389,
+        "idx": 381,
         "t": 1725940800,
         "dir": "long",
         "entry": 57218.57,
@@ -10135,7 +9858,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10152,7 +9875,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 390,
+        "idx": 382,
         "t": 1725955200,
         "dir": "long",
         "entry": 57228,
@@ -10174,7 +9897,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10191,7 +9914,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 391,
+        "idx": 383,
         "t": 1725969600,
         "dir": "long",
         "entry": 56596,
@@ -10215,7 +9938,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10232,7 +9955,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 392,
+        "idx": 384,
         "t": 1725984000,
         "dir": "long",
         "entry": 57952.01,
@@ -10240,16 +9963,12 @@ a global hard refresh.
         "t1": 65585.63,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Range Filter"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "only Range Filter fired fresh, and no second house strategy has levels this way. Watch only.",
+        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -10275,7 +9994,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 393,
+        "idx": 385,
         "t": 1725998400,
         "dir": "long",
         "entry": 57635.99,
@@ -10314,7 +10033,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 394,
+        "idx": 386,
         "t": 1726012800,
         "dir": "long",
         "entry": 56819.55,
@@ -10323,13 +10042,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Range Filter"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — Range Filter fired the other way. Watch only, not a ticket.",
+        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -10338,7 +10055,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10355,7 +10072,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 395,
+        "idx": 387,
         "t": 1726027200,
         "dir": "long",
         "entry": 56712,
@@ -10377,7 +10094,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10394,7 +10111,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 396,
+        "idx": 388,
         "t": 1726041600,
         "dir": "long",
         "entry": 56797.99,
@@ -10420,7 +10137,7 @@ a global hard refresh.
           "smf": "long",
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10437,7 +10154,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 397,
+        "idx": 389,
         "t": 1726056000,
         "dir": "long",
         "entry": 56701.23,
@@ -10463,7 +10180,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10480,7 +10197,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 398,
+        "idx": 390,
         "t": 1726070400,
         "dir": "long",
         "entry": 57585.5,
@@ -10488,16 +10205,12 @@ a global hard refresh.
         "t1": 61729.69025,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Range Filter"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "only Range Filter fired fresh, and no second house strategy has levels this way. Watch only.",
+        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -10523,7 +10236,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 399,
+        "idx": 391,
         "t": 1726084800,
         "dir": "long",
         "entry": 57338,
@@ -10532,15 +10245,13 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Range Filter"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [
           "EMA 20/50"
         ],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — Range Filter fired the other way. Watch only, not a ticket.",
+        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -10549,7 +10260,7 @@ a global hard refresh.
           "smf": null,
           "msb": null,
           "cipher": null,
-          "rfilter": "short",
+          "rfilter": "long",
           "nwenv": null,
           "wavwap": null,
           "smc": "long",
@@ -10566,7 +10277,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 400,
+        "idx": 392,
         "t": 1726099200,
         "dir": "long",
         "entry": 58232.72,
@@ -10574,15 +10285,11 @@ a global hard refresh.
         "t1": 63680.9005,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Range Filter"
-        ],
+        "pineAgree": [],
         "pineOppose": [
           "Weekly AVWAP"
         ],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineFamilies": [],
         "indAgree": [
           "EMA 20/50",
           "Donchian 20"
@@ -10614,7 +10321,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 401,
+        "idx": 393,
         "t": 1726113600,
         "dir": "long",
         "entry": 58138.16,
@@ -10655,7 +10362,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 402,
+        "idx": 394,
         "t": 1726128000,
         "dir": "long",
         "entry": 58057.99,
@@ -10696,7 +10403,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 403,
+        "idx": 395,
         "t": 1726142400,
         "dir": "long",
         "entry": 57512.03,
@@ -10739,7 +10446,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 404,
+        "idx": 396,
         "t": 1726156800,
         "dir": "long",
         "entry": 58388,
@@ -10778,7 +10485,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 405,
+        "idx": 397,
         "t": 1726171200,
         "dir": "long",
         "entry": 58132.32,
@@ -10817,7 +10524,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 406,
+        "idx": 398,
         "t": 1726185600,
         "dir": "long",
         "entry": 57845.97,
@@ -10856,7 +10563,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 407,
+        "idx": 399,
         "t": 1726200000,
         "dir": "long",
         "entry": 58109.31,
@@ -10895,7 +10602,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 408,
+        "idx": 400,
         "t": 1726214400,
         "dir": "long",
         "entry": 57871.1,
@@ -10934,7 +10641,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 409,
+        "idx": 401,
         "t": 1726228800,
         "dir": "long",
         "entry": 59667.38,
@@ -10981,7 +10688,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 410,
+        "idx": 402,
         "t": 1726243200,
         "dir": "long",
         "entry": 59743.99,
@@ -11022,7 +10729,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 411,
+        "idx": 403,
         "t": 1726257600,
         "dir": "long",
         "entry": 60498,
@@ -11063,7 +10770,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 412,
+        "idx": 404,
         "t": 1726272000,
         "dir": "long",
         "entry": 60329.37,
@@ -11102,7 +10809,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 413,
+        "idx": 405,
         "t": 1726286400,
         "dir": "long",
         "entry": 60138.14,
@@ -11143,7 +10850,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 414,
+        "idx": 406,
         "t": 1726300800,
         "dir": "long",
         "entry": 59706.39,
@@ -11182,7 +10889,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 415,
+        "idx": 407,
         "t": 1726315200,
         "dir": "long",
         "entry": 59876,
@@ -11221,7 +10928,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 416,
+        "idx": 408,
         "t": 1726329600,
         "dir": "long",
         "entry": 59810,
@@ -11260,7 +10967,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 417,
+        "idx": 409,
         "t": 1726344000,
         "dir": "long",
         "entry": 59993.03,
@@ -11299,7 +11006,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 418,
+        "idx": 410,
         "t": 1726358400,
         "dir": "long",
         "entry": 60155.93,
@@ -11338,7 +11045,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 419,
+        "idx": 411,
         "t": 1726372800,
         "dir": "long",
         "entry": 60196,
@@ -11377,7 +11084,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 420,
+        "idx": 412,
         "t": 1726387200,
         "dir": "long",
         "entry": 60000.51,
@@ -11418,7 +11125,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 421,
+        "idx": 413,
         "t": 1726401600,
         "dir": "long",
         "entry": 60335.41,
@@ -11459,7 +11166,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 422,
+        "idx": 414,
         "t": 1726416000,
         "dir": "long",
         "entry": 59878.22,
@@ -11500,7 +11207,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 423,
+        "idx": 415,
         "t": 1726430400,
         "dir": "long",
         "entry": 59132,
@@ -11509,16 +11216,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "MSB / OB",
-          "SMC Core"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram"
-        ],
-        "pineNote": "PINE AGAINST — MSB / OB, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.80% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -11544,7 +11246,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 424,
+        "idx": 416,
         "t": 1726444800,
         "dir": "long",
         "entry": 58575.09,
@@ -11590,7 +11292,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 425,
+        "idx": 417,
         "t": 1726459200,
         "dir": "long",
         "entry": 58911.1,
@@ -11637,7 +11339,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 426,
+        "idx": 418,
         "t": 1726473600,
         "dir": "long",
         "entry": 58663.99,
@@ -11686,7 +11388,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 427,
+        "idx": 419,
         "t": 1726488000,
         "dir": "long",
         "entry": 57881.69,
@@ -11694,20 +11396,12 @@ a global hard refresh.
         "t1": 58609.37050000002,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Weekly AVWAP"
-        ],
-        "pineOppose": [
-          "SMC Core"
-        ],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.63% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -11733,7 +11427,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 428,
+        "idx": 420,
         "t": 1726502400,
         "dir": "long",
         "entry": 57943.99,
@@ -11782,7 +11476,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 429,
+        "idx": 421,
         "t": 1726516800,
         "dir": "short",
         "entry": 58213.99,
@@ -11823,7 +11517,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 430,
+        "idx": 422,
         "t": 1726531200,
         "dir": "short",
         "entry": 58060,
@@ -11862,7 +11556,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 431,
+        "idx": 423,
         "t": 1726545600,
         "dir": "short",
         "entry": 58695.39,
@@ -11901,7 +11595,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 432,
+        "idx": 424,
         "t": 1726560000,
         "dir": "long",
         "entry": 59080.99,
@@ -11944,7 +11638,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 433,
+        "idx": 425,
         "t": 1726574400,
         "dir": "long",
         "entry": 61135.5,
@@ -11997,7 +11691,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 434,
+        "idx": 426,
         "t": 1726588800,
         "dir": "long",
         "entry": 59967.99,
@@ -12044,7 +11738,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 435,
+        "idx": 427,
         "t": 1726603200,
         "dir": "long",
         "entry": 60313.99,
@@ -12089,7 +11783,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 436,
+        "idx": 428,
         "t": 1726617600,
         "dir": "long",
         "entry": 60509.99,
@@ -12134,7 +11828,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 437,
+        "idx": 429,
         "t": 1726632000,
         "dir": "long",
         "entry": 60428.01,
@@ -12177,7 +11871,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 438,
+        "idx": 430,
         "t": 1726646400,
         "dir": "long",
         "entry": 59846,
@@ -12220,7 +11914,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 439,
+        "idx": 431,
         "t": 1726660800,
         "dir": "long",
         "entry": 59429.18,
@@ -12259,7 +11953,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 440,
+        "idx": 432,
         "t": 1726675200,
         "dir": "long",
         "entry": 60057.99,
@@ -12300,7 +11994,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 441,
+        "idx": 433,
         "t": 1726689600,
         "dir": "long",
         "entry": 61759.99,
@@ -12345,7 +12039,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 442,
+        "idx": 434,
         "t": 1726704000,
         "dir": "long",
         "entry": 62117.99,
@@ -12388,7 +12082,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 443,
+        "idx": 435,
         "t": 1726718400,
         "dir": "long",
         "entry": 62093.99,
@@ -12427,7 +12121,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 444,
+        "idx": 436,
         "t": 1726732800,
         "dir": "long",
         "entry": 62645.44,
@@ -12466,7 +12160,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 445,
+        "idx": 437,
         "t": 1726747200,
         "dir": "long",
         "entry": 63154.04,
@@ -12508,7 +12202,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 446,
+        "idx": 438,
         "t": 1726761600,
         "dir": "long",
         "entry": 63251.99,
@@ -12552,7 +12246,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 447,
+        "idx": 439,
         "t": 1726776000,
         "dir": "long",
         "entry": 62947.99,
@@ -12591,7 +12285,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 448,
+        "idx": 440,
         "t": 1726790400,
         "dir": "long",
         "entry": 63742.16,
@@ -12630,7 +12324,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 449,
+        "idx": 441,
         "t": 1726804800,
         "dir": "long",
         "entry": 63524.8,
@@ -12669,7 +12363,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 450,
+        "idx": 442,
         "t": 1726819200,
         "dir": "long",
         "entry": 63440,
@@ -12708,7 +12402,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 451,
+        "idx": 443,
         "t": 1726833600,
         "dir": "long",
         "entry": 63153.99,
@@ -12747,7 +12441,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 452,
+        "idx": 444,
         "t": 1726848000,
         "dir": "long",
         "entry": 62809.13,
@@ -12786,7 +12480,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 453,
+        "idx": 445,
         "t": 1726862400,
         "dir": "long",
         "entry": 63201.05,
@@ -12825,7 +12519,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 454,
+        "idx": 446,
         "t": 1726876800,
         "dir": "long",
         "entry": 62889.57,
@@ -12866,7 +12560,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 455,
+        "idx": 447,
         "t": 1726891200,
         "dir": "long",
         "entry": 63091.02,
@@ -12911,7 +12605,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 456,
+        "idx": 448,
         "t": 1726905600,
         "dir": "long",
         "entry": 63089.77,
@@ -12952,7 +12646,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 457,
+        "idx": 449,
         "t": 1726920000,
         "dir": "long",
         "entry": 63167.98,
@@ -12995,7 +12689,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 458,
+        "idx": 450,
         "t": 1726934400,
         "dir": "long",
         "entry": 63203.59,
@@ -13040,7 +12734,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 459,
+        "idx": 451,
         "t": 1726948800,
         "dir": "long",
         "entry": 63348.96,
@@ -13079,7 +12773,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 460,
+        "idx": 452,
         "t": 1726963200,
         "dir": "long",
         "entry": 63106,
@@ -13118,7 +12812,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 461,
+        "idx": 453,
         "t": 1726977600,
         "dir": "long",
         "entry": 62936,
@@ -13157,7 +12851,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 462,
+        "idx": 454,
         "t": 1726992000,
         "dir": "long",
         "entry": 62784,
@@ -13196,7 +12890,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 463,
+        "idx": 455,
         "t": 1727006400,
         "dir": "long",
         "entry": 62652.12,
@@ -13235,7 +12929,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 464,
+        "idx": 456,
         "t": 1727020800,
         "dir": "long",
         "entry": 63160,
@@ -13274,7 +12968,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 465,
+        "idx": 457,
         "t": 1727035200,
         "dir": "long",
         "entry": 63578.76,
@@ -13313,7 +13007,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 466,
+        "idx": 458,
         "t": 1727049600,
         "dir": "long",
         "entry": 64354,
@@ -13352,7 +13046,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 467,
+        "idx": 459,
         "t": 1727064000,
         "dir": "long",
         "entry": 63548.82,
@@ -13391,7 +13085,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 468,
+        "idx": 460,
         "t": 1727078400,
         "dir": "long",
         "entry": 63435.04,
@@ -13430,7 +13124,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 469,
+        "idx": 461,
         "t": 1727092800,
         "dir": "long",
         "entry": 63618,
@@ -13469,7 +13163,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 470,
+        "idx": 462,
         "t": 1727107200,
         "dir": "long",
         "entry": 63298.56,
@@ -13508,7 +13202,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 471,
+        "idx": 463,
         "t": 1727121600,
         "dir": "long",
         "entry": 63339.99,
@@ -13547,7 +13241,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 472,
+        "idx": 464,
         "t": 1727136000,
         "dir": "long",
         "entry": 63124,
@@ -13586,7 +13280,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 473,
+        "idx": 465,
         "t": 1727150400,
         "dir": "long",
         "entry": 63559.92,
@@ -13625,7 +13319,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 474,
+        "idx": 466,
         "t": 1727164800,
         "dir": "long",
         "entry": 63478.34,
@@ -13664,7 +13358,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 475,
+        "idx": 467,
         "t": 1727179200,
         "dir": "long",
         "entry": 63159.99,
@@ -13703,7 +13397,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 476,
+        "idx": 468,
         "t": 1727193600,
         "dir": "long",
         "entry": 64292.34,
@@ -13742,7 +13436,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 477,
+        "idx": 469,
         "t": 1727208000,
         "dir": "long",
         "entry": 64262.7,
@@ -13781,7 +13475,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 478,
+        "idx": 470,
         "t": 1727222400,
         "dir": "long",
         "entry": 64460,
@@ -13820,7 +13514,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 479,
+        "idx": 471,
         "t": 1727236800,
         "dir": "long",
         "entry": 63843.33,
@@ -13859,7 +13553,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 480,
+        "idx": 472,
         "t": 1727251200,
         "dir": "long",
         "entry": 63838.01,
@@ -13898,7 +13592,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 481,
+        "idx": 473,
         "t": 1727265600,
         "dir": "long",
         "entry": 63495.66,
@@ -13937,7 +13631,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 482,
+        "idx": 474,
         "t": 1727280000,
         "dir": "long",
         "entry": 63181.5,
@@ -13976,7 +13670,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 483,
+        "idx": 475,
         "t": 1727294400,
         "dir": "long",
         "entry": 63152.01,
@@ -14015,7 +13709,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 484,
+        "idx": 476,
         "t": 1727308800,
         "dir": "long",
         "entry": 63514.34,
@@ -14054,7 +13748,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 485,
+        "idx": 477,
         "t": 1727323200,
         "dir": "long",
         "entry": 63852.07,
@@ -14093,7 +13787,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 486,
+        "idx": 478,
         "t": 1727337600,
         "dir": "long",
         "entry": 64393.99,
@@ -14132,7 +13826,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 487,
+        "idx": 479,
         "t": 1727352000,
         "dir": "long",
         "entry": 65229.03,
@@ -14174,7 +13868,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 488,
+        "idx": 480,
         "t": 1727366400,
         "dir": "long",
         "entry": 64711.06,
@@ -14218,7 +13912,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 489,
+        "idx": 481,
         "t": 1727380800,
         "dir": "long",
         "entry": 65173.99,
@@ -14263,7 +13957,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 490,
+        "idx": 482,
         "t": 1727395200,
         "dir": "long",
         "entry": 65366.01,
@@ -14302,7 +13996,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 491,
+        "idx": 483,
         "t": 1727409600,
         "dir": "long",
         "entry": 65460.02,
@@ -14341,7 +14035,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 492,
+        "idx": 484,
         "t": 1727424000,
         "dir": "long",
         "entry": 65437.35,
@@ -14382,7 +14076,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 493,
+        "idx": 485,
         "t": 1727438400,
         "dir": "long",
         "entry": 66006.01,
@@ -14423,7 +14117,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 494,
+        "idx": 486,
         "t": 1727452800,
         "dir": "long",
         "entry": 65657.99,
@@ -14464,7 +14158,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 495,
+        "idx": 487,
         "t": 1727467200,
         "dir": "long",
         "entry": 65769.95,
@@ -14507,7 +14201,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 496,
+        "idx": 488,
         "t": 1727481600,
         "dir": "long",
         "entry": 66063.76,
@@ -14548,7 +14242,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 497,
+        "idx": 489,
         "t": 1727496000,
         "dir": "long",
         "entry": 65824.01,
@@ -14587,7 +14281,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 498,
+        "idx": 490,
         "t": 1727510400,
         "dir": "long",
         "entry": 65798.01,
@@ -14630,7 +14324,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 499,
+        "idx": 491,
         "t": 1727524800,
         "dir": "long",
         "entry": 65619.13,
@@ -14669,7 +14363,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 500,
+        "idx": 492,
         "t": 1727539200,
         "dir": "long",
         "entry": 65724,
@@ -14710,7 +14404,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 501,
+        "idx": 493,
         "t": 1727553600,
         "dir": "long",
         "entry": 65858,
@@ -14751,7 +14445,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 502,
+        "idx": 494,
         "t": 1727568000,
         "dir": "long",
         "entry": 65815.92,
@@ -14792,7 +14486,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 503,
+        "idx": 495,
         "t": 1727582400,
         "dir": "long",
         "entry": 65477.01,
@@ -14804,10 +14498,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.30% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -14833,7 +14525,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 504,
+        "idx": 496,
         "t": 1727596800,
         "dir": "long",
         "entry": 65691.92,
@@ -14845,10 +14537,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.62% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -14874,7 +14564,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 505,
+        "idx": 497,
         "t": 1727611200,
         "dir": "long",
         "entry": 65751.34,
@@ -14882,16 +14572,12 @@ a global hard refresh.
         "t1": 66475.31133999999,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Lorentzian"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "only Lorentzian fired fresh, and no second house strategy has levels this way. Watch only.",
+        "pineNote": "COST FLOOR — stop 0.55% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": "long",
@@ -14917,7 +14603,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 506,
+        "idx": 498,
         "t": 1727625600,
         "dir": "long",
         "entry": 65958.82,
@@ -14956,7 +14642,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 507,
+        "idx": 499,
         "t": 1727640000,
         "dir": "long",
         "entry": 65602.01,
@@ -14995,7 +14681,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 508,
+        "idx": 500,
         "t": 1727654400,
         "dir": "long",
         "entry": 64553.68,
@@ -15034,7 +14720,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 509,
+        "idx": 501,
         "t": 1727668800,
         "dir": "long",
         "entry": 64562.01,
@@ -15042,20 +14728,12 @@ a global hard refresh.
         "t1": 65370.59201,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Weekly AVWAP"
-        ],
-        "pineOppose": [
-          "SMC Core"
-        ],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.63% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -15081,7 +14759,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 510,
+        "idx": 502,
         "t": 1727683200,
         "dir": "long",
         "entry": 63819.44,
@@ -15130,7 +14808,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 511,
+        "idx": 503,
         "t": 1727697600,
         "dir": "long",
         "entry": 63561.41,
@@ -15139,16 +14817,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Smart Money Flow",
-          "SMC Core"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — Smart Money Flow, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.55% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -15174,7 +14847,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 512,
+        "idx": 504,
         "t": 1727712000,
         "dir": "short",
         "entry": 63488,
@@ -15221,7 +14894,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 513,
+        "idx": 505,
         "t": 1727726400,
         "dir": "short",
         "entry": 63327.59,
@@ -15268,7 +14941,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 514,
+        "idx": 506,
         "t": 1727740800,
         "dir": "short",
         "entry": 63723.48,
@@ -15307,7 +14980,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 515,
+        "idx": 507,
         "t": 1727755200,
         "dir": "short",
         "entry": 64045.92,
@@ -15346,7 +15019,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 516,
+        "idx": 508,
         "t": 1727769600,
         "dir": "short",
         "entry": 63734,
@@ -15385,7 +15058,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 517,
+        "idx": 509,
         "t": 1727784000,
         "dir": "short",
         "entry": 62628.85,
@@ -15429,7 +15102,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 518,
+        "idx": 510,
         "t": 1727798400,
         "dir": "short",
         "entry": 61755.99,
@@ -15473,7 +15146,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 519,
+        "idx": 511,
         "t": 1727812800,
         "dir": "short",
         "entry": 60805.78,
@@ -15517,7 +15190,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 520,
+        "idx": 512,
         "t": 1727827200,
         "dir": "short",
         "entry": 61750.47,
@@ -15560,7 +15233,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 521,
+        "idx": 513,
         "t": 1727841600,
         "dir": "short",
         "entry": 61727.4,
@@ -15601,7 +15274,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 522,
+        "idx": 514,
         "t": 1727856000,
         "dir": "short",
         "entry": 61164.01,
@@ -15642,7 +15315,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 523,
+        "idx": 515,
         "t": 1727870400,
         "dir": "short",
         "entry": 61874.01,
@@ -15681,7 +15354,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 524,
+        "idx": 516,
         "t": 1727884800,
         "dir": "short",
         "entry": 60190.01,
@@ -15725,7 +15398,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 525,
+        "idx": 517,
         "t": 1727899200,
         "dir": "short",
         "entry": 60649.28,
@@ -15764,7 +15437,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 526,
+        "idx": 518,
         "t": 1727913600,
         "dir": "short",
         "entry": 61463.99,
@@ -15803,7 +15476,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 527,
+        "idx": 519,
         "t": 1727928000,
         "dir": "short",
         "entry": 60926,
@@ -15842,7 +15515,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 528,
+        "idx": 520,
         "t": 1727942400,
         "dir": "short",
         "entry": 60764.74,
@@ -15881,7 +15554,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 529,
+        "idx": 521,
         "t": 1727956800,
         "dir": "short",
         "entry": 60641.5,
@@ -15922,7 +15595,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 530,
+        "idx": 522,
         "t": 1727971200,
         "dir": "short",
         "entry": 61036,
@@ -15961,7 +15634,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 531,
+        "idx": 523,
         "t": 1727985600,
         "dir": "short",
         "entry": 60752.71,
@@ -16000,7 +15673,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 532,
+        "idx": 524,
         "t": 1728000000,
         "dir": "short",
         "entry": 60951.99,
@@ -16043,7 +15716,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 533,
+        "idx": 525,
         "t": 1728014400,
         "dir": "short",
         "entry": 61443.64,
@@ -16084,7 +15757,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 534,
+        "idx": 526,
         "t": 1728028800,
         "dir": "short",
         "entry": 61449.84,
@@ -16125,7 +15798,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 535,
+        "idx": 527,
         "t": 1728043200,
         "dir": "short",
         "entry": 61873.04,
@@ -16166,7 +15839,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 536,
+        "idx": 528,
         "t": 1728057600,
         "dir": "short",
         "entry": 62368,
@@ -16174,21 +15847,12 @@ a global hard refresh.
         "t1": 62102.00275,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Lorentzian"
-        ],
-        "pineOppose": [
-          "HalfTrend"
-        ],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — HalfTrend fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.21% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": "short",
@@ -16214,7 +15878,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 537,
+        "idx": 529,
         "t": 1728072000,
         "dir": "short",
         "entry": 62086,
@@ -16225,13 +15889,9 @@ a global hard refresh.
         "pineAgree": [],
         "pineOppose": [],
         "pineFamilies": [],
-        "indAgree": [
-          "Liquidity sweep"
-        ],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indAgree": [],
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.70% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -16257,7 +15917,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 538,
+        "idx": 530,
         "t": 1728086400,
         "dir": "short",
         "entry": 61861.99,
@@ -16296,7 +15956,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 539,
+        "idx": 531,
         "t": 1728100800,
         "dir": "short",
         "entry": 62076.19,
@@ -16309,7 +15969,7 @@ a global hard refresh.
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.71% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -16335,7 +15995,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 540,
+        "idx": 532,
         "t": 1728115200,
         "dir": "short",
         "entry": 62180,
@@ -16348,7 +16008,7 @@ a global hard refresh.
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.54% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -16374,7 +16034,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 541,
+        "idx": 533,
         "t": 1728129600,
         "dir": "short",
         "entry": 62167.66,
@@ -16387,7 +16047,7 @@ a global hard refresh.
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.56% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -16413,7 +16073,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 542,
+        "idx": 534,
         "t": 1728144000,
         "dir": "short",
         "entry": 61848.48,
@@ -16454,7 +16114,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 543,
+        "idx": 535,
         "t": 1728158400,
         "dir": "short",
         "entry": 62058,
@@ -16467,7 +16127,7 @@ a global hard refresh.
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.74% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -16493,7 +16153,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 544,
+        "idx": 536,
         "t": 1728172800,
         "dir": "short",
         "entry": 61878.66,
@@ -16532,7 +16192,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 545,
+        "idx": 537,
         "t": 1728187200,
         "dir": "short",
         "entry": 61949.01,
@@ -16571,7 +16231,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 546,
+        "idx": 538,
         "t": 1728201600,
         "dir": "short",
         "entry": 62101.92,
@@ -16584,7 +16244,7 @@ a global hard refresh.
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.67% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -16610,7 +16270,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 547,
+        "idx": 539,
         "t": 1728216000,
         "dir": "short",
         "entry": 62720.01,
@@ -16619,16 +16279,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "MSB / OB",
-          "SMC Core"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "Donchian 20"
-        ],
-        "pineNote": "PINE AGAINST — MSB / OB, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.14% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -16654,7 +16309,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 548,
+        "idx": 540,
         "t": 1728230400,
         "dir": "short",
         "entry": 62631.38,
@@ -16663,15 +16318,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "SMC Core"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
-        "indAgree": [
-          "Liquidity sweep"
-        ],
+        "indAgree": [],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — SMC Core fired the other way. Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.60% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -16697,7 +16348,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 549,
+        "idx": 541,
         "t": 1728244800,
         "dir": "long",
         "entry": 62819.91,
@@ -16742,7 +16393,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 550,
+        "idx": 542,
         "t": 1728259200,
         "dir": "long",
         "entry": 63530.51,
@@ -16789,7 +16440,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 551,
+        "idx": 543,
         "t": 1728273600,
         "dir": "long",
         "entry": 63531.99,
@@ -16834,7 +16485,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 552,
+        "idx": 544,
         "t": 1728288000,
         "dir": "long",
         "entry": 63135.44,
@@ -16881,7 +16532,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 553,
+        "idx": 545,
         "t": 1728302400,
         "dir": "long",
         "entry": 63651.6,
@@ -16926,7 +16577,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 554,
+        "idx": 546,
         "t": 1728316800,
         "dir": "long",
         "entry": 63382,
@@ -16971,7 +16622,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 555,
+        "idx": 547,
         "t": 1728331200,
         "dir": "long",
         "entry": 62224,
@@ -16983,10 +16634,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.74% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -17012,7 +16661,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 556,
+        "idx": 548,
         "t": 1728345600,
         "dir": "long",
         "entry": 62629.8,
@@ -17055,7 +16704,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 557,
+        "idx": 549,
         "t": 1728360000,
         "dir": "long",
         "entry": 62319.99,
@@ -17063,18 +16712,12 @@ a global hard refresh.
         "t1": 63179.874749999995,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Weekly AVWAP"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.69% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -17100,7 +16743,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 558,
+        "idx": 550,
         "t": 1728374400,
         "dir": "long",
         "entry": 62624.01,
@@ -17145,7 +16788,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 559,
+        "idx": 551,
         "t": 1728388800,
         "dir": "short",
         "entry": 62288.01,
@@ -17189,7 +16832,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 560,
+        "idx": 552,
         "t": 1728403200,
         "dir": "short",
         "entry": 62245.53,
@@ -17230,7 +16873,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 561,
+        "idx": 553,
         "t": 1728417600,
         "dir": "short",
         "entry": 62160.49,
@@ -17269,7 +16912,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 562,
+        "idx": 554,
         "t": 1728432000,
         "dir": "short",
         "entry": 62394.07,
@@ -17308,7 +16951,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 563,
+        "idx": 555,
         "t": 1728446400,
         "dir": "short",
         "entry": 62276.78,
@@ -17349,7 +16992,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 564,
+        "idx": 556,
         "t": 1728460800,
         "dir": "short",
         "entry": 62200,
@@ -17388,7 +17031,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 565,
+        "idx": 557,
         "t": 1728475200,
         "dir": "short",
         "entry": 62316,
@@ -17427,7 +17070,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 566,
+        "idx": 558,
         "t": 1728489600,
         "dir": "short",
         "entry": 61031.98,
@@ -17472,7 +17115,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 567,
+        "idx": 559,
         "t": 1728504000,
         "dir": "short",
         "entry": 60636.02,
@@ -17517,7 +17160,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 568,
+        "idx": 560,
         "t": 1728518400,
         "dir": "short",
         "entry": 60865.29,
@@ -17558,7 +17201,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 569,
+        "idx": 561,
         "t": 1728532800,
         "dir": "short",
         "entry": 60900,
@@ -17597,7 +17240,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 570,
+        "idx": 562,
         "t": 1728547200,
         "dir": "short",
         "entry": 61262,
@@ -17636,7 +17279,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 571,
+        "idx": 563,
         "t": 1728561600,
         "dir": "short",
         "entry": 60789.36,
@@ -17677,7 +17320,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 572,
+        "idx": 564,
         "t": 1728576000,
         "dir": "short",
         "entry": 59727.28,
@@ -17725,7 +17368,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 573,
+        "idx": 565,
         "t": 1728590400,
         "dir": "short",
         "entry": 60326.39,
@@ -17770,7 +17413,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 574,
+        "idx": 566,
         "t": 1728604800,
         "dir": "short",
         "entry": 60614,
@@ -17813,7 +17456,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 575,
+        "idx": 567,
         "t": 1728619200,
         "dir": "short",
         "entry": 60674.69,
@@ -17856,7 +17499,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 576,
+        "idx": 568,
         "t": 1728633600,
         "dir": "short",
         "entry": 61174.87,
@@ -17899,7 +17542,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 577,
+        "idx": 569,
         "t": 1728648000,
         "dir": "short",
         "entry": 62259.05,
@@ -17907,22 +17550,12 @@ a global hard refresh.
         "t1": 61789.55,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "SMC Core"
-        ],
-        "pineOppose": [
-          "Smart Money Flow",
-          "HalfTrend"
-        ],
-        "pineFamilies": [
-          "structure"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — Smart Money Flow, HalfTrend fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.38% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -17948,7 +17581,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 578,
+        "idx": 570,
         "t": 1728662400,
         "dir": "short",
         "entry": 63086.01,
@@ -17956,19 +17589,12 @@ a global hard refresh.
         "t1": 62311.12100000001,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "NW Envelope"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram, RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.61% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -17994,7 +17620,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 579,
+        "idx": 571,
         "t": 1728676800,
         "dir": "long",
         "entry": 62540,
@@ -18035,7 +17661,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 580,
+        "idx": 572,
         "t": 1728691200,
         "dir": "long",
         "entry": 62568,
@@ -18076,7 +17702,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 581,
+        "idx": 573,
         "t": 1728705600,
         "dir": "long",
         "entry": 62767.57,
@@ -18117,7 +17743,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 582,
+        "idx": 574,
         "t": 1728720000,
         "dir": "long",
         "entry": 62936.91,
@@ -18156,7 +17782,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 583,
+        "idx": 575,
         "t": 1728734400,
         "dir": "long",
         "entry": 63157.49,
@@ -18197,7 +17823,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 584,
+        "idx": 576,
         "t": 1728748800,
         "dir": "long",
         "entry": 63000.01,
@@ -18238,7 +17864,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 585,
+        "idx": 577,
         "t": 1728763200,
         "dir": "long",
         "entry": 63206.22,
@@ -18279,7 +17905,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 586,
+        "idx": 578,
         "t": 1728777600,
         "dir": "long",
         "entry": 62712.31,
@@ -18322,7 +17948,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 587,
+        "idx": 579,
         "t": 1728792000,
         "dir": "long",
         "entry": 62843.48,
@@ -18367,7 +17993,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 588,
+        "idx": 580,
         "t": 1728806400,
         "dir": "long",
         "entry": 62561.33,
@@ -18408,7 +18034,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 589,
+        "idx": 581,
         "t": 1728820800,
         "dir": "long",
         "entry": 62229.31,
@@ -18420,10 +18046,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.34% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -18449,7 +18073,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 590,
+        "idx": 582,
         "t": 1728835200,
         "dir": "long",
         "entry": 62734.32,
@@ -18492,7 +18116,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 591,
+        "idx": 583,
         "t": 1728849600,
         "dir": "long",
         "entry": 62870.02,
@@ -18531,7 +18155,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 592,
+        "idx": 584,
         "t": 1728864000,
         "dir": "long",
         "entry": 64299.99,
@@ -18581,7 +18205,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 593,
+        "idx": 585,
         "t": 1728878400,
         "dir": "long",
         "entry": 64620.87,
@@ -18628,7 +18252,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 594,
+        "idx": 586,
         "t": 1728892800,
         "dir": "long",
         "entry": 64920.06,
@@ -18676,7 +18300,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 595,
+        "idx": 587,
         "t": 1728907200,
         "dir": "long",
         "entry": 65870,
@@ -18723,7 +18347,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 596,
+        "idx": 588,
         "t": 1728921600,
         "dir": "long",
         "entry": 65939.4,
@@ -18766,7 +18390,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 597,
+        "idx": 589,
         "t": 1728936000,
         "dir": "long",
         "entry": 66083.99,
@@ -18813,7 +18437,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 598,
+        "idx": 590,
         "t": 1728950400,
         "dir": "long",
         "entry": 65400,
@@ -18856,7 +18480,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 599,
+        "idx": 591,
         "t": 1728964800,
         "dir": "long",
         "entry": 65638.74,
@@ -18895,7 +18519,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 600,
+        "idx": 592,
         "t": 1728979200,
         "dir": "long",
         "entry": 65399.69,
@@ -18934,7 +18558,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 601,
+        "idx": 593,
         "t": 1728993600,
         "dir": "long",
         "entry": 66022,
@@ -18976,7 +18600,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 602,
+        "idx": 594,
         "t": 1729008000,
         "dir": "long",
         "entry": 66970.18,
@@ -19022,7 +18646,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 603,
+        "idx": 595,
         "t": 1729022400,
         "dir": "long",
         "entry": 67074.14,
@@ -19061,7 +18685,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 604,
+        "idx": 596,
         "t": 1729036800,
         "dir": "long",
         "entry": 67095.98,
@@ -19102,7 +18726,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 605,
+        "idx": 597,
         "t": 1729051200,
         "dir": "long",
         "entry": 66972.53,
@@ -19141,7 +18765,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 606,
+        "idx": 598,
         "t": 1729065600,
         "dir": "long",
         "entry": 67894.72,
@@ -19185,7 +18809,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 607,
+        "idx": 599,
         "t": 1729080000,
         "dir": "long",
         "entry": 67749.99,
@@ -19224,7 +18848,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 608,
+        "idx": 600,
         "t": 1729094400,
         "dir": "long",
         "entry": 67728,
@@ -19263,7 +18887,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 609,
+        "idx": 601,
         "t": 1729108800,
         "dir": "long",
         "entry": 67620.01,
@@ -19302,7 +18926,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 610,
+        "idx": 602,
         "t": 1729123200,
         "dir": "long",
         "entry": 67601.4,
@@ -19341,7 +18965,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 611,
+        "idx": 603,
         "t": 1729137600,
         "dir": "long",
         "entry": 67303.18,
@@ -19382,7 +19006,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 612,
+        "idx": 604,
         "t": 1729152000,
         "dir": "long",
         "entry": 66872.43,
@@ -19423,7 +19047,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 613,
+        "idx": 605,
         "t": 1729166400,
         "dir": "long",
         "entry": 67590.66,
@@ -19464,7 +19088,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 614,
+        "idx": 606,
         "t": 1729180800,
         "dir": "long",
         "entry": 66840,
@@ -19506,7 +19130,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 615,
+        "idx": 607,
         "t": 1729195200,
         "dir": "long",
         "entry": 67421.78,
@@ -19547,7 +19171,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 616,
+        "idx": 608,
         "t": 1729209600,
         "dir": "long",
         "entry": 67555.4,
@@ -19586,7 +19210,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 617,
+        "idx": 609,
         "t": 1729224000,
         "dir": "long",
         "entry": 67969.7,
@@ -19627,7 +19251,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 618,
+        "idx": 610,
         "t": 1729238400,
         "dir": "long",
         "entry": 67702,
@@ -19666,7 +19290,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 619,
+        "idx": 611,
         "t": 1729252800,
         "dir": "long",
         "entry": 68735.35,
@@ -19705,7 +19329,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 620,
+        "idx": 612,
         "t": 1729267200,
         "dir": "long",
         "entry": 68608.01,
@@ -19744,7 +19368,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 621,
+        "idx": 613,
         "t": 1729281600,
         "dir": "long",
         "entry": 68428,
@@ -19783,7 +19407,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 622,
+        "idx": 614,
         "t": 1729296000,
         "dir": "long",
         "entry": 68450.01,
@@ -19822,7 +19446,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 623,
+        "idx": 615,
         "t": 1729310400,
         "dir": "long",
         "entry": 68346.54,
@@ -19861,7 +19485,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 624,
+        "idx": 616,
         "t": 1729324800,
         "dir": "long",
         "entry": 68090.3,
@@ -19900,7 +19524,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 625,
+        "idx": 617,
         "t": 1729339200,
         "dir": "long",
         "entry": 68226.93,
@@ -19939,7 +19563,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 626,
+        "idx": 618,
         "t": 1729353600,
         "dir": "long",
         "entry": 68181.98,
@@ -19978,7 +19602,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 627,
+        "idx": 619,
         "t": 1729368000,
         "dir": "long",
         "entry": 68378,
@@ -20017,7 +19641,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 628,
+        "idx": 620,
         "t": 1729382400,
         "dir": "long",
         "entry": 68188,
@@ -20056,7 +19680,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 629,
+        "idx": 621,
         "t": 1729396800,
         "dir": "long",
         "entry": 68378,
@@ -20095,7 +19719,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 630,
+        "idx": 622,
         "t": 1729411200,
         "dir": "long",
         "entry": 68420.01,
@@ -20134,7 +19758,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 631,
+        "idx": 623,
         "t": 1729425600,
         "dir": "long",
         "entry": 68625.99,
@@ -20173,7 +19797,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 632,
+        "idx": 624,
         "t": 1729440000,
         "dir": "long",
         "entry": 68508.29,
@@ -20212,7 +19836,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 633,
+        "idx": 625,
         "t": 1729454400,
         "dir": "long",
         "entry": 69031.99,
@@ -20251,7 +19875,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 634,
+        "idx": 626,
         "t": 1729468800,
         "dir": "long",
         "entry": 68939.99,
@@ -20290,7 +19914,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 635,
+        "idx": 627,
         "t": 1729483200,
         "dir": "long",
         "entry": 68514,
@@ -20329,7 +19953,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 636,
+        "idx": 628,
         "t": 1729497600,
         "dir": "long",
         "entry": 68238.01,
@@ -20368,7 +19992,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 637,
+        "idx": 629,
         "t": 1729512000,
         "dir": "long",
         "entry": 67341.02,
@@ -20407,7 +20031,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 638,
+        "idx": 630,
         "t": 1729526400,
         "dir": "long",
         "entry": 67763,
@@ -20446,7 +20070,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 639,
+        "idx": 631,
         "t": 1729540800,
         "dir": "long",
         "entry": 67377.5,
@@ -20485,7 +20109,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 640,
+        "idx": 632,
         "t": 1729555200,
         "dir": "long",
         "entry": 67390.02,
@@ -20524,7 +20148,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 641,
+        "idx": 633,
         "t": 1729569600,
         "dir": "long",
         "entry": 67402,
@@ -20563,7 +20187,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 642,
+        "idx": 634,
         "t": 1729584000,
         "dir": "long",
         "entry": 67299.15,
@@ -20602,7 +20226,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 643,
+        "idx": 635,
         "t": 1729598400,
         "dir": "long",
         "entry": 67282.27,
@@ -20641,7 +20265,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 644,
+        "idx": 636,
         "t": 1729612800,
         "dir": "long",
         "entry": 67482.98,
@@ -20680,7 +20304,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 645,
+        "idx": 637,
         "t": 1729627200,
         "dir": "long",
         "entry": 67426,
@@ -20719,7 +20343,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 646,
+        "idx": 638,
         "t": 1729641600,
         "dir": "long",
         "entry": 67082.1,
@@ -20758,7 +20382,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 647,
+        "idx": 639,
         "t": 1729656000,
         "dir": "long",
         "entry": 66852.34,
@@ -20771,7 +20395,7 @@ a global hard refresh.
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.47% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -20797,7 +20421,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 648,
+        "idx": 640,
         "t": 1729670400,
         "dir": "short",
         "entry": 66414,
@@ -20840,7 +20464,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 649,
+        "idx": 641,
         "t": 1729684800,
         "dir": "short",
         "entry": 66223.44,
@@ -20883,7 +20507,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 650,
+        "idx": 642,
         "t": 1729699200,
         "dir": "short",
         "entry": 66472,
@@ -20926,7 +20550,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 651,
+        "idx": 643,
         "t": 1729713600,
         "dir": "short",
         "entry": 66668.65,
@@ -20965,7 +20589,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 652,
+        "idx": 644,
         "t": 1729728000,
         "dir": "short",
         "entry": 67213.16,
@@ -21004,7 +20628,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 653,
+        "idx": 645,
         "t": 1729742400,
         "dir": "short",
         "entry": 67123.08,
@@ -21043,7 +20667,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 654,
+        "idx": 646,
         "t": 1729756800,
         "dir": "short",
         "entry": 67285.99,
@@ -21084,7 +20708,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 655,
+        "idx": 647,
         "t": 1729771200,
         "dir": "long",
         "entry": 67701.22,
@@ -21129,7 +20753,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 656,
+        "idx": 648,
         "t": 1729785600,
         "dir": "long",
         "entry": 68309.79,
@@ -21175,7 +20799,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 657,
+        "idx": 649,
         "t": 1729800000,
         "dir": "long",
         "entry": 68198.28,
@@ -21225,7 +20849,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 658,
+        "idx": 650,
         "t": 1729814400,
         "dir": "long",
         "entry": 68008,
@@ -21270,7 +20894,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 659,
+        "idx": 651,
         "t": 1729828800,
         "dir": "long",
         "entry": 67531.97,
@@ -21313,7 +20937,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 660,
+        "idx": 652,
         "t": 1729843200,
         "dir": "long",
         "entry": 68105.79,
@@ -21360,7 +20984,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 661,
+        "idx": 653,
         "t": 1729857600,
         "dir": "long",
         "entry": 67690.01,
@@ -21405,7 +21029,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 662,
+        "idx": 654,
         "t": 1729872000,
         "dir": "long",
         "entry": 66850,
@@ -21452,7 +21076,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 663,
+        "idx": 655,
         "t": 1729886400,
         "dir": "long",
         "entry": 66698.33,
@@ -21500,7 +21124,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 664,
+        "idx": 656,
         "t": 1729900800,
         "dir": "long",
         "entry": 66914,
@@ -21542,7 +21166,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 665,
+        "idx": 657,
         "t": 1729915200,
         "dir": "short",
         "entry": 67007.99,
@@ -21583,7 +21207,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 666,
+        "idx": 658,
         "t": 1729929600,
         "dir": "short",
         "entry": 67138,
@@ -21624,7 +21248,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 667,
+        "idx": 659,
         "t": 1729944000,
         "dir": "short",
         "entry": 66886.49,
@@ -21663,7 +21287,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 668,
+        "idx": 660,
         "t": 1729958400,
         "dir": "short",
         "entry": 67177.99,
@@ -21704,7 +21328,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 669,
+        "idx": 661,
         "t": 1729972800,
         "dir": "short",
         "entry": 67092.76,
@@ -21743,7 +21367,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 670,
+        "idx": 662,
         "t": 1729987200,
         "dir": "short",
         "entry": 67289.57,
@@ -21782,7 +21406,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 671,
+        "idx": 663,
         "t": 1730001600,
         "dir": "short",
         "entry": 67204.01,
@@ -21825,7 +21449,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 672,
+        "idx": 664,
         "t": 1730016000,
         "dir": "long",
         "entry": 67128.04,
@@ -21864,7 +21488,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 673,
+        "idx": 665,
         "t": 1730030400,
         "dir": "long",
         "entry": 67791.99,
@@ -21906,7 +21530,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 674,
+        "idx": 666,
         "t": 1730044800,
         "dir": "long",
         "entry": 67850,
@@ -21953,7 +21577,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 675,
+        "idx": 667,
         "t": 1730059200,
         "dir": "long",
         "entry": 68021.7,
@@ -21998,7 +21622,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 676,
+        "idx": 668,
         "t": 1730073600,
         "dir": "long",
         "entry": 67727.59,
@@ -22041,7 +21665,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 677,
+        "idx": 669,
         "t": 1730088000,
         "dir": "long",
         "entry": 68415.52,
@@ -22088,7 +21712,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 678,
+        "idx": 670,
         "t": 1730102400,
         "dir": "long",
         "entry": 68753.78,
@@ -22131,7 +21755,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 679,
+        "idx": 671,
         "t": 1730116800,
         "dir": "long",
         "entry": 68494.2,
@@ -22174,7 +21798,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 680,
+        "idx": 672,
         "t": 1730131200,
         "dir": "long",
         "entry": 69629.98,
@@ -22217,7 +21841,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 681,
+        "idx": 673,
         "t": 1730145600,
         "dir": "long",
         "entry": 69962.21,
@@ -22261,7 +21885,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 682,
+        "idx": 674,
         "t": 1730160000,
         "dir": "long",
         "entry": 70938.14,
@@ -22308,7 +21932,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 683,
+        "idx": 675,
         "t": 1730174400,
         "dir": "long",
         "entry": 71017.97,
@@ -22347,7 +21971,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 684,
+        "idx": 676,
         "t": 1730188800,
         "dir": "long",
         "entry": 71452.01,
@@ -22386,7 +22010,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 685,
+        "idx": 677,
         "t": 1730203200,
         "dir": "long",
         "entry": 72402.01,
@@ -22427,7 +22051,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 686,
+        "idx": 678,
         "t": 1730217600,
         "dir": "long",
         "entry": 72536.16,
@@ -22468,7 +22092,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 687,
+        "idx": 679,
         "t": 1730232000,
         "dir": "long",
         "entry": 72736.42,
@@ -22507,7 +22131,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 688,
+        "idx": 680,
         "t": 1730246400,
         "dir": "long",
         "entry": 72234,
@@ -22548,7 +22172,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 689,
+        "idx": 681,
         "t": 1730260800,
         "dir": "long",
         "entry": 72227.99,
@@ -22587,7 +22211,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 690,
+        "idx": 682,
         "t": 1730275200,
         "dir": "long",
         "entry": 71983.99,
@@ -22626,7 +22250,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 691,
+        "idx": 683,
         "t": 1730289600,
         "dir": "long",
         "entry": 72061.34,
@@ -22665,7 +22289,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 692,
+        "idx": 684,
         "t": 1730304000,
         "dir": "long",
         "entry": 71822.01,
@@ -22704,7 +22328,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 693,
+        "idx": 685,
         "t": 1730318400,
         "dir": "long",
         "entry": 72344.74,
@@ -22743,7 +22367,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 694,
+        "idx": 686,
         "t": 1730332800,
         "dir": "long",
         "entry": 72353.74,
@@ -22782,7 +22406,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 695,
+        "idx": 687,
         "t": 1730347200,
         "dir": "long",
         "entry": 72417.19,
@@ -22823,7 +22447,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 696,
+        "idx": 688,
         "t": 1730361600,
         "dir": "long",
         "entry": 72226,
@@ -22864,7 +22488,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 697,
+        "idx": 689,
         "t": 1730376000,
         "dir": "long",
         "entry": 70620,
@@ -22873,18 +22497,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "MSB / OB",
-          "HalfTrend",
-          "SMC Core"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — MSB / OB, HalfTrend, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.32% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -22910,7 +22527,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 698,
+        "idx": 690,
         "t": 1730390400,
         "dir": "long",
         "entry": 70092.07,
@@ -22919,16 +22536,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "SMC Core"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.13% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -22954,7 +22566,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 699,
+        "idx": 691,
         "t": 1730404800,
         "dir": "long",
         "entry": 70292.01,
@@ -23000,7 +22612,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 700,
+        "idx": 692,
         "t": 1730419200,
         "dir": "long",
         "entry": 69369.99,
@@ -23047,7 +22659,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 701,
+        "idx": 693,
         "t": 1730433600,
         "dir": "long",
         "entry": 69273.7,
@@ -23055,23 +22667,12 @@ a global hard refresh.
         "t1": 70264.37499999999,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Lorentzian",
-          "NW Envelope"
-        ],
-        "pineOppose": [
-          "Smart Money Flow",
-          "SMC Core"
-        ],
-        "pineFamilies": [
-          "trend",
-          "value"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — Smart Money Flow, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.72% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": "long",
@@ -23097,7 +22698,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 702,
+        "idx": 694,
         "t": 1730448000,
         "dir": "long",
         "entry": 70002.01,
@@ -23138,7 +22739,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 703,
+        "idx": 695,
         "t": 1730462400,
         "dir": "short",
         "entry": 69387.77,
@@ -23181,7 +22782,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 704,
+        "idx": 696,
         "t": 1730476800,
         "dir": "short",
         "entry": 69268,
@@ -23222,7 +22823,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 705,
+        "idx": 697,
         "t": 1730491200,
         "dir": "short",
         "entry": 69496.01,
@@ -23261,7 +22862,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 706,
+        "idx": 698,
         "t": 1730505600,
         "dir": "short",
         "entry": 69599.99,
@@ -23300,7 +22901,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 707,
+        "idx": 699,
         "t": 1730520000,
         "dir": "short",
         "entry": 69813.91,
@@ -23339,7 +22940,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 708,
+        "idx": 700,
         "t": 1730534400,
         "dir": "short",
         "entry": 69608,
@@ -23378,7 +22979,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 709,
+        "idx": 701,
         "t": 1730548800,
         "dir": "short",
         "entry": 69393.17,
@@ -23417,7 +23018,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 710,
+        "idx": 702,
         "t": 1730563200,
         "dir": "short",
         "entry": 69510,
@@ -23456,7 +23057,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 711,
+        "idx": 703,
         "t": 1730577600,
         "dir": "short",
         "entry": 69374.74,
@@ -23495,7 +23096,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 712,
+        "idx": 704,
         "t": 1730592000,
         "dir": "short",
         "entry": 68379.89,
@@ -23538,7 +23139,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 713,
+        "idx": 705,
         "t": 1730606400,
         "dir": "short",
         "entry": 68397.42,
@@ -23577,7 +23178,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 714,
+        "idx": 706,
         "t": 1730620800,
         "dir": "short",
         "entry": 68358.86,
@@ -23616,7 +23217,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 715,
+        "idx": 707,
         "t": 1730635200,
         "dir": "short",
         "entry": 68090.9,
@@ -23661,7 +23262,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 716,
+        "idx": 708,
         "t": 1730649600,
         "dir": "short",
         "entry": 68679,
@@ -23700,7 +23301,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 717,
+        "idx": 709,
         "t": 1730664000,
         "dir": "short",
         "entry": 68775.99,
@@ -23739,7 +23340,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 718,
+        "idx": 710,
         "t": 1730678400,
         "dir": "short",
         "entry": 69047.86,
@@ -23778,7 +23379,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 719,
+        "idx": 711,
         "t": 1730692800,
         "dir": "short",
         "entry": 68618,
@@ -23817,7 +23418,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 720,
+        "idx": 712,
         "t": 1730707200,
         "dir": "short",
         "entry": 68792.71,
@@ -23856,7 +23457,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 721,
+        "idx": 713,
         "t": 1730721600,
         "dir": "short",
         "entry": 68646.01,
@@ -23895,7 +23496,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 722,
+        "idx": 714,
         "t": 1730736000,
         "dir": "short",
         "entry": 67856,
@@ -23934,7 +23535,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 723,
+        "idx": 715,
         "t": 1730750400,
         "dir": "short",
         "entry": 67850.01,
@@ -23973,7 +23574,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 724,
+        "idx": 716,
         "t": 1730764800,
         "dir": "short",
         "entry": 68243,
@@ -24012,7 +23613,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 725,
+        "idx": 717,
         "t": 1730779200,
         "dir": "short",
         "entry": 68893.99,
@@ -24051,7 +23652,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 726,
+        "idx": 718,
         "t": 1730793600,
         "dir": "short",
         "entry": 68810.03,
@@ -24090,7 +23691,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 727,
+        "idx": 719,
         "t": 1730808000,
         "dir": "short",
         "entry": 69639.99,
@@ -24129,7 +23730,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 728,
+        "idx": 720,
         "t": 1730822400,
         "dir": "short",
         "entry": 68995.99,
@@ -24168,7 +23769,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 729,
+        "idx": 721,
         "t": 1730836800,
         "dir": "long",
         "entry": 69372.01,
@@ -24207,7 +23808,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 730,
+        "idx": 722,
         "t": 1730851200,
         "dir": "long",
         "entry": 74348.53,
@@ -24257,7 +23858,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 731,
+        "idx": 723,
         "t": 1730865600,
         "dir": "long",
         "entry": 73370.89,
@@ -24302,7 +23903,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 732,
+        "idx": 724,
         "t": 1730880000,
         "dir": "long",
         "entry": 74272.01,
@@ -24349,7 +23950,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 733,
+        "idx": 725,
         "t": 1730894400,
         "dir": "long",
         "entry": 74298,
@@ -24391,7 +23992,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 734,
+        "idx": 726,
         "t": 1730908800,
         "dir": "long",
         "entry": 75823.55,
@@ -24432,7 +24033,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 735,
+        "idx": 727,
         "t": 1730923200,
         "dir": "long",
         "entry": 75571.99,
@@ -24471,7 +24072,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 736,
+        "idx": 728,
         "t": 1730937600,
         "dir": "long",
         "entry": 75048.01,
@@ -24510,7 +24111,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 737,
+        "idx": 729,
         "t": 1730952000,
         "dir": "long",
         "entry": 74757.58,
@@ -24549,7 +24150,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 738,
+        "idx": 730,
         "t": 1730966400,
         "dir": "long",
         "entry": 74746,
@@ -24588,7 +24189,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 739,
+        "idx": 731,
         "t": 1730980800,
         "dir": "long",
         "entry": 76059.69,
@@ -24629,7 +24230,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 740,
+        "idx": 732,
         "t": 1730995200,
         "dir": "long",
         "entry": 76530.39,
@@ -24670,7 +24271,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 741,
+        "idx": 733,
         "t": 1731009600,
         "dir": "long",
         "entry": 75857.89,
@@ -24713,7 +24314,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 742,
+        "idx": 734,
         "t": 1731024000,
         "dir": "long",
         "entry": 75890.79,
@@ -24752,7 +24353,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 743,
+        "idx": 735,
         "t": 1731038400,
         "dir": "long",
         "entry": 76148.49,
@@ -24791,7 +24392,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 744,
+        "idx": 736,
         "t": 1731052800,
         "dir": "long",
         "entry": 75934.46,
@@ -24830,7 +24431,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 745,
+        "idx": 737,
         "t": 1731067200,
         "dir": "long",
         "entry": 76427.72,
@@ -24869,7 +24470,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 746,
+        "idx": 738,
         "t": 1731081600,
         "dir": "long",
         "entry": 76912.58,
@@ -24910,7 +24511,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 747,
+        "idx": 739,
         "t": 1731096000,
         "dir": "long",
         "entry": 76509.78,
@@ -24949,7 +24550,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 748,
+        "idx": 740,
         "t": 1731110400,
         "dir": "long",
         "entry": 76341.47,
@@ -24990,7 +24591,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 749,
+        "idx": 741,
         "t": 1731124800,
         "dir": "long",
         "entry": 76529.08,
@@ -25029,7 +24630,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 750,
+        "idx": 742,
         "t": 1731139200,
         "dir": "long",
         "entry": 76487.11,
@@ -25068,7 +24669,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 751,
+        "idx": 743,
         "t": 1731153600,
         "dir": "long",
         "entry": 76319.9,
@@ -25107,7 +24708,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 752,
+        "idx": 744,
         "t": 1731168000,
         "dir": "long",
         "entry": 76204.92,
@@ -25146,7 +24747,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 753,
+        "idx": 745,
         "t": 1731182400,
         "dir": "long",
         "entry": 76677.46,
@@ -25185,7 +24786,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 754,
+        "idx": 746,
         "t": 1731196800,
         "dir": "long",
         "entry": 77205.96,
@@ -25224,7 +24825,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 755,
+        "idx": 747,
         "t": 1731211200,
         "dir": "long",
         "entry": 78832.37,
@@ -25263,7 +24864,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 756,
+        "idx": 748,
         "t": 1731225600,
         "dir": "long",
         "entry": 79844.01,
@@ -25304,7 +24905,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 757,
+        "idx": 749,
         "t": 1731240000,
         "dir": "long",
         "entry": 79694.03,
@@ -25345,7 +24946,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 758,
+        "idx": 750,
         "t": 1731254400,
         "dir": "long",
         "entry": 79748.99,
@@ -25388,7 +24989,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 759,
+        "idx": 751,
         "t": 1731268800,
         "dir": "long",
         "entry": 80370.01,
@@ -25429,7 +25030,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 760,
+        "idx": 752,
         "t": 1731283200,
         "dir": "long",
         "entry": 81612.23,
@@ -25474,7 +25075,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 761,
+        "idx": 753,
         "t": 1731297600,
         "dir": "long",
         "entry": 81109.1,
@@ -25519,7 +25120,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 762,
+        "idx": 754,
         "t": 1731312000,
         "dir": "long",
         "entry": 82134,
@@ -25558,7 +25159,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 763,
+        "idx": 755,
         "t": 1731326400,
         "dir": "long",
         "entry": 84059.54,
@@ -25599,7 +25200,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 764,
+        "idx": 756,
         "t": 1731340800,
         "dir": "long",
         "entry": 86102.21,
@@ -25638,7 +25239,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 765,
+        "idx": 757,
         "t": 1731355200,
         "dir": "long",
         "entry": 88647.99,
@@ -25679,7 +25280,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 766,
+        "idx": 758,
         "t": 1731369600,
         "dir": "long",
         "entry": 88047.46,
@@ -25718,7 +25319,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 767,
+        "idx": 759,
         "t": 1731384000,
         "dir": "long",
         "entry": 88983.35,
@@ -25761,7 +25362,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 768,
+        "idx": 760,
         "t": 1731398400,
         "dir": "long",
         "entry": 87155.55,
@@ -25800,7 +25401,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 769,
+        "idx": 761,
         "t": 1731412800,
         "dir": "long",
         "entry": 86632,
@@ -25841,7 +25442,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 770,
+        "idx": 762,
         "t": 1731427200,
         "dir": "long",
         "entry": 88704.28,
@@ -25880,7 +25481,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 771,
+        "idx": 763,
         "t": 1731441600,
         "dir": "long",
         "entry": 87952.01,
@@ -25921,7 +25522,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 772,
+        "idx": 764,
         "t": 1731456000,
         "dir": "long",
         "entry": 87136,
@@ -25960,7 +25561,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 773,
+        "idx": 765,
         "t": 1731470400,
         "dir": "long",
         "entry": 87356,
@@ -26001,7 +25602,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 774,
+        "idx": 766,
         "t": 1731484800,
         "dir": "long",
         "entry": 87669.39,
@@ -26042,7 +25643,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 775,
+        "idx": 767,
         "t": 1731499200,
         "dir": "long",
         "entry": 92540.01,
@@ -26083,7 +25684,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 776,
+        "idx": 768,
         "t": 1731513600,
         "dir": "long",
         "entry": 90193.51,
@@ -26127,7 +25728,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 777,
+        "idx": 769,
         "t": 1731528000,
         "dir": "long",
         "entry": 90375.2,
@@ -26166,7 +25767,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 778,
+        "idx": 770,
         "t": 1731542400,
         "dir": "long",
         "entry": 89937.02,
@@ -26209,7 +25810,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 779,
+        "idx": 771,
         "t": 1731556800,
         "dir": "long",
         "entry": 90769.42,
@@ -26248,7 +25849,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 780,
+        "idx": 772,
         "t": 1731571200,
         "dir": "long",
         "entry": 91491.86,
@@ -26289,7 +25890,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 781,
+        "idx": 773,
         "t": 1731585600,
         "dir": "long",
         "entry": 87947.99,
@@ -26330,7 +25931,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 782,
+        "idx": 774,
         "t": 1731600000,
         "dir": "long",
         "entry": 89463.99,
@@ -26371,7 +25972,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 783,
+        "idx": 775,
         "t": 1731614400,
         "dir": "long",
         "entry": 87325.59,
@@ -26410,7 +26011,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 784,
+        "idx": 776,
         "t": 1731628800,
         "dir": "long",
         "entry": 88218.21,
@@ -26449,7 +26050,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 785,
+        "idx": 777,
         "t": 1731643200,
         "dir": "long",
         "entry": 87612,
@@ -26488,7 +26089,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 786,
+        "idx": 778,
         "t": 1731657600,
         "dir": "long",
         "entry": 89741.25,
@@ -26527,7 +26128,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 787,
+        "idx": 779,
         "t": 1731672000,
         "dir": "long",
         "entry": 88445.41,
@@ -26566,7 +26167,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 788,
+        "idx": 780,
         "t": 1731686400,
         "dir": "long",
         "entry": 90377.89,
@@ -26605,7 +26206,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 789,
+        "idx": 781,
         "t": 1731700800,
         "dir": "long",
         "entry": 91032.07,
@@ -26644,7 +26245,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 790,
+        "idx": 782,
         "t": 1731715200,
         "dir": "long",
         "entry": 91252.03,
@@ -26683,7 +26284,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 791,
+        "idx": 783,
         "t": 1731729600,
         "dir": "long",
         "entry": 91117.53,
@@ -26724,7 +26325,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 792,
+        "idx": 784,
         "t": 1731744000,
         "dir": "long",
         "entry": 91169.69,
@@ -26763,7 +26364,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 793,
+        "idx": 785,
         "t": 1731758400,
         "dir": "long",
         "entry": 90521.2,
@@ -26802,7 +26403,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 794,
+        "idx": 786,
         "t": 1731772800,
         "dir": "long",
         "entry": 91100.24,
@@ -26841,7 +26442,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 795,
+        "idx": 787,
         "t": 1731787200,
         "dir": "long",
         "entry": 90586.92,
@@ -26880,7 +26481,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 796,
+        "idx": 788,
         "t": 1731801600,
         "dir": "long",
         "entry": 90247.86,
@@ -26919,7 +26520,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 797,
+        "idx": 789,
         "t": 1731816000,
         "dir": "long",
         "entry": 90550.8,
@@ -26958,7 +26559,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 798,
+        "idx": 790,
         "t": 1731830400,
         "dir": "long",
         "entry": 90684.19,
@@ -26997,7 +26598,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 799,
+        "idx": 791,
         "t": 1731844800,
         "dir": "long",
         "entry": 90260.01,
@@ -27036,7 +26637,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 800,
+        "idx": 792,
         "t": 1731859200,
         "dir": "long",
         "entry": 90044,
@@ -27075,7 +26676,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 801,
+        "idx": 793,
         "t": 1731873600,
         "dir": "long",
         "entry": 89855.99,
@@ -27114,7 +26715,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 802,
+        "idx": 794,
         "t": 1731888000,
         "dir": "long",
         "entry": 90668.58,
@@ -27153,7 +26754,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 803,
+        "idx": 795,
         "t": 1731902400,
         "dir": "long",
         "entry": 91719.9,
@@ -27192,7 +26793,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 804,
+        "idx": 796,
         "t": 1731916800,
         "dir": "long",
         "entry": 90275.13,
@@ -27231,7 +26832,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 805,
+        "idx": 797,
         "t": 1731931200,
         "dir": "long",
         "entry": 92309.51,
@@ -27270,7 +26871,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 806,
+        "idx": 798,
         "t": 1731945600,
         "dir": "long",
         "entry": 90608.26,
@@ -27309,7 +26910,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 807,
+        "idx": 799,
         "t": 1731960000,
         "dir": "long",
         "entry": 90464.08,
@@ -27348,7 +26949,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 808,
+        "idx": 800,
         "t": 1731974400,
         "dir": "long",
         "entry": 91428,
@@ -27387,7 +26988,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 809,
+        "idx": 801,
         "t": 1731988800,
         "dir": "long",
         "entry": 91620.01,
@@ -27426,7 +27027,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 810,
+        "idx": 802,
         "t": 1732003200,
         "dir": "long",
         "entry": 91652.02,
@@ -27465,7 +27066,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 811,
+        "idx": 803,
         "t": 1732017600,
         "dir": "long",
         "entry": 92391.99,
@@ -27504,7 +27105,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 812,
+        "idx": 804,
         "t": 1732032000,
         "dir": "long",
         "entry": 93227.87,
@@ -27543,7 +27144,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 813,
+        "idx": 805,
         "t": 1732046400,
         "dir": "long",
         "entry": 92310.79,
@@ -27582,7 +27183,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 814,
+        "idx": 806,
         "t": 1732060800,
         "dir": "long",
         "entry": 92039.99,
@@ -27621,7 +27222,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 815,
+        "idx": 807,
         "t": 1732075200,
         "dir": "long",
         "entry": 92850.38,
@@ -27660,7 +27261,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 816,
+        "idx": 808,
         "t": 1732089600,
         "dir": "long",
         "entry": 93454.65,
@@ -27699,7 +27300,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 817,
+        "idx": 809,
         "t": 1732104000,
         "dir": "long",
         "entry": 94739.97,
@@ -27744,7 +27345,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 818,
+        "idx": 810,
         "t": 1732118400,
         "dir": "long",
         "entry": 94000,
@@ -27787,7 +27388,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 819,
+        "idx": 811,
         "t": 1732132800,
         "dir": "long",
         "entry": 94286.56,
@@ -27826,7 +27427,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 820,
+        "idx": 812,
         "t": 1732147200,
         "dir": "long",
         "entry": 95798.12,
@@ -27865,7 +27466,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 821,
+        "idx": 813,
         "t": 1732161600,
         "dir": "long",
         "entry": 96912.01,
@@ -27906,7 +27507,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 822,
+        "idx": 814,
         "t": 1732176000,
         "dir": "long",
         "entry": 97974.99,
@@ -27947,7 +27548,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 823,
+        "idx": 815,
         "t": 1732190400,
         "dir": "long",
         "entry": 96672,
@@ -27991,7 +27592,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 824,
+        "idx": 816,
         "t": 1732204800,
         "dir": "long",
         "entry": 97829.83,
@@ -28035,7 +27636,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 825,
+        "idx": 817,
         "t": 1732219200,
         "dir": "long",
         "entry": 98317.12,
@@ -28074,7 +27675,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 826,
+        "idx": 818,
         "t": 1732233600,
         "dir": "long",
         "entry": 98836.5,
@@ -28113,7 +27714,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 827,
+        "idx": 819,
         "t": 1732248000,
         "dir": "long",
         "entry": 99173.7,
@@ -28152,7 +27753,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 828,
+        "idx": 820,
         "t": 1732262400,
         "dir": "long",
         "entry": 98870.38,
@@ -28191,7 +27792,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 829,
+        "idx": 821,
         "t": 1732276800,
         "dir": "long",
         "entry": 98664,
@@ -28230,7 +27831,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 830,
+        "idx": 822,
         "t": 1732291200,
         "dir": "long",
         "entry": 99079.74,
@@ -28271,7 +27872,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 831,
+        "idx": 823,
         "t": 1732305600,
         "dir": "long",
         "entry": 98892,
@@ -28310,7 +27911,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 832,
+        "idx": 824,
         "t": 1732320000,
         "dir": "long",
         "entry": 98666.67,
@@ -28349,7 +27950,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 833,
+        "idx": 825,
         "t": 1732334400,
         "dir": "long",
         "entry": 98560.85,
@@ -28390,7 +27991,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 834,
+        "idx": 826,
         "t": 1732348800,
         "dir": "long",
         "entry": 98429.99,
@@ -28431,7 +28032,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 835,
+        "idx": 827,
         "t": 1732363200,
         "dir": "long",
         "entry": 98400,
@@ -28472,7 +28073,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 836,
+        "idx": 828,
         "t": 1732377600,
         "dir": "long",
         "entry": 97504,
@@ -28484,10 +28085,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.44% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -28513,7 +28112,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 837,
+        "idx": 829,
         "t": 1732392000,
         "dir": "long",
         "entry": 97672.4,
@@ -28525,10 +28124,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.61% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -28554,7 +28151,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 838,
+        "idx": 830,
         "t": 1732406400,
         "dir": "long",
         "entry": 98200.1,
@@ -28593,7 +28190,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 839,
+        "idx": 831,
         "t": 1732420800,
         "dir": "long",
         "entry": 98431.05,
@@ -28632,7 +28229,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 840,
+        "idx": 832,
         "t": 1732435200,
         "dir": "long",
         "entry": 97280.03,
@@ -28671,7 +28268,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 841,
+        "idx": 833,
         "t": 1732449600,
         "dir": "long",
         "entry": 95901.51,
@@ -28710,7 +28307,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 842,
+        "idx": 834,
         "t": 1732464000,
         "dir": "long",
         "entry": 96320.02,
@@ -28749,7 +28346,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 843,
+        "idx": 835,
         "t": 1732478400,
         "dir": "long",
         "entry": 97900.04,
@@ -28788,7 +28385,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 844,
+        "idx": 836,
         "t": 1732492800,
         "dir": "long",
         "entry": 97898.8,
@@ -28827,7 +28424,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 845,
+        "idx": 837,
         "t": 1732507200,
         "dir": "long",
         "entry": 98047.34,
@@ -28866,7 +28463,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 846,
+        "idx": 838,
         "t": 1732521600,
         "dir": "long",
         "entry": 98188.09,
@@ -28905,7 +28502,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 847,
+        "idx": 839,
         "t": 1732536000,
         "dir": "long",
         "entry": 96000.56,
@@ -28948,7 +28545,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 848,
+        "idx": 840,
         "t": 1732550400,
         "dir": "long",
         "entry": 94669.48,
@@ -28956,18 +28553,12 @@ a global hard refresh.
         "t1": 95320.235,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Lorentzian"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.34% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": "long",
@@ -28993,7 +28584,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 849,
+        "idx": 841,
         "t": 1732564800,
         "dir": "long",
         "entry": 93010.01,
@@ -29001,21 +28592,12 @@ a global hard refresh.
         "t1": 93986.44024999997,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Weekly AVWAP"
-        ],
-        "pineOppose": [
-          "Smart Money Flow"
-        ],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "Donchian 20",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — Smart Money Flow fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.52% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -29041,7 +28623,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 850,
+        "idx": 842,
         "t": 1732579200,
         "dir": "long",
         "entry": 94464,
@@ -29086,7 +28668,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 851,
+        "idx": 843,
         "t": 1732593600,
         "dir": "short",
         "entry": 93785.71,
@@ -29127,7 +28709,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 852,
+        "idx": 844,
         "t": 1732608000,
         "dir": "short",
         "entry": 92356.85,
@@ -29168,7 +28750,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 853,
+        "idx": 845,
         "t": 1732622400,
         "dir": "short",
         "entry": 92813,
@@ -29209,7 +28791,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 854,
+        "idx": 846,
         "t": 1732636800,
         "dir": "short",
         "entry": 91683.89,
@@ -29248,7 +28830,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 855,
+        "idx": 847,
         "t": 1732651200,
         "dir": "short",
         "entry": 91965.16,
@@ -29291,7 +28873,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 856,
+        "idx": 848,
         "t": 1732665600,
         "dir": "short",
         "entry": 92588,
@@ -29330,7 +28912,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 857,
+        "idx": 849,
         "t": 1732680000,
         "dir": "short",
         "entry": 93597.16,
@@ -29369,7 +28951,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 858,
+        "idx": 850,
         "t": 1732694400,
         "dir": "short",
         "entry": 93367.99,
@@ -29408,7 +28990,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 859,
+        "idx": 851,
         "t": 1732708800,
         "dir": "short",
         "entry": 95556.01,
@@ -29451,7 +29033,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 860,
+        "idx": 852,
         "t": 1732723200,
         "dir": "short",
         "entry": 96627.99,
@@ -29463,11 +29045,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — MACD histogram, RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.08% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -29493,7 +29072,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 861,
+        "idx": 853,
         "t": 1732737600,
         "dir": "long",
         "entry": 95863.11,
@@ -29536,7 +29115,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 862,
+        "idx": 854,
         "t": 1732752000,
         "dir": "long",
         "entry": 95471.43,
@@ -29581,7 +29160,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 863,
+        "idx": 855,
         "t": 1732766400,
         "dir": "long",
         "entry": 95299.66,
@@ -29622,7 +29201,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 864,
+        "idx": 856,
         "t": 1732780800,
         "dir": "long",
         "entry": 95452.01,
@@ -29661,7 +29240,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 865,
+        "idx": 857,
         "t": 1732795200,
         "dir": "long",
         "entry": 95007.14,
@@ -29702,7 +29281,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 866,
+        "idx": 858,
         "t": 1732809600,
         "dir": "long",
         "entry": 95119.48,
@@ -29741,7 +29320,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 867,
+        "idx": 859,
         "t": 1732824000,
         "dir": "long",
         "entry": 95643.98,
@@ -29780,7 +29359,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 868,
+        "idx": 860,
         "t": 1732838400,
         "dir": "long",
         "entry": 96590.36,
@@ -29819,7 +29398,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 869,
+        "idx": 861,
         "t": 1732852800,
         "dir": "long",
         "entry": 95625.05,
@@ -29858,7 +29437,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 870,
+        "idx": 862,
         "t": 1732867200,
         "dir": "long",
         "entry": 97237.91,
@@ -29900,7 +29479,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 871,
+        "idx": 863,
         "t": 1732881600,
         "dir": "long",
         "entry": 98019.47,
@@ -29944,7 +29523,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 872,
+        "idx": 864,
         "t": 1732896000,
         "dir": "long",
         "entry": 97329.73,
@@ -29983,7 +29562,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 873,
+        "idx": 865,
         "t": 1732910400,
         "dir": "long",
         "entry": 97460,
@@ -30026,7 +29605,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 874,
+        "idx": 866,
         "t": 1732924800,
         "dir": "long",
         "entry": 96640.02,
@@ -30065,7 +29644,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 875,
+        "idx": 867,
         "t": 1732939200,
         "dir": "long",
         "entry": 96783.38,
@@ -30108,7 +29687,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 876,
+        "idx": 868,
         "t": 1732953600,
         "dir": "long",
         "entry": 96267.99,
@@ -30147,7 +29726,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 877,
+        "idx": 869,
         "t": 1732968000,
         "dir": "long",
         "entry": 96645.41,
@@ -30186,7 +29765,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 878,
+        "idx": 870,
         "t": 1732982400,
         "dir": "long",
         "entry": 97019.68,
@@ -30225,7 +29804,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 879,
+        "idx": 871,
         "t": 1732996800,
         "dir": "long",
         "entry": 96407.99,
@@ -30264,7 +29843,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 880,
+        "idx": 872,
         "t": 1733011200,
         "dir": "long",
         "entry": 96336.75,
@@ -30303,7 +29882,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 881,
+        "idx": 873,
         "t": 1733025600,
         "dir": "long",
         "entry": 96472.97,
@@ -30342,7 +29921,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 882,
+        "idx": 874,
         "t": 1733040000,
         "dir": "long",
         "entry": 97108.89,
@@ -30381,7 +29960,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 883,
+        "idx": 875,
         "t": 1733054400,
         "dir": "long",
         "entry": 97028.02,
@@ -30420,7 +29999,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 884,
+        "idx": 876,
         "t": 1733068800,
         "dir": "long",
         "entry": 97178.73,
@@ -30459,7 +30038,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 885,
+        "idx": 877,
         "t": 1733083200,
         "dir": "long",
         "entry": 97185.18,
@@ -30498,7 +30077,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 886,
+        "idx": 878,
         "t": 1733097600,
         "dir": "long",
         "entry": 96483.75,
@@ -30537,7 +30116,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 887,
+        "idx": 879,
         "t": 1733112000,
         "dir": "long",
         "entry": 95999.99,
@@ -30576,7 +30155,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 888,
+        "idx": 880,
         "t": 1733126400,
         "dir": "long",
         "entry": 95128.68,
@@ -30615,7 +30194,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 889,
+        "idx": 881,
         "t": 1733140800,
         "dir": "long",
         "entry": 97048,
@@ -30654,7 +30233,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 890,
+        "idx": 882,
         "t": 1733155200,
         "dir": "long",
         "entry": 95816,
@@ -30693,7 +30272,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 891,
+        "idx": 883,
         "t": 1733169600,
         "dir": "long",
         "entry": 95840.62,
@@ -30732,7 +30311,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 892,
+        "idx": 884,
         "t": 1733184000,
         "dir": "long",
         "entry": 96079.36,
@@ -30771,7 +30350,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 893,
+        "idx": 885,
         "t": 1733198400,
         "dir": "long",
         "entry": 95550,
@@ -30810,7 +30389,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 894,
+        "idx": 886,
         "t": 1733212800,
         "dir": "short",
         "entry": 94988.01,
@@ -30849,7 +30428,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 895,
+        "idx": 887,
         "t": 1733227200,
         "dir": "short",
         "entry": 95682.54,
@@ -30888,7 +30467,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 896,
+        "idx": 888,
         "t": 1733241600,
         "dir": "short",
         "entry": 95428.6,
@@ -30927,7 +30506,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 897,
+        "idx": 889,
         "t": 1733256000,
         "dir": "short",
         "entry": 95849.69,
@@ -30966,7 +30545,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 898,
+        "idx": 890,
         "t": 1733270400,
         "dir": "short",
         "entry": 95770.32,
@@ -31005,7 +30584,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 899,
+        "idx": 891,
         "t": 1733284800,
         "dir": "long",
         "entry": 96588.81,
@@ -31044,7 +30623,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 900,
+        "idx": 892,
         "t": 1733299200,
         "dir": "long",
         "entry": 96190.41,
@@ -31083,7 +30662,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 901,
+        "idx": 893,
         "t": 1733313600,
         "dir": "long",
         "entry": 95742.81,
@@ -31122,7 +30701,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 902,
+        "idx": 894,
         "t": 1733328000,
         "dir": "long",
         "entry": 97209.64,
@@ -31161,7 +30740,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 903,
+        "idx": 895,
         "t": 1733342400,
         "dir": "long",
         "entry": 98587.32,
@@ -31211,7 +30790,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 904,
+        "idx": 896,
         "t": 1733356800,
         "dir": "long",
         "entry": 102964,
@@ -31258,7 +30837,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 905,
+        "idx": 897,
         "t": 1733371200,
         "dir": "long",
         "entry": 102236.1,
@@ -31304,7 +30883,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 906,
+        "idx": 898,
         "t": 1733385600,
         "dir": "long",
         "entry": 102566.91,
@@ -31349,7 +30928,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 907,
+        "idx": 899,
         "t": 1733400000,
         "dir": "long",
         "entry": 101292.01,
@@ -31394,7 +30973,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 908,
+        "idx": 900,
         "t": 1733414400,
         "dir": "long",
         "entry": 99028,
@@ -31439,7 +31018,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 909,
+        "idx": 901,
         "t": 1733428800,
         "dir": "long",
         "entry": 96945.63,
@@ -31489,7 +31068,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 910,
+        "idx": 902,
         "t": 1733443200,
         "dir": "long",
         "entry": 97735.29,
@@ -31531,7 +31110,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 911,
+        "idx": 903,
         "t": 1733457600,
         "dir": "long",
         "entry": 98138.54,
@@ -31572,7 +31151,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 912,
+        "idx": 904,
         "t": 1733472000,
         "dir": "long",
         "entry": 98069.62,
@@ -31613,7 +31192,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 913,
+        "idx": 905,
         "t": 1733486400,
         "dir": "long",
         "entry": 99309.99,
@@ -31656,7 +31235,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 914,
+        "idx": 906,
         "t": 1733500800,
         "dir": "long",
         "entry": 101439.99,
@@ -31701,7 +31280,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 915,
+        "idx": 907,
         "t": 1733515200,
         "dir": "long",
         "entry": 99740.84,
@@ -31742,7 +31321,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 916,
+        "idx": 908,
         "t": 1733529600,
         "dir": "long",
         "entry": 99299.63,
@@ -31781,7 +31360,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 917,
+        "idx": 909,
         "t": 1733544000,
         "dir": "long",
         "entry": 99405.2,
@@ -31820,7 +31399,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 918,
+        "idx": 910,
         "t": 1733558400,
         "dir": "long",
         "entry": 99620,
@@ -31859,7 +31438,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 919,
+        "idx": 911,
         "t": 1733572800,
         "dir": "long",
         "entry": 99756.01,
@@ -31900,7 +31479,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 920,
+        "idx": 912,
         "t": 1733587200,
         "dir": "long",
         "entry": 100077.45,
@@ -31941,7 +31520,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 921,
+        "idx": 913,
         "t": 1733601600,
         "dir": "long",
         "entry": 99831.99,
@@ -31980,7 +31559,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 922,
+        "idx": 914,
         "t": 1733616000,
         "dir": "long",
         "entry": 99934.82,
@@ -32019,7 +31598,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 923,
+        "idx": 915,
         "t": 1733630400,
         "dir": "long",
         "entry": 99675.11,
@@ -32060,7 +31639,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 924,
+        "idx": 916,
         "t": 1733644800,
         "dir": "long",
         "entry": 99701.16,
@@ -32101,7 +31680,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 925,
+        "idx": 917,
         "t": 1733659200,
         "dir": "long",
         "entry": 99912.01,
@@ -32140,7 +31719,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 926,
+        "idx": 918,
         "t": 1733673600,
         "dir": "long",
         "entry": 100100.98,
@@ -32179,7 +31758,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 927,
+        "idx": 919,
         "t": 1733688000,
         "dir": "long",
         "entry": 101109.59,
@@ -32224,7 +31803,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 928,
+        "idx": 920,
         "t": 1733702400,
         "dir": "long",
         "entry": 99090.84,
@@ -32233,16 +31812,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Weekly AVWAP"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "Engulfing",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.71% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -32268,7 +31842,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 929,
+        "idx": 921,
         "t": 1733716800,
         "dir": "long",
         "entry": 99576.51,
@@ -32313,7 +31887,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 930,
+        "idx": 922,
         "t": 1733731200,
         "dir": "long",
         "entry": 98088.47,
@@ -32322,13 +31896,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "HalfTrend"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — HalfTrend fired the other way. Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.10% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -32354,7 +31926,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 931,
+        "idx": 923,
         "t": 1733745600,
         "dir": "long",
         "entry": 97812,
@@ -32363,13 +31935,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Weekly AVWAP"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "PINE AGAINST — Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.36% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -32395,7 +31965,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 932,
+        "idx": 924,
         "t": 1733760000,
         "dir": "short",
         "entry": 97070.32,
@@ -32438,7 +32008,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 933,
+        "idx": 925,
         "t": 1733774400,
         "dir": "short",
         "entry": 97276.47,
@@ -32483,7 +32053,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 934,
+        "idx": 926,
         "t": 1733788800,
         "dir": "short",
         "entry": 96931.99,
@@ -32525,7 +32095,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 935,
+        "idx": 927,
         "t": 1733803200,
         "dir": "short",
         "entry": 97196.44,
@@ -32568,7 +32138,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 936,
+        "idx": 928,
         "t": 1733817600,
         "dir": "short",
         "entry": 97722.52,
@@ -32607,7 +32177,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 937,
+        "idx": 929,
         "t": 1733832000,
         "dir": "short",
         "entry": 95658.79,
@@ -32646,7 +32216,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 938,
+        "idx": 930,
         "t": 1733846400,
         "dir": "short",
         "entry": 95856.5,
@@ -32689,7 +32259,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 939,
+        "idx": 931,
         "t": 1733860800,
         "dir": "short",
         "entry": 96593,
@@ -32730,7 +32300,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 940,
+        "idx": 932,
         "t": 1733875200,
         "dir": "short",
         "entry": 97398.43,
@@ -32771,7 +32341,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 941,
+        "idx": 933,
         "t": 1733889600,
         "dir": "short",
         "entry": 97334.6,
@@ -32812,7 +32382,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 942,
+        "idx": 934,
         "t": 1733904000,
         "dir": "short",
         "entry": 98292.61,
@@ -32856,7 +32426,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 943,
+        "idx": 935,
         "t": 1733918400,
         "dir": "long",
         "entry": 100361.64,
@@ -32904,7 +32474,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 944,
+        "idx": 936,
         "t": 1733932800,
         "dir": "long",
         "entry": 101122.71,
@@ -32948,7 +32518,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 945,
+        "idx": 937,
         "t": 1733947200,
         "dir": "long",
         "entry": 101125,
@@ -32990,7 +32560,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 946,
+        "idx": 938,
         "t": 1733961600,
         "dir": "long",
         "entry": 101025.87,
@@ -33034,7 +32604,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 947,
+        "idx": 939,
         "t": 1733976000,
         "dir": "long",
         "entry": 100499.99,
@@ -33075,7 +32645,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 948,
+        "idx": 940,
         "t": 1733990400,
         "dir": "long",
         "entry": 100358.42,
@@ -33114,7 +32684,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 949,
+        "idx": 941,
         "t": 1734004800,
         "dir": "long",
         "entry": 101797.14,
@@ -33159,7 +32729,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 950,
+        "idx": 942,
         "t": 1734019200,
         "dir": "long",
         "entry": 99481.32,
@@ -33202,7 +32772,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 951,
+        "idx": 943,
         "t": 1734033600,
         "dir": "long",
         "entry": 100004.29,
@@ -33245,7 +32815,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 952,
+        "idx": 944,
         "t": 1734048000,
         "dir": "long",
         "entry": 99729.09,
@@ -33284,7 +32854,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 953,
+        "idx": 945,
         "t": 1734062400,
         "dir": "long",
         "entry": 100130,
@@ -33323,7 +32893,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 954,
+        "idx": 946,
         "t": 1734076800,
         "dir": "long",
         "entry": 100353.37,
@@ -33362,7 +32932,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 955,
+        "idx": 947,
         "t": 1734091200,
         "dir": "long",
         "entry": 99873.16,
@@ -33375,7 +32945,7 @@ a global hard refresh.
         "pineFamilies": [],
         "indAgree": [],
         "indOppose": [],
-        "pineNote": "no fresh pine script on this 4h tape (10 of 10 cores ran). Watch only, not a ticket.",
+        "pineNote": "COST FLOOR — stop 0.72% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -33401,7 +32971,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 956,
+        "idx": 948,
         "t": 1734105600,
         "dir": "long",
         "entry": 101462.34,
@@ -33440,7 +33010,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 957,
+        "idx": 949,
         "t": 1734120000,
         "dir": "long",
         "entry": 101424.25,
@@ -33481,7 +33051,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 958,
+        "idx": 950,
         "t": 1734134400,
         "dir": "long",
         "entry": 102088,
@@ -33526,7 +33096,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 959,
+        "idx": 951,
         "t": 1734148800,
         "dir": "long",
         "entry": 101824,
@@ -33565,7 +33135,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 960,
+        "idx": 952,
         "t": 1734163200,
         "dir": "long",
         "entry": 101583.99,
@@ -33604,7 +33174,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 961,
+        "idx": 953,
         "t": 1734177600,
         "dir": "long",
         "entry": 101625.12,
@@ -33643,7 +33213,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 962,
+        "idx": 954,
         "t": 1734192000,
         "dir": "long",
         "entry": 101313.54,
@@ -33682,7 +33252,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 963,
+        "idx": 955,
         "t": 1734206400,
         "dir": "long",
         "entry": 101420,
@@ -33721,7 +33291,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 964,
+        "idx": 956,
         "t": 1734220800,
         "dir": "long",
         "entry": 101733.82,
@@ -33760,7 +33330,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 965,
+        "idx": 957,
         "t": 1734235200,
         "dir": "long",
         "entry": 101732.09,
@@ -33799,7 +33369,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 966,
+        "idx": 958,
         "t": 1734249600,
         "dir": "long",
         "entry": 102671.44,
@@ -33838,7 +33408,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 967,
+        "idx": 959,
         "t": 1734264000,
         "dir": "long",
         "entry": 102704.01,
@@ -33879,7 +33449,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 968,
+        "idx": 960,
         "t": 1734278400,
         "dir": "long",
         "entry": 103252.95,
@@ -33920,7 +33490,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 969,
+        "idx": 961,
         "t": 1734292800,
         "dir": "long",
         "entry": 104463.99,
@@ -33961,7 +33531,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 970,
+        "idx": 962,
         "t": 1734307200,
         "dir": "long",
         "entry": 104582.28,
@@ -34003,7 +33573,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 971,
+        "idx": 963,
         "t": 1734321600,
         "dir": "long",
         "entry": 104992.79,
@@ -34046,7 +33616,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 972,
+        "idx": 964,
         "t": 1734336000,
         "dir": "long",
         "entry": 103757.99,
@@ -34085,7 +33655,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 973,
+        "idx": 965,
         "t": 1734350400,
         "dir": "long",
         "entry": 106332.01,
@@ -34128,7 +33698,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 974,
+        "idx": 966,
         "t": 1734364800,
         "dir": "long",
         "entry": 106583.12,
@@ -34170,7 +33740,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 975,
+        "idx": 967,
         "t": 1734379200,
         "dir": "long",
         "entry": 106058.66,
@@ -34211,7 +33781,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 976,
+        "idx": 968,
         "t": 1734393600,
         "dir": "long",
         "entry": 106866.49,
@@ -34250,7 +33820,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 977,
+        "idx": 969,
         "t": 1734408000,
         "dir": "long",
         "entry": 106805.75,
@@ -34289,7 +33859,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 978,
+        "idx": 970,
         "t": 1734422400,
         "dir": "long",
         "entry": 106808.31,
@@ -34328,7 +33898,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 979,
+        "idx": 971,
         "t": 1734436800,
         "dir": "long",
         "entry": 106478.47,
@@ -34371,7 +33941,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 980,
+        "idx": 972,
         "t": 1734451200,
         "dir": "long",
         "entry": 106475.89,
@@ -34410,7 +33980,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 981,
+        "idx": 973,
         "t": 1734465600,
         "dir": "long",
         "entry": 106133.74,
@@ -34449,7 +34019,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 982,
+        "idx": 974,
         "t": 1734480000,
         "dir": "long",
         "entry": 104763.98,
@@ -34493,7 +34063,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 983,
+        "idx": 975,
         "t": 1734494400,
         "dir": "long",
         "entry": 104250.75,
@@ -34538,7 +34108,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 984,
+        "idx": 976,
         "t": 1734508800,
         "dir": "long",
         "entry": 105028.33,
@@ -34583,7 +34153,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 985,
+        "idx": 977,
         "t": 1734523200,
         "dir": "long",
         "entry": 104428.54,
@@ -34628,7 +34198,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 986,
+        "idx": 978,
         "t": 1734537600,
         "dir": "long",
         "entry": 102817.82,
@@ -34637,16 +34207,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "Smart Money Flow"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — Smart Money Flow fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.07% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -34672,7 +34237,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 987,
+        "idx": 979,
         "t": 1734552000,
         "dir": "long",
         "entry": 100204.01,
@@ -34680,22 +34245,12 @@ a global hard refresh.
         "t1": 100820.855,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Lorentzian"
-        ],
-        "pineOppose": [
-          "MSB / OB",
-          "SMC Core"
-        ],
-        "pineFamilies": [
-          "trend"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "Donchian 20",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — MSB / OB, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.31% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": "long",
@@ -34721,7 +34276,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 988,
+        "idx": 980,
         "t": 1734566400,
         "dir": "short",
         "entry": 101193.15,
@@ -34771,7 +34326,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 989,
+        "idx": 981,
         "t": 1734580800,
         "dir": "short",
         "entry": 101656.57,
@@ -34816,7 +34371,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 990,
+        "idx": 982,
         "t": 1734595200,
         "dir": "short",
         "entry": 102449.99,
@@ -34861,7 +34416,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 991,
+        "idx": 983,
         "t": 1734609600,
         "dir": "short",
         "entry": 100679.86,
@@ -34908,7 +34463,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 992,
+        "idx": 984,
         "t": 1734624000,
         "dir": "short",
         "entry": 97199.72,
@@ -34953,7 +34508,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 993,
+        "idx": 985,
         "t": 1734638400,
         "dir": "short",
         "entry": 97461.86,
@@ -34996,7 +34551,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 994,
+        "idx": 986,
         "t": 1734652800,
         "dir": "short",
         "entry": 97106.02,
@@ -35039,7 +34594,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 995,
+        "idx": 987,
         "t": 1734667200,
         "dir": "short",
         "entry": 97832.53,
@@ -35082,7 +34637,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 996,
+        "idx": 988,
         "t": 1734681600,
         "dir": "short",
         "entry": 92723.98,
@@ -35123,7 +34678,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 997,
+        "idx": 989,
         "t": 1734696000,
         "dir": "short",
         "entry": 96991.62,
@@ -35167,7 +34722,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 998,
+        "idx": 990,
         "t": 1734710400,
         "dir": "short",
         "entry": 97116,
@@ -35208,7 +34763,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 999,
+        "idx": 991,
         "t": 1734724800,
         "dir": "short",
         "entry": 97805.44,
@@ -35247,7 +34802,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1000,
+        "idx": 992,
         "t": 1734739200,
         "dir": "short",
         "entry": 97487.46,
@@ -35286,7 +34841,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1001,
+        "idx": 993,
         "t": 1734753600,
         "dir": "short",
         "entry": 99040,
@@ -35325,7 +34880,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1002,
+        "idx": 994,
         "t": 1734768000,
         "dir": "short",
         "entry": 98262.08,
@@ -35366,7 +34921,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1003,
+        "idx": 995,
         "t": 1734782400,
         "dir": "short",
         "entry": 97527.97,
@@ -35407,7 +34962,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1004,
+        "idx": 996,
         "t": 1734796800,
         "dir": "short",
         "entry": 97269.03,
@@ -35448,7 +35003,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1005,
+        "idx": 997,
         "t": 1734811200,
         "dir": "short",
         "entry": 97291.99,
@@ -35489,7 +35044,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1006,
+        "idx": 998,
         "t": 1734825600,
         "dir": "short",
         "entry": 96994.37,
@@ -35532,7 +35087,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1007,
+        "idx": 999,
         "t": 1734840000,
         "dir": "short",
         "entry": 96210.24,
@@ -35571,7 +35126,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1008,
+        "idx": 1000,
         "t": 1734854400,
         "dir": "short",
         "entry": 97101.28,
@@ -35610,7 +35165,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1009,
+        "idx": 1001,
         "t": 1734868800,
         "dir": "short",
         "entry": 95377.72,
@@ -35649,7 +35204,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1010,
+        "idx": 1002,
         "t": 1734883200,
         "dir": "short",
         "entry": 94836.55,
@@ -35690,7 +35245,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1011,
+        "idx": 1003,
         "t": 1734897600,
         "dir": "short",
         "entry": 95186.27,
@@ -35731,7 +35286,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1012,
+        "idx": 1004,
         "t": 1734912000,
         "dir": "short",
         "entry": 96025.15,
@@ -35774,7 +35329,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1013,
+        "idx": 1005,
         "t": 1734926400,
         "dir": "short",
         "entry": 95404.01,
@@ -35815,7 +35370,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1014,
+        "idx": 1006,
         "t": 1734940800,
         "dir": "short",
         "entry": 95932.42,
@@ -35858,7 +35413,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1015,
+        "idx": 1007,
         "t": 1734955200,
         "dir": "short",
         "entry": 93250.37,
@@ -35903,7 +35458,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1016,
+        "idx": 1008,
         "t": 1734969600,
         "dir": "short",
         "entry": 93044.79,
@@ -35944,7 +35499,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1017,
+        "idx": 1009,
         "t": 1734984000,
         "dir": "short",
         "entry": 94881.47,
@@ -35988,7 +35543,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1018,
+        "idx": 1010,
         "t": 1734998400,
         "dir": "short",
         "entry": 94348.75,
@@ -36027,7 +35582,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1019,
+        "idx": 1011,
         "t": 1735012800,
         "dir": "short",
         "entry": 94233.19,
@@ -36066,7 +35621,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1020,
+        "idx": 1012,
         "t": 1735027200,
         "dir": "short",
         "entry": 94398.6,
@@ -36107,7 +35662,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1021,
+        "idx": 1013,
         "t": 1735041600,
         "dir": "short",
         "entry": 98300,
@@ -36116,16 +35671,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "HalfTrend"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — HalfTrend fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.07% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -36151,7 +35701,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1022,
+        "idx": 1014,
         "t": 1735056000,
         "dir": "short",
         "entry": 97581.09,
@@ -36197,7 +35747,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1023,
+        "idx": 1015,
         "t": 1735070400,
         "dir": "short",
         "entry": 98663.58,
@@ -36243,7 +35793,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1024,
+        "idx": 1016,
         "t": 1735084800,
         "dir": "short",
         "entry": 98029.48,
@@ -36288,7 +35838,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1025,
+        "idx": 1017,
         "t": 1735099200,
         "dir": "long",
         "entry": 98084.33,
@@ -36329,7 +35879,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1026,
+        "idx": 1018,
         "t": 1735113600,
         "dir": "long",
         "entry": 97907.61,
@@ -36371,7 +35921,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1027,
+        "idx": 1019,
         "t": 1735128000,
         "dir": "long",
         "entry": 98519.98,
@@ -36410,7 +35960,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1028,
+        "idx": 1020,
         "t": 1735142400,
         "dir": "long",
         "entry": 99018.52,
@@ -36449,7 +35999,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1029,
+        "idx": 1021,
         "t": 1735156800,
         "dir": "long",
         "entry": 99429.6,
@@ -36490,7 +36040,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1030,
+        "idx": 1022,
         "t": 1735171200,
         "dir": "long",
         "entry": 98995.17,
@@ -36532,7 +36082,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1031,
+        "idx": 1023,
         "t": 1735185600,
         "dir": "long",
         "entry": 97719.99,
@@ -36571,7 +36121,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1032,
+        "idx": 1024,
         "t": 1735200000,
         "dir": "long",
         "entry": 95695.81,
@@ -36614,7 +36164,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1033,
+        "idx": 1025,
         "t": 1735214400,
         "dir": "short",
         "entry": 96042.88,
@@ -36659,7 +36209,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1034,
+        "idx": 1026,
         "t": 1735228800,
         "dir": "short",
         "entry": 96102.25,
@@ -36700,7 +36250,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1035,
+        "idx": 1027,
         "t": 1735243200,
         "dir": "short",
         "entry": 95791.6,
@@ -36741,7 +36291,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1036,
+        "idx": 1028,
         "t": 1735257600,
         "dir": "short",
         "entry": 96417.84,
@@ -36782,7 +36332,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1037,
+        "idx": 1029,
         "t": 1735272000,
         "dir": "short",
         "entry": 95104.76,
@@ -36821,7 +36371,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1038,
+        "idx": 1030,
         "t": 1735286400,
         "dir": "short",
         "entry": 96952.38,
@@ -36862,7 +36412,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1039,
+        "idx": 1031,
         "t": 1735300800,
         "dir": "short",
         "entry": 94573.75,
@@ -36901,7 +36451,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1040,
+        "idx": 1032,
         "t": 1735315200,
         "dir": "short",
         "entry": 94750,
@@ -36942,7 +36492,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1041,
+        "idx": 1033,
         "t": 1735329600,
         "dir": "short",
         "entry": 94299.03,
@@ -36985,7 +36535,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1042,
+        "idx": 1034,
         "t": 1735344000,
         "dir": "short",
         "entry": 94594.91,
@@ -37024,7 +36574,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1043,
+        "idx": 1035,
         "t": 1735358400,
         "dir": "short",
         "entry": 94381.99,
@@ -37065,7 +36615,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1044,
+        "idx": 1036,
         "t": 1735372800,
         "dir": "short",
         "entry": 94754.83,
@@ -37104,7 +36654,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1045,
+        "idx": 1037,
         "t": 1735387200,
         "dir": "short",
         "entry": 94447.29,
@@ -37143,7 +36693,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1046,
+        "idx": 1038,
         "t": 1735401600,
         "dir": "short",
         "entry": 95027.76,
@@ -37182,7 +36732,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1047,
+        "idx": 1039,
         "t": 1735416000,
         "dir": "short",
         "entry": 95300,
@@ -37221,7 +36771,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1048,
+        "idx": 1040,
         "t": 1735430400,
         "dir": "short",
         "entry": 95172.4,
@@ -37262,7 +36812,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1049,
+        "idx": 1041,
         "t": 1735444800,
         "dir": "short",
         "entry": 95272.04,
@@ -37303,7 +36853,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1050,
+        "idx": 1042,
         "t": 1735459200,
         "dir": "short",
         "entry": 95032.57,
@@ -37342,7 +36892,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1051,
+        "idx": 1043,
         "t": 1735473600,
         "dir": "short",
         "entry": 94511.12,
@@ -37381,7 +36931,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1052,
+        "idx": 1044,
         "t": 1735488000,
         "dir": "short",
         "entry": 93612.89,
@@ -37420,7 +36970,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1053,
+        "idx": 1045,
         "t": 1735502400,
         "dir": "short",
         "entry": 93738.2,
@@ -37459,7 +37009,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1054,
+        "idx": 1046,
         "t": 1735516800,
         "dir": "short",
         "entry": 93722.71,
@@ -37498,7 +37048,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1055,
+        "idx": 1047,
         "t": 1735531200,
         "dir": "short",
         "entry": 93731.65,
@@ -37537,7 +37087,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1056,
+        "idx": 1048,
         "t": 1735545600,
         "dir": "short",
         "entry": 93923.14,
@@ -37576,7 +37126,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1057,
+        "idx": 1049,
         "t": 1735560000,
         "dir": "short",
         "entry": 92130.21,
@@ -37625,7 +37175,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1058,
+        "idx": 1050,
         "t": 1735574400,
         "dir": "short",
         "entry": 94417.04,
@@ -37664,7 +37214,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1059,
+        "idx": 1051,
         "t": 1735588800,
         "dir": "short",
         "entry": 92792.05,
@@ -37703,7 +37253,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1060,
+        "idx": 1052,
         "t": 1735603200,
         "dir": "short",
         "entry": 92509.59,
@@ -37748,7 +37298,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1061,
+        "idx": 1053,
         "t": 1735617600,
         "dir": "short",
         "entry": 92860.75,
@@ -37787,7 +37337,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1062,
+        "idx": 1054,
         "t": 1735632000,
         "dir": "short",
         "entry": 94232.68,
@@ -37832,7 +37382,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1063,
+        "idx": 1055,
         "t": 1735646400,
         "dir": "short",
         "entry": 95412,
@@ -37876,7 +37426,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1064,
+        "idx": 1056,
         "t": 1735660800,
         "dir": "short",
         "entry": 94166.88,
@@ -37921,7 +37471,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1065,
+        "idx": 1057,
         "t": 1735675200,
         "dir": "short",
         "entry": 93576,
@@ -37962,7 +37512,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1066,
+        "idx": 1058,
         "t": 1735689600,
         "dir": "short",
         "entry": 93838.04,
@@ -38003,7 +37553,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1067,
+        "idx": 1059,
         "t": 1735704000,
         "dir": "short",
         "entry": 93684.1,
@@ -38046,7 +37596,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1068,
+        "idx": 1060,
         "t": 1735718400,
         "dir": "short",
         "entry": 93444.64,
@@ -38087,7 +37637,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1069,
+        "idx": 1061,
         "t": 1735732800,
         "dir": "short",
         "entry": 94432.94,
@@ -38126,7 +37676,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1070,
+        "idx": 1062,
         "t": 1735747200,
         "dir": "short",
         "entry": 94627.07,
@@ -38165,7 +37715,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1071,
+        "idx": 1063,
         "t": 1735761600,
         "dir": "short",
         "entry": 94591.79,
@@ -38204,7 +37754,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1072,
+        "idx": 1064,
         "t": 1735776000,
         "dir": "short",
         "entry": 95010.33,
@@ -38250,7 +37800,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1073,
+        "idx": 1065,
         "t": 1735790400,
         "dir": "short",
         "entry": 95822,
@@ -38262,10 +37812,8 @@ a global hard refresh.
         "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — RSI 14 crossed the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.50% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -38291,7 +37839,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1074,
+        "idx": 1066,
         "t": 1735804800,
         "dir": "long",
         "entry": 96732.99,
@@ -38339,7 +37887,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1075,
+        "idx": 1067,
         "t": 1735819200,
         "dir": "long",
         "entry": 96455.01,
@@ -38386,7 +37934,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1076,
+        "idx": 1068,
         "t": 1735833600,
         "dir": "long",
         "entry": 97317.74,
@@ -38431,7 +37979,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1077,
+        "idx": 1069,
         "t": 1735848000,
         "dir": "long",
         "entry": 96984.79,
@@ -38478,7 +38026,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1078,
+        "idx": 1070,
         "t": 1735862400,
         "dir": "long",
         "entry": 97062.3,
@@ -38523,7 +38071,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1079,
+        "idx": 1071,
         "t": 1735876800,
         "dir": "long",
         "entry": 96304,
@@ -38568,7 +38116,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1080,
+        "idx": 1072,
         "t": 1735891200,
         "dir": "long",
         "entry": 96757.58,
@@ -38613,7 +38161,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1081,
+        "idx": 1073,
         "t": 1735905600,
         "dir": "long",
         "entry": 97521.35,
@@ -38654,7 +38202,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1082,
+        "idx": 1074,
         "t": 1735920000,
         "dir": "long",
         "entry": 98592.01,
@@ -38696,7 +38244,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1083,
+        "idx": 1075,
         "t": 1735934400,
         "dir": "long",
         "entry": 98174.18,
@@ -38739,7 +38287,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1084,
+        "idx": 1076,
         "t": 1735948800,
         "dir": "long",
         "entry": 98200,
@@ -38778,7 +38326,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1085,
+        "idx": 1077,
         "t": 1735963200,
         "dir": "long",
         "entry": 98271.88,
@@ -38817,7 +38365,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1086,
+        "idx": 1078,
         "t": 1735977600,
         "dir": "long",
         "entry": 97889.39,
@@ -38856,7 +38404,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1087,
+        "idx": 1079,
         "t": 1735992000,
         "dir": "long",
         "entry": 97657.94,
@@ -38895,7 +38443,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1088,
+        "idx": 1080,
         "t": 1736006400,
         "dir": "long",
         "entry": 98166.26,
@@ -38934,7 +38482,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1089,
+        "idx": 1081,
         "t": 1736020800,
         "dir": "long",
         "entry": 98220.5,
@@ -38973,7 +38521,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1090,
+        "idx": 1082,
         "t": 1736035200,
         "dir": "long",
         "entry": 98187.96,
@@ -39012,7 +38560,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1091,
+        "idx": 1083,
         "t": 1736049600,
         "dir": "long",
         "entry": 98268.77,
@@ -39051,7 +38599,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1092,
+        "idx": 1084,
         "t": 1736064000,
         "dir": "long",
         "entry": 97641.63,
@@ -39092,7 +38640,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1093,
+        "idx": 1085,
         "t": 1736078400,
         "dir": "long",
         "entry": 98028.98,
@@ -39131,7 +38679,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1094,
+        "idx": 1086,
         "t": 1736092800,
         "dir": "long",
         "entry": 98079.63,
@@ -39170,7 +38718,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1095,
+        "idx": 1087,
         "t": 1736107200,
         "dir": "long",
         "entry": 98363.61,
@@ -39209,7 +38757,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1096,
+        "idx": 1088,
         "t": 1736121600,
         "dir": "long",
         "entry": 99037.57,
@@ -39248,7 +38796,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1097,
+        "idx": 1089,
         "t": 1736136000,
         "dir": "long",
         "entry": 99318.7,
@@ -39289,7 +38837,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1098,
+        "idx": 1090,
         "t": 1736150400,
         "dir": "long",
         "entry": 99259.99,
@@ -39332,7 +38880,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1099,
+        "idx": 1091,
         "t": 1736164800,
         "dir": "long",
         "entry": 102147.95,
@@ -39373,7 +38921,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1100,
+        "idx": 1092,
         "t": 1736179200,
         "dir": "long",
         "entry": 101817.22,
@@ -39412,7 +38960,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1101,
+        "idx": 1093,
         "t": 1736193600,
         "dir": "long",
         "entry": 102235.6,
@@ -39451,7 +38999,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1102,
+        "idx": 1094,
         "t": 1736208000,
         "dir": "long",
         "entry": 101708.08,
@@ -39490,7 +39038,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1103,
+        "idx": 1095,
         "t": 1736222400,
         "dir": "long",
         "entry": 101664.81,
@@ -39529,7 +39077,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1104,
+        "idx": 1096,
         "t": 1736236800,
         "dir": "long",
         "entry": 100830.86,
@@ -39568,7 +39116,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1105,
+        "idx": 1097,
         "t": 1736251200,
         "dir": "long",
         "entry": 97952.26,
@@ -39616,7 +39164,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1106,
+        "idx": 1098,
         "t": 1736265600,
         "dir": "long",
         "entry": 96451.98,
@@ -39624,24 +39172,12 @@ a global hard refresh.
         "t1": 96868.61774999999,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Weekly AVWAP"
-        ],
-        "pineOppose": [
-          "MSB / OB",
-          "Smart Money Flow",
-          "SMC Core"
-        ],
-        "pineFamilies": [
-          "value"
-        ],
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram",
-          "Donchian 20",
-          "RSI 14"
-        ],
-        "pineNote": "PINE AGAINST — MSB / OB, Smart Money Flow, SMC Core fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.22% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -39667,7 +39203,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1107,
+        "idx": 1099,
         "t": 1736280000,
         "dir": "long",
         "entry": 96954.61,
@@ -39711,7 +39247,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1108,
+        "idx": 1100,
         "t": 1736294400,
         "dir": "short",
         "entry": 96525.2,
@@ -39758,7 +39294,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1109,
+        "idx": 1101,
         "t": 1736308800,
         "dir": "short",
         "entry": 95657.09,
@@ -39805,7 +39341,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1110,
+        "idx": 1102,
         "t": 1736323200,
         "dir": "short",
         "entry": 95134.92,
@@ -39850,7 +39386,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1111,
+        "idx": 1103,
         "t": 1736337600,
         "dir": "short",
         "entry": 95493.77,
@@ -39893,7 +39429,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1112,
+        "idx": 1104,
         "t": 1736352000,
         "dir": "short",
         "entry": 94243.89,
@@ -39935,7 +39471,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1113,
+        "idx": 1105,
         "t": 1736366400,
         "dir": "short",
         "entry": 95060.61,
@@ -39978,7 +39514,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1114,
+        "idx": 1106,
         "t": 1736380800,
         "dir": "short",
         "entry": 94027.9,
@@ -40019,7 +39555,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1115,
+        "idx": 1107,
         "t": 1736395200,
         "dir": "short",
         "entry": 93221.59,
@@ -40064,7 +39600,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1116,
+        "idx": 1108,
         "t": 1736409600,
         "dir": "short",
         "entry": 93465.23,
@@ -40105,7 +39641,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1117,
+        "idx": 1109,
         "t": 1736424000,
         "dir": "short",
         "entry": 94244.02,
@@ -40150,7 +39686,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1118,
+        "idx": 1110,
         "t": 1736438400,
         "dir": "short",
         "entry": 91909.59,
@@ -40189,7 +39725,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1119,
+        "idx": 1111,
         "t": 1736452800,
         "dir": "short",
         "entry": 92552.49,
@@ -40228,7 +39764,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1120,
+        "idx": 1112,
         "t": 1736467200,
         "dir": "short",
         "entry": 93696.13,
@@ -40267,7 +39803,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1121,
+        "idx": 1113,
         "t": 1736481600,
         "dir": "short",
         "entry": 94492.63,
@@ -40306,7 +39842,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1122,
+        "idx": 1114,
         "t": 1736496000,
         "dir": "short",
         "entry": 95073.95,
@@ -40345,7 +39881,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1123,
+        "idx": 1115,
         "t": 1736510400,
         "dir": "short",
         "entry": 93730.92,
@@ -40386,7 +39922,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1124,
+        "idx": 1116,
         "t": 1736524800,
         "dir": "short",
         "entry": 95327.06,
@@ -40395,15 +39931,11 @@ a global hard refresh.
         "tier": "near",
         "ticket": false,
         "pineAgree": [],
-        "pineOppose": [
-          "HalfTrend"
-        ],
+        "pineOppose": [],
         "pineFamilies": [],
         "indAgree": [],
-        "indOppose": [
-          "MACD histogram"
-        ],
-        "pineNote": "PINE AGAINST — HalfTrend fired the other way. Watch only, not a ticket.",
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.59% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -40429,7 +39961,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1125,
+        "idx": 1117,
         "t": 1736539200,
         "dir": "short",
         "entry": 94726.11,
@@ -40470,7 +40002,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1126,
+        "idx": 1118,
         "t": 1736553600,
         "dir": "short",
         "entry": 94206.95,
@@ -40511,7 +40043,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1127,
+        "idx": 1119,
         "t": 1736568000,
         "dir": "short",
         "entry": 94246.36,
@@ -40554,7 +40086,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1128,
+        "idx": 1120,
         "t": 1736582400,
         "dir": "short",
         "entry": 94625.65,
@@ -40593,7 +40125,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1129,
+        "idx": 1121,
         "t": 1736596800,
         "dir": "short",
         "entry": 94410.26,
@@ -40632,7 +40164,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1130,
+        "idx": 1122,
         "t": 1736611200,
         "dir": "short",
         "entry": 94249.26,
@@ -40671,7 +40203,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1131,
+        "idx": 1123,
         "t": 1736625600,
         "dir": "short",
         "entry": 94599.99,
@@ -40710,7 +40242,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1132,
+        "idx": 1124,
         "t": 1736640000,
         "dir": "short",
         "entry": 94622.4,
@@ -40749,7 +40281,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1133,
+        "idx": 1125,
         "t": 1736654400,
         "dir": "short",
         "entry": 94323.85,
@@ -40788,7 +40320,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1134,
+        "idx": 1126,
         "t": 1736668800,
         "dir": "short",
         "entry": 94255.1,
@@ -40827,7 +40359,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1135,
+        "idx": 1127,
         "t": 1736683200,
         "dir": "short",
         "entry": 95071.9,
@@ -40866,7 +40398,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1136,
+        "idx": 1128,
         "t": 1736697600,
         "dir": "short",
         "entry": 94650.26,
@@ -40905,7 +40437,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1137,
+        "idx": 1129,
         "t": 1736712000,
         "dir": "short",
         "entry": 94545.06,
@@ -40944,7 +40476,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1138,
+        "idx": 1130,
         "t": 1736726400,
         "dir": "short",
         "entry": 94269.23,
@@ -40983,7 +40515,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1139,
+        "idx": 1131,
         "t": 1736740800,
         "dir": "short",
         "entry": 93590.24,
@@ -41022,7 +40554,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1140,
+        "idx": 1132,
         "t": 1736755200,
         "dir": "short",
         "entry": 90851.22,
@@ -41061,7 +40593,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1141,
+        "idx": 1133,
         "t": 1736769600,
         "dir": "short",
         "entry": 92123.75,
@@ -41107,7 +40639,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1142,
+        "idx": 1134,
         "t": 1736784000,
         "dir": "short",
         "entry": 92312.18,
@@ -41146,7 +40678,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1143,
+        "idx": 1135,
         "t": 1736798400,
         "dir": "short",
         "entry": 94536.1,
@@ -41189,7 +40721,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1144,
+        "idx": 1136,
         "t": 1736812800,
         "dir": "short",
         "entry": 94861.4,
@@ -41234,7 +40766,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1145,
+        "idx": 1137,
         "t": 1736827200,
         "dir": "short",
         "entry": 94864,
@@ -41280,7 +40812,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1146,
+        "idx": 1138,
         "t": 1736841600,
         "dir": "short",
         "entry": 96548.04,
@@ -41330,7 +40862,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1147,
+        "idx": 1139,
         "t": 1736856000,
         "dir": "long",
         "entry": 96471.65,
@@ -41375,7 +40907,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1148,
+        "idx": 1140,
         "t": 1736870400,
         "dir": "long",
         "entry": 96537.8,
@@ -41418,7 +40950,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1149,
+        "idx": 1141,
         "t": 1736884800,
         "dir": "long",
         "entry": 96560.86,
@@ -41461,7 +40993,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1150,
+        "idx": 1142,
         "t": 1736899200,
         "dir": "long",
         "entry": 97317.12,
@@ -41506,7 +41038,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1151,
+        "idx": 1143,
         "t": 1736913600,
         "dir": "long",
         "entry": 97301.35,
@@ -41553,7 +41085,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1152,
+        "idx": 1144,
         "t": 1736928000,
         "dir": "long",
         "entry": 96762.18,
@@ -41594,7 +41126,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1153,
+        "idx": 1145,
         "t": 1736942400,
         "dir": "long",
         "entry": 98992.42,
@@ -41643,7 +41175,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1154,
+        "idx": 1146,
         "t": 1736956800,
         "dir": "long",
         "entry": 99844.9,
@@ -41685,7 +41217,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1155,
+        "idx": 1147,
         "t": 1736971200,
         "dir": "long",
         "entry": 100497.35,
@@ -41729,7 +41261,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1156,
+        "idx": 1148,
         "t": 1736985600,
         "dir": "long",
         "entry": 99478.03,
@@ -41770,7 +41302,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1157,
+        "idx": 1149,
         "t": 1737000000,
         "dir": "long",
         "entry": 99799.99,
@@ -41809,7 +41341,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1158,
+        "idx": 1150,
         "t": 1737014400,
         "dir": "long",
         "entry": 99158.71,
@@ -41850,7 +41382,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1159,
+        "idx": 1151,
         "t": 1737028800,
         "dir": "long",
         "entry": 99296.17,
@@ -41889,7 +41421,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1160,
+        "idx": 1152,
         "t": 1737043200,
         "dir": "long",
         "entry": 100417.2,
@@ -41928,7 +41460,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1161,
+        "idx": 1153,
         "t": 1737057600,
         "dir": "long",
         "entry": 99987.3,
@@ -41967,7 +41499,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1162,
+        "idx": 1154,
         "t": 1737072000,
         "dir": "long",
         "entry": 101051.73,
@@ -42008,7 +41540,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1163,
+        "idx": 1155,
         "t": 1737086400,
         "dir": "long",
         "entry": 101440.5,
@@ -42047,7 +41579,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1164,
+        "idx": 1156,
         "t": 1737100800,
         "dir": "long",
         "entry": 102237.6,
@@ -42086,7 +41618,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1165,
+        "idx": 1157,
         "t": 1737115200,
         "dir": "long",
         "entry": 104000,
@@ -42125,7 +41657,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1166,
+        "idx": 1158,
         "t": 1737129600,
         "dir": "long",
         "entry": 105834.93,
@@ -42164,7 +41696,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1167,
+        "idx": 1159,
         "t": 1737144000,
         "dir": "long",
         "entry": 104077.48,
@@ -42205,7 +41737,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1168,
+        "idx": 1160,
         "t": 1737158400,
         "dir": "long",
         "entry": 103559.82,
@@ -42244,7 +41776,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1169,
+        "idx": 1161,
         "t": 1737172800,
         "dir": "long",
         "entry": 102821.75,
@@ -42283,7 +41815,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1170,
+        "idx": 1162,
         "t": 1737187200,
         "dir": "long",
         "entry": 103589.29,
@@ -42322,7 +41854,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1171,
+        "idx": 1163,
         "t": 1737201600,
         "dir": "long",
         "entry": 104568.96,
@@ -42361,7 +41893,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1172,
+        "idx": 1164,
         "t": 1737216000,
         "dir": "long",
         "entry": 104382.01,
@@ -42400,7 +41932,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1173,
+        "idx": 1165,
         "t": 1737230400,
         "dir": "long",
         "entry": 104556.23,
@@ -42439,7 +41971,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1174,
+        "idx": 1166,
         "t": 1737244800,
         "dir": "long",
         "entry": 104984.01,
@@ -42478,7 +42010,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1175,
+        "idx": 1167,
         "t": 1737259200,
         "dir": "long",
         "entry": 105167.12,
@@ -42517,7 +42049,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1176,
+        "idx": 1168,
         "t": 1737273600,
         "dir": "long",
         "entry": 104363.23,
@@ -42558,7 +42090,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1177,
+        "idx": 1169,
         "t": 1737288000,
         "dir": "long",
         "entry": 104936.35,
@@ -42599,7 +42131,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1178,
+        "idx": 1170,
         "t": 1737302400,
         "dir": "long",
         "entry": 106200,
@@ -42642,7 +42174,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1179,
+        "idx": 1171,
         "t": 1737316800,
         "dir": "long",
         "entry": 101331.57,
@@ -42692,7 +42224,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1180,
+        "idx": 1172,
         "t": 1737331200,
         "dir": "long",
         "entry": 101891.93,
@@ -42739,7 +42271,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1181,
+        "idx": 1173,
         "t": 1737345600,
         "dir": "long",
         "entry": 107120.65,
@@ -42781,7 +42313,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1182,
+        "idx": 1174,
         "t": 1737360000,
         "dir": "long",
         "entry": 108239.19,
@@ -42829,7 +42361,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1183,
+        "idx": 1175,
         "t": 1737374400,
         "dir": "long",
         "entry": 104957.99,
@@ -42868,7 +42400,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1184,
+        "idx": 1176,
         "t": 1737388800,
         "dir": "long",
         "entry": 103691.63,
@@ -42914,7 +42446,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1185,
+        "idx": 1177,
         "t": 1737403200,
         "dir": "long",
         "entry": 102260.01,
@@ -42955,7 +42487,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1186,
+        "idx": 1178,
         "t": 1737417600,
         "dir": "long",
         "entry": 102936.01,
@@ -43000,7 +42532,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1187,
+        "idx": 1179,
         "t": 1737432000,
         "dir": "long",
         "entry": 101989.05,
@@ -43045,7 +42577,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1188,
+        "idx": 1180,
         "t": 1737446400,
         "dir": "long",
         "entry": 103758.25,
@@ -43088,7 +42620,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1189,
+        "idx": 1181,
         "t": 1737460800,
         "dir": "long",
         "entry": 103943,
@@ -43127,7 +42659,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1190,
+        "idx": 1182,
         "t": 1737475200,
         "dir": "long",
         "entry": 107031.34,
@@ -43172,7 +42704,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1191,
+        "idx": 1183,
         "t": 1737489600,
         "dir": "long",
         "entry": 106143.82,
@@ -43215,7 +42747,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1192,
+        "idx": 1184,
         "t": 1737504000,
         "dir": "long",
         "entry": 105600.01,
@@ -43256,7 +42788,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1193,
+        "idx": 1185,
         "t": 1737518400,
         "dir": "long",
         "entry": 105084.77,
@@ -43295,7 +42827,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1194,
+        "idx": 1186,
         "t": 1737532800,
         "dir": "long",
         "entry": 105100.39,
@@ -43334,7 +42866,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1195,
+        "idx": 1187,
         "t": 1737547200,
         "dir": "long",
         "entry": 104180.01,
@@ -43373,7 +42905,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1196,
+        "idx": 1188,
         "t": 1737561600,
         "dir": "long",
         "entry": 104630,
@@ -43414,7 +42946,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1197,
+        "idx": 1189,
         "t": 1737576000,
         "dir": "long",
         "entry": 103706.66,
@@ -43455,7 +42987,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1198,
+        "idx": 1190,
         "t": 1737590400,
         "dir": "long",
         "entry": 102461.25,
@@ -43498,7 +43030,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1199,
+        "idx": 1191,
         "t": 1737604800,
         "dir": "long",
         "entry": 102710.27,
@@ -43541,7 +43073,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1200,
+        "idx": 1192,
         "t": 1737619200,
         "dir": "long",
         "entry": 101944.49,
@@ -43549,21 +43081,12 @@ a global hard refresh.
         "t1": 103458.37325000002,
         "tier": "near",
         "ticket": false,
-        "pineAgree": [
-          "Smart Money Flow"
-        ],
+        "pineAgree": [],
         "pineOppose": [],
-        "pineFamilies": [
-          "flow"
-        ],
-        "indAgree": [
-          "Liquidity sweep"
-        ],
-        "indOppose": [
-          "Engulfing",
-          "RSI 14"
-        ],
-        "pineNote": "INDICATOR AGAINST — Engulfing, RSI 14 crossed the other way. Watch only, not a ticket.",
+        "pineFamilies": [],
+        "indAgree": [],
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.74% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
         "pineRefused": true,
         "pineMarks": {
           "lor": null,
@@ -43589,7 +43112,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1201,
+        "idx": 1193,
         "t": 1737633600,
         "dir": "long",
         "entry": 105263.52,
@@ -43632,7 +43155,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1202,
+        "idx": 1194,
         "t": 1737648000,
         "dir": "long",
         "entry": 103770.04,
@@ -43671,7 +43194,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1203,
+        "idx": 1195,
         "t": 1737662400,
         "dir": "long",
         "entry": 103910.34,
@@ -43710,7 +43233,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1204,
+        "idx": 1196,
         "t": 1737676800,
         "dir": "long",
         "entry": 103891.75,
@@ -43749,7 +43272,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1205,
+        "idx": 1197,
         "t": 1737691200,
         "dir": "long",
         "entry": 105046.8,
@@ -43792,7 +43315,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1206,
+        "idx": 1198,
         "t": 1737705600,
         "dir": "long",
         "entry": 105420.1,
@@ -43833,7 +43356,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1207,
+        "idx": 1199,
         "t": 1737720000,
         "dir": "long",
         "entry": 105859.98,
@@ -43874,7 +43397,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1208,
+        "idx": 1200,
         "t": 1737734400,
         "dir": "long",
         "entry": 105760.94,
@@ -43915,7 +43438,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1209,
+        "idx": 1201,
         "t": 1737748800,
         "dir": "long",
         "entry": 104870.5,
@@ -43954,7 +43477,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1210,
+        "idx": 1202,
         "t": 1737763200,
         "dir": "long",
         "entry": 105202.4,
@@ -43993,7 +43516,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1211,
+        "idx": 1203,
         "t": 1737777600,
         "dir": "long",
         "entry": 104385.98,
@@ -44032,7 +43555,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1212,
+        "idx": 1204,
         "t": 1737792000,
         "dir": "long",
         "entry": 104670.99,
@@ -44071,7 +43594,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1213,
+        "idx": 1205,
         "t": 1737806400,
         "dir": "long",
         "entry": 104897.79,
@@ -44110,7 +43633,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1214,
+        "idx": 1206,
         "t": 1737820800,
         "dir": "long",
         "entry": 105055.16,
@@ -44149,7 +43672,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1215,
+        "idx": 1207,
         "t": 1737835200,
         "dir": "long",
         "entry": 104746.85,
@@ -44188,7 +43711,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1216,
+        "idx": 1208,
         "t": 1737849600,
         "dir": "long",
         "entry": 105062.42,
@@ -44229,7 +43752,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1217,
+        "idx": 1209,
         "t": 1737864000,
         "dir": "long",
         "entry": 104998.35,
@@ -44268,7 +43791,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1218,
+        "idx": 1210,
         "t": 1737878400,
         "dir": "long",
         "entry": 104818.69,
@@ -44307,7 +43830,7 @@ a global hard refresh.
         }
       },
       {
-        "idx": 1219,
+        "idx": 1211,
         "t": 1737892800,
         "dir": "long",
         "entry": 104967.01,
@@ -44342,6 +43865,357 @@ a global hard refresh.
           "bars": 2,
           "grossR": -1.000011,
           "netR": -1.091946,
+          "bothTouch": false
+        }
+      },
+      {
+        "idx": 1212,
+        "t": 1737907200,
+        "dir": "long",
+        "entry": 105081.63,
+        "stop": 104053.549185,
+        "t1": 107137.79163000002,
+        "tier": "near",
+        "ticket": false,
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
+        "indAgree": [],
+        "indOppose": [],
+        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
+        "pineRefused": true,
+        "pineMarks": {
+          "lor": null,
+          "ht": null,
+          "sqz": null,
+          "smf": null,
+          "msb": null,
+          "cipher": null,
+          "rfilter": "long",
+          "nwenv": null,
+          "wavwap": null,
+          "smc": "long",
+          "supertrend": null,
+          "macd": null,
+          "cci": null
+        },
+        "outcome": {
+          "status": "stop",
+          "bars": 1,
+          "grossR": -1.00001,
+          "netR": -1.081779,
+          "bothTouch": false
+        }
+      },
+      {
+        "idx": 1213,
+        "t": 1737921600,
+        "dir": "long",
+        "entry": 102620,
+        "stop": 102469.13,
+        "t1": 102921.73999999999,
+        "tier": "near",
+        "ticket": false,
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
+        "indAgree": [],
+        "indOppose": [],
+        "pineNote": "TAPE REGIME — COMPRESSION — compression chop, wait for expansion. Watch only, not a ticket.",
+        "pineRefused": true,
+        "pineMarks": {
+          "lor": null,
+          "ht": "short",
+          "sqz": null,
+          "smf": null,
+          "msb": "short",
+          "cipher": null,
+          "rfilter": "long",
+          "nwenv": null,
+          "wavwap": null,
+          "smc": "short",
+          "supertrend": null,
+          "macd": null,
+          "cci": null
+        },
+        "outcome": {
+          "status": "stop",
+          "bars": 1,
+          "grossR": -1.000066,
+          "netR": -1.544217,
+          "bothTouch": true
+        }
+      },
+      {
+        "idx": 1214,
+        "t": 1737936000,
+        "dir": "long",
+        "entry": 101395.64,
+        "stop": 100660.786625,
+        "t1": 102865.34675000001,
+        "tier": "near",
+        "ticket": false,
+        "pineAgree": [],
+        "pineOppose": [],
+        "pineFamilies": [],
+        "indAgree": [],
+        "indOppose": [],
+        "pineNote": "COST FLOOR — stop 0.72% of entry is under 4× the 0.20% round-trip taker cost (0.80%); friction alone would eat more than 0.25R of planned risk. Watch only, not a ticket.",
+        "pineRefused": true,
+        "pineMarks": {
+          "lor": null,
+          "ht": null,
+          "sqz": "short",
+          "smf": "short",
+          "msb": null,
+          "cipher": null,
+          "rfilter": "long",
+          "nwenv": null,
+          "wavwap": "short",
+          "smc": "short",
+          "supertrend": "short",
+          "macd": null,
+          "cci": null
+        },
+        "outcome": {
+          "status": "stop",
+          "bars": 1,
+          "grossR": -1,
+          "netR": -1.110385,
+          "bothTouch": false
+        }
+      },
+      {
+        "idx": 1215,
+        "t": 1737950400,
+        "dir": "short",
+        "entry": 99048.02,
+        "stop": 105596.527875,
+        "t1": 85951.00425000001,
+        "tier": "near",
+        "ticket": false,
+        "pineAgree": [
+          "SMC Core"
+        ],
+        "pineOppose": [
+          "Weekly AVWAP"
+        ],
+        "pineFamilies": [
+          "structure"
+        ],
+        "indAgree": [
+          "Donchian 20",
+          "RSI 14"
+        ],
+        "indOppose": [],
+        "pineNote": "PINE AGAINST — Weekly AVWAP fired the other way. Watch only, not a ticket.",
+        "pineRefused": true,
+        "pineMarks": {
+          "lor": null,
+          "ht": null,
+          "sqz": null,
+          "smf": null,
+          "msb": null,
+          "cipher": null,
+          "rfilter": "long",
+          "nwenv": null,
+          "wavwap": "long",
+          "smc": "short",
+          "supertrend": null,
+          "macd": null,
+          "cci": null
+        },
+        "outcome": {
+          "status": "stop",
+          "bars": 20,
+          "grossR": -1.000002,
+          "netR": -1.012102,
+          "bothTouch": false
+        }
+      },
+      {
+        "idx": 1216,
+        "t": 1737964800,
+        "dir": "short",
+        "entry": 98761.13,
+        "stop": 105596.527875,
+        "t1": 85090.33425000001,
+        "tier": "near",
+        "ticket": false,
+        "pineAgree": [
+          "SMC Core"
+        ],
+        "pineOppose": [],
+        "pineFamilies": [
+          "structure"
+        ],
+        "indAgree": [
+          "EMA 20/50",
+          "RSI 14"
+        ],
+        "indOppose": [],
+        "pineNote": "PINE + INDICATOR — SMC Core fresh, and EMA 20/50, RSI 14 crossed the same way · 1d tape too thin to read — one-family tiebreak, -0.076R on the hg-v1403 walk. Watch only, not a ticket.",
+        "pineRefused": true,
+        "pineMarks": {
+          "lor": null,
+          "ht": null,
+          "sqz": null,
+          "smf": null,
+          "msb": null,
+          "cipher": null,
+          "rfilter": "long",
+          "nwenv": null,
+          "wavwap": null,
+          "smc": "short",
+          "supertrend": null,
+          "macd": null,
+          "cci": null
+        },
+        "outcome": {
+          "status": "stop",
+          "bars": 19,
+          "grossR": -1.000001,
+          "netR": -1.01156,
+          "bothTouch": false
+        }
+      },
+      {
+        "idx": 1217,
+        "t": 1737979200,
+        "dir": "short",
+        "entry": 101112.03,
+        "stop": 105596.527875,
+        "t1": 92143.03425,
+        "tier": "near",
+        "ticket": false,
+        "pineAgree": [
+          "SMC Core"
+        ],
+        "pineOppose": [
+          "NW Envelope"
+        ],
+        "pineFamilies": [
+          "structure"
+        ],
+        "indAgree": [
+          "EMA 20/50",
+          "RSI 14"
+        ],
+        "indOppose": [],
+        "pineNote": "PINE AGAINST — NW Envelope fired the other way. Watch only, not a ticket.",
+        "pineRefused": true,
+        "pineMarks": {
+          "lor": null,
+          "ht": null,
+          "sqz": null,
+          "smf": null,
+          "msb": null,
+          "cipher": null,
+          "rfilter": "long",
+          "nwenv": "long",
+          "wavwap": null,
+          "smc": "short",
+          "supertrend": null,
+          "macd": null,
+          "cci": "long"
+        },
+        "outcome": {
+          "status": "stop",
+          "bars": 18,
+          "grossR": -1,
+          "netR": -1.018038,
+          "bothTouch": false
+        }
+      },
+      {
+        "idx": 1218,
+        "t": 1737993600,
+        "dir": "short",
+        "entry": 99700.02,
+        "stop": 105596.527875,
+        "t1": 87907.00425000001,
+        "tier": "clean",
+        "ticket": true,
+        "pineAgree": [
+          "Smart Money Flow",
+          "SMC Core"
+        ],
+        "pineOppose": [],
+        "pineFamilies": [
+          "flow",
+          "structure"
+        ],
+        "indAgree": [
+          "EMA 20/50"
+        ],
+        "indOppose": [],
+        "pineNote": "PINE CONFIRM — Smart Money Flow, SMC Core · EMA 20/50 crossed the same way · 1d tape too thin to read",
+        "pineRefused": false,
+        "pineMarks": {
+          "lor": null,
+          "ht": null,
+          "sqz": null,
+          "smf": "short",
+          "msb": null,
+          "cipher": null,
+          "rfilter": "long",
+          "nwenv": null,
+          "wavwap": null,
+          "smc": "short",
+          "supertrend": null,
+          "macd": null,
+          "cci": null
+        },
+        "outcome": {
+          "status": "stop",
+          "bars": 17,
+          "grossR": -1.000002,
+          "netR": -1.013528,
+          "bothTouch": false
+        }
+      },
+      {
+        "idx": 1219,
+        "t": 1738008000,
+        "dir": "short",
+        "entry": 102082.83,
+        "stop": 105596.527875,
+        "t1": 95055.43425,
+        "tier": "near",
+        "ticket": false,
+        "pineAgree": [
+          "Weekly AVWAP"
+        ],
+        "pineOppose": [],
+        "pineFamilies": [
+          "value"
+        ],
+        "indAgree": [
+          "EMA 20/50"
+        ],
+        "indOppose": [],
+        "pineNote": "PINE + INDICATOR — Weekly AVWAP fresh, and EMA 20/50 crossed the same way · 1d tape too thin to read — one-family tiebreak, -0.076R on the hg-v1403 walk. Watch only, not a ticket.",
+        "pineRefused": true,
+        "pineMarks": {
+          "lor": null,
+          "ht": null,
+          "sqz": null,
+          "smf": null,
+          "msb": null,
+          "cipher": null,
+          "rfilter": "long",
+          "nwenv": null,
+          "wavwap": "short",
+          "smc": "short",
+          "supertrend": null,
+          "macd": null,
+          "cci": null
+        },
+        "outcome": {
+          "status": "stop",
+          "bars": 16,
+          "grossR": -1,
+          "netR": -1.023242,
           "bothTouch": false
         }
       }
