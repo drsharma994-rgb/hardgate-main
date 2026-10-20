@@ -2069,6 +2069,15 @@ function pineGoldBlocksLead(states, dir){
   }
   if (read2 >= 3 && oppose2 >= 3 && oppose2 > agree2) return 'QQE, squeeze, weekly AVWAP and efficiency against';
   if (states.squeezeOn === true && isFinite(states.efficiencyEr) && states.efficiencyEr < 0.22 && withN < PINE_GOLD_MAJORITY) return 'squeeze on with no trend efficiency';
+  /* The record-only layers already have a side on this bar (allLong / allShort).
+     They still cannot lead. They can only stop a ticket when most of the ones
+     that actually read a side point the other way. One script cannot do it. */
+  var stackWith = dir === 'long' ? states.allLong : states.allShort;
+  var stackAgainst = dir === 'long' ? states.allShort : states.allLong;
+  var stackRead = states.readable || 0;
+  if (stackRead >= 12 && stackAgainst >= 8 && stackAgainst > stackWith){
+    return 'wider Pine stack against (' + stackAgainst + ' of ' + stackRead + ')';
+  }
   return null;
 }
 
