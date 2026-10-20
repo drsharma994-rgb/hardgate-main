@@ -500,6 +500,11 @@
       "version": "hg-v1411",
       "built": "2026-10-20T02:20:00Z",
       "note": "GOLD PINE holds a lead against swing structure (higher highs and higher lows, or the reverse) and against a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when extended and neither structure nor that stack confirms. A TD9 completion holds the bar it prints on. None of these mint a ticket."
+    },
+    {
+      "version": "hg-v1412",
+      "built": "2026-10-20T02:40:00Z",
+      "note": "GOLD PINE holds a lead when the 40-bar regression t-stat is 2 or more the other way. An ATR spike in the top of its last 100 readings holds a lead only when that regression is not significant in the trade direction. A significant trend is not blocked for being volatile. Neither read mints a ticket."
     }
   ]
 }
