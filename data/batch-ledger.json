@@ -510,6 +510,11 @@
       "version": "hg-v1413",
       "built": "2026-10-20T02:55:00Z",
       "note": "GOLD PINE holds a lead that wicks through the Shanghai 01:00-02:00 UTC hour and closes back, and a lead that fights a weekly-open sweep. Neither read mints a ticket. A feed with no weekly open, or a day with no Shanghai hour, does not refuse."
+    },
+    {
+      "version": "hg-v1414",
+      "built": "2026-10-20T03:10:00Z",
+      "note": "GOLD PINE holds a lead while price is inside the Ichimoku cloud, and holds a lead when the Elder Impulse (EMA21 slope and MACD histogram) both point the other way. A close above or below the cloud does not refuse. Neither read mints a ticket."
     }
   ]
 }

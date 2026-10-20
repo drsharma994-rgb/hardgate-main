@@ -2085,7 +2085,7 @@ function pineGoldFormRead(rows){
     ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null,
     alligator: null, rvi: null, bop: null, alma: null, kst: null, mcginley: null, rsi50: null,
     stack5: null, macdZero: null, macdHist: null, psarStand: null, stochStand: null, emaSlope: null, rsiDiv: null,
-    structure: null, goldEma: null, laguerre: null, lrsi: null, rsi3: null, tdBuy: 0, tdSell: 0, regT: null, regDir: null, atrPct: null };
+    structure: null, goldEma: null, laguerre: null, lrsi: null, rsi3: null, tdBuy: 0, tdSell: 0, regT: null, regDir: null, atrPct: null, cloud: null };
   if (!rows || rows.length < 60) return blank;
   var i = rows.length - 1, c = pgrNum(rows[i].c);
   if (!isFinite(c)) return blank;
@@ -2225,6 +2225,7 @@ function pineGoldFormRead(rows){
   if (isFinite(r3)) blank.rsi3 = r3;
   var td = pgrTdSetup(closes);
   blank.tdBuy = td.buy; blank.tdSell = td.sell;
+  blank.cloud = pgrCloudState(rows);
   var reg = pgrRegT(closes, 40);
   if (reg){ blank.regT = reg.t; blank.regDir = reg.dir; }
   blank.atrPct = pgrAtrPct(rows, 14, 100);
@@ -2497,6 +2498,23 @@ function pgrAtrPct(rows, len, look){
   }
   return n ? (100 * (below + ties * 0.5) / n) : NaN;
 }
+function pgrCloudState(rows){
+  var i = rows.length - 1, ci = i - 26;
+  if (ci < 51) return null;
+  function mid(end, len){
+    var hh = pgrHighest(rows, end - len + 1, end, 'h');
+    var ll = pgrLowest(rows, end - len + 1, end, 'l');
+    if (!isFinite(hh) || !isFinite(ll)) return NaN;
+    return (hh + ll) / 2;
+  }
+  var sA = (mid(ci, 9) + mid(ci, 26)) / 2, sB = mid(ci, 52), c = pgrNum(rows[i].c);
+  if (![sA, sB, c].every(isFinite)) return null;
+  var top = Math.max(sA, sB), bot = Math.min(sA, sB);
+  if (!(top > bot)) return null;
+  if (c > top) return 'long';
+  if (c < bot) return 'short';
+  return 'inside';
+}
 function pineGoldBlocksLead(states, dir){
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
@@ -2561,6 +2579,8 @@ function pineGoldFormHold(states, dir){
   if (isFinite(states.regT) && Math.abs(states.regT) >= 2 && states.regDir && states.regDir !== dir) return '40-bar regression is against the lead (t=' + states.regT.toFixed(1) + ')';
   var trendBacked = isFinite(states.regT) && Math.abs(states.regT) >= 2 && states.regDir === dir;
   if (!trendBacked && isFinite(states.atrPct) && states.atrPct >= 98) return 'ATR spike without a significant regression (' + states.atrPct.toFixed(0) + ')';
+  if (states.cloud === 'inside') return 'Price is inside the Ichimoku cloud.';
+  if (states.emaSlope && states.emaSlope === states.macdHist && states.emaSlope !== dir) return 'Elder Impulse is against the lead';
   return null;
 }
 function pgrFamilyHold(states, dir, ids, need){
@@ -4855,7 +4875,7 @@ function pineGoldLayerStates(rows){
               stack5: null, macdZero: null, macdHist: null, psarStand: null, stochStand: null, emaSlope: null, rsiDiv: null,
               /* hg-v1411 researched gold filters */
               structure: null, goldEma: null, laguerre: null, lrsi: null, rsi3: null, tdBuy: 0, tdSell: 0,
-              regT: null, regDir: null, atrPct: null,
+              regT: null, regDir: null, atrPct: null, cloud: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -5137,7 +5157,7 @@ function pineGoldLayerStates(rows){
         out.psarStand = formed.psarStand; out.stochStand = formed.stochStand; out.emaSlope = formed.emaSlope; out.rsiDiv = formed.rsiDiv;
         out.structure = formed.structure; out.goldEma = formed.goldEma; out.laguerre = formed.laguerre;
         out.lrsi = formed.lrsi; out.rsi3 = formed.rsi3; out.tdBuy = formed.tdBuy; out.tdSell = formed.tdSell;
-        out.regT = formed.regT; out.regDir = formed.regDir; out.atrPct = formed.atrPct;
+        out.regT = formed.regT; out.regDir = formed.regDir; out.atrPct = formed.atrPct; out.cloud = formed.cloud;
       }
     }catch(eForm){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
@@ -5296,12 +5316,14 @@ function pineGoldStackLineHtml(states, marks){
       cells += '<span class="gsx-ind gsx-stateonly ' + (regMk === true ? 'ok' : (regMk === false ? 'no' : 'na')) + '" title="40-bar regression t-stat. |t| of 2 or more against the lead holds it." style="border-style:dashed"><b>Reg t</b> ' + e(states.regT.toFixed(1)) + '</span>';
     }
     if (isFinite(states.atrPct)) cells += '<span class="gsx-ind gsx-stateonly na" title="ATR(14) percentile versus the last 100 readings. A spike holds a lead only when the regression is not significant in its direction." style="border-style:dashed"><b>ATR pct</b> ' + e(states.atrPct.toFixed(0)) + '</span>';
+    if (states.cloud) cells += '<span class="gsx-ind gsx-stateonly ' + (states.cloud === 'inside' ? 'no' : 'na') + '" title="Ichimoku cloud 26 bars back. Inside the cloud holds a lead." style="border-style:dashed"><b>Cloud</b> ' + e(states.cloud === 'inside' ? 'INSIDE' : states.cloud.toUpperCase()) + '</span>';
+    if (states.emaSlope && states.emaSlope === states.macdHist) cells += '<span class="gsx-ind gsx-stateonly na" title="Elder Impulse: EMA21 slope and MACD histogram agree. Against the lead, it holds." style="border-style:dashed"><b>Elder</b> ' + e(states.emaSlope.toUpperCase()) + '</span>';
     var mj = marks['pine:majorityWith'];
     var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE a market structure of higher highs and higher lows, or the reverse, holds a lead that opposes it. So does a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when they are extended and that stack does not confirm. A TD9 completion holds the bar it prints on. A 40-bar regression with |t| of 2 or more holds a lead that fights it. An ATR spike holds a lead only when that regression does not confirm the direction. The Shanghai hour and a weekly-open sweep hold a lead when price wicks through and closes back against it. The tally gates nothing.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE a market structure of higher highs and higher lows, or the reverse, holds a lead that opposes it. So does a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when they are extended and that stack does not confirm. A TD9 completion holds the bar it prints on. A 40-bar regression with |t| of 2 or more holds a lead that fights it. An ATR spike holds a lead only when that regression does not confirm the direction. The Shanghai hour and a weekly-open sweep hold a lead when price wicks through and closes back against it. Price inside the Ichimoku cloud holds a lead, and so does an Elder Impulse bar whose EMA slope and MACD histogram both point the other way. The tally gates nothing.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }
