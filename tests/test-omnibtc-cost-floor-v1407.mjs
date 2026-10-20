@@ -1,5 +1,6 @@
 /* HARDGATE — hg-v1418: the OMNIBTC cost-floor stand-down.
 
+   hg-v1419: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1419); the pack under test remains hg-v1418.
    hg-v1418: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1418); the pack under test remains hg-v1418.
    hg-v1421: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1421); the pack under test remains hg-v1418.
    WHAT THIS GUARD PROVES, behaviourally, through the real IIFE:
@@ -234,10 +235,10 @@ console.log('\n== 7) both lever surfaces exist by name (a rename trips here) =='
 console.log('\n== 8) the deploy pins moved with the pack (?v= byte-check) ==');
 {
   const bs = (read('build-stamp.js').match(/version:\s*'([^']+)'/) || [])[1];
-  ok(bs === 'hg-v1418', 'build-stamp.js carries hg-v1418 (got ' + bs + ')');
+  ok(bs === 'hg-v1419', 'build-stamp.js carries hg-v1419 (got ' + bs + ')');
   ok(bs === HG_VER, 'and it is the tree version ' + HG_VER);
   const idx = read('index.html');
-  ok(idx.indexOf('omnibtc.js?v=1418') !== -1, 'index.html loads omnibtc.js?v=1418');
+  ok(idx.indexOf('omnibtc.js?v=1419') !== -1, 'index.html loads omnibtc.js?v=1419');
   ok(!/\?v=1406\b/.test(idx), 'no stale ?v=1406 pin survives in index.html');
 }
 

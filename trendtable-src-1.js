@@ -256,7 +256,15 @@ function tmTicketClaim(r, plan){
        WITH the majority measured toxic both halves (direction-agnostic).
      ③ reads['tm:cloud'] !== false — the 1D Ichimoku cloud AGAINST the
        majority was the worst cluster on the tape.
-     ④ |composite| = 2 (a bare 2-of-4 majority) admits only with
+     ④ the 1D EMA(150) regime bar (hg-v1419) — price on the wrong side of
+       the 150-day EMA for the row's own majority measured toxic in BOTH
+       halves on the same replay (dropped n=37 at −0.166R standalone, n=27
+       at −0.215R on the floor-kept book, H1 −0.560 / H2 −0.117; every
+       flagged row had the EMA200 leg WITH it, so this read is not the
+       composite restated). FAILS OPEN when the row carries no 1d series,
+       fewer than 150 closes, or no finite EMA (hg-v989) — a fresh listing
+       under 150 daily bars is vetoed by nothing here.
+     ⑤ |composite| = 2 (a bare 2-of-4 majority) admits only with
        gatesPassed ≥ 3 standing behind it; |≥3| rows are unaffected.
    ②③ read the hg-v1159 leg marks through tmLegReads and FAIL OPEN on the
    hg-v989 third state: a live row whose reads bag carries no fresh-cross or
@@ -279,7 +287,17 @@ function tmAdmissionFloor(r, plan){
   var legs = tmLegReads(r, dir);
   if (legs['tm:freshCross'] === true) why.push('freshCross');
   if (legs['tm:cloud'] === false) why.push('cloudAgainst');
-  /* ④ the bare-majority floor — a |2| composite needs 3 gates with it */
+  /* ④ the 1D EMA(150) regime bar (hg-v1419) — fail-open when the row carries
+     no readable 1d series or no finite EMA: absent is absent, never a guess */
+  if (dir && Array.isArray(r.rows1d) && r.rows1d.length >= 150 && typeof ema === 'function'){
+    try{
+      var c1 = r.rows1d.map(function(x){ return +(x && x.c); });
+      var e150 = ema(c1, 150)[c1.length - 1], px1 = c1[c1.length - 1];
+      if (isFinite(e150) && isFinite(px1)
+          && ((dir === 'long' && px1 < e150) || (dir === 'short' && px1 > e150))) why.push('ema150Against');
+    }catch(e){ /* an unreadable tape abstains — the clause vetoes nothing it cannot read */ }
+  }
+  /* ⑤ the bare-majority floor — a |2| composite needs 3 gates with it */
   var sc = Math.abs(+r.score);
   var gp = (r.gate && isFinite(+r.gate.gatesPassed)) ? +r.gate.gatesPassed : 0;
   if (!(sc >= 3) && gp < 3) why.push('bare|2|<3gates');
