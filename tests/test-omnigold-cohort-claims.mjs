@@ -328,8 +328,8 @@ console.log('\n== the evidence reports its own condition (hg-v816) ==');
   const by = k => h.groups.filter(g => g.key === k)[0];
 
   ok(h.groups.length === 4, 'all four baked maps are read');
-  ok(by('kinds').judgeable === 54 && by('kinds').thin === 0,
-     'every mechanic row can carry a rate — the bake drops kinds under 40');
+  ok(by('kinds').judgeable === 55 && by('kinds').thin === 0,
+     'every mechanic row can carry a rate — the bake drops kinds under 40 (hg-v1402: 55 — P4-ADRX crossed the bar on the re-walk)');
   ok(by('grades').blind === true && by('grades').keys === 3,
      'the engine grades are BLIND: three rows, not one of them judgeable');
   ok(by('grades').settled === 3,

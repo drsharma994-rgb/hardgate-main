@@ -515,6 +515,7 @@ W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
+W.tmIndependentSum = tmIndependentSum;
 W.trendmxGateEval = trendmxGateEval;
 W.trendmxClassify = trendmxClassify;
 W.hgTrendMatrixAlign = hgTrendMatrixAlign;   /* hg-v995 */
@@ -564,6 +565,7 @@ W.tmCandleRead = tmCandleRead;             /* hg-v1336: the one call into hgCfCa
 W.tmCandleMarks = tmCandleMarks;           /* hg-v1336: the three-state marks tmRecordReads folds into each record */
 W.tmCandleChipHtml = tmCandleChipHtml;     /* hg-v1336: the pattern chip the matrix row paints beside the gate chip */
 W.tmTicketClaim = tmTicketClaim;           /* hg-v1159: the ticket claim is the board's clean tier */
+W.tmAdmissionFloor = tmAdmissionFloor;     /* hg-v1399: the measured admission floor every seam shares */
 W.tmValidSetup = tmValidSetup;             /* hg-v1160: the replay harness asks the desk's own plan validity rule */
 W.HG_TM_FACTOR_SEP = HG_TM_FACTOR_SEP;     /* hg-v1160: read by the panel, the drift guard and nothing else */
 W.tmFactorSepHtml = tmFactorSepHtml;       /* hg-v1160: the replay panel, measured or not */
@@ -586,6 +588,7 @@ W.trendmxCandleDeskHTML = trendmxCandleDeskHTML; /* hg-v1337 */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
+W.trendmxPineMarks = trendmxPineMarks;     /* hg-v1399: the 13 record-only Pine ports, exported (the pin was always the mark home; the export was missing) */
 W.trendmxCrossState = function(){
   try{
     if (!__tmScanSnap) return null;

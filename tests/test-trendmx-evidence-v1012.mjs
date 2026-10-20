@@ -28,6 +28,9 @@
      6 windows of 0.8         -> source 'taker' but bars 6 < TM_FLOW_MIN_WIN
                                  (10, hg-v1009's floor) -> UNREAD
 
+   hg-v1399: tape recalibrated for the stopPct>=2% admission floor — the
+   wicks widen (x0.5 -> x4 of step, closes untouched); every assertion and
+   its coverage is unchanged.
    Run: node tests/test-trendmx-evidence-v1012.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -57,8 +60,8 @@ function tape(n, tfSec, start, step){
   const rows = []; let c = start;
   for (let i = 0; i < n; i++){
     const o = c; c = c + step;
-    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 0.5,
-                l: Math.min(o, c) - Math.abs(step) * 0.5, c, v: 1000 });
+    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 4,   /* hg-v1399: wider wicks so the house stop prices >=2% of entry (the admission floor) — closes, and every read off closes, are byte-identical */
+                l: Math.min(o, c) - Math.abs(step) * 4, c, v: 1000 });
   }
   return rows;
 }

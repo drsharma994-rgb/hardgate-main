@@ -26,7 +26,8 @@
                  them at all — which is a different claim from "thin" and a
                  very different one from "measured and negative".
 
-   54 + 11 + 13 = 78, the whole register.
+   54 + 11 + 13 = 78, the whole register. (hg-v1402: 55 + 10 + 13 — P4-ADRX
+   crossed the bar on the re-walk and graduated thin -> measured.)
 
    hg-v923 added SWEEP-OB, and it is the case the derivation was built for:
    a mechanic registered long after the bake, which therefore cannot appear
@@ -83,9 +84,14 @@ console.log('== every registered mechanic is in exactly one of three states ==')
   ok(counts.none === 0, 'no registered mechanic falls through into no state at all');
   ok(counts.measured + counts.thin + counts.unobserved === MECH.length,
      `the three states partition the register (${counts.measured}+${counts.thin}+${counts.unobserved} of ${MECH.length})`);
-  ok(counts.measured === 54, `54 are measured (${counts.measured})`);
+  /* hg-v1402 re-walk moved the partition 54+11+13 -> 55+11+12 = 78:
+     P4-ADRX graduated thin -> measured (159 settled), and SWEEP-OB graduated
+     unobserved -> thin (28 formed firings, under the 40 bar — it was
+     registered hg-v923, after the OLD bake, and had simply never fired on it;
+     on this walk it fired). */
+  ok(counts.measured === 55, `55 are measured (${counts.measured})`);
   ok(counts.thin === 11, `11 fired but settled under the bar (${counts.thin})`);
-  ok(counts.unobserved === 13, `and 13 were never observed at all (${counts.unobserved})`);
+  ok(counts.unobserved === 12, `and 12 were never observed at all (${counts.unobserved})`);
 
   /* a string that is not this desk's mechanic has nothing to disclose and
      must not be swept into "unobserved" */
@@ -96,8 +102,12 @@ console.log('== every registered mechanic is in exactly one of three states ==')
 console.log('\n== the unobserved set is derived, and the derivation is safe ==');
 {
   const U = ctx.hgOgUnobservedKinds();
-  ok(Array.isArray(U) && U.length === 13, `thirteen mechanics have no record of any kind (${U.length})`);
-  ok(U.indexOf('SWEEP-OB') >= 0, 'SWEEP-OB among them — registered in hg-v923, after the bake');
+  ok(Array.isArray(U) && U.length === 12, `twelve mechanics have no record of any kind (${U.length})`);
+  /* hg-v1402: SWEEP-OB left the unobserved set — it fired 28 times on the
+     re-walk and is THIN now (the hg-v923 case working exactly as designed:
+     the derivation followed the bake with no list edited) */
+  ok(U.indexOf('SWEEP-OB') < 0, 'SWEEP-OB graduated out — it fired on the re-walk');
+  ok(ctx.hgOgKindKnownState('SWEEP-OB') === 'thin', 'and lands in thin, not measured');
   ok(U.indexOf('P8-GEO') >= 0 && U.indexOf('COINT-SPREAD') >= 0, 'including P8-GEO and COINT-SPREAD');
   ok(U.indexOf('MMOVE') < 0, 'and not a measured one');
   ok(U.indexOf('POC-REVERT') < 0, 'nor a thin one — POC-REVERT fired, it just fired too little');
@@ -107,8 +117,15 @@ console.log('\n== the unobserved set is derived, and the derivation is safe ==')
      kind down to zero surviving rows, it lands in NEITHER map and this
      check fails — which is the point: the alternative is a card claiming
      a mechanic was never seen when it fired a hundred times. */
+  /* hg-v1402: the coverage union reads the LIVE maps. Top-level `perKind`
+     is the frozen hg-v699-era fit-study map the additive bake write never
+     refreshes; the measured map that moves with each bake is
+     sequentialBake.formedByKind (P4-ADRX is measured there on the re-walk —
+     159 settled — while absent from perKind), and the thin map now carries
+     seen-but-fully-filtered kinds at count 0 (DONCHIAN-DRIVE: 2 firings, 0
+     surviving) instead of dropping them from both maps. */
   const seen = new Set(Object.keys(ART.sequentialBake.kindSeenRaw));
-  const measured = new Set(Object.keys(ART.perKind));
+  const measured = new Set([...Object.keys(ART.perKind), ...Object.keys(ART.sequentialBake.formedByKind)]);
   const thin = new Set(Object.keys(ART.sequentialBake.kindBelowThreshold.kinds));
   const union = new Set([...measured, ...thin]);
   ok(seen.size > 0 && union.size > 0, 'the artifact carries all three maps');
@@ -120,7 +137,7 @@ console.log('\n== the unobserved set is derived, and the derivation is safe ==')
 
   /* and the register genuinely contains mechanics the walk never saw */
   const neverSeen = MECH.filter(k => !seen.has(k));
-  ok(neverSeen.length === 13, 'thirteen registered mechanics are absent from the walk entirely');
+  ok(neverSeen.length === 12, 'twelve registered mechanics are absent from the walk entirely (hg-v1402: SWEEP-OB fired on the re-walk)');
   ok(neverSeen.slice().sort().join(',') === U.slice().sort().join(','),
      'and the derived set is exactly those — computed, never transcribed');
 
@@ -138,15 +155,15 @@ console.log('\n== each state renders what it actually knows ==');
 
   const thin = L('POC-REVERT');
   ok(/NOT MEASURED/.test(thin), 'a thin mechanic says it was not measured');
-  ok(/2 settled firing/.test(thin), 'with the count it reached');
-  ok(!/%/.test(thin), 'and no win rate — a rate on two trades is an overclaim with a caveat');
+  ok(/6 settled firing/.test(thin), 'with the count it reached (hg-v1402 re-walk: 6, was 2)');
+  ok(!/%/.test(thin), 'and no win rate — a rate on six trades is an overclaim with a caveat');
   ok(!/NEVER OBSERVED/.test(thin), 'and does not claim it was never seen, because it was');
 
   const unseen = L('P8-GEO');
   ok(/NEVER OBSERVED/.test(unseen), 'an unobserved mechanic says so');
   ok(/did not produce a single firing/i.test(unseen), 'in as many words');
   ok(/Not a weak record: no record/.test(unseen), 'and names the distinction that matters');
-  ok(/13 of 78/.test(unseen), 'with how many share its state, counted rather than written');
+  ok(/12 of 78/.test(unseen), 'with how many share its state, counted rather than written (hg-v1402: 12, was 13)');
   ok(!/%/.test(unseen) && !/n=/.test(unseen), 'and no number that could be read as a result');
   ok(!/NaN|undefined|null/.test(unseen), 'with nothing leaked');
 

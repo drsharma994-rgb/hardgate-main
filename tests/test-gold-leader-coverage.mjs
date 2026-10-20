@@ -264,33 +264,38 @@ console.log('4. the three refusals');
   }
 }
 
-/* ---- 5. the tier the scan cannot reach ---- */
-console.log('5. the unreachable tier');
+/* ---- 5. the tier the scan can barely reach (hg-v1404 recalibration) ---- */
+console.log('5. the tier the scan barely reaches');
 {
+  /* hg-v1404: on the hg-v1402 walk the old 'unreachable' finding INVERTED —
+     232 of 10,306 replay rows score 85+ and the top is 89 (was: 0 of 9,897,
+     max 78). The honest pins below freeze the fresh measurement; the legend
+     text moved with it. The cell still carries no scan verdict: reaching the
+     number is not clearing it. */
   const og = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-omnigold-results.json'), 'utf8')).trades;
   const scored = og.map((t) => t.confluence).filter((x) => typeof x === 'number');
-  ok(scored.length > 9000, 'the OMNIGOLD replay scored ' + scored.length + ' rows');
-  eq(scored.filter((x) => x >= 85).length, 0, 'and NOT ONE reached the 85 the top tier needs');
+  ok(scored.length > 10000, 'the OMNIGOLD replay scored ' + scored.length + ' rows');
+  eq(scored.filter((x) => x >= 85).length, 232, 'and 232 reached the 85 the top tier needs (was ZERO on the old walk)');
   const max = Math.max(...scored);
-  ok(max < 85, 'the scan score tops out at ' + max);
-  eq(max, 78, 'which is 78');
+  ok(max >= 85, 'the scan score tops out at ' + max);
+  eq(max, 89, 'which is 89');
   const o = readFileSync(join(ROOT, 'omnigold.js'), 'utf8');
-  ok(/SCAN CARDS NEVER REACH THIS/.test(o), 'the legend cell says the scan cannot reach it');
-  ok(o.includes('tops out near 78') && o.includes('0 of 9,897'), 'with the measured numbers');
+  ok(/SCAN CARDS RARELY REACH THIS/.test(o), 'the legend cell says the scan rarely reaches it (hg-v1404)');
+  ok(o.includes('tops out near 89') && o.includes('232 of 10,306'), 'with the measured numbers');
   /* scope to the capA assignment — the phrase also sits in a comment, and a
      file-wide check passes while the rendered caption loses it (the same twin
      problem as the shares above) */
   const capAt = o.indexOf('var capA =');
   ok(capAt > 0, 'the top-tier caption is built at var capA');
-  const capBody = o.slice(capAt, o.indexOf(';', o.indexOf('SCAN CARDS NEVER REACH THIS')) + 1);
+  const capBody = o.slice(capAt, o.indexOf(';', o.indexOf('SCAN CARDS RARELY REACH THIS')) + 1);
   /* BOTH branches — with a replay record and without. Checking only that the
      phrase appears somewhere in the caption passes when the with-record branch
      loses it and the fallback keeps it, which is the branch a reader with data
      never sees. */
   eq((capBody.match(/engine grade-A scalar only/g) || []).length, 2,
      'both caption branches keep the path that CAN reach the tier');
-  ok(/SCAN CARDS NEVER REACH THIS/.test(capBody), 'and carries the scan-path fact');
-  ok(capBody.includes('78') && capBody.includes('9,897'), 'with both measured numbers');
+  ok(/SCAN CARDS RARELY REACH THIS/.test(capBody), 'and carries the scan-path fact');
+  ok(capBody.includes('89') && capBody.includes('10,306'), 'with both measured numbers');
 }
 
 console.log('\n' + (fail ? 'FAILED ' + fail + ' / ' : '') + pass + ' assertions passed');

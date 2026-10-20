@@ -42,10 +42,10 @@ const supVote = built.votes.filter(v => v.id === 'super-gold')[0];
 assert.equal(supVote.derived, true);
 assert.equal(supVote.echo, true);
 assert.equal(supVote.sameAs, 'GOLD SCALP');
-/* hg-v1393: the without-spread case still watches, not ready. */
+/* An unread venue spread is named. It does not by itself stand the plan aside. */
 const noSpread = win.hgGoldConfluenceBuild(votes, { px: 2651.5, src: 'gold-api' });
-assert.equal(noSpread.ready, false);
-assert.ok(noSpread.watch, 'watch when spread unread');
+assert.equal(noSpread.ready, true);
+assert.equal(noSpread.watch, undefined);
 assert.match(noSpread.reason, /spread was not read/);
 
 const rec = [];
@@ -302,6 +302,47 @@ og = null;
 await wait.hgGoldConfluenceScan(wait, { gather: true });
 assert.equal(opened, 1);
 assert.equal(clicks, 1);
+
+const ultra = win.hgGoldConfluenceRead({
+  goldUltraState: () => ({
+    fire: false,
+    recordOnly: true,
+    setups: { pick: { dir: 'long', entry: 2650, stop: 2640, t1: 2670 } }
+  })
+}).filter(v => v.id === 'goldultra')[0];
+assert.equal(ultra.state, 'setup');
+assert.equal(ultra.side, 'long');
+
+const pineLead = win.hgGoldConfluenceRead({
+  goldPineScan: () => ({
+    swing: [{ dir: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78, grade: 'B' }],
+    scalp: []
+  })
+}).filter(v => v.id === 'goldpine')[0];
+assert.equal(pineLead.state, 'setup');
+assert.equal(pineLead.side, 'short');
+assert.equal(pineLead.entry, 4174.4);
+
+const alone = win.hgGoldConfluenceBuild([
+  { id: 'super-gold', desk: 'SUPER GOLD', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { id: 'goldpine', desk: 'GOLD PINE', state: 'setup', side: 'long', entry: 2651, stop: 2641, t1: 2671, grade: 'A', lead: true },
+  { id: 'ganeshgold', desk: 'GANESH GOLD', state: 'setup', side: 'long', entry: 2652, stop: 2638, t1: 2672, grade: 'A', lead: true }
+], { px: 2651 });
+assert.equal(alone.ready, true);
+assert.equal(alone.longCount, 3);
+assert.ok(alone.desks.indexOf('SUPER GOLD') >= 0);
+
+win.goldscalpScan = () => ({ cands: [row(2650, 2640, 2670)] });
+win.goldswingScan = () => ({ cands: [row(2651, 2642, 2668)] });
+win.ganeshGoldState = () => ({ plan: { dir: 'long', entry: 2652, stop: 2638, t1: 2672, grade: 'A' } });
+win.superGoldScan = () => ({ cands: [row(2650, 2641, 2670)] });
+const liveAnchor = win.hgGoldIuxAnchor;
+win.hgGoldIuxAnchor = async () => null;
+win.hgGoldIuxAnchorCached = () => ({ px: 2651.5, at: 1, src: 'gold-api' });
+const fromCache = await win.hgGoldConfluenceScan(win);
+assert.equal(fromCache.ready, true);
+assert.equal(fromCache.mark, 2651.5);
+win.hgGoldIuxAnchor = liveAnchor;
 
 const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');

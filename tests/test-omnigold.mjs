@@ -143,11 +143,13 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
     }
   }
   /* cost-drag is priced at the SELECTED VENUE now, so "immaterial" is only
-     true of a named one. $12 on ~$2000 gold is 0.6% of price: clear of the
-     0.50% stop floor, and at XM's 0.020% round trip the spread is 3% of 1R.
-     Left unset it would fail closed to PAXG, where the same stop pays 43%
-     and the gate correctly declines — which is the whole point of the
-     change and not what this block is testing. */
+     true of a named one. $24 on ~$2100 gold is ~1.1% of price: clear of the
+     1.00% stop floor (hg-v1402 recalibration — the old $12/0.6% fixture now
+     sits UNDER the raised floor and the stop floor, not measured-edge, was
+     standing the card aside), and at XM's 0.020% round trip the spread is
+     under 2% of 1R. Left unset it would fail closed to PAXG, where the same
+     stop pays 23% and the gate correctly declines — which is the whole
+     point of the change and not what this block is testing. */
   win.HG_OG_VENUE = 'XM';
   const full = win.hgOgGates(wavy, hit, {
     htf:{e21:10,e50:9}, killzone:{zone:'LONDON',label:'LONDON OPEN'},
@@ -161,7 +163,7 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
        UNCHECKED, as the measured-edge assertion further down requires, and
        a ticket used to issue on it anyway. */
     stats:{samples:120,hit:0.45,expR:0.12},
-    planRisk: 12   /* 0.6% of price: clear of the floor, cheap at XM */
+    planRisk: 24   /* ~1.1% of price: clear of the 1.00% floor, cheap at XM */
   });
   delete win.HG_OG_VENUE;
   const gFull = win.hgOmniGrade(full);
@@ -180,7 +182,7 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
     macro:{realRateHint:'TAILWIND', dxy:{trend20:'DOWN'}}, yield:{valid:true},
     adr:{usedPct:45}, news:{risk:'low',note:''}, minRr:1.5,
     stats:{samples:120,hit:0.58,expR:0.12},
-    planRisk: 12
+    planRisk: 24
   });
   delete win.HG_OG_VENUE;
   ok(win.hgOmniGrade(proven).ticket === true,
@@ -439,7 +441,11 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   ok(/spans a sign change/.test(floor(8).why),
      'it says the outcome evidence reverses across the unprovable-fill interval');
   ok(/COST rule/.test(floor(8).why), 'and rests the floor on cost, where the argument holds');
-  ok(/0\.50%/.test(floor(8).why), 'and states the floor it failed');
+  /* hg-v1402 recalibration: the floor moved 0.50% -> 1.00% (fresh-window
+     walk, dropped band negative both halves at both venues). The fixtures
+     straddle both floors — 0.18% below either, 1.36% above either — so only
+     this textual pin moves; the behavioral pins are unchanged. */
+  ok(/1\.00%/.test(floor(8).why), 'and states the floor it failed');
 
   /* the floor is about market noise, not fees — it must not move with venue */
   ok(floor(8, 'XM').pass === floor(8, 'PAXG').pass,

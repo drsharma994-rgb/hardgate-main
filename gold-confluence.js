@@ -29,7 +29,42 @@ var DESKS = [
   { id: 'goldscalp', label: 'GOLD SCALP', read: function(w){ return callFn(w, 'goldscalpScan'); } },
   { id: 'goldswing', label: 'GOLD SWING', read: function(w){ return callFn(w, 'goldswingScan'); } },
   { id: 'super-gold', label: 'SUPER GOLD', read: function(w){ return callFn(w, 'superGoldScan'); } },
-  { id: 'goldpine', label: 'GOLD PINE', read: function(w){ return callFn(w, 'goldPineScan'); } },
+  { id: 'goldpine', label: 'GOLD PINE', read: function(w){
+      var snap = callFn(w, 'goldPineScan');
+      if (!snap || typeof snap !== 'object' || Array.isArray(snap) || snap.bestId) return snap;
+      var seq = [], keys = ['swingTop', 'scalpTop', 'swing', 'scalp'], ki, arr, i;
+      for (ki = 0; ki < keys.length; ki++){
+        arr = snap[keys[ki]];
+        if (!Array.isArray(arr)) continue;
+        for (i = 0; i < arr.length; i++) seq.push(arr[i]);
+      }
+      if (!seq.length) return snap;
+      var lead = null, cands = [], seen = {}, j, s, key, copy, p, side, entry, stop, t1;
+      for (j = 0; j < seq.length; j++){
+        s = seq[j];
+        if (!s || typeof s !== 'object') continue;
+        side = sideOf(s.dir || s.side);
+        entry = num(s.entry);
+        stop = num(s.stop != null ? s.stop : (s.stopLoss != null ? s.stopLoss : s.sl));
+        t1 = num(s.t1 != null ? s.t1 : (s.tp1 != null ? s.tp1 : s.tp));
+        key = s.id || (String(s.mode || '') + '|' + String(side || '') + '|' + entry + '|' + stop + '|' + t1);
+        if (seen[key]) continue;
+        seen[key] = true;
+        copy = {};
+        for (p in s) if (Object.prototype.hasOwnProperty.call(s, p)) copy[p] = s[p];
+        if (!copy.id) copy.id = 'pine-' + cands.length;
+        cands.push(copy);
+        if (lead) continue;
+        if (copy.recordOnly || copy.pineBlock || copy.demoted || copy.vetoed || copy.dropped) continue;
+        if (ordered(side, entry, stop, t1)) lead = copy.id;
+      }
+      if (!lead) return snap;
+      var out = {};
+      for (p in snap) if (Object.prototype.hasOwnProperty.call(snap, p)) out[p] = snap[p];
+      out.cands = cands;
+      out.bestId = lead;
+      return out;
+  } },
   { id: 'golddirection', label: 'GOLD DIRECTION', read: function(w){ return callFn(w, 'goldDirectionScan'); } },
   { id: 'goldultra', label: 'GOLD ULTRA', read: function(w){ return callFn(w, 'goldUltraState'); } },
   { id: 'ganeshgold', label: 'GANESH GOLD', read: function(w){ return callFn(w, 'ganeshGoldState'); } },
@@ -147,7 +182,7 @@ function rowOf(o){
   var side = sideOf(o.dir || o.side || o.direction);
   if (!side) return null;
   var entry = num(o.entry);
-  var stop = num(o.stop != null ? o.stop : o.stopLoss);
+  var stop = num(o.stop != null ? o.stop : (o.stopLoss != null ? o.stopLoss : o.sl));
   var t1 = num(o.t1 != null ? o.t1 : (o.tp1 != null ? o.tp1 : (o.tp != null ? o.tp : o.takeProfit)));
   if (!ordered(side, entry, stop, t1)) return null;
   return {
@@ -167,7 +202,10 @@ function pushItem(snap, item, rows){
     || (src && src.verdict && src.verdict.qualifies === true)
     || (item.grade && item.grade.ticket === true)
     || item.minimalLossPass === true
-    || item.ticket === true);
+    || item.ticket === true
+    || item.locked === true
+    || item.perfect === true
+    || (src && (src.locked === true || src.perfect === true)));
   rows.push(row);
 }
 function sendGrade(g){
@@ -177,7 +215,7 @@ function sendGrade(g){
     g = g.letter || g.grade || g.name || '';
   }
   var s = String(g).trim().toUpperCase().replace(/\s+/g, ' ');
-  return s === 'A' || s === 'A+' || s === 'SCALP A' || s === 'SCALP A+'
+  return s === 'A' || s === 'A+' || s === 'CLEAN' || s === 'SCALP A' || s === 'SCALP A+'
     || s === 'SNIPER A' || s === 'SNIPER A+' || s === 'TICKET';
 }
 function collectRows(snap){
@@ -229,9 +267,16 @@ function plansFrom(snap){
   });
   if (saw) return picks;
   if (snap.setups && !Array.isArray(snap.setups) && Object.prototype.hasOwnProperty.call(snap.setups, 'pick')){
+    /* GOLD ULTRA stamps fire/recordOnly on the count. The crowned pick is
+       a separate plan. A count that did not fire does not erase that pick.
+       A pick the desk itself marked record-only is still not a vote. */
+    var picked = snap.setups.pick;
+    if (picked && typeof picked === 'object' && picked.recordOnly !== true){
+      var up = rowOf(picked);
+      if (up) return [up];
+    }
     if (snap.fire === false || snap.recordOnly === true) return [];
-    var up = rowOf(snap.setups.pick);
-    return up ? [up] : [];
+    return [];
   }
   if (snap.plan){
     var pr = rowOf(snap.plan);
@@ -616,8 +661,8 @@ function samePlan(a, b){
     && Math.abs(a.t1 - b.t1) < 0.05;
 }
 /* SUPER GOLD is a selection over GOLD SCALP and GOLD SWING.
-   MILLI GOLD is OMNIGOLD filtered. Same side or not, that plan is
-   the parent desk, including when the stop is a dollar away. */
+   MILLI GOLD is OMNIGOLD filtered. It is not a second vote when a
+   parent published. When no parent published, this plan is the vote. */
 var DERIVED_OF = {
   'super-gold': { parents: ['goldscalp', 'goldswing'], reads: 'GOLD SCALP and GOLD SWING' },
   milligold: { parents: ['omnigold'], reads: 'OMNIGOLD' }
@@ -634,15 +679,19 @@ function markEcho(setups){
   setups.forEach(function(v){
     var spec = v && DERIVED_OF[v.id];
     if (!spec) return;
-    v.derived = true;
-    v.echo = true;
-    v.reads = spec.reads;
+    var parentVoted = false;
     var named = null;
     spec.parents.forEach(function(pid){
       var p = byId[pid];
-      if (!p || p.side !== v.side) return;
+      if (!p) return;
+      parentVoted = true;
+      if (p.side !== v.side) return;
       if (!named || nearPlan(p, v)) named = p.desk;
     });
+    if (!parentVoted) return;
+    v.derived = true;
+    v.echo = true;
+    v.reads = spec.reads;
     v.sameAs = named;
   });
   var kept = [];
@@ -877,7 +926,9 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   var maxE = Math.max.apply(null, entries), minE = Math.min.apply(null, entries);
   var spreadPct = (maxE - minE) / entry * 100;
   var tightOk = spreadPct <= 0.80;
-  var netOk = isFinite(base.netRr) ? base.netRr >= 1.20 : false;
+  /* An unread venue spread is named. It is not a failed cost check.
+     A measured spread still has to leave at least 1.20R. */
+  var netOk = base.spreadUsd == null ? true : (isFinite(base.netRr) && base.netRr >= 1.20);
   var crowned = priced.filter(function(v){ return v.lead === true || sendGrade(v.grade); }).length;
   var crownOk = crowned >= 2;
   base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk, crowned: crowned, crownOk: crownOk };
@@ -892,7 +943,11 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     base.accuracyTier = 'WATCH';
   } else {
     base.accuracyTier = 'HIGH';
-    base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + priced.length + ' crowned — MOST ACCURATE.';
+    if (base.spreadUsd == null){
+      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, ' + crowned + '/' + priced.length + ' crowned. The venue spread was not read, so the cost was not subtracted.';
+    } else {
+      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + priced.length + ' crowned — MOST ACCURATE.';
+    }
   }
   // Stand aside only if caller wants strict HIGH; default keeps ready but tags tier
   // For this task: require HIGH for ready (most accurate only)
@@ -1015,6 +1070,29 @@ function recordConfluence(win, built){
   }catch(e){}
 }
 
+async function readAnchor(win){
+  var a = null;
+  try{
+    if (win && typeof win.hgGoldIuxAnchor === 'function') a = await win.hgGoldIuxAnchor();
+  }catch(e0){ a = null; }
+  if (a && num(a.px) > 0) return { px: +a.px, at: a.at || Date.now(), src: a.src || 'gold-api' };
+  try{
+    if (win && typeof win.hgGoldIuxAnchorCached === 'function'){
+      var c = win.hgGoldIuxAnchorCached();
+      if (c && num(c.px) > 0) return { px: +c.px, at: c.at || Date.now(), src: c.src || 'gold-api' };
+    }
+  }catch(e1){}
+  try{
+    if (!win || typeof win.fetch !== 'function') return null;
+    var r = await win.fetch('/api/proxy?url=' + encodeURIComponent('https://api.gold-api.com/price/XAU'), { cache: 'no-store' });
+    if (!r || !r.ok || typeof r.json !== 'function') return null;
+    var j = await r.json();
+    var p = j ? num(j.price != null ? j.price : j.px) : NaN;
+    if (!(p > 1000 && p < 20000)) return null;
+    return { px: p, at: Date.now(), src: 'gold-api' };
+  }catch(e2){ return null; }
+}
+
 async function hgGoldConfluenceScan(win, opts){
   win = win || W;
   opts = opts || {};
@@ -1023,13 +1101,7 @@ async function hgGoldConfluenceScan(win, opts){
     try{ extra = await hgGoldConfluenceGather(win, opts.onProgress); }catch(eG){ extra = { snaps: {}, notes: {} }; }
   }
   var votes = hgGoldConfluenceRead(win, extra);
-  var iux = null;
-  try{
-    if (typeof win.hgGoldIuxAnchor === 'function'){
-      var a = await win.hgGoldIuxAnchor();
-      if (a && num(a.px) > 0) iux = { px: +a.px, at: a.at || Date.now(), src: a.src || 'gold-api' };
-    }
-  }catch(e){ iux = null; }
+  var iux = await readAnchor(win);
   var built = hgGoldConfluenceBuild(votes, iux, { spreadUsd: measuredSpread(win) });
   built.at = Date.now();
   if (!scanHarness(win)) recordConfluence(win, built);
@@ -1098,37 +1170,47 @@ function paint(root, built){
   desk.innerHTML = '<div class="hg-note">' + esc(built.reason || '') + '</div>' + plan + cost + voteHtml;
 }
 
+var scanGen = 0;
+var lastRoot = null;
 function mount(root){
   if (!root) return;
+  lastRoot = root;
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. SCAN GOLD DESKS opens each gold desk that has not published yet and waits until that scan finishes. Three different crowned plans are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. SUPER GOLD and MILLI GOLD repeat the desk they read. GOLD DIRECTION still needs your own LONG or SHORT.</div></div></div>';
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three different crowned plans are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT.</div></div></div>';
   var btn = root.querySelector('#gc-run');
   var stat = root.querySelector('#gc-stat');
   function go(doGather){
+    var mine = ++scanGen;
     if (btn) btn.disabled = true;
     if (stat) stat.textContent = doGather ? 'Scanning gold desks…' : 'Reading…';
     return hgGoldConfluenceScan(W, {
       gather: !!doGather,
-      onProgress: function(msg){ if (stat) stat.textContent = msg; }
+      onProgress: function(msg){ if (mine === scanGen && stat) stat.textContent = msg; }
     }).then(function(built){
+      if (mine !== scanGen) return built;
       if (btn) btn.disabled = false;
       paint(root, built);
       return built;
     }).catch(function(){
+      if (mine !== scanGen) return null;
       if (btn) btn.disabled = false;
-      if (stat) stat.textContent = 'STAND ASIDE';
+      if (stat) stat.textContent = 'Scan did not finish';
       return null;
     });
   }
   if (btn) btn.addEventListener('click', function(){ return go(true); });
-  go(false);
+  go(true);
 }
 
 async function refresh(){
-  try{ return (await hgGoldConfluenceScan(W)).ready ? 'setup' : 'stand aside'; }
-  catch(e){ return 'error'; }
+  try{
+    var built = await hgGoldConfluenceScan(W, { gather: !scanHarness(W) });
+    if (lastRoot) paint(lastRoot, built);
+    if (!built) return 'error';
+    return built.ready ? 'setup' : (built.watch ? 'watch' : 'stand aside');
+  }catch(e){ return 'error'; }
 }
 
 W.hgGoldConfluenceRead = hgGoldConfluenceRead;

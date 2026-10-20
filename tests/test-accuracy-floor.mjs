@@ -438,7 +438,8 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
      cause rather than a silent consequence of a module file being absent (hg-v1329). */
   const NO_FORWARD_RECORD = {
     'gold': 'the inline scan, which records under CARD:<scanId> rather than a tab pool',
-    'candle-forecast': 'a predictive forecast display — it names the next candle and its band, mints no ticket and writes no forward row, so there is no outcome to grade'
+    'candle-forecast': 'a predictive forecast display — it names the next candle and its band, mints no ticket and writes no forward row, so there is no outcome to grade',
+    'puregold': 'a live reading of one Pine script (IST EMA cross, stop and target from that close). It mints no ticket and writes no forward row — the strategy has no settled book to grade'
   };
 
   const orphan = [];

@@ -33,6 +33,13 @@
         no gate names a mark, the set fits the ledger
      7) build stamps
 
+   hg-v1399: 4h tape recalibrated for the stopPct>=2% admission floor
+   (300 bars x slope 0.3 from 100 -> 220 bars x slope 0.19 from 1, wicks
+   ±0.3 untouched) — no price-scale crossover exists between the floor and
+   this suite's CHOP<=38.2 'clean trending tape' pin, so slope/bar-count
+   recalibrate; the tape stays the same clean monotonic trend and the floor
+   genuinely engages (~2.1% stop). The heldWhy expectation names the floor's
+   zero count. No other assertion changed.
    Run: node tests/test-trendmx-witness-marks.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -63,8 +70,8 @@ function boot(files, extra){
 }
 const SEC4 = 14400;
 const now = Date.now() / 1000;
-function tape(n, step, slope, endT){
-  const rows = []; let c = 100; const t0 = endT - (n - 1) * step;
+function tape(n, step, slope, endT, start){
+  const rows = []; let c = (start === undefined ? 100 : start); const t0 = endT - (n - 1) * step;
   for (let i = 0; i < n; i++){ c += slope; rows.push({ t: t0 + i * step, o: c, h: c + 0.3, l: c - 0.3, c, v: 1000 }); }
   return rows;
 }
@@ -75,7 +82,14 @@ function zigzag(n, step, endT){
   return rows;
 }
 const LAST4H = Math.floor(now / SEC4) * SEC4 - SEC4;
-const UP = { '4h': tape(300, SEC4, 0.3, LAST4H), '1d': tape(300, 86400, 1, Math.floor(now / 86400) * 86400 - 86400), '1h': tape(300, 3600, 0.1, Math.floor(now / 3600) * 3600 - 3600) };
+/* hg-v1399: the 4h tape recalibrates for the stopPct>=2% admission floor —
+   300 bars x slope 0.3 from 100 -> 220 bars x slope 0.19 from 1, wicks ±0.3
+   untouched. No price-scale crossover exists between the floor and this
+   suite's CHOP<=38.2 'clean trending tape' pin (probed: scaling closes alone
+   pushes CHOP to 68-81), so slope/bar-count recalibrate instead: the tape is
+   the same clean monotonic trend (CHOP ~36, ER 1) and the floor genuinely
+   engages (the house stop prices ~2.1% of entry). */
+const UP = { '4h': tape(220, SEC4, 0.19, LAST4H, 1), '1d': tape(300, 86400, 1, Math.floor(now / 86400) * 86400 - 86400), '1h': tape(300, 3600, 0.1, Math.floor(now / 3600) * 3600 - 3600) };
 const STACK = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'hg-forward.js', 'setup-ui.js', 'trendtable.combined.js'];
 const ITEMS = [
   { sym: 'ETHUSDT', base: 'ETH', exchange: 'binance', fundingPct: null, turnoverUsd: 1e8, mark: 190 },
@@ -201,7 +215,7 @@ console.log('\n3. the class partition, driven directly: held rows keep their pla
   S.__fund.FUNDUSDT = FUND_AGAINST; S.__fund.FLOWFUNDUSDT = FUND_AGAINST;
   const out = S.trendmxLimitClasses(rows);
   ok(out.clean.length === 1 && out.clean[0].row.sym === 'SOLUSDT' && out.conv.length === 0, 'one clean row reaches the desk; every held row stays off it');
-  ok(out.heldClean === 7 && JSON.stringify(out.heldWhy.clean) === JSON.stringify({ flow: 4, mom: 1, vol: 1, fund: 1, postgate: 0 }), 'the hold-off COUNTS are the hg-v1019 counts: each held row counted ONCE under the first witness that fired (' + JSON.stringify(out.heldWhy.clean) + ')');
+  ok(out.heldClean === 7 && JSON.stringify(out.heldWhy.clean) === JSON.stringify({ flow: 4, mom: 1, vol: 1, fund: 1, postgate: 0, floor: 0 }), 'the hold-off COUNTS are the hg-v1019 counts: each held row counted ONCE under the first witness that fired (' + JSON.stringify(out.heldWhy.clean) + '); hg-v1399: the admission floor adds its own named reason (zero here — every priced stop clears 2%)');
   ok(Array.isArray(out.heldWitness) && out.heldWitness.length === 6 && out.heldWitness.every(h => h.plan && isFinite(h.plan.entry) && isFinite(h.plan.stop) && isFinite(h.plan.t1)), 'six held rows are KEPT with a priced plan (the seventh had no tape to price on)');
   ok(!out.heldWitness.some(h => h.row.sym === 'NOPLANUSDT'), 'the held row with no plan is counted and NOT kept — a record needs levels');
   const by = {}; out.heldWitness.forEach(h => { by[h.row.sym] = h.heldBy; });

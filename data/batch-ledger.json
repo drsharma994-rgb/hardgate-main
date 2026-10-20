@@ -415,6 +415,106 @@
       "version": "hg-v1389",
       "built": "2026-10-16T06:10:00Z",
       "note": "The gold confluence fallback scores a candle impulse, the 20-bar average, and RSI only when those are read. An unread venue spread is named and is not filled in as zero. The fallback does not replace the gold candle builder, the day-swing reader, or the measure reader."
+    },
+    {
+      "version": "hg-v1394",
+      "built": "2026-10-16T16:10:00Z",
+      "note": "CONFLUENCE scans when the tab opens and no longer stands aside just because the venue spread was not read. A Gold Ultra crown still votes when the count did not fire. The Gold Pine top card is the vote. Super Gold counts when Scalp and Swing published nothing. A cached or proxied IUX quote is used when the live read fails. Three crowned plans are still required, and a measured spread under 1.20R is still a watch."
+    },
+    {
+      "version": "hg-v1395",
+      "built": "2026-10-17T15:00:00Z",
+      "note": "OMNIBTC records the standing side of TTM Squeeze, Weekly AVWAP, HalfTrend, Range Filter, NW Envelope and VuManChu, and prints that state on the card. Those reads do not vote. TSI, choppiness, the ATR regime and a 20-bar VWAP are disclosed on the indicator bank and do not vote. The ten pine cores still decide a ticket. MACD, Donchian and session VWAP stay out of the record bank."
+    },
+    {
+      "version": "hg-v1396",
+      "built": "2026-10-17T15:20:00Z",
+      "note": "OMNIBTC writes TSI, VWAP, choppiness and the ATR regime onto the forward book as reads, not votes. A zero, a tie, a mixed chop, or a normal ATR regime stays unread. The forward section says the standing Pine states are not promoted until a settled split separates one. The ten cores still decide a ticket."
+    },
+    {
+      "version": "hg-v1397",
+      "built": "2026-10-17T15:55:00Z",
+      "note": "OMNIBTC scores the pine +10 only when the ten-core book agrees with the direction, not because the engine name contains PINE. A pine-refused crown is handed to the next survivor the book accepts. If every candidate is refused, the original watch stays. The ten cores still decide a ticket."
+    },
+    {
+      "version": "hg-v1398",
+      "built": "2026-10-17T16:39:00Z",
+      "note": "TREND MATRIX keeps the five-leg score and takes the side from the four legs that can disagree. One leg plus the ADX echo is not a plan. Two independent legs still are. The 4h cascade is not a new hard gate."
+    },
+    {
+      "version": "hg-v1399",
+      "built": "2026-10-17T20:30:00Z",
+      "note": "TREND MATRIX admission floor, measured on the hg-v1160 replay: stop at least 2% of entry, no fresh cross riding with the majority, the 1D cloud not against it, a bare |2| majority needs three gates. Fail-open on absent reads; floored rows paint, name the reason, record ticket:false. +0.086R expectancy on the kept cohort, both halves agree."
+    },
+    {
+      "version": "hg-v1400",
+      "built": "2026-10-18T02:04:00Z",
+      "note": "PURE GOLD is a gold-group tab. It enters only on a fresh EMA 21/55 cross inside 17:30\u201321:30 IST. Stop is 1.5 ATR and target is 3 ATR from the signal close. The entry is the next bar open, unread when that bar is not in the tape. A standing stack is not a cross."
+    },
+    {
+      "version": "hg-v1401",
+      "built": "2026-10-18T03:00:00Z",
+      "note": "GOLD PINE admission floor: scalp stop >= 0.3% of entry (census-measured, negative both halves at both cost models), the MOST PROBABLE pin honors the handoff R:R floor, killzone/fix-lock read the signal bar. Swing stop floor measured and refused (mixed halves). No weights moved."
+    },
+    {
+      "version": "hg-v1402",
+      "built": "2026-10-18T06:30:00Z",
+      "note": "OMNIGOLD formation floor: all three of regime-fit/htf-confirm/hurst-regime must pass on the card ledger or the card stands aside naming the reason (kept +0.047R/+0.040R XM vs dropped -0.115R/-0.175R, both halves of the fresh hg-v752 walk window); stop floor 0.5% -> 1.0% of entry (sub-floor cohort -1.469R/-1.809R spot, -0.118R/-0.148R XM, both halves; pure 0.5-1.0% band -0.378R/-0.419R spot). Fail-open on absent reads; floored cards paint and record not-formed. Kind-name vetoes refused (toxicity is cost, not direction); 2R target kept after sweep re-check failed to reproduce."
+    },
+    {
+      "version": "hg-v1403",
+      "built": "2026-10-18T06:30:00Z",
+      "note": "OMNIBTC restores the v1299-v1305 pack lost in merge resolution (tests had stayed pinned): free-feed/indicator mark readers (12 free + 13 ind), FUNDAMENTALS & FEED panel, LEGS_PIN refresh pin, v1303 four defects, v1304 direction geometry at three ingest sites, v1305 direction-aware measured-rank verdicts, hgObtcPineMarks + HG_OBTC_WALK replay literal; trendmxPineMarks restored to 13 ports. First walker bake on 5,000 BTC 4h bars (n=4779, 72 tickets). Measured gate change: two independent fresh pine families required for a ticket; one-family tiebreaks demoted to watch (-0.076R both halves vs +0.153R for 2+ families on the 2000-bar tail); MACD histogram veto-only (-0.234R as confirm). Honesty: 5000-bar separation +0.109R overall (tickets +0.0625R vs held -0.0464R) but the premium is H2-only there (H1 tickets -0.159R vs held -0.035R); ~73% of former tickets stand aside; forward ledger decides. Suite amendments (mutation-proven, same commit): v1299/v1301 count re-pins 13->17/25->29 (hg-v1396 house marks postdate them), pine-nine 10->13, pine-accuracy fixtures, v1304 version re-pin, walker bake-state."
+    },
+    {
+      "version": "hg-v1404",
+      "built": "2026-10-18T16:00:00Z",
+      "note": "OMNIGOLD completes the v1402 bake propagation \u2014 the wave gate scoped to omnigold-named suites and missed the wider gold family; 16 previously-green suites re-derived from the committed artifact (hg-v1399 precedent: regenerate literal where a generator exists, else minimal-diff + header note). Literals regenerated: HG_OG_SELECTION (mechanic-selection.mjs --write), HG_OG_FACTOR_SEP (factor-separation bake \u2014 ZERO verdicts survive the re-walk, stated plainly), HG_MILLI_ROSTER/HG_MILLI_FORWARD (8 mechanics; beats desk 5 of 6, pays 0), HG_GOLD_DESK_BREAKEVEN omnigold half (edge still flips: -2.3 to +6.1 pts), HG_GOLD_SESSION_EVIDENCE (all five signs unchanged across four bakes), HG_GOLD_SIBLING_RECORD (EQH-SWEEP dropped loudly \u2014 thin on re-walk), HG_OG_EVIDENCE_GATESET (58-key fingerprint of the 2026-10-18 walk), plus the factor-separation / mechanic-selection / capA-legend narratives and the sequential-ticket prose kept honest against the empty gated book. Suites amended: fill-depth, gate-mask, unprovable-fill, mechanic-selection, factor-separation, milli-gold, milli-gold-walk, formed-population, desk-breakeven, gold-excursions, gold-leader-coverage, gold-evidence-citations, gold-oos-sweep, gold-sibling-records, gold-profitability-audit (S1 only; its S2/S8 hgGoldAudit missing-module failures are pre-existing at 3f9e5660). Also fixed: evidence-bake narrative date 2026-09-12 to 2026-10-18; v1402 stamp quote +0.047 to +0.050R (2-row snapshot drift \u2014 quoted from the committed artifact). No behavior change beyond propagation (renderer branches added only where a fresh literal made the old path unreachable or crash on null). gold-pine-*, gold-iux-anchor, gold-tape-sanity-family fail identically at pre-land 3f9e5660 \u2014 pre-existing, untouched; test-gold-served-is-tested is the v1403 server.mjs needle, owned by the omnibtc fix."
+    },
+    {
+      "version": "hg-v1405",
+      "built": "2026-10-19T16:09:39Z",
+      "note": "SYNDICATE is a crypto-group CoinDCX relay. News is aggregated then consolidated. A headline can stand a setup down and cannot mint the direction. The stop is 1.5 times the 15m ATR beyond the 4h zone. Net R uses the house 0.20% round-trip and must clear 2.2 or the target is not widened. Funding, the book, liquidations, and maintenance margin stay unread when the public mark does not carry them, so the zone is not moved and leverage is not suggested. USDT dominance is not on a readable series and is not a vote. The relay repeats every 5 minutes while the tab is open and never sends an order."
+    },
+    {
+      "version": "hg-v1407",
+      "built": "2026-10-20T01:10:00Z",
+      "note": "GOLD PINE uses seven more Pine reads \u2014 Vortex, DEMA 21/55, 20-bar regression slope, Elder Ray, EMA 50/200, CMO 14 and the Bollinger midline \u2014 plus choppiness. They cannot mint a ticket. A lead is held when choppiness is above 61.8, or when at least five of those reads have a side and more of them oppose the ticket than agree."
+    },
+    {
+      "version": "hg-v1408",
+      "built": "2026-10-20T01:30:00Z",
+      "note": "GOLD PINE adds a second Pine family: Awesome Oscillator, Ultimate Oscillator, TSI, ROC 12, SSL channel, Stoch RSI and DPO. They cannot mint a ticket. The lead is held when four of them read a side and more oppose than agree, on top of the Vortex family and the wider stack."
+    },
+    {
+      "version": "hg-v1409",
+      "built": "2026-10-20T01:45:00Z",
+      "note": "GOLD PINE adds a confirmation family: Alligator, RVI, Balance of Power, ALMA 20, KST, McGinley Dynamic and RSI versus 50. They cannot mint a ticket. When four of them read, the lead is held unless more of them agree than oppose."
+    },
+    {
+      "version": "hg-v1410",
+      "built": "2026-10-20T02:05:00Z",
+      "note": "GOLD PINE reads the standing EMA 8-55 ribbon, MACD against zero, the histogram, PSAR, stochastic and the EMA21 slope, plus RSI swing divergence. A scalp is also judged on the 4h tape. A swing is held when the 15m families are majority-against. None of these mint a ticket."
+    },
+    {
+      "version": "hg-v1411",
+      "built": "2026-10-20T02:20:00Z",
+      "note": "GOLD PINE holds a lead against swing structure (higher highs and higher lows, or the reverse) and against a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when extended and neither structure nor that stack confirms. A TD9 completion holds the bar it prints on. None of these mint a ticket."
+    },
+    {
+      "version": "hg-v1412",
+      "built": "2026-10-20T02:40:00Z",
+      "note": "GOLD PINE holds a lead when the 40-bar regression t-stat is 2 or more the other way. An ATR spike in the top of its last 100 readings holds a lead only when that regression is not significant in the trade direction. A significant trend is not blocked for being volatile. Neither read mints a ticket."
+    },
+    {
+      "version": "hg-v1413",
+      "built": "2026-10-20T02:55:00Z",
+      "note": "GOLD PINE holds a lead that wicks through the Shanghai 01:00-02:00 UTC hour and closes back, and a lead that fights a weekly-open sweep. Neither read mints a ticket. A feed with no weekly open, or a day with no Shanghai hour, does not refuse."
+    },
+    {
+      "version": "hg-v1414",
+      "built": "2026-10-20T03:10:00Z",
+      "note": "GOLD PINE holds a lead while price is inside the Ichimoku cloud, and holds a lead when the Elder Impulse (EMA21 slope and MACD histogram) both point the other way. A close above or below the cloud does not refuse. Neither read mints a ticket."
     }
   ]
 }

@@ -24,6 +24,9 @@
    The matrix ships as trendtable.combined.js (served as the twelve trendtable-src-N.js
    parts); this guard boots the combined file, which is what the parts concatenate to.
 
+   hg-v1399: tape recalibrated for the stopPct>=2% admission floor — the
+   tape wicks widen (±0.3 -> ±1.5, closes untouched); every assertion and
+   its coverage is unchanged.
    Run: node tests/test-trendmx-free-feeds.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -58,7 +61,8 @@ const now = Date.now() / 1000;
 /* a tape whose last closed bar sits one 4h bar behind the clock */
 function tape(n, step, slope, endT){
   const rows = []; let c = 100; const t0 = endT - (n - 1) * step;
-  for (let i = 0; i < n; i++){ c += slope; rows.push({ t: t0 + i * step, o: c, h: c + 0.3, l: c - 0.3, c, v: 1000 }); }
+  /* hg-v1399: wicks widen (±0.3 -> ±1.5, closes untouched) so the house stop prices >=2% of entry — the admission floor */
+  for (let i = 0; i < n; i++){ c += slope; rows.push({ t: t0 + i * step, o: c, h: c + 1.5, l: c - 1.5, c, v: 1000 }); }
   return rows;
 }
 const LAST4H = Math.floor(now / SEC4) * SEC4 - SEC4;

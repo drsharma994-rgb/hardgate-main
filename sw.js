@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1393';
+const HG_CACHE = 'hg-v1414';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -23,7 +23,7 @@ const HG_SHELL = [
   './icon.svg', './icon-192.png', './icon-512.png', './bright.css', './hg-icons.css', './vendor/base-themes/tokens-data-dense-light.css', './trading-dashboard-pro.css', './mobile.css', './annunciator.css', './hardgate-desktop-shell.css',
   './build-stamp.js', './gold-iux.js',
   './hghost.js', './hardgate-desktop-shell.js',
-  './indicators.js', './indicators2.js', './store.js', './binance.js', './inc4-data-core.js', './hg-setup-core.js', './hg-perfect-setup.js', './coinalyze.js', './coinglass.js', './borrow-rates.js', './liquidity-gate.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './agent-alerts.js',
+  './indicators.js', './indicators2.js', './store.js', './binance.js', './inc4-data-core.js', './hg-setup-core.js', './hg-perfect-setup.js', './coinalyze.js', './coinglass.js', './borrow-rates.js', './liquidity-gate.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './syndicate.js', './agent-alerts.js',
   './setup-ui.js', './setup-solidity.js', './smc-lib.js', './smc-setups.js', './setup-calibration.js', './plans.js', './setup-stack.js', './gate-replay-oos.js', './cryptogates.js',
   /* hg-v1150: the matrix ships as a loader (trendtable.js fetches the 12
      parts at runtime). The COMBINED file is precached beside it: tests boot
@@ -40,7 +40,7 @@ const HG_SHELL = [
   './portfolio-allocation.js', './inc567-data-core.js', './inc567-config-loader.js', './inc567-regime-panels.js',
   './inc34-data-core.js', './backtest-tab-params.js', './data/param-drift.json', './data/desk-tab-params.json', './data/symbol-tier.json', './data/alert-precision.json',
   './recon-tab.js', './setup-activation.js', './rotation.js', './goldspot.js',
-  './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './gold-core-engine.js', './gold-titan-engine.js', './gold-scalp.js', './ganesh-gold.js', './pinegold.js', './goldscalp.js', './ganeshgold.js', './gold-free-evidence.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './gold-suite-unified.js', './signallog.js',
+  './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './gold-core-engine.js', './gold-titan-engine.js', './gold-scalp.js', './ganesh-gold.js', './pinegold.js', './goldscalp.js', './ganeshgold.js', './gold-free-evidence.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './puregold.js', './gold-suite-unified.js', './signallog.js',
   './candle-confluence.js', './gold-candle-forecast.js', './candle-forecast-intel.js', './candlestick_patterns.js', './gold_confluence_engine.js',
   './data/setup-profile.json', './data/regime-profile.json',
   './data/strategy-weights.json', './data/strategy-regime-state.json', './data/fund-config.json',

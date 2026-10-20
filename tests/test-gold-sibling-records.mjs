@@ -113,18 +113,27 @@ console.log('1. every quoted number is derived from the committed walk');
 /* ---- 1b. the generator fails LOUDLY, which is the whole hg-v921 rule ---- */
 console.log('1b. a block it cannot find, or a record it cannot read, is fatal');
 {
-  /* A twin the walk observed but the gate-clear bake did not is a BROKEN
-     artifact, not an absent record — skipping it would silently turn a
-     measured mechanic into "nothing is known", which is the exact false
-     statement this pack exists to delete. */
-  let threw = false;
+  /* hg-v1404 recalibration: this state is no longer hypothetical — the
+     hg-v1402 re-walk made it real (EQH-SWEEP: measured in the frozen hg-v699
+     perKind, thin at 39 settled on the fresh formedByKind). A throw there
+     would block every future bake the moment any mechanic graduates out of
+     measured. The behavior is now: skip, and SAY so on the console — the
+     drop is loud, just not fatal. The old comment's fear (a measured
+     mechanic silently becoming "nothing is known") is answered by the print,
+     not by the crash. */
+  let threw = false, logged = [], rec = null;
+  const keep = console.log; console.log = (...a) => { logged.push(a.join(' ')); };
   try {
-    GEN.buildRecords({ goldround: 'ROUND-MAGNET' }, {
+    rec = GEN.buildRecords({ goldround: 'ROUND-MAGNET' }, {
       perKind: { 'ROUND-MAGNET': { n: 620 } },
       sequentialBake: { formedByKind: {} }
     });
   } catch (e){ threw = true; }
-  ok(threw, 'a twin in perKind with no gate-clear record THROWS rather than dropping it');
+  finally { console.log = keep; }
+  ok(!threw, 'a twin in perKind with no gate-clear record no longer throws (the re-walk made that state real)');
+  ok(rec && Object.keys(rec).length === 0, 'the twin is dropped from the record');
+  ok(logged.some(l => /thin on the re-walk|no fresh measured record/.test(l) && /ROUND-MAGNET/.test(l)),
+     'and the drop is PRINTED with the twin named — loud, not silent');
 
   /* A mechanic in neither is genuinely never-observed — 24 of 78 are — and
      that is a real state, not an error. */
@@ -223,7 +232,7 @@ console.log('5. the card says whose record it is quoting');
   const n = W.hgGoldExtraUncheckedNote('goldround');
   ok(/ROUND-MAGNET/.test(n), 'the note names the twin mechanic');
   ok(/OMNIGOLD/.test(n), 'and attributes the record to OMNIGOLD');
-  ok(/587/.test(n), 'and quotes the settled count from the record');
+  ok(/560/.test(n), 'and quotes the settled count from the record (hg-v1404 re-walk: 560, was 587)');
   ok(/cannot lead/i.test(n), 'and still says it cannot lead');
   ok(!/^NO MEASURED RECORD/.test(n),
      'it no longer claims nothing is known — that was hg-v933s error');

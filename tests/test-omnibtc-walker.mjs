@@ -9,7 +9,19 @@
    its output is the shape the literal writer reads, that the literal is
    generated-only (hg-v921), that the reader paints "REPLAY · NOT YET
    MEASURED" when no artifact exists, and that nothing in the stack is a
-   gate on the literal's rows. */
+   gate on the literal's rows. 
+   hg-v1403 bake recalibration (verifier-approved, mutation-proven): the
+   walk BAKED at hg-v1403 (scripts/backtest-omnibtc-results.json, n=4779,
+   72 tickets, ticket +0.0625R vs held -0.0464R; the premium is an H2
+   phenomenon on the 5000-bar window — H1 tickets -0.159R vs held -0.035R,
+   H2 +0.296R vs -0.058R; the 2000-bar tail ran +0.153R — the forward
+   ledger decides live). §5 zero-drift now compares renderBlock(current
+   artifact); §7 covers BOTH panel states (unmeasured fixture keeps the
+   NOT-YET-MEASURED teeth, baked default asserts the measured table); §6
+   asserts summary.n > 0 with the ticket key present — the 400-bar
+   synthetic fixture mints ZERO tickets by design under the hg-v1403
+   two-family minimum (real tape mints 72).
+*/
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -152,16 +164,20 @@ console.log('== 5) literal writer: generated-only, round-trips zero drift (hg-v9
   const endCount = (src.match(/END GENERATED HG_OBTC_WALK/g) || []).length;
   ok(beginCount === 1 && endCount === 1, 'exactly one generated block (no duplicates)');
 
-  /* the writer re-reads the artifact and must round-trip the current literal
-     to no-drift (because no artifact exists today, the literal reads
-     measured:false and the writer re-produces the same block). */
   const { renderBlock } = await import('../scripts/omnibtc-evidence-literal.mjs');
-  const block = renderBlock(null);
-  ok(block.includes('var HG_OBTC_WALK ='), 'rendered block declares HG_OBTC_WALK');
-  ok(block.includes('"measured": false') || block.includes('"measured":false'),
+  /* pure-function shape: a missing artifact still renders the hg-v990
+     measured:false placeholder (this is what a fresh checkout would bake) */
+  const nullBlock = renderBlock(null);
+  ok(nullBlock.includes('var HG_OBTC_WALK ='), 'rendered block declares HG_OBTC_WALK');
+  ok(nullBlock.includes('"measured": false') || nullBlock.includes('"measured":false'),
     'with no artifact the literal reads measured:false');
-  ok(block.includes('scripts/backtest-omnibtc-results.json does not exist'),
+  ok(nullBlock.includes('scripts/backtest-omnibtc-results.json does not exist'),
     'note names the missing artifact (hg-v990 shape)');
+  /* hg-v1403: the walk has baked — the zero-drift pin compares the writer's
+     render of the CURRENT committed artifact against the in-tree literal */
+  const art = JSON.parse(read('scripts/backtest-omnibtc-results.json'));
+  const block = renderBlock(art);
+  ok(block.includes('"measured": true'), 'baked artifact renders measured:true');
   ok(src.includes(block),
     'current omnibtc.js already carries the regenerated block byte-for-byte (zero drift)');
 }
@@ -177,8 +193,12 @@ console.log('== 6) literal writer: a walked artifact produces a measured:true bl
   const block = renderBlock(walkOut);
   ok(block.includes('"measured": true'),
     'walked artifact produces measured:true');
-  ok(block.includes('"n":') && !block.includes('"n": 0,'),
-    'n is positive on a successful walk');
+  /* hg-v1403: the 400-bar synthetic fixture mints ZERO tickets by design
+     under the two-family minimum (real tape mints 72) — assert the walk
+     population and the ticket cohort key, not a fixture ticket count */
+  ok(/"n": [1-9]/.test(block),
+    'walk population n is positive on a successful walk');
+  ok(block.includes('"nTicket":'), 'the ticket cohort key is present (may be zero on the fixture)');
   ok(block.includes('"rows":') && block.includes('"outcome":'),
     'the measured literal carries rows[] with outcome fields');
   ok(block.includes('"summary":') && block.includes('"ticket":'),
@@ -218,13 +238,26 @@ console.log('== 7) reader paints "REPLAY · NOT YET MEASURED" when no walk ran =
     'hgObtcReplayPanelHtml is exported on W');
   const htmlNull = ctx.hgObtcReplayPanelHtml(null);
   ok(htmlNull === '' || htmlNull === undefined, 'null T returns empty');
-  const htmlUnmeasured = ctx.hgObtcReplayPanelHtml();
+  /* hg-v1403: the unmeasured branch keeps its teeth on an explicit
+     measured:false fixture (a fresh checkout before a bake paints this) */
+  const htmlUnmeasured = ctx.hgObtcReplayPanelHtml({
+    measured: false, n: 0, span: null, horizonBars: 20, costFrac: 0.0008,
+    note: 'scripts/backtest-omnibtc-results.json does not exist — the walk has not run',
+    forwardOnly: ['postgate:accuracy', 'flow'], rows: []
+  });
   ok(/REPLAY · NOT YET MEASURED/.test(htmlUnmeasured),
-    'default (HG_OBTC_WALK, measured:false) paints "REPLAY · NOT YET MEASURED"');
+    'an unmeasured literal paints "REPLAY · NOT YET MEASURED"');
   ok(/does not exist/.test(htmlUnmeasured),
-    'the panel names the missing artifact');
+    'the unmeasured panel names the missing artifact');
   ok(/Forward-only reads/.test(htmlUnmeasured),
-    'the panel names the forward-only reads');
+    'the unmeasured panel names the forward-only reads');
+  /* hg-v1403: the walk has baked — the default (in-tree HG_OBTC_WALK) is
+     measured:true and paints the measured table */
+  const htmlBaked = ctx.hgObtcReplayPanelHtml();
+  ok(!/NOT YET MEASURED/.test(htmlBaked) && /REPLAY/.test(htmlBaked),
+    'default (HG_OBTC_WALK, measured:true) paints the measured replay panel');
+  ok(/TICKETS n=/.test(htmlBaked) && /HELD/.test(htmlBaked),
+    'the baked panel prints the ticket and held cohorts');
 
   const measured = {
     measured: true,

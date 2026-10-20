@@ -88,7 +88,12 @@ export function buildRecords(twins, artifact){
          record of zeros, so it is left out and the note falls back to the
          honest empty line. */
       if (!perKind[twin]) continue;
-      missing.push(twin);
+      /* hg-v1404: a twin can also be measured in the FROZEN hg-v699 perKind
+         map yet absent from the fresh formedByKind — the re-walk settled it
+         under the 40-trade bar (EQH-SWEEP, 39). That is the same state with
+         a history, not a corruption: there is no FRESH record to quote, so
+         the twin is left out and the skip is printed, never silent. */
+      console.log('  note — twin has no fresh measured record (thin on the re-walk), skipped: ' + twin);
       continue;
     }
     out[twin] = {
@@ -102,9 +107,6 @@ export function buildRecords(twins, artifact){
       minRr: MIN_RR,
       breakevenPct: +(100 / (1 + MIN_RR)).toFixed(1)
     };
-  }
-  if (missing.length){
-    throw new Error('twin observed in perKind but absent from formedByKind: ' + missing.join(', '));
   }
   return out;
 }
