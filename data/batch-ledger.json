@@ -490,6 +490,11 @@
       "version": "hg-v1409",
       "built": "2026-10-20T01:45:00Z",
       "note": "GOLD PINE adds a confirmation family: Alligator, RVI, Balance of Power, ALMA 20, KST, McGinley Dynamic and RSI versus 50. They cannot mint a ticket. When four of them read, the lead is held unless more of them agree than oppose."
+    },
+    {
+      "version": "hg-v1410",
+      "built": "2026-10-20T02:05:00Z",
+      "note": "GOLD PINE reads the standing EMA 8-55 ribbon, MACD against zero, the histogram, PSAR, stochastic and the EMA21 slope, plus RSI swing divergence. A scalp is also judged on the 4h tape. A swing is held when the 15m families are majority-against. None of these mint a ticket."
     }
   ]
 }

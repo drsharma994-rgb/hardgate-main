@@ -957,14 +957,16 @@ function runGoldPineScan(bars, ctx){
     }
   }catch(eFS){}
   try{
-    var blk = gfn('pineGoldBlocksLead'), formHold = gfn('pineGoldFormHold'), stFn = gfn('pineGoldLayerStates'), tape = gfn('pineGoldTapeVeto');
-    function holdPine(list, rows, mode){
+    var blk = gfn('pineGoldBlocksLead'), formHold = gfn('pineGoldFormHold'), htfHold = gfn('pineGoldHtfHold'), stFn = gfn('pineGoldLayerStates'), tape = gfn('pineGoldTapeVeto');
+    function holdPine(list, rows, mode, otherRows){
       if (!list || !rows || !rows.length) return;
       var ps = stFn ? stFn(rows) : null;
+      var other = (stFn && otherRows && otherRows.length >= 60) ? stFn(otherRows) : null;
       for (var z = 0; z < list.length; z++){
         if (!list[z] || list[z].recordOnly || list[z].demoted) continue;
         var why = (blk && ps && ps.ok === true) ? blk(ps, list[z].dir) : null;
         if (!why && formHold && ps && ps.ok === true) why = formHold(ps, list[z].dir);
+        if (!why && htfHold && other && other.ok === true) why = htfHold(other, list[z].dir, mode);
         if (!why && tape){
           try{
             why = tape(rows, list[z].dir, { mode: mode, now: Date.now(), macro: macro, silverRows: W.__hgSilverRows || null });
@@ -976,8 +978,8 @@ function runGoldPineScan(bars, ctx){
         list[z].demotedWhy = why;
       }
     }
-    holdPine(swing, bars && bars.rows4h, 'swing');
-    holdPine(scalp, bars && bars.rows15m, 'scalp');
+    holdPine(swing, bars && bars.rows4h, 'swing', bars && bars.rows15m);
+    holdPine(scalp, bars && bars.rows15m, 'scalp', bars && bars.rows4h);
     if (typeof W.hgGoldInstApply === 'function'){
       W.hgGoldInstApply(scalp, bars && bars.rows15m, macro, { desk: 'goldpine', horizon: 'scalp' });
       W.hgGoldInstApply(swing, bars && bars.rows15m, macro, { desk: 'goldpine', horizon: 'swing' });
