@@ -2822,6 +2822,13 @@ function pineGoldTapeVeto(rows, dir, opts){
   if (wkWhy) return wkWhy;
   var diWhy = pineGoldDiCrossVeto(rows, dir);
   if (diWhy) return diWhy;
+  var shWhy = pineGoldShanghaiHourVeto(rows, dir);
+  if (shWhy) return shWhy;
+  try{
+    var woFn = gfn('hgGoldWeeklyOpen');
+    var wo = woFn ? woFn(rows) : null;
+    if (wo && (wo.dir === 'long' || wo.dir === 'short') && wo.dir !== dir) return wo.why || 'The weekly open was swept against this trade.';
+  }catch(eWo){}
   return null;
 }
 function pineGoldSessionDayOk(rows){
@@ -3768,6 +3775,41 @@ function pineGoldLondonHourVeto(rows, dir){
   if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
   if (dir === 'long' && h > hi && c <= hi && c < o) return 'The London open hour was pierced and closed back under.';
   if (dir === 'short' && l < lo && c >= lo && c > o) return 'The London open hour was pierced and closed back over.';
+  return null;
+}
+/* Shanghai morning, 01:00–02:00 UTC. Gold's Asian benchmark prints in that
+   hour. A later bar that wicks through it and closes back does not pass.
+   A day with no bar in the hour, or a hour under $3, does not refuse. */
+function pineGoldShanghaiHourVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 2) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 1 || hv >= 2) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The Shanghai hour was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The Shanghai hour was pierced and closed back over.';
   return null;
 }
 /* The 50 EMA. Losing it on this bar does not pass. A close already through it does not refuse. */
@@ -5259,7 +5301,7 @@ function pineGoldStackLineHtml(states, marks){
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE a market structure of higher highs and higher lows, or the reverse, holds a lead that opposes it. So does a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when they are extended and that stack does not confirm. A TD9 completion holds the bar it prints on. A 40-bar regression with |t| of 2 or more holds a lead that fights it. An ATR spike holds a lead only when that regression does not confirm the direction. The tally gates nothing.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE a market structure of higher highs and higher lows, or the reverse, holds a lead that opposes it. So does a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when they are extended and that stack does not confirm. A TD9 completion holds the bar it prints on. A 40-bar regression with |t| of 2 or more holds a lead that fights it. An ATR spike holds a lead only when that regression does not confirm the direction. The Shanghai hour and a weekly-open sweep hold a lead when price wicks through and closes back against it. The tally gates nothing.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }
@@ -5362,6 +5404,7 @@ G.pineGoldR2Veto = pineGoldR2Veto;
 G.pineGoldKijunVeto = pineGoldKijunVeto;
 G.pineGoldMacdVeto = pineGoldMacdVeto;
 G.pineGoldLondonHourVeto = pineGoldLondonHourVeto;
+G.pineGoldShanghaiHourVeto = pineGoldShanghaiHourVeto;
 G.pineGoldEma50Veto = pineGoldEma50Veto;
 G.pineGoldTd9Veto = pineGoldTd9Veto;
 G.pineGoldComexHourVeto = pineGoldComexHourVeto;
@@ -5437,6 +5480,7 @@ if (typeof module !== 'undefined' && module.exports){
     /* hg-v1171 */
     pineGoldWilliamsReentry, pineGoldTrixCross, pineGoldFisherZero,
     pineGoldAdxDi, pineGoldHeikin, pineGoldSessVwap, pineGoldBlocksLead, pineGoldFormHold, pineGoldHtfHold, pineGoldTapeVeto,
+    pineGoldShanghaiHourVeto,
     pineGoldQqe, pineGoldSqueezeFire, pineGoldWeeklyAvwap, pineGoldEfficiency,
     pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries,
     /* hg-v1202 */
