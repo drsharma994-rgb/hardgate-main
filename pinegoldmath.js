@@ -2082,7 +2082,8 @@ function pgrSideOf(a, b){
    A missing read stays null. Equality stays null. These cannot mint. */
 function pineGoldFormRead(rows){
   var blank = { vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null,
-    ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null };
+    ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null,
+    alligator: null, rvi: null, bop: null, alma: null, kst: null, mcginley: null, rsi50: null };
   if (!rows || rows.length < 60) return blank;
   var i = rows.length - 1, c = pgrNum(rows[i].c);
   if (!isFinite(c)) return blank;
@@ -2185,6 +2186,42 @@ function pineGoldFormRead(rows){
     var sma20 = pgrSmaAt(closes, i, 20);
     if (isFinite(sma20) && isFinite(closes[i - 10])) blank.dpo = pgrSideOf(closes[i - 10] - sma20, 0);
   }
+  if (i >= 21){
+    var sm5 = pgrSmmaSeries(hl2, 5), sm8 = pgrSmmaSeries(hl2, 8), sm13 = pgrSmmaSeries(hl2, 13);
+    var lips = sm5[i - 3], teeth = sm8[i - 5], jaw = sm13[i - 8];
+    if (isFinite(lips) && isFinite(teeth) && isFinite(jaw)){
+      if (lips > teeth && teeth > jaw) blank.alligator = 'long';
+      else if (lips < teeth && teeth < jaw) blank.alligator = 'short';
+    }
+  }
+  if (i >= 12){
+    var rv = [pgrRviAt(rows, closes, i), pgrRviAt(rows, closes, i - 1), pgrRviAt(rows, closes, i - 2), pgrRviAt(rows, closes, i - 3)];
+    if (rv.every(isFinite)){
+      var sig = (rv[0] + (2 * rv[1]) + (2 * rv[2]) + rv[3]) / 6;
+      blank.rvi = pgrSideOf(rv[0], sig);
+    }
+  }
+  if (i >= 9){
+    var bsum = 0, bn = 0, bk;
+    for (bk = i - 9; bk <= i; bk++){
+      var bh = pgrNum(rows[bk].h), bl = pgrNum(rows[bk].l), br = bh - bl;
+      if (!(br > 0)) continue;
+      bsum += (closes[bk] - pgrNum(rows[bk].o)) / br;
+      bn++;
+    }
+    if (bn >= 8) blank.bop = pgrSideOf(bsum / bn, 0);
+  }
+  if (i >= 19) blank.alma = pgrSideOf(c, pgrAlmaAt(closes, i, 20, 0.85, 6));
+  if (i >= 44){
+    var k1 = pgrSmaOfRoc(closes, i, 10, 10), k2 = pgrSmaOfRoc(closes, i, 15, 10);
+    var k3 = pgrSmaOfRoc(closes, i, 20, 10), k4 = pgrSmaOfRoc(closes, i, 30, 15);
+    if (isFinite(k1) && isFinite(k2) && isFinite(k3) && isFinite(k4)) blank.kst = pgrSideOf(k1 + (2 * k2) + (3 * k3) + (4 * k4), 0);
+  }
+  if (rows.length >= 20){
+    var md = pgrMcginleyAt(closes, 14);
+    if (isFinite(md)) blank.mcginley = pgrSideOf(c, md);
+  }
+  if (i >= 14) blank.rsi50 = pgrSideOf(pgrRsiAt(closes, i, 14), 50);
   return blank;
 }
 function pgrSmaAt(values, i, n){
@@ -2209,6 +2246,79 @@ function pgrRsiAt(closes, i, n){
   if (!(l > 0)) return 100;
   var rs = g / l;
   return 100 - (100 / (1 + rs));
+}
+function pgrSmmaSeries(values, n){
+  var out = new Array(values.length), prev = null, i;
+  for (i = 0; i < values.length; i++){
+    var v = pgrNum(values[i]);
+    if (!isFinite(v)){ out[i] = NaN; continue; }
+    if (prev == null){
+      if (i < n - 1){ out[i] = NaN; continue; }
+      var s = 0, ok = true, j;
+      for (j = i - n + 1; j <= i; j++){
+        var x = pgrNum(values[j]);
+        if (!isFinite(x)) ok = false;
+        else s += x;
+      }
+      prev = ok ? s / n : null;
+      out[i] = prev == null ? NaN : prev;
+    } else {
+      prev = ((prev * (n - 1)) + v) / n;
+      out[i] = prev;
+    }
+  }
+  return out;
+}
+function pgrRviAt(rows, closes, i){
+  if (i < 9) return NaN;
+  var co = 0, hl = 0, k;
+  for (k = i - 9; k <= i; k++){
+    var o = pgrNum(rows[k].o), h = pgrNum(rows[k].h), l = pgrNum(rows[k].l), c = closes[k];
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return NaN;
+    co += c - o;
+    hl += h - l;
+  }
+  if (!(hl > 0)) return 0;
+  return co / hl;
+}
+function pgrAlmaAt(values, i, n, offset, sigma){
+  if (i < n - 1) return NaN;
+  var m = offset * (n - 1), s = n / sigma, wsum = 0, vsum = 0, k;
+  for (k = 0; k < n; k++){
+    var v = pgrNum(values[i - n + 1 + k]);
+    if (!isFinite(v)) return NaN;
+    var w = Math.exp(-((k - m) * (k - m)) / (2 * s * s));
+    wsum += w;
+    vsum += w * v;
+  }
+  return wsum ? vsum / wsum : NaN;
+}
+function pgrRocAt(closes, i, n){
+  if (i < n || !isFinite(closes[i]) || !isFinite(closes[i - n]) || closes[i - n] === 0) return NaN;
+  return ((closes[i] - closes[i - n]) / closes[i - n]) * 100;
+}
+function pgrSmaOfRoc(closes, i, rocN, smaN){
+  if (i < rocN + smaN - 1) return NaN;
+  var s = 0, k, r;
+  for (k = i - smaN + 1; k <= i; k++){
+    r = pgrRocAt(closes, k, rocN);
+    if (!isFinite(r)) return NaN;
+    s += r;
+  }
+  return s / smaN;
+}
+function pgrMcginleyAt(closes, n){
+  var seed = pgrSmaAt(closes, n - 1, n), i, prev;
+  if (!isFinite(seed) || seed === 0) return NaN;
+  prev = seed;
+  for (i = n; i < closes.length; i++){
+    var p = closes[i];
+    if (!isFinite(p) || p === 0 || prev === 0) return NaN;
+    var den = n * Math.pow(p / prev, 4);
+    if (!isFinite(den) || den === 0) return NaN;
+    prev = prev + ((p - prev) / den);
+  }
+  return prev;
 }
 function pineGoldBlocksLead(states, dir){
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
@@ -2255,6 +2365,8 @@ function pineGoldFormHold(states, dir){
   if (fr >= 5 && fa > fw) return 'formation Pine scripts disagree (' + fw + ' with, ' + fa + ' against)';
   var pace = pgrFamilyHold(states, dir, PINE_GOLD_PACE_IDS, 4);
   if (pace) return 'pace Pine scripts disagree (' + pace + ')';
+  var prime = pgrFamilyConfirm(states, dir, PINE_GOLD_PRIME_IDS, 4);
+  if (prime) return 'prime Pine scripts do not confirm (' + prime + ')';
   return null;
 }
 function pgrFamilyHold(states, dir, ids, need){
@@ -2266,6 +2378,17 @@ function pgrFamilyHold(states, dir, ids, need){
     else if (v === 'long' || v === 'short'){ a++; r++; }
   }
   if (r >= need && a > w) return w + ' with, ' + a + ' against';
+  return null;
+}
+function pgrFamilyConfirm(states, dir, ids, need){
+  if (!ids) return null;
+  var w = 0, a = 0, r = 0, i, v;
+  for (i = 0; i < ids.length; i++){
+    v = states[ids[i]];
+    if (v === dir){ w++; r++; }
+    else if (v === 'long' || v === 'short'){ a++; r++; }
+  }
+  if (r >= need && w <= a) return w + ' with, ' + a + ' against';
   return null;
 }
 
@@ -4466,6 +4589,8 @@ function pineGoldLayerStates(rows){
               vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null,
               /* hg-v1408 pace family */
               ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null,
+              /* hg-v1409 prime family: must confirm a GOLD PINE lead */
+              alligator: null, rvi: null, bop: null, alma: null, kst: null, mcginley: null, rsi50: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -4741,6 +4866,8 @@ function pineGoldLayerStates(rows){
         out.boll = formed.boll; out.chop = formed.chop;
         out.ao = formed.ao; out.uo = formed.uo; out.tsi = formed.tsi; out.roc = formed.roc;
         out.ssl = formed.ssl; out.stochrsi = formed.stochrsi; out.dpo = formed.dpo;
+        out.alligator = formed.alligator; out.rvi = formed.rvi; out.bop = formed.bop;
+        out.alma = formed.alma; out.kst = formed.kst; out.mcginley = formed.mcginley; out.rsi50 = formed.rsi50;
       }
     }catch(eForm){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
@@ -4773,8 +4900,14 @@ var PINE_GOLD_FORM_LABEL = {
   vortex: 'Vortex', dema: 'DEMA 21/55', linreg: 'Linreg 20', elder: 'Elder Ray',
   ribbon: 'EMA 50/200', cmo: 'CMO 14', boll: 'Bollinger mid',
   ao: 'Awesome Osc', uo: 'Ultimate Osc', tsi: 'TSI', roc: 'ROC 12',
-  ssl: 'SSL channel', stochrsi: 'Stoch RSI', dpo: 'DPO 20'
+  ssl: 'SSL channel', stochrsi: 'Stoch RSI', dpo: 'DPO 20',
+  alligator: 'Alligator', rvi: 'RVI', bop: 'Balance of Power', alma: 'ALMA 20',
+  kst: 'KST', mcginley: 'McGinley 14', rsi50: 'RSI 50'
 };
+/* hg-v1409: a third family. A GOLD PINE lead needs these to confirm when
+   four of them read. A split or a majority against holds the ticket.
+   They cannot mint. */
+var PINE_GOLD_PRIME_IDS = ['alligator', 'rvi', 'bop', 'alma', 'kst', 'mcginley', 'rsi50'];
 /* hg-v1408: a second family. Counted on its own so the first seven cannot
    outvote it. Cannot mint. GOLD PINE holds when four read and more oppose. */
 var PINE_GOLD_PACE_IDS = ['ao', 'uo', 'tsi', 'roc', 'ssl', 'stochrsi', 'dpo'];
@@ -4796,6 +4929,10 @@ function pineGoldPineMarks(states, dir){
   PINE_GOLD_PACE_IDS.forEach(function(id){
     var pv = states[id];
     if (pv === 'long' || pv === 'short') m['pine:' + id + 'With'] = (pv === dir);
+  });
+  PINE_GOLD_PRIME_IDS.forEach(function(id){
+    var qv = states[id];
+    if (qv === 'long' || qv === 'short') m['pine:' + id + 'With'] = (qv === dir);
   });
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
   var againstN = dir === 'long' ? states.agreeShort : states.agreeLong;
@@ -4841,12 +4978,18 @@ function pineGoldStackLineHtml(states, marks){
       var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
       cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — pace family, can hold a GOLD PINE lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
     });
+    PINE_GOLD_PRIME_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — prime family, must confirm a GOLD PINE lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
     var mj = marks['pine:majorityWith'];
     var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE the Vortex family holds a lead when five read and more oppose, the Awesome / Ultimate / TSI / ROC / SSL / Stoch RSI / DPO family holds a lead when four read and more oppose, the wider record-layer stack holds a lead the same way, and choppiness above 61.8 holds a lead on its own.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE the Vortex family and the pace family hold a lead when more oppose than agree, the wider record-layer stack holds a lead the same way, choppiness above 61.8 holds a lead on its own, and Alligator, RVI, Balance of Power, ALMA, KST, McGinley and RSI 50 must confirm when four of them read.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }

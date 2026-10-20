@@ -485,6 +485,11 @@
       "version": "hg-v1408",
       "built": "2026-10-20T01:30:00Z",
       "note": "GOLD PINE adds a second Pine family: Awesome Oscillator, Ultimate Oscillator, TSI, ROC 12, SSL channel, Stoch RSI and DPO. They cannot mint a ticket. The lead is held when four of them read a side and more oppose than agree, on top of the Vortex family and the wider stack."
+    },
+    {
+      "version": "hg-v1409",
+      "built": "2026-10-20T01:45:00Z",
+      "note": "GOLD PINE adds a confirmation family: Alligator, RVI, Balance of Power, ALMA 20, KST, McGinley Dynamic and RSI versus 50. They cannot mint a ticket. When four of them read, the lead is held unless more of them agree than oppose."
     }
   ]
 }
