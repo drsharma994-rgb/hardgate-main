@@ -495,6 +495,11 @@
       "version": "hg-v1410",
       "built": "2026-10-20T02:05:00Z",
       "note": "GOLD PINE reads the standing EMA 8-55 ribbon, MACD against zero, the histogram, PSAR, stochastic and the EMA21 slope, plus RSI swing divergence. A scalp is also judged on the 4h tape. A swing is held when the 15m families are majority-against. None of these mint a ticket."
+    },
+    {
+      "version": "hg-v1411",
+      "built": "2026-10-20T02:20:00Z",
+      "note": "GOLD PINE holds a lead against swing structure (higher highs and higher lows, or the reverse) and against a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when extended and neither structure nor that stack confirms. A TD9 completion holds the bar it prints on. None of these mint a ticket."
     }
   ]
 }

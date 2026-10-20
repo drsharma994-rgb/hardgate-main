@@ -2084,7 +2084,8 @@ function pineGoldFormRead(rows){
   var blank = { vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null,
     ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null,
     alligator: null, rvi: null, bop: null, alma: null, kst: null, mcginley: null, rsi50: null,
-    stack5: null, macdZero: null, macdHist: null, psarStand: null, stochStand: null, emaSlope: null, rsiDiv: null };
+    stack5: null, macdZero: null, macdHist: null, psarStand: null, stochStand: null, emaSlope: null, rsiDiv: null,
+    structure: null, goldEma: null, laguerre: null, lrsi: null, rsi3: null, tdBuy: 0, tdSell: 0 };
   if (!rows || rows.length < 60) return blank;
   var i = rows.length - 1, c = pgrNum(rows[i].c);
   if (!isFinite(c)) return blank;
@@ -2210,6 +2211,20 @@ function pineGoldFormRead(rows){
     if (stoch) blank.stochStand = pgrSideOf(stoch.k[i], stoch.d[i]);
   }catch(eSt){}
   blank.rsiDiv = pgrRsiDivergence(rows, closes);
+  blank.structure = pgrSwingStructure(rows);
+  if (rows.length >= 200){
+    var ge20 = pgrEmaSeries(closes, 20), ge50 = pgrEmaSeries(closes, 50), ge200 = pgrEmaSeries(closes, 200);
+    if (isFinite(ge20[i]) && isFinite(ge50[i]) && isFinite(ge200[i])){
+      if (ge20[i] > ge50[i] && ge50[i] > ge200[i] && c > ge200[i]) blank.goldEma = 'long';
+      else if (ge20[i] < ge50[i] && ge50[i] < ge200[i] && c < ge200[i]) blank.goldEma = 'short';
+    }
+  }
+  var lr = pgrLaguerre(closes, 0.5);
+  if (isFinite(lr)){ blank.lrsi = lr; blank.laguerre = pgrSideOf(lr, 50); }
+  var r3 = pgrRsiAt(closes, i, 3);
+  if (isFinite(r3)) blank.rsi3 = r3;
+  var td = pgrTdSetup(closes);
+  blank.tdBuy = td.buy; blank.tdSell = td.sell;
   if (i >= 21){
     var sm5 = pgrSmmaSeries(hl2, 5), sm8 = pgrSmmaSeries(hl2, 8), sm13 = pgrSmmaSeries(hl2, 13);
     var lips = sm5[i - 3], teeth = sm8[i - 5], jaw = sm13[i - 8];
@@ -2376,6 +2391,55 @@ function pgrRsiDivergence(rows, closes){
   if (bear === bull) return null;
   return bear ? 'short' : 'long';
 }
+function pgrSwingStructure(rows){
+  var i = rows.length - 1;
+  function pivots(kind){
+    var out = [], k, left = 3, right = 3, j;
+    for (k = i - right; k >= left && out.length < 2; k--){
+      var v = pgrNum(kind === 'h' ? rows[k].h : rows[k].l);
+      if (!isFinite(v)) continue;
+      var ok = true;
+      for (j = k - left; j <= k + right; j++){
+        if (j === k) continue;
+        var o = pgrNum(kind === 'h' ? rows[j].h : rows[j].l);
+        if (!isFinite(o) || (kind === 'h' ? !(v > o) : !(v < o))) ok = false;
+      }
+      if (ok) out.push(v);
+    }
+    return out;
+  }
+  var hs = pivots('h'), ls = pivots('l');
+  if (hs.length < 2 || ls.length < 2) return null;
+  if (hs[0] > hs[1] && ls[0] > ls[1]) return 'long';
+  if (hs[0] < hs[1] && ls[0] < ls[1]) return 'short';
+  return null;
+}
+function pgrLaguerre(closes, gamma){
+  var l0 = closes[0], l1 = closes[0], l2 = closes[0], l3 = closes[0], i, out = NaN;
+  if (!isFinite(l0)) return NaN;
+  for (i = 0; i < closes.length; i++){
+    var p = closes[i];
+    if (!isFinite(p)) continue;
+    var L0 = ((1 - gamma) * p) + (gamma * l0);
+    var L1 = ((-gamma) * L0) + l0 + (gamma * l1);
+    var L2 = ((-gamma) * L1) + l1 + (gamma * l2);
+    var L3 = ((-gamma) * L2) + l2 + (gamma * l3);
+    l0 = L0; l1 = L1; l2 = L2; l3 = L3;
+    var cu = Math.max(L0 - L1, 0) + Math.max(L1 - L2, 0) + Math.max(L2 - L3, 0);
+    var cd = Math.max(L1 - L0, 0) + Math.max(L2 - L1, 0) + Math.max(L3 - L2, 0);
+    if (cu + cd > 0) out = (100 * cu) / (cu + cd);
+  }
+  return out;
+}
+function pgrTdSetup(closes){
+  var sell = 0, buy = 0, t;
+  for (t = 4; t < closes.length; t++){
+    if (!isFinite(closes[t]) || !isFinite(closes[t - 4])){ sell = 0; buy = 0; continue; }
+    if (closes[t] > closes[t - 4]) sell++; else sell = 0;
+    if (closes[t] < closes[t - 4]) buy++; else buy = 0;
+  }
+  return { buy: buy, sell: sell };
+}
 function pineGoldBlocksLead(states, dir){
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
@@ -2426,6 +2490,17 @@ function pineGoldFormHold(states, dir){
   var depth = pgrFamilyHold(states, dir, PINE_GOLD_DEPTH_IDS, 4);
   if (depth) return 'standing Pine scripts disagree (' + depth + ')';
   if ((states.rsiDiv === 'long' || states.rsiDiv === 'short') && states.rsiDiv !== dir) return 'RSI divergence against the lead';
+  if ((states.structure === 'long' || states.structure === 'short') && states.structure !== dir){
+    return 'market structure is ' + (states.structure === 'long' ? 'higher highs and higher lows' : 'lower highs and lower lows');
+  }
+  if ((states.goldEma === 'long' || states.goldEma === 'short') && states.goldEma !== dir) return 'EMA 20/50/200 stack is against';
+  if (dir === 'long' && states.tdSell === 9) return 'TD sell setup completed on this bar';
+  if (dir === 'short' && states.tdBuy === 9) return 'TD buy setup completed on this bar';
+  var backed = states.structure === dir || states.goldEma === dir;
+  if (!backed && dir === 'long' && isFinite(states.lrsi) && states.lrsi >= 80) return 'Laguerre RSI is extended and neither structure nor the EMA stack confirms (' + states.lrsi.toFixed(0) + ')';
+  if (!backed && dir === 'short' && isFinite(states.lrsi) && states.lrsi <= 20) return 'Laguerre RSI is washed out and neither structure nor the EMA stack confirms (' + states.lrsi.toFixed(0) + ')';
+  if (!backed && dir === 'long' && isFinite(states.rsi3) && states.rsi3 >= 85) return 'RSI(3) is extended and neither structure nor the EMA stack confirms (' + states.rsi3.toFixed(0) + ')';
+  if (!backed && dir === 'short' && isFinite(states.rsi3) && states.rsi3 <= 15) return 'RSI(3) is washed out and neither structure nor the EMA stack confirms (' + states.rsi3.toFixed(0) + ')';
   return null;
 }
 function pgrFamilyHold(states, dir, ids, need){
@@ -4676,6 +4751,8 @@ function pineGoldLayerStates(rows){
               alligator: null, rvi: null, bop: null, alma: null, kst: null, mcginley: null, rsi50: null,
               /* hg-v1410 standing sides and RSI divergence */
               stack5: null, macdZero: null, macdHist: null, psarStand: null, stochStand: null, emaSlope: null, rsiDiv: null,
+              /* hg-v1411 researched gold filters */
+              structure: null, goldEma: null, laguerre: null, lrsi: null, rsi3: null, tdBuy: 0, tdSell: 0,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -4955,6 +5032,8 @@ function pineGoldLayerStates(rows){
         out.alma = formed.alma; out.kst = formed.kst; out.mcginley = formed.mcginley; out.rsi50 = formed.rsi50;
         out.stack5 = formed.stack5; out.macdZero = formed.macdZero; out.macdHist = formed.macdHist;
         out.psarStand = formed.psarStand; out.stochStand = formed.stochStand; out.emaSlope = formed.emaSlope; out.rsiDiv = formed.rsiDiv;
+        out.structure = formed.structure; out.goldEma = formed.goldEma; out.laguerre = formed.laguerre;
+        out.lrsi = formed.lrsi; out.rsi3 = formed.rsi3; out.tdBuy = formed.tdBuy; out.tdSell = formed.tdSell;
       }
     }catch(eForm){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
@@ -4991,7 +5070,8 @@ var PINE_GOLD_FORM_LABEL = {
   alligator: 'Alligator', rvi: 'RVI', bop: 'Balance of Power', alma: 'ALMA 20',
   kst: 'KST', mcginley: 'McGinley 14', rsi50: 'RSI 50',
   stack5: 'EMA 8-55', macdZero: 'MACD zero', macdHist: 'MACD hist',
-  psarStand: 'PSAR side', stochStand: 'Stoch side', emaSlope: 'EMA21 slope'
+  psarStand: 'PSAR side', stochStand: 'Stoch side', emaSlope: 'EMA21 slope',
+  structure: 'Structure', goldEma: 'EMA 20/50/200', laguerre: 'Laguerre RSI'
 };
 /* hg-v1409: a third family. A GOLD PINE lead needs these to confirm when
    four of them read. A split or a majority against holds the ticket.
@@ -5001,6 +5081,7 @@ var PINE_GOLD_PRIME_IDS = ['alligator', 'rvi', 'bop', 'alma', 'kst', 'mcginley',
    MACD against zero, the histogram, PSAR and stochastic. Four must read
    and more must oppose before they hold a GOLD PINE lead. */
 var PINE_GOLD_DEPTH_IDS = ['stack5', 'macdZero', 'macdHist', 'psarStand', 'stochStand', 'emaSlope'];
+var PINE_GOLD_RESEARCH_IDS = ['structure', 'goldEma', 'laguerre'];
 /* hg-v1408: a second family. Counted on its own so the first seven cannot
    outvote it. Cannot mint. GOLD PINE holds when four read and more oppose. */
 var PINE_GOLD_PACE_IDS = ['ao', 'uo', 'tsi', 'roc', 'ssl', 'stochrsi', 'dpo'];
@@ -5032,6 +5113,10 @@ function pineGoldPineMarks(states, dir){
     if (dv === 'long' || dv === 'short') m['pine:' + id + 'With'] = (dv === dir);
   });
   if (states.rsiDiv === 'long' || states.rsiDiv === 'short') m['pine:rsiDivWith'] = (states.rsiDiv === dir);
+  PINE_GOLD_RESEARCH_IDS.forEach(function(id){
+    var rv = states[id];
+    if (rv === 'long' || rv === 'short') m['pine:' + id + 'With'] = (rv === dir);
+  });
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
   var againstN = dir === 'long' ? states.agreeShort : states.agreeLong;
   if (withN >= PINE_GOLD_MAJORITY) m['pine:majorityWith'] = true;
@@ -5092,12 +5177,21 @@ function pineGoldStackLineHtml(states, marks){
       var dMk = marks['pine:rsiDivWith'];
       cells += '<span class="gsx-ind gsx-stateonly ' + (dMk === true ? 'ok' : (dMk === false ? 'no' : 'na')) + '" title="' + e('pine:rsiDivWith — RSI swing divergence, can hold a GOLD PINE lead') + '" style="border-style:dashed"><b>RSI div</b> ' + e(states.rsiDiv.toUpperCase()) + '</span>';
     }
+    PINE_GOLD_RESEARCH_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      if (id === 'laguerre' && isFinite(states.lrsi)) tag = (v ? v.toUpperCase() : 'MID') + ' ' + states.lrsi.toFixed(0);
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — researched gold filter, can hold a lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
+    if (isFinite(states.rsi3)) cells += '<span class="gsx-ind gsx-stateonly na" title="RSI(3). An extended read holds a lead only when the EMA 20/50/200 stack does not confirm." style="border-style:dashed"><b>RSI 3</b> ' + e(states.rsi3.toFixed(0)) + '</span>';
+    if (states.tdSell === 9 || states.tdBuy === 9) cells += '<span class="gsx-ind gsx-stateonly no" title="Tom DeMark setup completed on this bar" style="border-style:dashed"><b>TD9</b> ' + (states.tdSell === 9 ? 'SELL' : 'BUY') + '</span>';
     var mj = marks['pine:majorityWith'];
     var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE a scalp is also held by the same reads on the 4h tape, and a swing is held when the 15m families are majority-against. The EMA 8-55 ribbon, standing MACD, PSAR and stochastic hold a lead when four read and more oppose, and an RSI divergence holds a lead on its own.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE a market structure of higher highs and higher lows, or the reverse, holds a lead that opposes it. So does a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when they are extended and that stack does not confirm. A TD9 completion holds the bar it prints on.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }
