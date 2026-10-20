@@ -2081,7 +2081,8 @@ function pgrSideOf(a, b){
    Chande momentum, close against the Bollinger midline, and choppiness.
    A missing read stays null. Equality stays null. These cannot mint. */
 function pineGoldFormRead(rows){
-  var blank = { vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null };
+  var blank = { vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null,
+    ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null };
   if (!rows || rows.length < 60) return blank;
   var i = rows.length - 1, c = pgrNum(rows[i].c);
   if (!isFinite(c)) return blank;
@@ -2145,7 +2146,69 @@ function pineGoldFormRead(rows){
     }
     if (gain + loss > 0) blank.cmo = pgrSideOf(gain - loss, 0);
   }
+  var hl2 = rows.map(function(r){ return (pgrNum(r.h) + pgrNum(r.l)) / 2; });
+  if (i >= 33) blank.ao = pgrSideOf(pgrSmaAt(hl2, i, 5), pgrSmaAt(hl2, i, 34));
+  if (i >= 28){
+    var bp = function(len){
+      var b = 0, tr = 0, k;
+      for (k = i - len + 1; k <= i; k++){
+        var pc = closes[k - 1], lo = Math.min(pgrNum(rows[k].l), pc), hi = Math.max(pgrNum(rows[k].h), pc);
+        b += closes[k] - lo; tr += hi - lo;
+      }
+      return tr > 0 ? b / tr : NaN;
+    };
+    var a7 = bp(7), a14 = bp(14), a28 = bp(28);
+    if (isFinite(a7) && isFinite(a14) && isFinite(a28)) blank.uo = pgrSideOf((4 * a7 + 2 * a14 + a28) / 7, 0.5);
+  }
+  if (i >= 40){
+    var mom = closes.map(function(v, idx){ return idx === 0 ? NaN : v - closes[idx - 1]; });
+    var abs = mom.map(function(v){ return isFinite(v) ? Math.abs(v) : NaN; });
+    var sm = pgrEmaSeries(pgrEmaSeries(mom, 25), 13);
+    var sa = pgrEmaSeries(pgrEmaSeries(abs, 25), 13);
+    if (isFinite(sm[i]) && isFinite(sa[i]) && sa[i] !== 0) blank.tsi = pgrSideOf(sm[i] / sa[i], 0);
+  }
+  if (i >= 12) blank.roc = pgrSideOf(closes[i] - closes[i - 12], 0);
+  if (i >= 9){
+    var highs = rows.map(function(r){ return pgrNum(r.h); });
+    var lows = rows.map(function(r){ return pgrNum(r.l); });
+    var sh = pgrSmaAt(highs, i, 10), sl = pgrSmaAt(lows, i, 10);
+    if (isFinite(sh) && c > sh) blank.ssl = 'long';
+    else if (isFinite(sl) && c < sl) blank.ssl = 'short';
+  }
+  if (i >= 28){
+    var rsi = [], r;
+    for (r = i - 13; r <= i; r++) rsi.push(pgrRsiAt(closes, r, 14));
+    var hiR = Math.max.apply(null, rsi), loR = Math.min.apply(null, rsi);
+    if (isFinite(hiR) && isFinite(loR) && hiR > loR) blank.stochrsi = pgrSideOf((rsi[rsi.length - 1] - loR) / (hiR - loR), 0.5);
+  }
+  if (i >= 30){
+    var sma20 = pgrSmaAt(closes, i, 20);
+    if (isFinite(sma20) && isFinite(closes[i - 10])) blank.dpo = pgrSideOf(closes[i - 10] - sma20, 0);
+  }
   return blank;
+}
+function pgrSmaAt(values, i, n){
+  if (i < n - 1) return NaN;
+  var s = 0, k;
+  for (k = i - n + 1; k <= i; k++){
+    var v = pgrNum(values[k]);
+    if (!isFinite(v)) return NaN;
+    s += v;
+  }
+  return s / n;
+}
+function pgrRsiAt(closes, i, n){
+  if (i < n) return NaN;
+  var g = 0, l = 0, k, d;
+  for (k = i - n + 1; k <= i; k++){
+    d = closes[k] - closes[k - 1];
+    if (d > 0) g += d;
+    else if (d < 0) l -= d;
+  }
+  if (!(g + l > 0)) return 50;
+  if (!(l > 0)) return 100;
+  var rs = g / l;
+  return 100 - (100 / (1 + rs));
 }
 function pineGoldBlocksLead(states, dir){
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
@@ -2169,11 +2232,10 @@ function pineGoldBlocksLead(states, dir){
   if (states.squeezeOn === true && isFinite(states.efficiencyEr) && states.efficiencyEr < 0.22 && withN < PINE_GOLD_MAJORITY) return 'squeeze on with no trend efficiency';
   return null;
 }
-/* hg-v1407: GOLD PINE only. The wider record-layer stack and seven more Pine
-   reads cannot mint a ticket. This desk holds a lead when most of the
-   record-layer sides oppose it, when choppiness is a range, or when at least
-   five of the formation reads have a side and more of them oppose than agree.
-   Other gold desks do not call this. */
+/* hg-v1408: GOLD PINE only. The wider record-layer stack, the Vortex family and
+   the pace family (Awesome, Ultimate, TSI, ROC, SSL, Stoch RSI, DPO) cannot
+   mint a ticket. This desk holds a lead when most of a readable family oppose
+   it, or when choppiness is a range. Other gold desks do not call this. */
 function pineGoldFormHold(states, dir){
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
   var stackWith = dir === 'long' ? states.allLong : states.allShort;
@@ -2191,6 +2253,19 @@ function pineGoldFormHold(states, dir){
     else if (fv === 'long' || fv === 'short'){ fa++; fr++; }
   }
   if (fr >= 5 && fa > fw) return 'formation Pine scripts disagree (' + fw + ' with, ' + fa + ' against)';
+  var pace = pgrFamilyHold(states, dir, PINE_GOLD_PACE_IDS, 4);
+  if (pace) return 'pace Pine scripts disagree (' + pace + ')';
+  return null;
+}
+function pgrFamilyHold(states, dir, ids, need){
+  if (!ids) return null;
+  var w = 0, a = 0, r = 0, i, v;
+  for (i = 0; i < ids.length; i++){
+    v = states[ids[i]];
+    if (v === dir){ w++; r++; }
+    else if (v === 'long' || v === 'short'){ a++; r++; }
+  }
+  if (r >= need && a > w) return w + ' with, ' + a + ' against';
   return null;
 }
 
@@ -4389,6 +4464,8 @@ function pineGoldLayerStates(rows){
               /* hg-v1220 state-only (not in the record-layer table) */ vumanchuCipher: null,
               /* hg-v1407 formation family: state only, cannot mint a ticket */
               vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null,
+              /* hg-v1408 pace family */
+              ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null,
               allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
@@ -4662,6 +4739,8 @@ function pineGoldLayerStates(rows){
         out.vortex = formed.vortex; out.dema = formed.dema; out.linreg = formed.linreg;
         out.elder = formed.elder; out.ribbon = formed.ribbon; out.cmo = formed.cmo;
         out.boll = formed.boll; out.chop = formed.chop;
+        out.ao = formed.ao; out.uo = formed.uo; out.tsi = formed.tsi; out.roc = formed.roc;
+        out.ssl = formed.ssl; out.stochrsi = formed.stochrsi; out.dpo = formed.dpo;
       }
     }catch(eForm){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
@@ -4692,8 +4771,13 @@ var PINE_GOLD_STATE_ONLY_IDS = ['vumanchuCipher'];
 var PINE_GOLD_FORM_IDS = ['vortex', 'dema', 'linreg', 'elder', 'ribbon', 'cmo', 'boll'];
 var PINE_GOLD_FORM_LABEL = {
   vortex: 'Vortex', dema: 'DEMA 21/55', linreg: 'Linreg 20', elder: 'Elder Ray',
-  ribbon: 'EMA 50/200', cmo: 'CMO 14', boll: 'Bollinger mid'
+  ribbon: 'EMA 50/200', cmo: 'CMO 14', boll: 'Bollinger mid',
+  ao: 'Awesome Osc', uo: 'Ultimate Osc', tsi: 'TSI', roc: 'ROC 12',
+  ssl: 'SSL channel', stochrsi: 'Stoch RSI', dpo: 'DPO 20'
 };
+/* hg-v1408: a second family. Counted on its own so the first seven cannot
+   outvote it. Cannot mint. GOLD PINE holds when four read and more oppose. */
+var PINE_GOLD_PACE_IDS = ['ao', 'uo', 'tsi', 'roc', 'ssl', 'stochrsi', 'dpo'];
 function pineGoldPineMarks(states, dir){
   var m = {};
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return m;
@@ -4708,6 +4792,10 @@ function pineGoldPineMarks(states, dir){
   PINE_GOLD_FORM_IDS.forEach(function(id){
     var fv = states[id];
     if (fv === 'long' || fv === 'short') m['pine:' + id + 'With'] = (fv === dir);
+  });
+  PINE_GOLD_PACE_IDS.forEach(function(id){
+    var pv = states[id];
+    if (pv === 'long' || pv === 'short') m['pine:' + id + 'With'] = (pv === dir);
   });
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
   var againstN = dir === 'long' ? states.agreeShort : states.agreeLong;
@@ -4747,12 +4835,18 @@ function pineGoldStackLineHtml(states, marks){
       var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
       cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — can hold a lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
     });
+    PINE_GOLD_PACE_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — pace family, can hold a GOLD PINE lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
     var mj = marks['pine:majorityWith'];
     var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE, Vortex, DEMA, linreg, Elder Ray, the 50/200 ribbon, CMO and Bollinger hold a lead when five of them read and more oppose than agree, the wider record-layer stack holds a lead the same way, and choppiness above 61.8 holds a lead on its own.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE the Vortex family holds a lead when five read and more oppose, the Awesome / Ultimate / TSI / ROC / SSL / Stoch RSI / DPO family holds a lead when four read and more oppose, the wider record-layer stack holds a lead the same way, and choppiness above 61.8 holds a lead on its own.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }

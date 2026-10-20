@@ -480,6 +480,11 @@
       "version": "hg-v1407",
       "built": "2026-10-20T01:10:00Z",
       "note": "GOLD PINE uses seven more Pine reads \u2014 Vortex, DEMA 21/55, 20-bar regression slope, Elder Ray, EMA 50/200, CMO 14 and the Bollinger midline \u2014 plus choppiness. They cannot mint a ticket. A lead is held when choppiness is above 61.8, or when at least five of those reads have a side and more of them oppose the ticket than agree."
+    },
+    {
+      "version": "hg-v1408",
+      "built": "2026-10-20T01:30:00Z",
+      "note": "GOLD PINE adds a second Pine family: Awesome Oscillator, Ultimate Oscillator, TSI, ROC 12, SSL channel, Stoch RSI and DPO. They cannot mint a ticket. The lead is held when four of them read a side and more oppose than agree, on top of the Vortex family and the wider stack."
     }
   ]
 }
