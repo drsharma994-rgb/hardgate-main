@@ -14,7 +14,25 @@
    A bar that trades both stop and target is the stop — there is no bar
    magnifier. The 5% equity size and the 0.02 commission are not prices.
    Unread tape, unread clock, unread session, unread EMA or unread ATR
-   is not a setup and is not filled in. */
+   is not a setup and is not filled in.
+
+   hg-v1416: three measured stand-aside vetoes, paint-level only — no ledger,
+   no ticket, no behavior gate; the desk still mints no forward row and every
+   clause abstains when its read never landed. The first census of the desk's
+   own scan (39,939 bar-pinned reads over ~14 months of PAXG 15m, 128 walked
+   trades, -0.011R gross) measured each dropped cohort negative in BOTH time
+   halves at BOTH cost models (0.20% Binance-spot RT, 0.02% XM RT):
+   - 'weekend session': the 17:30-21:30 IST premise is a cash gold session; a
+     Saturday/Sunday print is not it (-4.68R/-5.10R spot, -0.241R/-0.432R XM).
+   - 'late session': bar open at or past 20:30 IST, the window's last hour
+     (-1.00R/-1.47R spot, -0.265R/-0.392R XM — thin narrative, the forward
+     record decides).
+   - 'stop under floor': stop under 0.20% of entry — at a 0.20% round trip the
+     costs are the whole risk (-3.01R/-3.59R spot, -0.144R/-0.152R XM).
+   Together they stand aside 70 of 128 signals; the kept 58 still resolve
+   negative at every cost model — loss-reduction, not a green book. A refused
+   cross paints its reason by recency against the last closed trade, and the
+   armed card now carries the exit it used to swallow. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
@@ -33,6 +51,11 @@ var SPEC = {
   session: '1730-2130',
   count: 400
 };
+
+/* hg-v1416 measured vetoes. Module constants, NOT SPEC keys — the SPEC
+   literals are pinned field-by-field (tests/test-puregold.mjs). */
+var STOP_FLOOR_PCT = 0.20;      /* cost-equals-1R at a 0.20% spot round trip; 10x the XM round trip */
+var LATE_SESSION_MIN = 20 * 60 + 30;  /* 20:30 IST — the measured fixed cut, not the DST-drifting London window */
 
 function isNum(x){ return typeof x === 'number' && isFinite(x); }
 
@@ -215,6 +238,7 @@ function blank(){
     lastClosedMs: null,
     stacked: null,
     lastEvent: null,
+    veto: null,
     pending: null,
     formingFill: false,
     barsHeld: null,
@@ -280,6 +304,7 @@ function pgRead(rows, nowMs){
   var pos = null;
   var pending = null;
   var lastEvent = null;
+  var veto = null;
   var pathBroken = false;
 
   for (i = 0; i < n; i++){
@@ -333,8 +358,26 @@ function pgRead(rows, nowMs){
     var mins = istMinutes(openMs);
     if (mins == null) continue;
     if (mins < SPEC.sessionStart || mins >= SPEC.sessionEnd) continue;
+    /* hg-v1416 measured vetoes, in premise order: weekend > late > floor.
+       weekendOf is hoisted below and returns null on an unread instant, so
+       === true fails open; mins is known-finite here; an unread ATR already
+       continued above, so the floor reads the same lv the paint would. A
+       refused cross never mints pending — it is recorded and painted. */
+    if (weekendOf(openMs) === true){
+      veto = { kind: 'weekend session', dir: side, signalMs: openMs, index: i };
+      continue;
+    }
+    if (mins >= LATE_SESSION_MIN){
+      veto = { kind: 'late session', dir: side, signalMs: openMs, index: i };
+      continue;
+    }
     var lv = levelsOf(side, row.c, atr[i]);
     if (!lv) continue;
+    var stopPct = Math.abs(lv.stop - row.c) / row.c * 100;
+    if (stopPct < STOP_FLOOR_PCT){
+      veto = { kind: 'stop under floor', dir: side, signalMs: openMs, stopPct: stopPct, signalClose: row.c, index: i };
+      continue;
+    }
     if (pos && pos.dir === side) continue;
     if (pending && pending.dir === side) continue;
     pending = {
@@ -346,6 +389,7 @@ function pgRead(rows, nowMs){
       atr: atr[i],
       signalMs: openMs
     };
+    veto = null;
     pathBroken = false;
   }
 
@@ -370,6 +414,7 @@ function pgRead(rows, nowMs){
     out.barsHeld = last - pos.fillIndex;
     out.weekend = weekendOf(pos.signalMs);
     out.lastEvent = null;
+    out.veto = null;
     if (pending && pending.dir !== pos.dir){
       out.pending = {
         dir: pending.dir,
@@ -394,13 +439,24 @@ function pgRead(rows, nowMs){
     out.atr = pending.atr;
     out.signalMs = pending.signalMs;
     out.weekend = weekendOf(pending.signalMs);
-    out.lastEvent = null;
+    /* hg-v1416: the armed card carries the exit it used to swallow — a cross
+       that armed on the exit bar no longer hides the closed trade. A live
+       setup still outranks a refusal, so veto stays nulled here. */
+    out.lastEvent = lastEvent;
+    out.veto = null;
     return out;
   }
 
   out.lastEvent = lastEvent;
   if (pathBroken){
     out.reason = 'path unread';
+    return out;
+  }
+  /* hg-v1416: a refused cross paints by recency against the last closed
+     trade — the fresher event is the card's reason. */
+  if (veto && (!lastEvent || veto.index >= lastEvent.index)){
+    out.veto = veto;
+    out.reason = veto.kind;
     return out;
   }
   if (lastEvent){
@@ -473,15 +529,28 @@ function pgHtml(read, meta){
         + fmt(read.pending.stop) + ' and target ' + fmt(read.pending.target)
         + ' are measured from its signal close ' + fmt(read.pending.signalClose) + '.</div>';
     }
+    /* hg-v1416: the exit this setup's signal bar swallowed is disclosed. */
+    var closedEv = '';
+    if (read.lastEvent){
+      closedEv = '<div class="note">Closed ' + (read.lastEvent.dir === 'short' ? 'SHORT' : 'LONG')
+        + ' · entry was ' + fmt(read.lastEvent.entry)
+        + ' · stop ' + fmt(read.lastEvent.stop)
+        + ' · target ' + fmt(read.lastEvent.target)
+        + ' · signal close ' + fmt(read.lastEvent.signalClose)
+        + '. That is the old trade, not this order.</div>';
+    }
     return head + '<div><b>' + side + '</b> · ' + state + '</div>'
       + '<div>' + entryLine + '</div>'
       + '<div>Stop ' + fmt(read.stop) + ' · target ' + fmt(read.target) + '</div>'
       + '<div>Signal close ' + fmt(read.signalClose) + ' at ' + esc(istLabel(read.signalMs) || 'time unread')
       + ' · ATR ' + fmt(read.atr) + '</div>'
-      + rrLine + held + wk + pend + diag + rule + '</div>';
+      + rrLine + held + wk + pend + closedEv + diag + rule + '</div>';
   }
 
   var why = {
+    'weekend session': 'The last cross printed on a weekend. The 17:30–21:30 IST premise is a cash gold session; a Saturday/Sunday PAXG print is not it. The measured weekend cohort resolved -4.68R/-5.10R at spot and -0.241R/-0.432R at XM — the largest per-trade drop in the census. No setup.',
+    'late session': 'The last cross opened inside the last hour of the window — the London PM fix / NY option-cut window. The measured late cohort resolved -1.00R/-1.47R at spot and -0.265R/-0.392R at XM, negative in both halves; the narrative is thin and the forward record decides. No setup.',
+    'stop under floor': 'The last cross measured its stop under the 0.20% floor — at a 0.20% round trip the costs are the whole risk. The measured sub-floor cohort resolved -3.01R/-3.59R at spot and -0.144R/-0.152R at XM, negative in both halves. No setup.',
     'tape unread': 'Tape unread. No entry, stop, or target.',
     'clock unread': 'Clock unread, so a closed bar cannot be told from a forming one. No setup.',
     'no closed bar': 'No closed 15m bar. The forming bar is not a signal.',
@@ -496,6 +565,17 @@ function pgHtml(read, meta){
     'no fresh cross': 'Inside the session, no fresh EMA 21/55 cross. A standing stack is not an entry.'
   };
   var line = why[read.reason] || 'No setup.';
+  var vetoNote = '';
+  if (read.veto && read.reason === read.veto.kind){
+    if (read.veto.kind === 'stop under floor'){
+      vetoNote = '<div class="note">The refused ' + (read.veto.dir === 'short' ? 'SHORT' : 'LONG')
+        + ' cross measured its stop at ' + (isNum(read.veto.stopPct) ? read.veto.stopPct.toFixed(3) : 'unread')
+        + '% of entry, under the 0.20% floor. Its signal close was ' + fmt(read.veto.signalClose) + '.</div>';
+    } else {
+      vetoNote = '<div class="note">The refused ' + (read.veto.dir === 'short' ? 'SHORT' : 'LONG')
+        + ' cross opened at ' + esc(istLabel(read.veto.signalMs) || 'time unread') + '.</div>';
+    }
+  }
   var closed = '';
   if (read.lastEvent && (read.reason === 'stopped' || read.reason === 'target hit')){
     closed = '<div class="note">Closed ' + (read.lastEvent.dir === 'short' ? 'SHORT' : 'LONG')
@@ -505,7 +585,7 @@ function pgHtml(read, meta){
       + ' · signal close ' + fmt(read.lastEvent.signalClose)
       + '. Those are the old trade, not a new order.</div>';
   }
-  return head + '<div><b>STAND ASIDE</b></div><div>' + line + '</div>' + closed + diag + rule + '</div>';
+  return head + '<div><b>STAND ASIDE</b></div><div>' + line + '</div>' + vetoNote + closed + diag + rule + '</div>';
 }
 
 var __el = null;

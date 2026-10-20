@@ -1,6 +1,14 @@
 /* PURE GOLD — the IST session EMA cross, and only that.
    Entry is the next open. Stop and target come from the signal close.
    A stack is not a cross. Unread stays unread.
+   hg-v1416 recalibration (the wave's one, minimal-diff): the build() fixture
+   wick widened 0.05 -> 1.5 so the crafted crosses measure stopPct ~0.27%,
+   above the new 0.20% admission floor; the old wick measured ~0.093% and
+   every state-machine assertion below would stand aside with 'stop under
+   floor'. Assertions self-derive stop/target from ctx.hgPureGoldAtr on the
+   fixture itself, so they are unchanged; the count is unchanged. Stamps stay
+   Monday 18:00 IST — clear of the weekend and late-session clauses. Mutation
+   proof for the floor lives in tests/test-puregold-admission-floor.mjs.
    Run: node tests/test-puregold.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -84,8 +92,8 @@ function build(dir){
     rows.push({
       t: rows.length,
       o: prev,
-      h: Math.max(prev, c) + 0.05,
-      l: Math.min(prev, c) - 0.05,
+      h: Math.max(prev, c) + 1.5,
+      l: Math.min(prev, c) - 1.5,
       c: c
     });
     prev = c;

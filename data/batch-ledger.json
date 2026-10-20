@@ -109,7 +109,7 @@
     {
       "version": "hg-v1319",
       "built": "2026-10-13T18:45:00Z",
-      "note": "CANDLE FORECAST names every remaining gold tab beside the candle pattern. OMNIGOLD DESK is driven on this tape. OPTI GOLD counts only a live open or waiting setup from its last scan. NEW GOLD counts only when its own three legs fire, and that level is not the stop. SUPER GOLD counts only a scan already on the page. MILLI GOLD is named and has no side. An unscanned or unloaded engine stays unread and is never agreement. A confluence ticket \u2014 a named candle pattern, two families with the call, none against \u2014 becomes the setup, including on the scalp bracket. The stop stays the pattern extreme or one ATR. Tab prices are not the stop. Four more candle shapes are named beside the call and do not vote: matching high and low, separating lines, stick sandwich, and upside-gap two crows."
+      "note": "CANDLE FORECAST names every remaining gold tab beside the candle pattern. OMNIGOLD DESK is driven on this tape. OPTI GOLD counts only a live open or waiting setup from its last scan. NEW GOLD counts only when its own three legs fire, and that level is not the stop. SUPER GOLD counts only a scan already on the page. MILLI GOLD is named and has no side. An unscanned or unloaded engine stays unread and is never agreement. A confluence ticket — a named candle pattern, two families with the call, none against — becomes the setup, including on the scalp bracket. The stop stays the pattern extreme or one ATR. Tab prices are not the stop. Four more candle shapes are named beside the call and do not vote: matching high and low, separating lines, stick sandwich, and upside-gap two crows."
     },
     {
       "version": "hg-v1320",
@@ -269,7 +269,7 @@
     {
       "version": "hg-v1360",
       "built": "2026-10-15T00:30:00Z",
-      "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR \u2014 a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
+      "note": "CANDLE FORECAST's intelligence layer deepens: a SETUP GRADE above the execution card counts eight printed checks (side, named pattern, confluence ticket, structure at price, four-of-five timeframes, tradeable volatility, feeds agree, no blackout) with a feed lock or blackout capping any grade at C; a FORECAST CONE projects the next three closed bars as an ATR band widened by sqrt(bars) with an EMA-slope tilt capped at half an ATR — a range with a lean, never a target; the SESSION killzone clock from gold-session.js sits beside volatility and news as context that never votes; a DISTANCE read names how far the last close sits from the bracket's entry and stop in dollars and ATR; and the pattern record adds a three-bar follow-through count beside the next-bar settle, still labelled in-sample. Closed bars only, no invented prices. All version surfaces move together."
     },
     {
       "version": "hg-v1361",
@@ -279,7 +279,7 @@
     {
       "version": "hg-v1362",
       "built": "2026-10-15T02:30:00Z",
-      "note": "SUPER GOLD's intelligence layer becomes an audit: a CROWN AUDIT grades the crowned row on nine printed checks (both desks on one side, GRADE A PASS, candles travelling with the crown, four-of-five timeframes on the crowned side, the entry at marked structure, a tradeable volatility regime, feeds agreeing, no news blackout, no fundamental headwind) with a feed lock or blackout capping the grade at C \u2014 the audit never uncrowns and is not a probability; a DISTANCE read names how far the source desk's sizing mark sits from the entry in dollars and ATR; the desk intel gains the cross-feed quality check and the structure map from the shared hgCfIntel readers; and the desk publishes one alert candidate through tabalerts only when crowned at GRADE B or better, expiring with the scan that earned it. All version surfaces move together."
+      "note": "SUPER GOLD's intelligence layer becomes an audit: a CROWN AUDIT grades the crowned row on nine printed checks (both desks on one side, GRADE A PASS, candles travelling with the crown, four-of-five timeframes on the crowned side, the entry at marked structure, a tradeable volatility regime, feeds agreeing, no news blackout, no fundamental headwind) with a feed lock or blackout capping the grade at C — the audit never uncrowns and is not a probability; a DISTANCE read names how far the source desk's sizing mark sits from the entry in dollars and ATR; the desk intel gains the cross-feed quality check and the structure map from the shared hgCfIntel readers; and the desk publishes one alert candidate through tabalerts only when crowned at GRADE B or better, expiring with the scan that earned it. All version surfaces move together."
     },
     {
       "version": "hg-v1363",
@@ -449,7 +449,7 @@
     {
       "version": "hg-v1400",
       "built": "2026-10-18T02:04:00Z",
-      "note": "PURE GOLD is a gold-group tab. It enters only on a fresh EMA 21/55 cross inside 17:30\u201321:30 IST. Stop is 1.5 ATR and target is 3 ATR from the signal close. The entry is the next bar open, unread when that bar is not in the tape. A standing stack is not a cross."
+      "note": "PURE GOLD is a gold-group tab. It enters only on a fresh EMA 21/55 cross inside 17:30–21:30 IST. Stop is 1.5 ATR and target is 3 ATR from the signal close. The entry is the next bar open, unread when that bar is not in the tape. A standing stack is not a cross."
     },
     {
       "version": "hg-v1401",
@@ -469,7 +469,7 @@
     {
       "version": "hg-v1404",
       "built": "2026-10-18T16:00:00Z",
-      "note": "OMNIGOLD completes the v1402 bake propagation \u2014 the wave gate scoped to omnigold-named suites and missed the wider gold family; 16 previously-green suites re-derived from the committed artifact (hg-v1399 precedent: regenerate literal where a generator exists, else minimal-diff + header note). Literals regenerated: HG_OG_SELECTION (mechanic-selection.mjs --write), HG_OG_FACTOR_SEP (factor-separation bake \u2014 ZERO verdicts survive the re-walk, stated plainly), HG_MILLI_ROSTER/HG_MILLI_FORWARD (8 mechanics; beats desk 5 of 6, pays 0), HG_GOLD_DESK_BREAKEVEN omnigold half (edge still flips: -2.3 to +6.1 pts), HG_GOLD_SESSION_EVIDENCE (all five signs unchanged across four bakes), HG_GOLD_SIBLING_RECORD (EQH-SWEEP dropped loudly \u2014 thin on re-walk), HG_OG_EVIDENCE_GATESET (58-key fingerprint of the 2026-10-18 walk), plus the factor-separation / mechanic-selection / capA-legend narratives and the sequential-ticket prose kept honest against the empty gated book. Suites amended: fill-depth, gate-mask, unprovable-fill, mechanic-selection, factor-separation, milli-gold, milli-gold-walk, formed-population, desk-breakeven, gold-excursions, gold-leader-coverage, gold-evidence-citations, gold-oos-sweep, gold-sibling-records, gold-profitability-audit (S1 only; its S2/S8 hgGoldAudit missing-module failures are pre-existing at 3f9e5660). Also fixed: evidence-bake narrative date 2026-09-12 to 2026-10-18; v1402 stamp quote +0.047 to +0.050R (2-row snapshot drift \u2014 quoted from the committed artifact). No behavior change beyond propagation (renderer branches added only where a fresh literal made the old path unreachable or crash on null). gold-pine-*, gold-iux-anchor, gold-tape-sanity-family fail identically at pre-land 3f9e5660 \u2014 pre-existing, untouched; test-gold-served-is-tested is the v1403 server.mjs needle, owned by the omnibtc fix."
+      "note": "OMNIGOLD completes the v1402 bake propagation — the wave gate scoped to omnigold-named suites and missed the wider gold family; 16 previously-green suites re-derived from the committed artifact (hg-v1399 precedent: regenerate literal where a generator exists, else minimal-diff + header note). Literals regenerated: HG_OG_SELECTION (mechanic-selection.mjs --write), HG_OG_FACTOR_SEP (factor-separation bake — ZERO verdicts survive the re-walk, stated plainly), HG_MILLI_ROSTER/HG_MILLI_FORWARD (8 mechanics; beats desk 5 of 6, pays 0), HG_GOLD_DESK_BREAKEVEN omnigold half (edge still flips: -2.3 to +6.1 pts), HG_GOLD_SESSION_EVIDENCE (all five signs unchanged across four bakes), HG_GOLD_SIBLING_RECORD (EQH-SWEEP dropped loudly — thin on re-walk), HG_OG_EVIDENCE_GATESET (58-key fingerprint of the 2026-10-18 walk), plus the factor-separation / mechanic-selection / capA-legend narratives and the sequential-ticket prose kept honest against the empty gated book. Suites amended: fill-depth, gate-mask, unprovable-fill, mechanic-selection, factor-separation, milli-gold, milli-gold-walk, formed-population, desk-breakeven, gold-excursions, gold-leader-coverage, gold-evidence-citations, gold-oos-sweep, gold-sibling-records, gold-profitability-audit (S1 only; its S2/S8 hgGoldAudit missing-module failures are pre-existing at 3f9e5660). Also fixed: evidence-bake narrative date 2026-09-12 to 2026-10-18; v1402 stamp quote +0.047 to +0.050R (2-row snapshot drift — quoted from the committed artifact). No behavior change beyond propagation (renderer branches added only where a fresh literal made the old path unreachable or crash on null). gold-pine-*, gold-iux-anchor, gold-tape-sanity-family fail identically at pre-land 3f9e5660 — pre-existing, untouched; test-gold-served-is-tested is the v1403 server.mjs needle, owned by the omnibtc fix."
     },
     {
       "version": "hg-v1405",
@@ -479,7 +479,7 @@
     {
       "version": "hg-v1407",
       "built": "2026-10-20T01:10:00Z",
-      "note": "GOLD PINE uses seven more Pine reads \u2014 Vortex, DEMA 21/55, 20-bar regression slope, Elder Ray, EMA 50/200, CMO 14 and the Bollinger midline \u2014 plus choppiness. They cannot mint a ticket. A lead is held when choppiness is above 61.8, or when at least five of those reads have a side and more of them oppose the ticket than agree."
+      "note": "GOLD PINE uses seven more Pine reads — Vortex, DEMA 21/55, 20-bar regression slope, Elder Ray, EMA 50/200, CMO 14 and the Bollinger midline — plus choppiness. They cannot mint a ticket. A lead is held when choppiness is above 61.8, or when at least five of those reads have a side and more of them oppose the ticket than agree."
     },
     {
       "version": "hg-v1408",
@@ -520,6 +520,11 @@
       "version": "hg-v1415",
       "built": "2026-10-20T08:22:00Z",
       "note": "GOLD PINE refreshes every 2 minutes while the tab is open. The timer still starts on mount, still clears on remount, and still calls the same scan as the button. It does not refresh other desks."
+    },
+    {
+      "version": "hg-v1416",
+      "built": "2026-10-20T14:00:00Z",
+      "note": "PURE GOLD admission floor, paint-level: three measured stand-aside reasons join the why ladder — stop under 0.20% of entry (dropped n=40 at -3.01R/-3.59R spot, -0.144R/-0.152R XM), weekend session (dropped n=23 at -4.68R/-5.10R spot, -0.241R/-0.432R XM), late session bar open >= 20:30 IST (dropped n=35 at -1.00R/-1.47R spot, -0.265R/-0.392R XM) — each negative in both time halves at both cost models on the first census of the desks own scan (39,939 bar-pinned reads, ~14 months PAXG 15m, 128 walked trades at -0.011R gross). Kept cohort still negative at every cost model: loss-reduction, not a green book. No ledger, no ticket, no forward row; every clause abstains when its read never landed. The armed card carries the exit it used to swallow. Suites amended: exactly one — test-puregold.mjs fixtures re-widened (wick 0.05 -> 1.5, stopPct ~0.093% -> ~0.27%) so the crafted crosses stay above the floor, assertion count unchanged; mutation proof lives in the new tests/test-puregold-admission-floor.mjs (33 assertions). Measured and refused: short-side veto (hg-v1402 discipline), raw-ATR 0.06% frame (fails XM both-halves), named 20:00-20:45 PM-fix window (sign-unstable), slip/chase gates (zero fires), ER/vol-cone (hg-v966), every SPEC literal."
     }
   ]
 }
