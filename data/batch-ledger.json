@@ -515,6 +515,11 @@
       "version": "hg-v1414",
       "built": "2026-10-20T03:10:00Z",
       "note": "GOLD PINE holds a lead while price is inside the Ichimoku cloud, and holds a lead when the Elder Impulse (EMA21 slope and MACD histogram) both point the other way. A close above or below the cloud does not refuse. Neither read mints a ticket."
+    },
+    {
+      "version": "hg-v1415",
+      "built": "2026-10-20T08:22:00Z",
+      "note": "GOLD PINE refreshes every 2 minutes while the tab is open. The timer still starts on mount, still clears on remount, and still calls the same scan as the button. It does not refresh other desks."
     }
   ]
 }
