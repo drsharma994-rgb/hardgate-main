@@ -136,7 +136,14 @@ var HG_ACCURACY_TABS = {
   optigold:       ['OPTI GOLD'],
   '80percent':    ['OMNIGOLD:P80'],
   tauric:         ['OMNIGOLD:TAURIC'],
-  'super-gold':   ['SUPER:GOLD']
+  'super-gold':   ['SUPER:GOLD'],
+  /* hg-v1417: CANDLE FORECAST joins the judged roster. The desk has recorded
+     forward rows since hg-v1358 (hgCfForwardMark in goldind.js writes pool
+     'CANDLE FORECAST' with ticket on the record) — the old no-forward-record
+     exemption was stale, and its probe read a file that does not exist
+     ('candle-forecast.js' instead of 'gold-candle-forecast.js'), so it passed
+     vacuously. The desk stands judged like every recording desk. */
+  'candle-forecast': ['CANDLE FORECAST']
 };
 
 /* A roster entry is an exact pool name, or { prefix } for a desk that writes

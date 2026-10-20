@@ -19900,6 +19900,29 @@ function hgCfBuildSetup(rows, opts, fc) {
           }).join(' · '));
       out.missing = f.missing || null;
     }
+    /* hg-v1417: STRUCTURE-CONFIRMED PUBLICATION (the measured admission floor).
+       The desk census (13+ months, 455 formed 4h swings, both chronological
+       halves, independently re-run) split the swing book on the confluence's
+       higher-timeframe-structure voter: confirmed swings hit 58.1% next-candle
+       and paid +0.278R at XM costs (H1 +0.326 / H2 +0.233); swings the voter
+       read and did NOT confirm hit 43.6% and paid -0.133R (H1 -0.004 /
+       H2 -0.283) — 38% of formed swings. So a formed 4h bracket PUBLISHES only
+       when that voter confirms. This withholds the bracket from the swing card,
+       the day list and the executable card ONLY: the read still stands, the
+       bracket object still exists for the ledger and the horizon table, and
+       the ledger keeps recording both cohorts under the cf:htfWith mark so the
+       withheld half is judged forward. Fail-open narrowed to the two states the
+       census never measured (no confluence, no higher tape). Never a flipped
+       side, never a NEUTRAL. */
+    out.published = true;
+    out.htfConfirm = null;
+    if (out.formed && /^4h$/.test(tf)) {
+      out.htfConfirm = (typeof hgCfSwingHtfConfirm === 'function') ? hgCfSwingHtfConfirm(out) : null;
+      if (out.htfConfirm === false) {
+        out.published = false;
+        out.why += ' · The 4h read stands, but the higher timeframe does not confirm it, so the bracket is withheld. In the desk census (13 months, 455 formed swings) confirmed reads hit 58% next-candle and paid +0.28R at XM costs; unconfirmed reads hit 44% and paid -0.13R. Nothing was invented.';
+      }
+    }
     if (out.formed && isFinite(out.entry) && isFinite(out.stop)) {
       var sign = (out.dir === 'BULL') ? 1 : -1;
       out.risk = +(Math.abs(out.entry - out.stop)).toFixed(2);
@@ -19919,6 +19942,36 @@ function hgCfBuildSetup(rows, opts, fc) {
     out.why = 'setup build error';
     return out;
   }
+}
+
+function hgCfSwingHtfConfirm(setup) {
+  /* hg-v1417: DID THE HIGHER-TIMEFRAME-STRUCTURE VOTER CONFIRM THIS SETUP?
+     Three states, because the census measured three different things:
+       TRUE  — the confluence's 'higher-timeframe structure' voter (goldind.js
+               hgCfConfluence, id 'higher') read AND leans with the call. This
+               cohort hit 58.1% next-candle and paid +0.278R at XM costs over
+               13 months of 4h bars (282 formed swings, both halves positive).
+       FALSE — the voter READ and did not lean with the call (lean null on a
+               read tape: structure split or unread on handed frames — and, on
+               reads the formation block did not reach, lean against). This is
+               the measured -0.133R cohort (173 formed swings, negative in both
+               halves). NOT a fail-open state: it is the cohort the admission
+               floor withholds.
+       NULL  — never measured: the confluence never ran, the voters array is
+               absent, or the voter's own why is 'no higher tape was handed in'
+               (a rows1d load failure). Fail open, exactly like the existing
+               familiesAgainst clause fails open on a walked setup. */
+  try {
+    var cv = setup && setup.confluenceView;
+    if (!cv || !Array.isArray(cv.voters)) return null;
+    var v = null, i;
+    for (i = 0; i < cv.voters.length; i++) {
+      if (cv.voters[i] && cv.voters[i].name === 'higher-timeframe structure') { v = cv.voters[i]; break; }
+    }
+    if (!v) return null;
+    if (String(v.why || '') === 'no higher tape was handed in') return null;
+    return (v.lean === true) ? true : false;
+  } catch (eHc) { return null; }
 }
 
 function hgCfHigherFrame(tapes) {
@@ -20957,6 +21010,11 @@ function goldCandleForecast(rows) {
       checked: checked,
       reasons: reasons,
       patterns: pat.names,
+      /* hg-v1417: the pattern layer's family counts, carried out so the card can
+         NAME a read the candle patterns themselves vote against (the census read:
+         unformed reads against the pattern vote hit 41% next-candle, both halves).
+         Additive and read-only — nothing gates on it. */
+      patternVotes: { bull: pat.bullVotes, bear: pat.bearVotes },
       /* hg-v1311: the advanced layer, named and located. Read by nothing that
          gates, scores or prices — the card prints it and the ledger measures it. */
       advancedPatterns: adv.names,
@@ -21346,6 +21404,22 @@ function hgCfForwardMark(setup, rows, tf) {
         reads = hgCfPatternMarks(setup, rows);
       }
     } catch (eMk) { reads = undefined; }
+    /* hg-v1417: the admission mark rides the record on BOTH lanes, added to the
+       reads bag AFTER the pattern marks. It gates publication on the 4h card
+       only; on the 15m book it is measurement (the scalp voter separates
+       direction at +6.5pp in both halves, so the scalp book stays splittable).
+       Absent when the confluence state is unreadable — hg-v989 three-state,
+       never a guessed false. The record keeps BOTH cohorts: a withheld bracket
+       is still a formed setup and still belongs on the ledger. */
+    try {
+      if (setup && typeof hgCfSwingHtfConfirm === 'function') {
+        var htfMark = hgCfSwingHtfConfirm(setup);
+        if (htfMark === true || htfMark === false) {
+          if (!reads || typeof reads !== 'object') reads = {};
+          reads['cf:htfWith'] = htfMark;
+        }
+      }
+    } catch (eHm) {}
     var t2 = isFinite(+setup.tp2) ? +setup.tp2 : undefined;
     var feed = setup.source || undefined;
     out.recorded = +record('CANDLE FORECAST', frame, [{
@@ -21443,6 +21517,12 @@ function hgCfDaySwings(rows, opts) {
     if (side === 'long' ? !(t1 > entry) : !(t1 < entry)) return;
     var cv = setup.confluenceView;
     if (cv && typeof cv.familiesAgainst === 'number' && cv.familiesAgainst > 0) return;
+    /* hg-v1417: a bracket the higher timeframe did not confirm is withheld from
+       publication, so the day does not confirm it either. Same fail-open class
+       as the clause above: walked setups carry no confluenceView, so
+       hgCfSwingHtfConfirm returns null, published stays true, and the walk is
+       unchanged. */
+    if (setup.published === false) return;
     var i;
     for (i = 0; i < bag.length; i++) {
       if (bag[i].dir === setup.dir && bag[i].entry === entry && bag[i].stop === stopPx) return;
@@ -21511,6 +21591,7 @@ function hgCfDaySwings(rows, opts) {
         : 'This day could not be walked. ';
       var missBit = '';
       if (knownMiss) missBit = 'The last 4h bar stopped on ' + knownMiss + '. ';
+      else if (live && live.formed === true && live.published === false) missBit = 'The last 4h bar formed, then the higher timeframe did not confirm, so it is not shown. ';
       else if (live && live.formed === true && live.confluenceView && live.confluenceView.familiesAgainst > 0) missBit = 'The last 4h bar formed, then a family net against, so it is not shown. ';
       else if (live && live.ok === false) missBit = 'The last 4h bar could not be read. ';
       else if (live && (!live.dir || live.dir === 'NEUTRAL')) missBit = 'The last 4h bar named no side. ';
@@ -21618,6 +21699,9 @@ if (typeof window !== "undefined") {
      for the scalp and once on the 4h tape for the swing — so the two horizons are
      built by the SAME code path and stay comparable (hg-v949). */
   window.hgCfBuildSetup = hgCfBuildSetup;
+  /* hg-v1417: the three-state admission read, exported so a guard can drive it
+     directly and the new admission-floor suite can pin each state. */
+  window.hgCfSwingHtfConfirm = hgCfSwingHtfConfirm;
   window.hgCfHigherFrame = hgCfHigherFrame;
   window.hgCfUltimate = hgCfUltimate;
   window.hgCfFeedBoard = hgCfFeedBoard;

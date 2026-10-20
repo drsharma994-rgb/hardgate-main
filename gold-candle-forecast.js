@@ -340,6 +340,13 @@ on every page load since v1308:
       } catch (eDay) {
         forecast.daySwings = { ok: false, setups: [], why: 'Confirmed swings could not be read. Nothing was invented.' };
       }
+      /* hg-v1417: the card's census annotations (vol regime, five-timeframe
+         alignment) read the same tapes the intel layer reads. Stashed on the
+         forecast so renderResult stays a function of one argument; hand-built
+         fixtures carry none of these and the lines simply skip (fail open). */
+      forecast._tapes = tapes || null;
+      forecast._c15 = candles || null;
+      forecast._c4 = (Array.isArray(c4) ? c4 : null);
       this.renderResult(resultArea, statusEl, forecast);
 
       /* hg-v1325: the wide tally paints AFTER the card. The earlier call sat
@@ -556,6 +563,11 @@ on every page load since v1308:
       if (!b) return false;
       var dir = b.dir;
       if (dir !== 'BULL' && dir !== 'BEAR') return false;
+      /* hg-v1417: a bracket the higher timeframe did not confirm is withheld
+         from publication — the card falls to its no-levels arm, which prints
+         sw.why (the withhold sentence with the census numbers). The read
+         still stands; the bracket object still exists. */
+      if (b.published === false) return false;
       var entry = +b.entry, stopPx = +b.stop, t1 = +b.tp1;
       if (!isFinite(entry) || !isFinite(stopPx) || !isFinite(t1)) return false;
       if (!(Math.abs(entry - stopPx) > 0)) return false;
@@ -651,7 +663,19 @@ on every page load since v1308:
         var pf = bracket.perfectWhy
           ? ('<div class="note">Perfect bar: ' + String(bracket.perfectWhy).replace(/</g, '') + '</div>')
           : '';
-        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + veto + pf + '</td>';
+        /* hg-v1417: the pattern-against READ caution (a veto here was measured
+           and refused — formed setups against the pattern vote do NOT
+           anti-predict; the anti-predictor is the UNFORMED reads, which hit
+           41% next-candle in the census, both halves — so the caution is
+           named, nothing is withheld). Disclosure over veto, the hg-v1322
+           doctrine. */
+        var pv = forecast.patternVotes;
+        var patCaution = (tag === 'SCALP' && bracket.formed !== true
+          && (bracket.dir === 'BULL' || bracket.dir === 'BEAR') && pv
+          && ((bracket.dir === 'BULL' && +pv.bear > +pv.bull) || (bracket.dir === 'BEAR' && +pv.bull > +pv.bear)))
+          ? '<div class="note warn">The candle-pattern layer votes against this read — in the desk census reads like this hit 41% next-candle (both halves). Nothing is formed; the caution is named.</div>'
+          : '';
+        return '<td style="vertical-align:top;padding:8px;border-left:1px solid var(--line);"><b>' + tag + '</b> <span class="note">' + String(bracket.tf || '') + '</span><br>' + formed + '<div class="note" style="margin-top:4px;">' + String(pat).replace(/</g, '') + String(adv).replace(/</g, '') + '</div>' + hi + conf + lv + veto + pf + patCaution + '</td>';
       }).join('');
       horizonsHtml = '<div class="note" data-cf-horizons="1" style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px;"><b>SCALP AND SWING</b> <span class="note">— both built by one builder, each on its own tape</span><table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>' + cells + '</tr></table><div class="note">A scalp stop and a swing stop in dollars are not the same risk: read each against its own ATR above.</div></div>';
     })();
@@ -766,6 +790,48 @@ on every page load since v1308:
         : 'The forward ledger was not read this scan. Nothing was counted as a win.';
       return '<div class="note" data-cf-forward="1" style="margin:8px 0;"><b>Forward ledger, 4h.</b> ' + why.replace(/</g, '') + ' <span class="note">Out of sample. Not a probability.</span></div>';
     })();
+    /* hg-v1417: THE CENSUS LINES ON THE CARD. The desk's first outcome census
+       (38.5k 15m and 2.5k 4h PAXG bars, 13+ months, both chronological halves)
+       measured what this desk's reads are worth; these lines NAME that on the
+       card. Display only — nothing here gates, scores or prices, and every
+       line fails open (no intel module, no tapes, no line). */
+    var cfCensusLines = (function () {
+      var lines = '';
+      try {
+        var I = window.hgCfIntel;
+        if (!I) return '';
+        if (swHas && swDir) {
+          /* lever ④: the vol regime on the swing's own tape. COMPRESSION
+             anti-predicts direction in both halves but its formed-trade R is
+             mixed — annotation, never a gate. EXPANSION prints the mirror. */
+          var vr = (forecast._c4 && typeof I.volRegime === 'function') ? I.volRegime(forecast._c4) : null;
+          if (vr && vr.ok && vr.regime === 'COMPRESSION') {
+            lines += '<div class="note warn">The last 20 bars compress — in the desk census, reads in this regime hit 45% next-candle (both halves). The bracket stands; the regime is named.</div>';
+          } else if (vr && vr.ok && vr.regime === 'EXPANSION') {
+            lines += '<div class="note">The last 20 bars expand — in the desk census, reads in this regime hit 56% next-candle (both halves). The regime is named, not trusted.</div>';
+          }
+          /* lever ⑤: four-of-five timeframe alignment, +13.8pp both halves but
+             n=750 — named, not trusted. */
+          var fv = (forecast._tapes && typeof I.fiveTf === 'function') ? I.fiveTf({
+            rows5m: null,
+            rows15m: forecast._c15 || null,
+            rows1h: forecast._tapes.rows1h || null,
+            rows4h: forecast._c4 || null,
+            rows1d: forecast._tapes.rows1d || null
+          }) : null;
+          if (fv && fv.aligned === swDir) {
+            lines += '<div class="note">Four of five timeframes align with this read — in the census these reads hit 62% next-candle (n=750, thin; the cohort is named, not trusted).</div>';
+          }
+        }
+        /* lever ⑥: the strength anti-calibration honesty line. The desk prints
+           no probability; its one remaining heuristic does not calibrate, and
+           the card says so beside every scan. */
+        if (forecast.strength != null && isFinite(+forecast.strength)) {
+          lines += '<div class="note">Strength is the drift\'s |t|, not a chance — in the desk census the strongest-drift 15m calls were the WORST bucket (43%). Do not read it as confidence.</div>';
+        }
+      } catch (eAn) {}
+      return lines;
+    })();
     var alwaysHtml = (function () {
       var body;
       if (swHas) {
@@ -773,10 +839,12 @@ on every page load since v1308:
           + faceFacts
           + (sw.formed === true
             ? '<div class="note">Shown on every scan. The day list does not hide this swing.</div>'
-            : '<div class="note">Shown on every scan. Not a formed setup. These are the 4h call\'s own levels. Nothing new was priced.</div>');
+            : '<div class="note">Shown on every scan. Not a formed setup. These are the 4h call\'s own levels. Nothing new was priced.</div>')
+          + cfCensusLines;
       } else {
         body = '<span class="note">' + String((sw && sw.why) || 'The 4h tape named no side, so no swing setup is printed. Nothing was invented.').replace(/</g, '') + '</span>'
-          + faceFacts;
+          + faceFacts
+          + cfCensusLines;
       }
       return '<div class="note" data-cf-swing-always="1" style="margin:8px 0; border:1px solid var(--line); padding:8px;"><b>SWING</b> <span class="note">— shown on every scan</span><div style="margin-top:4px;">' + body + '</div></div>';
     })();
