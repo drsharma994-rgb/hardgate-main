@@ -124,7 +124,7 @@ async function fetchKlines(symbol, target){
   let out = [], endTime;
   while (out.length < target){
     const lim = Math.min(1000, target - out.length + 2);
-    let url = 'https://api.binance.com/api/v3/klines?symbol=' + symbol
+    let url = (process.env.HG_KLINES_BASE || 'https://api.binance.com') + '/api/v3/klines?symbol=' + symbol
             + '&interval=5m&limit=' + lim;
     if (endTime) url += '&endTime=' + endTime;
     const batch = await jget(url);

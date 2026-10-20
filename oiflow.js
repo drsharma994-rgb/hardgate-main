@@ -201,18 +201,33 @@ function oiflowClassify(d){
     else if (dn && oiDn){ regime = 'LONG FLUSH (capitulation)'; longEv.push(regime + qdetail); }
   }
 
+  /* hg-v1421 — funding-z fade + retail-fade are the measured-rejected
+     contrarian class (wide02: funding-contrarian worst bucket; retail L/S
+     contrarian 5/5 OOS failures). Crowding prints as regime context; the
+     votes return only under HG_POS_CONTRARIAN_VOTES (lever for the ledger). */
+  var contraVotes = ((typeof window !== 'undefined' && window.HG_POS_CONTRARIAN_VOTES === true)
+    || (typeof globalThis !== 'undefined' && globalThis.HG_POS_CONTRARIAN_VOTES === true));
+
   if (fundingZ !== null){
-    if (fundingZ >= FUND_Z_EXTREME)
-      shortEv.push('CROWDED LONG (squeeze-down risk) · funding z +' + fundingZ.toFixed(2));
-    else if (fundingZ <= -FUND_Z_EXTREME)
-      longEv.push('CROWDED SHORT (squeeze-up risk) · funding z ' + fundingZ.toFixed(2));
+    if (fundingZ >= FUND_Z_EXTREME){
+      regime = 'crowded long (funding z +' + fundingZ.toFixed(2) + ') — fresh longs stand down';
+      if (contraVotes) shortEv.push('CROWDED LONG (squeeze-down risk) · funding z +' + fundingZ.toFixed(2));
+    }
+    else if (fundingZ <= -FUND_Z_EXTREME){
+      regime = 'crowded short (funding z ' + fundingZ.toFixed(2) + ') — fresh shorts stand down';
+      if (contraVotes) longEv.push('CROWDED SHORT (squeeze-up risk) · funding z ' + fundingZ.toFixed(2));
+    }
   }
 
   if (longPct !== null){
-    if (longPct >= RETAIL_MAX_LONG)
-      shortEv.push('RETAIL MAX LONG (fade) · ' + longPct.toFixed(1) + '% long');
-    else if (longPct <= RETAIL_MAX_SHORT)
-      longEv.push('RETAIL MAX SHORT (fade) · ' + longPct.toFixed(1) + '% long');
+    if (longPct >= RETAIL_MAX_LONG){
+      regime = 'retail extremely long — context only (contrarian read: 5 measured OOS failures, hg-v1421)';
+      if (contraVotes) shortEv.push('RETAIL MAX LONG (fade) · ' + longPct.toFixed(1) + '% long');
+    }
+    else if (longPct <= RETAIL_MAX_SHORT){
+      regime = 'retail extremely short — context only (contrarian read: 5 measured OOS failures, hg-v1421)';
+      if (contraVotes) longEv.push('RETAIL MAX SHORT (fade) · ' + longPct.toFixed(1) + '% long');
+    }
   }
 
   if (takerAvg !== null){

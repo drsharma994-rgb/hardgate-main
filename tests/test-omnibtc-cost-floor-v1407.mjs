@@ -1,9 +1,9 @@
 /* HARDGATE — hg-v1418: the OMNIBTC cost-floor stand-down.
 
+   hg-v1421: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1421); the pack under test remains hg-v1418.
    hg-v1420: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1420); the pack under test remains hg-v1418.
    hg-v1419: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1419); the pack under test remains hg-v1418.
    hg-v1418: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1418); the pack under test remains hg-v1418.
-   hg-v1421: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1421); the pack under test remains hg-v1418.
    WHAT THIS GUARD PROVES, behaviourally, through the real IIFE:
      1. a tight-stop crown (stop under 4x the 0.20% round-trip taker cost =
         0.80% of entry) DEMOTES to a watch and names COST FLOOR with the
@@ -236,10 +236,10 @@ console.log('\n== 7) both lever surfaces exist by name (a rename trips here) =='
 console.log('\n== 8) the deploy pins moved with the pack (?v= byte-check) ==');
 {
   const bs = (read('build-stamp.js').match(/version:\s*'([^']+)'/) || [])[1];
-  ok(bs === 'hg-v1420', 'build-stamp.js carries hg-v1420 (got ' + bs + ')');
+  ok(bs === 'hg-v1421', 'build-stamp.js carries hg-v1421 (got ' + bs + ')');
   ok(bs === HG_VER, 'and it is the tree version ' + HG_VER);
   const idx = read('index.html');
-  ok(idx.indexOf('omnibtc.js?v=1420') !== -1, 'index.html loads omnibtc.js?v=1420');
+  ok(idx.indexOf('omnibtc.js?v=1421') !== -1, 'index.html loads omnibtc.js?v=1421');
   ok(!/\?v=1406\b/.test(idx), 'no stale ?v=1406 pin survives in index.html');
 }
 

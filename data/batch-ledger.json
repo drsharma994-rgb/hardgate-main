@@ -545,6 +545,11 @@
       "version": "hg-v1420",
       "built": "2026-10-20T16:00:00Z",
       "note": "PINE GOLD accuracy round 2 — marks, not gates. R2 census @ hg-v1417 reproduced the v1401 walk 119/119 exactly. v1401 scalp floor audit HOLDS: dropped cohort negative both halves at all three cost models (-3.994R/-3.809R BN, -0.529R/-0.440R XM, -5.149R/-4.932R taker); kept improves both halves at XM; but a 4x-cost floor at taker keeps 0/51 — the venue is the lever, and the floor note now names it (numbers frozen). Refused on measurement (hg-v966 both-halves): ER(20)>=0.30 veto (swing dropped cohort +0.560R H1 — anti-selects; scalp kept n=1 in H2), 1d EMA150 counter-regime veto (+0.246R/-0.242R mixed), Chandelier regime exits (swing -0.103R vs +0.144R fixed-2R; ledger comparability), PM-fix / NY-cut windows (the lock holds; n<=16 cells), 1.2xATR veto (degenerate halves). Ships: record-only three-state marks gp:er20ok (both lanes) + gp:d1with (swing) in the reads bag, REPLAY READ SPLIT paint, gates NOTHING; floor why gains the venue math (pinned prefix kept). NEW suite tests/test-goldpine-r2-marks.mjs (mutation-proven); direction-geometry-v1304 re-pin rides the stamp. Forward ledger decides."
+    },
+    {
+      "version": "hg-v1421",
+      "built": "2026-10-20T16:30:00Z",
+      "note": "CRYPTO SWEEP: cryptoultra artifact rebake on the priced walk (14/14 grid cells negative in-sample, chosen rule OOS n=77 -0.113R, MEASURED NOT TRADABLE); CRYPTO SCAN chop floor (Kaufman ER(20) < 0.30 stand-aside, skipped cohort -0.147R/-0.124R both halves, lever HG_CS_ER_FLOOR) with EMA150 counter-regime as footnote; 80PERCENT cost floor hg80CostFloorWhy (4x venue RT, sub-floor cohort -0.744R/-1.305R both halves at XM, lever HG_80_COST_FLOOR); SMART $/OI FLOW retail-contrarian + funding-fade votes demoted to context (lever HG_POS_CONTRARIAN_VOTES); SQUEEZE first baseline n=209 -0.15R both halves, RECORD ONLY."
     }
   ]
 }
