@@ -1,0 +1,147 @@
+/* =========================================================================
+   HARDGATE — Design System Tokens (applied globally)
+   Source of truth: design-system/hardgate/MASTER.md
+   Applies the "Financial Dashboard / Data-Dense" palette, typography and
+   spacing tokens as CSS variables so every tab inherits one cohesive look.
+   Safe to include: only defines variables + base element styling, no layout
+   overrides that could break existing tabs.
+   ========================================================================= */
+
+:root {
+  /* ---- Color palette (MASTER.md) ---- */
+  --color-primary:    #0F172A;
+  --color-on-primary: #FFFFFF;
+  --color-secondary:  #1E293B;
+  --color-accent:     #22C55E;
+  --color-background: #020617;
+  --color-foreground: #F8FAFC;
+  --color-muted:      #1A1E2F;
+  --color-border:     #334155;
+  --color-destructive:#EF4444;
+  --color-ring:       #0F172A;
+
+  /* Semantic aliases used across the app */
+  --hg-bg:        var(--color-background);
+  --hg-surface:   var(--color-secondary);
+  --hg-surface-2: var(--color-primary);
+  --hg-border:    var(--color-border);
+  --hg-text:      var(--color-foreground);
+  --hg-text-dim:  #94A3B8;
+  --hg-accent:    var(--color-accent);
+  --hg-danger:    var(--color-destructive);
+  --hg-warn:      #F59E0B;
+
+  /* ---- Typography ---- */
+  --font-heading: 'Orbitron', 'JetBrains Mono', system-ui, sans-serif;
+  --font-body:    'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+  --font-size-xs:  10px;
+  --font-size-sm:  12px;
+  --font-size-md:  13px;
+  --font-size-lg:  14px;
+  --font-size-xl:  16px;
+  --line-height:   1.4;
+
+  /* ---- Spacing (density 8/10) ---- */
+  --space-xs:  2px;
+  --space-sm:  4px;
+  --space-md:  8px;
+  --space-lg:  12px;
+  --space-xl:  16px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+
+  /* ---- Radius / shadow ---- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.35);
+}
+
+/* ---- Base element styling (inherits everywhere) ---- */
+html, body {
+  background: var(--hg-bg);
+  color: var(--hg-text);
+  font-family: var(--font-body);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--hg-text);
+  letter-spacing: 0.04em;
+}
+
+/* Links */
+a { color: var(--hg-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Scrollbars (webkit) — subtle, on-theme */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--hg-bg); }
+::-webkit-scrollbar-thumb { background: var(--hg-border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--hg-text-dim); }
+
+/* Focus ring */
+:focus-visible { outline: 2px solid var(--hg-accent); outline-offset: 2px; }
+
+/* Utility classes available to every tab */
+.hg-card {
+  background: var(--hg-surface);
+  border: 1px solid var(--hg-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+}
+.hg-card-title {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-lg);
+  color: var(--hg-text);
+  margin: 0 0 var(--space-md) 0;
+  letter-spacing: 0.06em;
+}
+.hg-accent { color: var(--hg-accent); }
+.hg-danger { color: var(--hg-danger); }
+.hg-warn   { color: var(--hg-warn); }
+.hg-dim    { color: var(--hg-text-dim); }
+.hg-mono   { font-family: var(--font-body); }
+
+.hg-btn {
+  background: var(--hg-accent);
+  color: var(--color-on-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-lg);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.hg-btn:hover { opacity: 0.85; }
+.hg-btn.secondary {
+  background: var(--hg-surface);
+  border: 1px solid var(--hg-border);
+  color: var(--hg-text);
+}
+
+.hg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+.hg-table th, .hg-table td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--hg-border);
+  text-align: left;
+}
+.hg-table th {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xs);
+  color: var(--hg-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.hg-table tr:hover { background: var(--hg-surface); }

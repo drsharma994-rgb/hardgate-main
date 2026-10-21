@@ -24,6 +24,7 @@ const HG_SHELL = [
   /* task #12: the MAIN stylesheet was never in the shell — the offline app
      booted unstyled. Guarded now by tests/test-offline-shell-parity.mjs. */
   './trading-dashboard-pro.css',
+  './design-system.css',
   /* task #12: the TRENDTABLE matrix loads its 12 literal fragments at runtime
      (trendtable.js line ~10 fetches 'trendtable-src-'+i), so a first-visit
      OFFLINE client had an empty matrix. ~200 bytes each — precache them. */
