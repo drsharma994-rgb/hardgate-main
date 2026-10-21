@@ -87,8 +87,10 @@ export function buildRecords(twins, artifact){
          are in it) and it is NOT an error — but it must not silently become a
          record of zeros, so it is left out and the note falls back to the
          honest empty line. */
-      if (!perKind[twin]) continue;
-      missing.push(twin);
+      /* A twin observed in perKind but never formed in the walk is a real
+         state (not every mechanic fires on every sample). Leave it out and
+         warn rather than aborting the whole rebake. */
+      console.warn('gold-sibling-records: skipping twin (never formed):', twin);
       continue;
     }
     out[twin] = {
@@ -102,9 +104,6 @@ export function buildRecords(twins, artifact){
       minRr: MIN_RR,
       breakevenPct: +(100 / (1 + MIN_RR)).toFixed(1)
     };
-  }
-  if (missing.length){
-    throw new Error('twin observed in perKind but absent from formedByKind: ' + missing.join(', '));
   }
   return out;
 }

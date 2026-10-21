@@ -1810,10 +1810,10 @@ function hgGoldEdgeRetuneNote(){
    inventing one would be the fitted-number mistake this desk keeps refusing.
    It reports the age and what the walk cannot have seen. The reader decides. */
 var HG_GOLD_EDGE_WALK = {
-  from: '2026-07-10T00:15:00.000Z',
-  to: '2026-09-10T11:45:00.000Z',
-  generated: '2026-09-10T12:13:17.246Z',
-  trades: 2605,
+  from: '2026-08-19T17:30:00.000Z',
+  to: '2026-10-21T05:00:00.000Z',
+  generated: '2026-10-21T05:15:56.026Z',
+  trades: 2037,
   src: 'scripts/backtest-goldscalp-results-floor.json'
 };
 
@@ -2304,26 +2304,13 @@ function hgGoldBindEnginePlan(cand, hit, ctx){
    refused because the walk computes rr on the inline engine's levels while the
    floor is applied by the best-levels pass that REPLACES them. */
 var HG_GOLD_SWING_SCOPE = {
-  walk: 'scripts/backtest-goldswing-results.json', settled: 244, minRr: 1.5,
-  underFloor: 25, underFloorPct: 10.246, rrAbsent: 5,
-  flips: 2, unreplayed: 1,
+  walk: 'scripts/backtest-goldswing-results.json', settled: 0, minRr: 1.5,
+  underFloor: 0, underFloorPct: NaN, rrAbsent: 0,
+  flips: 0, unreplayed: 1,
   verdict: 'REFUSED',
   why: 'the walk computes rr on the inline engine levels; the floor is applied by the best-levels pass that REPLACES them, so scoping a pre-snap ratio by a post-snap floor is a second wrong population, not a correction',
   rows: {
-    bos: { all: { n: 9, gross: 0.3889, net: 0.369 }, scoped: { n: 9, gross: 0.3889, net: 0.369 }, flipped: false },
-    fvg: { all: { n: 34, gross: -0.0364, net: -0.059 }, scoped: { n: 29, gross: -0.1028, net: -0.127 }, flipped: false },
-    ob: { all: { n: 4, gross: 0.2415, net: 0.215 }, scoped: { n: 3, gross: -0.1667, net: -0.196 }, flipped: true },
-    p5turt: { all: { n: 2, gross: 3.1045, net: 3.087 }, scoped: { n: 1, gross: 4.861, net: 4.842 }, flipped: false },
-    p5vwap: { all: { n: 1, gross: 1.727, net: 1.701 }, scoped: { n: 1, gross: 1.727, net: 1.701 }, flipped: false },
-    p5wyck: { all: { n: 4, gross: 0.335, net: 0.317 }, scoped: { n: 4, gross: 0.335, net: 0.317 }, flipped: false },
-    p6comp: { all: { n: 17, gross: -0.2675, net: -0.289 }, scoped: { n: 16, gross: -0.3596, net: -0.38 }, flipped: false },
-    p6zfade: { all: { n: 2, gross: -0.735, net: -0.753 }, scoped: { n: 2, gross: -0.735, net: -0.753 }, flipped: false },
-    p8range: { all: { n: 40, gross: 0.0581, net: 0.037 }, scoped: { n: 34, gross: -0.0214, net: -0.043 }, flipped: true },
-    p9volbar: { all: { n: 44, gross: 0.2111, net: 0.189 }, scoped: { n: 38, gross: 0.1514, net: 0.129 }, flipped: false },
-    pullback: { all: { n: 18, gross: -0.2577, net: -0.272 }, scoped: { n: 18, gross: -0.2577, net: -0.272 }, flipped: false },
-    ribbon: { all: { n: 23, gross: 0.2496, net: 0.228 }, scoped: { n: 13, gross: 0.5166, net: 0.495 }, flipped: false },
-    sweep: { all: { n: 14, gross: -0.1089, net: -0.125 }, scoped: { n: 14, gross: -0.1089, net: -0.125 }, flipped: false },
-    weekly: { all: { n: 32, gross: 0.2171, net: 0.2 }, scoped: { n: 32, gross: 0.2171, net: 0.2 }, flipped: false }
+
   }
 };
 
