@@ -14086,6 +14086,13 @@ terse status, and never launches a first-time scan on a global refresh.
       else host.innerHTML = dual + (host.innerHTML || '');
     } catch (eDual) {}
     try {
+      var mpHost = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
+      if (mpHost && typeof W.hgGoldAiReviewRun === 'function'){
+        if (pickScalp) W.hgGoldAiReviewRun(pickScalp, { tape: tape }, mpHost);
+        if (pickSwing) W.hgGoldAiReviewRun(pickSwing, { tape: tape }, mpHost);
+      }
+    } catch (eAiOg) {}
+    try {
       var uni = hgOgUniformLeadHtml();
       if (!uni) return;
       var oldUni = host.querySelector ? host.querySelector('[data-hg-gold-uniform-desk]') : null;
