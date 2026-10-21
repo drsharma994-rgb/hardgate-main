@@ -1,10 +1,7 @@
 {
   "version": 1,
-<<<<<<< HEAD
   "updatedAt": "2026-10-21T06:16:00.260Z",
-=======
-  "updatedAt": "2026-10-14T13:06:11.944Z",
->>>>>>> origin/main
+
   "sources": [
     "scripts/backtest-omniroute-v531-results.json",
     "scripts/omni-bt-analysis.json",
