@@ -171,7 +171,10 @@ function corsOrigin(req){
 function clientKey(req){
   try{
     const xf = req.headers && (req.headers['x-forwarded-for'] || req.headers['X-Forwarded-For']);
-    if (xf) return String(xf).split(',')[0].trim();
+    if (xf){
+      const hops = String(xf).split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      if (hops.length) return hops[hops.length - 1];
+    }
     if (req.socket && req.socket.remoteAddress) return String(req.socket.remoteAddress);
   }catch(e){}
   return 'local';
