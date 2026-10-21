@@ -613,26 +613,26 @@
       "expired": true
     },
     "BAT": {
-      "at": "2026-10-19T23:23:58.221Z",
-      "score": 4,
+      "at": "2026-10-21T01:13:36.760Z",
+      "score": 5,
       "fresh": true,
-      "ago": 6,
+      "ago": 8,
       "crossDay": "2026-10-12",
       "expired": true
     },
     "NIGHT": {
-      "at": "2026-10-20T19:41:39.200Z",
+      "at": "2026-10-21T01:13:38.397Z",
       "score": 3,
       "fresh": true,
-      "ago": 6,
+      "ago": 7,
       "crossDay": "2026-10-13",
       "expired": true
     },
     "W": {
-      "at": "2026-10-20T23:22:58.117Z",
+      "at": "2026-10-21T01:13:39.384Z",
       "score": 3,
       "fresh": true,
-      "ago": 7,
+      "ago": 8,
       "crossDay": "2026-10-12",
       "expired": true
     },
@@ -653,15 +653,23 @@
       "expired": true
     },
     "CFX": {
-      "at": "2026-10-20T23:22:58.658Z",
+      "at": "2026-10-21T01:13:39.713Z",
       "score": 2,
       "fresh": true,
-      "ago": 8,
+      "ago": 9,
       "crossDay": "2026-10-11",
+      "expired": true
+    },
+    "CKB": {
+      "at": "2026-10-21T01:13:43.331Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 6,
+      "crossDay": "2026-10-14",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-20T23:23:13.737Z",
+  "lastRunAt": "2026-10-21T01:13:57.297Z",
   "scanned": 504,
   "cards": 0
 }
