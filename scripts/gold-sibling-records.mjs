@@ -90,6 +90,7 @@ export function buildRecords(twins, artifact){
       /* A twin observed in perKind but never formed in the walk is a real
          state (not every mechanic fires on every sample). Leave it out and
          warn rather than aborting the whole rebake. */
+      console.log('gold-sibling-records: skipping twin (never formed):', twin);
       console.warn('gold-sibling-records: skipping twin (never formed):', twin);
 
       continue;

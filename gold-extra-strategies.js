@@ -596,8 +596,12 @@ var HG_GOLD_SIBLING_RECORD = {
   'CUSUM-SHIFT': { n: 47, settled: 35, winRate: 0.3429, grossR: 0.1318, netXm: 0.1102, tCluster: 0.95, zBreakeven: 0.12, minRr: 2, breakevenPct: 33.3 },
   'FIB-618': { n: 137, settled: 135, winRate: 0.3111, grossR: -0.0559, netXm: -0.1108, tCluster: -0.56, zBreakeven: -0.55, minRr: 2, breakevenPct: 33.3 },
   'ICHI-KUMO': { n: 114, settled: 95, winRate: 0.2526, grossR: -0.1406, netXm: -0.1721, tCluster: -1.79, zBreakeven: -1.67, minRr: 2, breakevenPct: 33.3 },
+  'INSIDE-BREAK': { n: 123, settled: 113, winRate: 0.3363, grossR: 0.0688, netXm: 0.0308, tCluster: 0.58, zBreakeven: 0.07, minRr: 2, breakevenPct: 33.3 },
   'LONDON-FIX': { n: 87, settled: 70, winRate: 0.2286, grossR: -0.265, netXm: -0.2949, tCluster: -2.27, zBreakeven: -1.86, minRr: 2, breakevenPct: 33.3 },
   'MMOVE': { n: 201, settled: 174, winRate: 0.3391, grossR: 0.0513, netXm: 0.0241, tCluster: 0.74, zBreakeven: 0.16, minRr: 2, breakevenPct: 33.3 },
+  'NY-OPEN-DRIVE': { n: 52, settled: 42, winRate: 0.3571, grossR: 0.1626, netXm: 0.1272, tCluster: 0.98, zBreakeven: 0.33, minRr: 2, breakevenPct: 33.3 },
+  'ORB': { n: 145, settled: 125, winRate: 0.336, grossR: 0.0684, netXm: 0.0365, tCluster: 0.68, zBreakeven: 0.06, minRr: 2, breakevenPct: 33.3 },
+  'P4-ADRX': { n: 157, settled: 157, winRate: 0.3503, grossR: 0.051, netXm: -0.0004, tCluster: 0.41, zBreakeven: 0.45, minRr: 2, breakevenPct: 33.3 },
   'P5-DRIVE': { n: 55, settled: 46, winRate: 0.3478, grossR: 0.0589, netXm: 0.0149, tCluster: 0.47, zBreakeven: 0.21, minRr: 2, breakevenPct: 33.3 },
   'P6-COMP': { n: 101, settled: 84, winRate: 0.3214, grossR: -0.0105, netXm: -0.0477, tCluster: -0.09, zBreakeven: -0.23, minRr: 2, breakevenPct: 33.3 },
   'PIVOT-REJECT': { n: 182, settled: 181, winRate: 0.2597, grossR: -0.2208, netXm: -0.3187, tCluster: -2.15, zBreakeven: -2.1, minRr: 2, breakevenPct: 33.3 },
@@ -606,7 +610,6 @@ var HG_GOLD_SIBLING_RECORD = {
   'STRUCT-BOS': { n: 111, settled: 93, winRate: 0.3226, grossR: 0.0418, netXm: 0.0104, tCluster: 0.43, zBreakeven: -0.22, minRr: 2, breakevenPct: 33.3 },
   'TREND-RECLAIM': { n: 114, settled: 109, winRate: 0.367, grossR: 0.1105, netXm: 0.0532, tCluster: 1.06, zBreakeven: 0.75, minRr: 2, breakevenPct: 33.3 },
   'WEEKLY-OPEN': { n: 163, settled: 159, winRate: 0.283, grossR: -0.1392, netXm: -0.2099, tCluster: -1.35, zBreakeven: -1.35, minRr: 2, breakevenPct: 33.3 }
-
 };
 /* --- END GENERATED HG_GOLD_SIBLING_RECORD --- */
 
