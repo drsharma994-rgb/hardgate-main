@@ -538,6 +538,23 @@ function cvEvaluate(inp){
     mlScore: ml.smoothed, horizonBars: CV_HORIZON,
     orderType: dir === 'long' ? 'BUY' : 'SELL'
   };
+  /* hg-v1434: Wave B admission floor, evaluated on the same closed 15m tape
+     the kNN scored. All four clauses adopted (dropped cohorts negative in
+     BOTH halves: costR -0.385R/-0.289R, ER(20) -0.330R/-0.261R, 1h-EMA50
+     -0.664R/-0.302R, volZ -0.504R/-0.279R) — and the kept book stays red, so
+     the tab also carries the measured banner. Demote-not-hide: the card keeps
+     its levels, the ledger records ticket=false. */
+  try{
+    if (out.ok && out.setup && typeof W.hgCryptoSinglesFloor === 'function'){
+      var cvFl = W.hgCryptoSinglesFloor('cryptoverse', out.setup, rows15);
+      if (cvFl){
+        out.demote = !!cvFl.demote;
+        out.floorReasons = cvFl.reasons || [];
+        out.floorMarks = cvFl.marks || [];
+        out.floorAbstained = cvFl.abstained || [];
+      }
+    }
+  }catch(eFl){}
   return out;
 }
 
@@ -663,8 +680,9 @@ function cvFwdRows(setups){
       barT: (s.bar && isFinite(+s.bar.t) && +s.bar.t > 0) ? +s.bar.t : undefined,
       mechanic: ('CVERSE-' + String(p.kind || 'SWEEP') + '@v' + CV_LABEL_V).toUpperCase().slice(0, 28),
       /* every card this tab shows cleared all three gates, so they are one
-         population; there is no weaker tier to split against yet */
-      ticket: true,
+         population; the hg-v1434 admission floor splits it -- a floored card
+         keeps its levels and records ticket=false (demote-not-hide) */
+      ticket: !s.demote,
       /* hg-v984: the macro read the card shows, or NOT RECORDED */
       macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined,
       /* hg-v985: the funding the card read, or NOT RECORDED. Only the RATE is
@@ -764,6 +782,7 @@ function cvCardHTML(row, idx){
     + s.dir.toUpperCase() + '</span>';
   h += '<span class="cv-chip">' + esc(s.kind) + '</span>';
   h += '<span class="cv-chip">RECORD ONLY</span>';
+  if (row.demote) h += '<span class="cv-chip" style="background:#FEE2E2;color:#991B1B">STANDS ASIDE</span>';   /* hg-v1434 */
   h += cvMacroChipHTML(row);   /* hg-v984 */
   h += cvFundingChipHTML(row);   /* hg-v985 */
   h += '<span class="cv-meta">entry ' + fmt(s.entry) + ' · SL ' + fmt(s.stop)
@@ -784,6 +803,10 @@ function cvCardHTML(row, idx){
   h += cvLedgerHTML(row.ledger);
   h += cvMacroNoteHTML(row);   /* hg-v984 */
   h += cvFundingNoteHTML(row);   /* hg-v985 */
+  if ((row.floorReasons && row.floorReasons.length) || (row.floorMarks && row.floorMarks.length))
+    h += '<div class="cv-note"><b>' + (row.demote ? 'STANDS ASIDE — hg-v1434 admission floor.' : 'FLOOR MARK — hg-v1434.') + '</b> '
+      + esc((row.floorReasons || []).concat(row.floorMarks || []).join(' · '))
+      + ' The setup keeps its levels and records ticket=false so the forward ledger prices this cohort.</div>';   /* hg-v1434 */
   h += '<div class="cv-note"><b>WHAT THIS DOES AND DOES NOT CLAIM.</b> No win rate is asserted. '
     + 'At ' + s.rr1 + 'R the trade only has to be right '
     + Math.round(s.breakeven * 100) + '% of the time to break even before costs, '
@@ -843,6 +866,7 @@ function cvCoverageHTML(run){
 function renderCards(rows, run){
   if (!__ui || !__ui.cards) return;
   var h = '';
+  try{ if (typeof W.hgCryptoSinglesBannerHtml === 'function') h += W.hgCryptoSinglesBannerHtml('cryptoverse'); }catch(eB){}   /* hg-v1434 */
   h += cvCoverageHTML(run);
   if (!rows || !rows.length){
     __ui.cards.innerHTML = h + cvEmptyHTML(run);
@@ -914,6 +938,8 @@ async function runScan(ui){
         rows.push({ sym: item.sym, label: item.sym, exchange: item.exchange,
                     bar: res.bar, price: res.price, setup: res.setup,
                     ledger: res.ledger, webhook: cvWebhook(item, res),
+                    demote: !!res.demote, floorReasons: res.floorReasons || [],
+                    floorMarks: res.floorMarks || [], floorAbstained: res.floorAbstained || [],
                     macro: cvMacroMark(item.sym, res.setup.dir),
                     funding: cvFundingMark(item, res.setup.dir) });
         setStat('scanned ' + scanned + '/' + items.length + ' · ' + rows.length + ' setup(s) so far…');

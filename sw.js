@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1433';
+const HG_CACHE = 'hg-v1434';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -30,7 +30,7 @@ const HG_SHELL = [
      it, and an offline client that cannot fetch the parts has the fully
      assembled source in the shell cache. */
   './squeeze.js', './trendtable.js', './trendtable.combined.js', './oiflow.js', './regime.js', './carry.js', './hg-forward.js', './proven-edge.js', './desk-agree.js', './fundamental-stack.js', './regime-stack.js', './hg-mechanics.js', './hg-gates.js', './hg-plan.js', './crypto-catalog.js', './omniroute.js', './dex-screener.js', './setup-confirm.js', './combi.js', './gold-formation.js', './omnigold.js', './omnigold1.js', './milligold.js', './newgold.js', './golddirection.js', './goldultra.js', './cryptoultra.js', './cryptoscan.js', './omnipresent.js', './formation-nightly.js', './formation-nightly-boot.js', './desk-formation-edge.js', './hg-omni-strategy-bridge.js', './contract-report.js', './omnibtc-engines.js', './omnibtc.js', './termbasis.js',
-  './gold-forward-read.js', './gold-rank-evidence.js', './gold-tape-sanity.js', './goldpro.js', './strats.js', './meanrev.js', './supersetup.js', './super-desk-common.js', './super-gold.js', './gold-confluence.js', './super-best.js', './super-sniper.js', './super-book.js', './super-calibrate.js', './reversalsniper.js', './edge.js', './startradertab.js', './book-routing.js', './api-client.js', './tradeos.js', './hey-lens.js', './book.js', './setup-activation.js', './execute.js', './liqs.js', './xuniverse.js', './desk-scan-universe.js',
+  './gold-forward-read.js', './gold-rank-evidence.js', './gold-tape-sanity.js', './goldpro.js', './strats.js', './meanrev.js', './supersetup.js', './super-desk-common.js', './super-gold.js', './gold-confluence.js', './super-best.js', './super-sniper.js', './super-book.js', './super-calibrate.js', './reversalsniper.js', './edge.js', './startradertab.js', './book-routing.js', './api-client.js', './tradeos.js', './hey-lens.js', './book.js', './setup-activation.js', './execute.js', './liqs.js', './xuniverse.js', './desk-scan-universe.js', './crypto-singles-floor.js',
   /* Vendored third-party libraries. Previously loaded from unpkg/jsdelivr, so
      the offline shell covered 126 local files and then broke on charts. */
   './vendor/lightweight-charts-4.2.0.js', './vendor/emailjs-browser-4.4.1.js',

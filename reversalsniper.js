@@ -511,6 +511,30 @@ function rsAssess(rows, opts){
       setup.nearClean = true;
       if (setup.tier === 'clean') setup.tier = 'near';
     }
+    /* hg-v1434: Wave B admission floor, on the same closed 4h tape. ER(20)
+       and 1d-EMA50 adopted (dropped cohorts negative in BOTH halves of the
+       default-param sensitivity census: -0.280R/-0.043R and -0.199R/-0.099R);
+       volZ refused (halves disagree: -0.374R/+0.146R). The shipped desk-param
+       minRR 2.25 strangle STANDS -- the relieved population measured -0.144R
+       negative both halves (n=597), corroborating the PIN-REJECT marker.
+       Demote-not-hide: the snipe keeps its levels and records ticket=false. */
+    if (setup.plan && typeof W.hgCryptoSinglesFloor === 'function'){
+      try{
+        var rsFl = W.hgCryptoSinglesFloor('reversalsniper', { dir: setup.dir || 'long', entry: setup.plan.entry, stop: setup.plan.stop }, rows);
+        if (rsFl){
+          setup.floorReasons = rsFl.reasons || [];
+          setup.floorMarks = rsFl.marks || [];
+          setup.floorAbstained = rsFl.abstained || [];
+          if (rsFl.demote){
+            setup.ticket = false;
+            setup.demote = true;
+            setup.demoted = true;
+            setup.watchOnly = true;
+            if (setup.tier === 'clean') setup.tier = 'near';
+          }
+        }
+      }catch(eFl){}
+    }
     return setup;
   }catch(e){ return null; }
 }

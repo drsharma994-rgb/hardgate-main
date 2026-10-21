@@ -617,6 +617,23 @@ function npEvaluate(inp){
     trend: trend.dir, horizonBars: NP_HORIZON,
     orderType: dir === 'long' ? 'BUY' : 'SELL'
   };
+  /* hg-v1434: Wave B admission floor on the same closed 15m tape. ER(20) /
+     1h-EMA50 / volZ adopted (dropped cohorts negative in BOTH halves:
+     -0.203R/-0.208R, -0.004R/-0.094R, -0.265R/-0.179R); the cost floor was
+     REFUSED here (dropped cohort h1 +0.076R — halves disagree, the hg-v966
+     rule). Demote-not-hide: levels kept, ledger records ticket=false, and the
+     tab carries the measured banner because the kept book is still red. */
+  try{
+    if (typeof W.hgCryptoSinglesFloor === 'function'){
+      var npFl = W.hgCryptoSinglesFloor('90percent', out.setup, rows);
+      if (npFl){
+        out.demote = !!npFl.demote;
+        out.floorReasons = npFl.reasons || [];
+        out.floorMarks = npFl.marks || [];
+        out.floorAbstained = npFl.abstained || [];
+      }
+    }
+  }catch(eFl){}
   return out;
 }
 
@@ -698,7 +715,9 @@ function npFwdRows(setups){
       /* the mechanic carries the TREND the setup was taken in, so the log can
          answer whether this rule works in both directions or only one */
       mechanic: ('NP90-' + String(p.dir) + '@v' + NP_LABEL_V).toUpperCase().slice(0, 28),
-      ticket: true,
+      /* hg-v1434: floored setups keep their levels and record ticket=false
+         (demote-not-hide) */
+      ticket: !s.demote,
       /* hg-v984: the macro read the card shows, or NOT RECORDED */
       macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined,
       /* hg-v985: the funding the card read, or NOT RECORDED. Only the RATE is
@@ -862,6 +881,7 @@ function npCardHTML(row, idx){
   h += '<span class="np-chip">TREND ' + esc(s.trend.toUpperCase()) + '</span>';
   h += '<span class="np-chip">3/3 PAIRS</span>';
   h += '<span class="np-chip">RECORD ONLY</span>';
+  if (row.demote) h += '<span class="np-chip" style="background:#FEE2E2;color:#991B1B">STANDS ASIDE</span>';   /* hg-v1434 */
   h += npMacroChipHTML(row);   /* hg-v984 */
   h += npFundingChipHTML(row);   /* hg-v985 */
   h += '<span class="np-meta">entry ' + fmt(s.entry) + ' · stop ' + fmt(s.stop)
@@ -883,6 +903,10 @@ function npCardHTML(row, idx){
   h += npPairsHTML(row.pairs);
   h += npMacroNoteHTML(row);   /* hg-v984 */
   h += npFundingNoteHTML(row);   /* hg-v985 */
+  if ((row.floorReasons && row.floorReasons.length) || (row.floorMarks && row.floorMarks.length))
+    h += '<div class="np-note"><b>' + (row.demote ? 'STANDS ASIDE — hg-v1434 admission floor.' : 'FLOOR MARK — hg-v1434.') + '</b> '
+      + esc((row.floorReasons || []).concat(row.floorMarks || []).join(' · '))
+      + ' The setup keeps its levels and records ticket=false so the forward ledger prices this cohort.</div>';   /* hg-v1434 */
   h += '<div class="np-note"><b>WHAT THE THREE PAIRINGS ARE AND ARE NOT.</b> '
     + 'RSI, the Stochastic, MACD and Bollinger %B are all computed from the same closes, '
     + 'so their agreement is largely one price series agreeing with itself — it is not six '
@@ -935,7 +959,9 @@ function npEmptyHTML(run){
 
 function renderCards(rows, run){
   if (!__ui || !__ui.cards) return;
-  var h = npCoverageHTML(run);
+  var h = '';
+  try{ if (typeof W.hgCryptoSinglesBannerHtml === 'function') h += W.hgCryptoSinglesBannerHtml('90percent'); }catch(eB){}   /* hg-v1434 */
+  h += npCoverageHTML(run);
   if (!rows || !rows.length){ __ui.cards.innerHTML = h + npEmptyHTML(run); return; }
   h += '<div style="font-size:11px;font-weight:700;color:#3730A3;background:#EEF2FF;'
     + 'padding:6px 8px;border-radius:6px;margin:8px 0">' + rows.length + ' setup'
@@ -997,6 +1023,8 @@ async function runScan(ui){
         }
         rows.push({ sym: item.sym, exchange: item.exchange, bar: res.bar, price: res.price,
                     setup: res.setup, ledger: res.ledger, pairs: res.pairs,
+                    demote: !!res.demote, floorReasons: res.floorReasons || [],
+                    floorMarks: res.floorMarks || [], floorAbstained: res.floorAbstained || [],
                     macro: npMacroMark(item.sym, res.setup.dir),
                     funding: npFundingMark(item, res.setup.dir) });
         setStat('scanned ' + scanned + '/' + items.length + ' · ' + rows.length + ' setup(s) so far…');

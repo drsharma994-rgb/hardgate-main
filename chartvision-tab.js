@@ -79,6 +79,16 @@ function cvFallbackPlan(m, rows4h){
   };
 }
 
+/* hg-v1434: seconds-since-epoch open time of the last closed bar — the
+   settlement anchor the ledger seam records with each crown. */
+function cvBarT(rows){
+  try{
+    if (!rows || !rows.length) return null;
+    var t = +rows[rows.length - 1].t;
+    return t > 1e12 ? Math.floor(t / 1000) : t;
+  }catch(e){ return null; }
+}
+
 function cvEvalSwing(item, rows4h){
   if (typeof W.swingGateMatrix !== 'function' || !rows4h || rows4h.length < 210) return null;
   var ticker = cvTicker(item);
@@ -118,6 +128,7 @@ function cvEvalSwing(item, rows4h){
     rows4h: rows4h,
     rows: rows4h,
     mark: fin(+ticker.mark) ? +ticker.mark : (rows4h.length ? rows4h[rows4h.length - 1].c : null),
+    barT: cvBarT(rows4h),
     fundingPct: ticker.fundingPct,
     turnoverUsd: ticker.turnoverUsd
   };
@@ -170,6 +181,7 @@ function cvEvalScalp(item, h1, m15){
     rows4h: h1,
     rows: hit.rows || m15,
     mark: fin(+ticker.mark) ? +ticker.mark : null,
+    barT: cvBarT(hit.rows || m15),
     fundingPct: ticker.fundingPct,
     turnoverUsd: ticker.turnoverUsd
   };
@@ -223,8 +235,14 @@ function cvCardHTML(r){
   var miss = (r.missing && r.missing.length)
     ? '<div class="note" style="margin-top:4px;font-size:11px">Missing: ' + esc(r.missing.join(', ')) + '</div>' : '';
   var clr = r.clearance ? '<div class="note" style="margin-top:4px;font-size:11px">' + esc(r.clearance) + '</div>' : '';
+  /* hg-v1434: demote-not-hide — a floored CLEAN card keeps its levels and
+     names the reason, but it is no longer a ticket (no trade/book buttons). */
+  var isTicket = r.tier === 'clean' && !r.demote;
+  var floorBlock = ((r.floorReasons && r.floorReasons.length) || (r.floorMarks && r.floorMarks.length))
+    ? '<div class="note warn" style="margin-top:6px"><b>' + (r.demote ? 'STANDS ASIDE' : 'FLOOR MARK') + '</b> — '
+      + esc((r.floorReasons || []).concat(r.floorMarks || []).join(' · ')) + '</div>' : '';
   var tradeOnclick = '';
-  if (r.tier === 'clean' && fin(+r.entry) && fin(+r.stop) && fin(+r.t1)){
+  if (isTicket && fin(+r.entry) && fin(+r.stop) && fin(+r.t1)){
     if (typeof W.hgToTradePlanOnclickAttr === 'function'){
       tradeOnclick = W.hgToTradePlanOnclickAttr(r.sym, r.dir, r.entry, r.stop, r.t1, {
         t2: r.t2, scanner: 'chartvision', strategy: r.style || 'swing'
@@ -235,7 +253,7 @@ function cvCardHTML(r){
     tradeOnclick = tradeOnclick.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
   var tradeBtn = tradeOnclick ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookBtn = (r.tier === 'clean' && typeof W.bookBtnHTML === 'function')
+  var bookBtn = (isTicket && typeof W.bookBtnHTML === 'function')
     ? W.bookBtnHTML(r.sym, r.dir, r.entry, r.stop, r.t1, { scanner: 'chartvision', strategy: r.style || 'swing', t2: r.t2 }) : '';
 
   return '<div class="card ' + esc(r.dir) + tierCls + '">'
@@ -254,7 +272,7 @@ function cvCardHTML(r){
     + (fin(+r.rr) ? ('<span class="k">R:R</span><span>' + pxF(r.rr) + '</span>') : '')
     + '</div>'
     + '<div class="gates">' + cvGateHtml(r) + '</div>'
-    + cvPlanHtml(r) + clr + miss + note + visionHtml + visionOnlySvg
+    + cvPlanHtml(r) + clr + miss + note + floorBlock + visionHtml + visionOnlySvg
     + '<div class="hgchart" id="' + chartId + '"></div>'
     + tradeBtn + bookBtn
     + '</div>';
@@ -308,6 +326,36 @@ function cvPublishState(rows, meta){
       })
     };
   }catch(e){}
+}
+
+/* hg-v1434: the desk's ledger seam. Every 6/7+ crown now records through the
+   shared forward log in the house shape (stRecordForward, startradertab.js) —
+   swing on its own 4h tape with a 20-bar horizon, scalp on 15m with 24.
+   Demote-not-hide: floors and the 6/7 NEAR tier record ticket=false with the
+   levels intact, so the ledger prices exactly the cohort the census measured
+   (desks/cryptosingles/baseline-census.json: swing n=501 -0.012R/+0.028R at
+   0.20%/0.04% RT, scalp n=1406 -0.585R at taker, both halves named). */
+function cvRecordForward(results, style){
+  try{
+    if (typeof W.hgFwdRecordScan !== 'function') return 0;
+    var tf = (style === 'scalp') ? '15m' : '4h';
+    var horizon = (style === 'scalp') ? 24 : 20;
+    var rows = (results || []).map(function(r){
+      return { sym: r.sym, dir: r.dir, entry: r.entry, stop: r.stop, t1: r.t1,
+        mark: r.mark, barT: r.barT, fundingPct: r.fundingPct,
+        mechanic: 'CV-' + String(style || r.style || 'swing').toUpperCase(),
+        ticket: !!(r.clean7 && !r.demote),
+        reads: r.reads || { gates: r.gatesPassed, tier: r.tier,
+          floor: (r.floorReasons || []).concat(r.floorMarks || []) } };
+    }).filter(function(r){
+      return r.dir && isFinite(+r.entry) && isFinite(+r.stop) && isFinite(+r.t1);
+    });
+    if (!rows.length) return 0;
+    return W.hgFwdRecordScan('CHARTVISION', tf, rows, { horizonBars: horizon });
+  }catch(e){
+    try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('chartvision', e); } catch(eW){}
+    return 0;
+  }
 }
 
 function cvFunnelHTML(meta){
@@ -423,11 +471,29 @@ async function cvRunScan(opts){
     var nearN = results.length - clean7n;
 
     __cv.results = results;
+    /* hg-v1434: Wave B admission floor, before publish + record so the card,
+       the snap and the ledger all carry the same demote. Swing keeps its
+       ER(20) clause record-only (a mark); scalp demotes costR/ER20/volZ. */
+    try{
+      if (typeof W.hgCryptoSinglesFloor === 'function'){
+        var floorKey = (style === 'scalp') ? 'chartvision-scalp' : 'chartvision-swing';
+        for (var fi = 0; fi < results.length; fi++){
+          var fl = W.hgCryptoSinglesFloor(floorKey, results[fi], results[fi].rows || results[fi].rows4h);
+          if (fl){
+            results[fi].demote = !!fl.demote;
+            results[fi].floorReasons = fl.reasons || [];
+            results[fi].floorMarks = fl.marks || [];
+            results[fi].floorAbstained = fl.abstained || [];
+          }
+        }
+      }
+    }catch(eFloor){}
     if (!shown.length){
       empty.style.display = 'block';
       stat.textContent = 'done — 0 setups at 6/7+ / ' + items.length + ' screened · ' + ((Date.now() - t0) / 1000).toFixed(0) + 's';
     } else {
-      cards.innerHTML = shown.map(cvCardHTML).join('');
+      var cvBanner0 = (typeof W.hgCryptoSinglesBannerHtml === 'function') ? W.hgCryptoSinglesBannerHtml('chartvision-' + style) : '';
+      cards.innerHTML = cvBanner0 + shown.map(cvCardHTML).join('');
       try { if (typeof W.hgMpPin === 'function') W.hgMpPin('chartvision', shown, null, cards); } catch (eMp) {}
       cvPaintCharts(cards, shown);
       stat.textContent = 'done — ' + results.length + ' at 6/7+ (' + clean7n + ' CLEAN · ' + nearN + ' NEAR) · showing '
@@ -442,6 +508,7 @@ async function cvRunScan(opts){
     }
 
     cvPublishState(results, { style: style, venue: venue, uniLen: items.length });
+    cvRecordForward(results, style);   /* hg-v1434: the desk's ledger seam */
     try { if (__cv.ui && __cv.ui.crown) __cv.ui.crown.innerHTML = cvCrownHtml(__cvSnap); } catch(eCr2){ }   /* hg-v1071 */
 
     if (typeof W.hgChartVisionEnrichDeskRows === 'function' && shown.length){
@@ -466,7 +533,8 @@ async function cvRunScan(opts){
             + Math.floor((Date.now() - t0) / 1000) + 's';
         },
         repaint: function(){
-          cards.innerHTML = shown.map(cvCardHTML).join('');
+          var cvBanner1 = (typeof W.hgCryptoSinglesBannerHtml === 'function') ? W.hgCryptoSinglesBannerHtml('chartvision-' + style) : '';
+          cards.innerHTML = cvBanner1 + shown.map(cvCardHTML).join('');
           try { if (typeof W.hgMpPin === 'function') W.hgMpPin('chartvision', shown, null, cards); } catch (eMp) {}
           cvPaintCharts(cards, shown);
           if (funnel){

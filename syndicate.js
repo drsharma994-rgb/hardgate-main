@@ -833,6 +833,13 @@ function paint(el, read, stat){
   if (!el) return;
   var root = el.querySelector ? el.querySelector('#synOut') : null;
   var html = hgSyndicateHtml(read);
+  /* hg-v1434: measured stand-down banner (Wave B census). The kline-only
+     relay minted 111 blueprints over 12.1 months on 12 majors: 17.6% win into
+     ~2.2R targets, -4.21R at 0.20% RT, negative in BOTH halves (-5.577/
+     -2.899). Floors were tested and REFUSED (best kept cohort still -1.14R).
+     Blueprints are reads for the news desk, never orders -- the desk already
+     sends none. The banner is paint-level honesty, not a floor. */
+  try{ if (typeof window.hgCryptoSinglesBannerHtml === 'function') html = window.hgCryptoSinglesBannerHtml('syndicate') + html; }catch(eB){}
   if (root) root.innerHTML = html;
   else el.innerHTML = shell() + html;
   var st = el.querySelector ? el.querySelector('#synStat') : null;
