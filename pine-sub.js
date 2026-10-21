@@ -162,7 +162,9 @@ function pineSubMountDesk(el, tabLabel, tabId){
       html += W.hgSetupDeskBannerHTML({
         kind: 'pine',
         tab: tabLabel || 'PINE',
-        note: 'NEW = CLEAN ticket · RECENT/ALIGNED = FORMING/NEAR — same tiers as main PINE tab.'
+        note: 'NEW = CLEAN ticket · RECENT/ALIGNED = FORMING/NEAR — same tiers as main PINE tab. '
+          + 'hg-v1435: measured negative — the pooled mirror book settled -0.083R taker / -0.021R maker, '
+          + 'negative both halves (n=14,147); signals print as EVIDENCE and record ticket:false.'
       });
     }
     if (typeof W.hgOmniPrincipalNoteHtml === 'function'){
@@ -178,6 +180,27 @@ function pineSubGateEmptyHTML(miss){
   return '<div class="empty"><b>WAIT.</b> No sym+dir pairs in the Pine universe. '
     + 'Run <b>EDGE</b> scan first (SWING fallback applies). Missing: '
     + pineSubEsc(miss) + '.</div>';
+}
+
+/* hg-v1435: the measured banner every pine mirror paints above its signals.
+   The Wave D census priced the family (12 majors, 4h, 2601 bars, Binance
+   0.20%/0.04% RT, both halves, each mirror's OWN signalFromResult and the
+   desks' own 20-bar record horizon): the pooled mirror book settled NEGATIVE
+   — -0.083R taker / -0.021R maker, both halves (n=14,147). Two named facts a
+   reader must not have to dig for: msb-ob was the ONLY positive script at
+   taker (+0.018R) and it decays (+0.090 first half -> -0.054 second);
+   vumanchu-cipher fired ZERO times in 12x2601 bars — divergence-only by
+   design (pinemath.js:810 prints only on a full last-bar divergence), not a
+   feed failure. Lever HG_PINE_MIRROR_EVIDENCE=false hides the banner for the
+   ledger comparison. Fail-open: text only, never throws. */
+function pineSubEvidenceBannerHTML(statLabel){
+  if (W.HG_PINE_MIRROR_EVIDENCE === false) return '';
+  return '<div class="note warn" style="font-size:11.5px"><b>MEASURED — EVIDENCE, NOT CALLS (hg-v1435):</b> '
+    + 'the pooled pine-mirror book settled <b>-0.083R taker / -0.021R maker, negative in both halves</b> '
+    + '(n=14,147 · 12 majors · 4h · 14.2 months · desks/pinemeta census). These signals print as evidence and '
+    + 'record ticket:false; they are not entries. msb-ob was the only positive script (+0.018R taker) and it '
+    + 'decays (+0.090 -> -0.054 across halves); vumanchu-cipher fired 0 times — divergence-only by design.'
+    + (statLabel ? ' <span class="dim">[' + pineSubEsc(statLabel) + ']</span>' : '') + '</div>';
 }
 
 function pineSubRenderOut(signals, gate, cardFn, emptyDetail){
@@ -292,11 +315,24 @@ function pineSubRunScan(cfg, opts){
               && fin(+sg.entry) && fin(+sg.stop) && fin(+sg.t1)
               && +sg.entry !== +sg.stop;
         }).map(function(sg){
+          /* hg-v1435: demoted to evidence. The Wave D census (desks/pinemeta,
+             12 majors 4h x2601 bars, Binance 0.20%/0.04% RT, both halves,
+             desk-own plans + the desks' own 20-bar record horizon) settled
+             the pooled mirror book at -0.083R taker / -0.021R maker, NEGATIVE
+             IN BOTH HALVES at both (n=14,147). The mints keep recording so
+             the ledger keeps measuring, but they no longer count as the
+             desk's calls: ticket:false, evidence-stamped. The gate's own
+             edgeTicket provenance is preserved on the row. Lever
+             HG_PINE_MIRROR_EVIDENCE=false restores the old ticket flags for
+             the forward-ledger comparison. */
+          var ev = (W.HG_PINE_MIRROR_EVIDENCE !== false);
           return { sym: sg.sym, dir: sg.dir, entry: +sg.entry, stop: +sg.stop, t1: +sg.t1,
                    mark: (isFinite(+sg.price) && +sg.price > 0) ? +sg.price : undefined,   /* hg-v981 */
                    barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(sg.rows).barT : undefined,
                    mechanic: String(sg.scriptId || statLabel || 'PINE').toUpperCase().slice(0, 24),
-                   ticket: !!sg.edgeTicket };
+                   ticket: ev ? false : !!sg.edgeTicket,
+                   edgeTicket: !!sg.edgeTicket,
+                   evidence: ev ? 'hg-v1435: pooled pine-mirror book -0.083R taker / -0.021R maker, negative both halves (n=14,147) — evidence, not a call' : undefined };
         });
         if (fwd.length) W.hgFwdRecordScan('PINE', TF, fwd, { horizonBars: 20 });
       }
@@ -318,7 +354,10 @@ function pineSubRunScan(cfg, opts){
 
     if (cfg.snap) cfg.snap.current = { at: Date.now(), signals: signals, gate: gate, stat: '' };
     if (ui.out && cardFn){
-      ui.out.innerHTML = pineSubRenderOut(signals, gate, cardFn, emptyDetail);
+      /* hg-v1435: the measured evidence banner rides above the signals on
+         every tab this harness serves (the nine mirrors, and the composite
+         when it paints through here). */
+      ui.out.innerHTML = pineSubEvidenceBannerHTML(statLabel) + pineSubRenderOut(signals, gate, cardFn, emptyDetail);
       try {
         if (typeof W.hgMpPin === 'function'){
           var pineKind = (ui.out.id === 'pineOut') ? 'pine'
@@ -372,6 +411,7 @@ W.pineSubScriptOpts = pineSubScriptOpts;
 W.pineSubRunScript = pineSubRunScript;
 W.pineSubEnrichSignal = pineSubEnrichSignal;
 W.pineSubBuildPlan = pineSubBuildPlan;
+W.pineSubEvidenceBannerHTML = pineSubEvidenceBannerHTML;   /* hg-v1435: the measured evidence banner, pinned behaviorally */
 W.pineSubCardHTML = pineSubCardHTML;
 W.pineSubMountDesk = pineSubMountDesk;
 W.pineSubGateEmptyHTML = pineSubGateEmptyHTML;

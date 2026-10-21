@@ -430,10 +430,10 @@ console.log('\n[§7] ship stamps align');
      hg-v1404 at the hg-v1404 bump; 'Sister suites re-pinned' convention).
      Behavior pins
      above unchanged. */
-  ok(/version:\s*'hg-v1434'/.test(bs), "build-stamp.js version: 'hg-v1434' (re-pinned hg-v1434)");
-  ok(/HG_CACHE\s*=\s*'hg-v1434'/.test(sw), "sw.js HG_CACHE = 'hg-v1434' (re-pinned hg-v1434)");
-  ok(/hg-v1434/.test(tt), 'trendtable.js stamped hg-v1434 (re-pinned hg-v1434)');
-  ok(/\?v=1434/.test(tt), 'trendtable.js uses ?v=1434 (re-pinned hg-v1434)');
+  ok(/version:\s*'hg-v1435'/.test(bs), "build-stamp.js version: 'hg-v1435' (re-pinned hg-v1435)");
+  ok(/HG_CACHE\s*=\s*'hg-v1435'/.test(sw), "sw.js HG_CACHE = 'hg-v1435' (re-pinned hg-v1435)");
+  ok(/hg-v1435/.test(tt), 'trendtable.js stamped hg-v1435 (re-pinned hg-v1435)');
+  ok(/\?v=1435/.test(tt), 'trendtable.js uses ?v=1435 (re-pinned hg-v1435)');
 }
 
 /* ---------- summary ---------- */

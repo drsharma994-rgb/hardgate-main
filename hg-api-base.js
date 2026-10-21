@@ -48,15 +48,20 @@
     if (old && old.parentNode) old.parentNode.removeChild(old);   /* hg-v1154: a detached or stubbed node has no parent */
     var s = document.createElement('script');
     s.id = id;
-    s.setAttribute('data-v', '1434');
+    s.setAttribute('data-v', '1435');
     s.src = src;
     s.async = false;
     (document.head || document.documentElement).appendChild(s);
   }
-  /* task #12/#2 fix: the ?v= here was 43 deploys stale (1124 vs the hg-v1167
+/* task #12/#2 fix: the ?v= here was 43 deploys stale (1124 vs the hg-v1167
      deploy) and neither file was precached — a first-visit OFFLINE client lost
-     the whole Shiva desk while the stale cachebuster hid it. Both files are
-     in HG_SHELL now, and the cache-bump check scans runtime literals here. */
-  add('hgShivaDesk', 'shivagold.js?v=1434');
-  add('hgShivaNav', 'shiva-nav.js?v=1434');
+     the whole Shiva desk while the stale cachebuster hid it.
+     hg-v1435 honesty repair: the line below USED to claim "both files are in
+     HG_SHELL now" — they were NOT (the desk was still lost on a first-visit
+     offline client, and the tab was missing from HG_NAV_GROUPS entirely).
+     Both files are in sw.js HG_SHELL for real now, 'shivagold' sits in the
+     GOLD group statically, and this injection stays as belt-and-braces.
+     The cache-bump check scans runtime literals here. */
+  add('hgShivaDesk', 'shivagold.js?v=1435');
+  add('hgShivaNav', 'shiva-nav.js?v=1435');
 })();

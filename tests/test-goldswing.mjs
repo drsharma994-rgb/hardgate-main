@@ -857,9 +857,14 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
      hg-v1389: 'gold-confluence' PREPENDED. Upstream's hg-v1384 shipped the new
      CONFLUENCE tab AT THE HEAD of the GOLD nav group (so it opens by default
      and reads every other gold desk below it) and did not update this pin.
-     This caught the drift when the full suite ran. */
-  assert(/tabs:\['gold-confluence','super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','puregold','tauric','80percent','candle-forecast'\]/.test(gLine),
-         'GOLD group: CONFLUENCE first (hg-v1384), then super desk, then swing/scalp — got: ' + gLine.trim());
+     This caught the drift when the full suite ran.
+     hg-v1435: 'shivagold' INSERTED after 'ganeshgold'. The desk was registered
+     (shivagold.js) but missing from HG_NAV_GROUPS — reachable only through the
+     hg-api-base runtime injection. Wave D made it a static member, which is a
+     real membership change this pin is SUPPOSED to catch. Recorded in its
+     actual position, not loosened to a pattern. */
+  assert(/tabs:\['gold-confluence','super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','shivagold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','puregold','tauric','80percent','candle-forecast'\]/.test(gLine),
+         'GOLD group: CONFLUENCE first (hg-v1384), then super desk, then swing/scalp, ganeshgold then shivagold (hg-v1435) — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');
   assert(sw.indexOf("'./goldswing.js'") !== -1 && sw.indexOf("'./goldpine.js'") !== -1

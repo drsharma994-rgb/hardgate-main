@@ -470,11 +470,16 @@ console.log('== 5) the census, derived from source ==');
      forever (hg-v979's own rule). Fail-open on feed -- the record settles on
      any gold bars -- is the honest answer here. The invariant below partitions
      "every writer that CAN name one feed does" from this one explicit exception. */
-  const EXP_WRITERS = ['eightypercent.js', 'ganeshgold.js', 'gold-confluence.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
+  /* hg-v1435: SIXTEEN writers -- shivagold.js became a ledger writer when
+     hg-v1435 registered the desk (first seam shivaRecordForward, SHIVA-SCALP/
+     SWING rows under sym 'XAUUSD'). Its rows name feed:'PAXG' — the desk's
+     own tape is the PAXGUSDT proxy (getGoldCandles), a single feed, so the
+     invariant below covers it with no exception. */
+  const EXP_WRITERS = ['eightypercent.js', 'ganeshgold.js', 'gold-confluence.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'shivagold.js', 'super-gold.js', 'tauric.js'].sort();
   const FEED_FAIL_OPEN = ['gold-confluence.js'];
   assert(JSON.stringify(resolvers.sort()) === JSON.stringify(EXP_RESOLVERS), 'the files that settle XAUUSD records are exactly the nine expected (' + resolvers.join(', ') + ')');
   assert(bareResolve.length === 0, 'every XAUUSD resolve names a feed (4 args, or 3 on the multi entry)' + (bareResolve.length ? ' -- BARE: ' + bareResolve.join(' | ') : ''));
-  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP_WRITERS), 'the files that write gold records are exactly the fifteen expected (' + writers.join(', ') + ')');
+  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP_WRITERS), 'the files that write gold records are exactly the sixteen expected (' + writers.join(', ') + ')');
   const bareExcept = bareWrite.filter(f => FEED_FAIL_OPEN.indexOf(f) < 0);
   assert(bareExcept.length === 0, 'every single-feed writer names a feed on the row (CONFLUENCE excepted, multi-feed median -- hg-v979 fail-open)' + (bareExcept.length ? ' -- BARE: ' + bareExcept.join(', ') : ''));
   /* And the exception must itself still appear in the bare list -- otherwise a

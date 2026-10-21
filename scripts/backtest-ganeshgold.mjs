@@ -109,7 +109,30 @@ async function fetchBars(symbol, interval, limit){
   throw err;
 }
 
+/* hg-v1435: the deferred engine boot LANDED — in the Wave D census harness
+   (desks/pinemeta/census-pinemeta.mjs), which vm-boots the desk's own
+   ganeshGoldScan with the full hold stack and replayed 34,594 scalp + 2,100
+   swing scans on PAXGUSDT spot. The baked artifact (measured:true) is
+   committed at OUT. A re-run of this walker must never clobber that bake
+   with the old measured:false stub: when a measured bake exists, this
+   script refreshes ONLY meta.fetchProbe and preserves the bake. */
+function existingMeasuredBake(){
+  try{
+    const art = JSON.parse(readFileSync(OUT, 'utf8'));
+    if (art && art.measured === true && Array.isArray(art.trades) && art.trades.length) return art;
+  }catch(e){}
+  return null;
+}
+
 function writeUnmeasured(reason){
+  const bake = existingMeasuredBake();
+  if (bake){
+    bake.meta = bake.meta || {};
+    bake.meta.fetchProbe = 'walker re-run (' + reason + ') — the hg-v1435 measured bake is preserved; the engine boot lives at desks/pinemeta/census-pinemeta.mjs';
+    writeFileSync(OUT, JSON.stringify(bake, null, 2));
+    console.error('[ganesh-walker] ' + reason + ' -- measured bake (hg-v1435) preserved at ' + OUT);
+    return bake;
+  }
   const art = {
     meta: {
       generated: null,   /* no clock stamps -- determinism matters more */

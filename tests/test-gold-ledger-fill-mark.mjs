@@ -316,9 +316,15 @@ console.log('== 4) the census, derived from source ==');
      hg-v1389: FIFTEEN -- gold-confluence.js (CONFLUENCE tab, upstream hg-v1384)
      records ticket rows under sym 'XAUUSD', so it joins this writer census. The
      hg-v1389 pack is itself about making that record settleable (barT, mark,
-     goldShut), so this count moves with the pack by construction. */
-  const EXP = ['eightypercent.js', 'ganeshgold.js', 'gold-confluence.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
-  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP), 'the fifteen gold writers (' + writers.join(', ') + ')');
+     goldShut), so this count moves with the pack by construction.
+     hg-v1435: SIXTEEN -- shivagold.js became a ledger writer when hg-v1435
+     registered the desk (it minted cards and recorded NOTHING before — its
+     first seam, shivaRecordForward, records SHIVA-SCALP/SWING rows under
+     sym 'XAUUSD', ticket:false, mark from the desk's own tape). The list is
+     updated honestly, not weakened: every writer is still individually
+     verified for a mark on its record path below. */
+  const EXP = ['eightypercent.js', 'ganeshgold.js', 'gold-confluence.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'shivagold.js', 'super-gold.js', 'tauric.js'].sort();
+  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP), 'the sixteen gold writers (' + writers.join(', ') + ')');
   assert(bare.length === 0, 'every one carries a mark on its record path' + (bare.length ? ' -- BARE: ' + bare.join(', ') : ''));
 }
 

@@ -749,10 +749,10 @@ W.ggWeekendVerdict = ggWeekendVerdict;   /* hg-v1154: the census route */
    profitability until the ledger has one. */
 /* --- BEGIN GENERATED HG_GANESH_WALK (hg-v1298) --- */
 W.HG_GANESH_WALK = {
-  measured: false,
-  n: 0,
-  span: null,
-  note: "scripts/backtest-ganeshgold-results.json does not exist: the GANESH GOLD walk has not run on a machine that can fetch bars. The walker is wired at scripts/backtest-ganeshgold.mjs (hg-v1298). Until this bakes, nothing on this desk can be filtered by profitability — hg-v966 forbids a gate on measurement that has not happened."
+  measured: true,
+  n: 6625,
+  span: "scalp 15m 2025-10-26..2026-10-21 · swing 4h 2025-10-26..2026-10-10",
+  note: "hg-v1435 FIRST BAKE (desks/pinemeta census): 34,594 scalp scans minted 8,717 A-grade plans and ZERO tickets; 2,100 swing scans minted 934 A-grade plans and ONE ticket (withheld, recorded, lost -1.03R at XM). The desk's own hold stack demotes effectively every A-grade plan to WATCH (inst-block 8,691/8,717 scalp, pine tape-veto 8,703, GS audit 8,692). The WATCH book the card actually shows: scalp 5,871 fills, win 29.8%, -0.067R avg at XM, NEGATIVE BOTH HALVES (-0.038 / -0.096); swing 753 fills, win 47.8%, +0.28R avg at XM, POSITIVE BOTH HALVES (+0.26 / +0.30). PAXG taker costs kill both books (-2.20R / -0.58R avg) — venue truth. XM 0.02% RT, PAXG 0.26% RT."
 };
 /* --- END GENERATED HG_GANESH_WALK --- */
 

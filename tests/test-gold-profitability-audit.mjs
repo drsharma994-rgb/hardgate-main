@@ -211,10 +211,16 @@ function ok(label, pass, detail){
   const endIdx = ganesh.indexOf('/* --- END GENERATED HG_GANESH_WALK');
   ok('S7.1 BEGIN marker present', beginIdx > 0);
   ok('S7.2 END marker present', endIdx > beginIdx);
-  ok('S7.3 literal contains measured:false (null-pointing until bake)',
-    ganesh.slice(beginIdx, endIdx).includes('measured: false'));
-  ok('S7.4 literal names scripts/backtest-ganeshgold.mjs',
-    ganesh.slice(beginIdx, endIdx).includes('scripts/backtest-ganeshgold.mjs'));
+  /* hg-v1435 re-pin: the Wave D bake LANDED (desks/pinemeta census — the
+     engine boot the hg-v1298 walker deferred), so the literal now points at
+     measured:true with the bake's headline facts. The null-pointing shape is
+     still covered by S7.5/S7.6 (writer behavior on missing markers) and by
+     the writer's own measured:false branch when the artifact is absent. */
+  ok('S7.3 literal contains measured:true (hg-v1435 bake landed)',
+    ganesh.slice(beginIdx, endIdx).includes('measured: true'));
+  ok('S7.4 literal names the hg-v1435 first-bake honesty stamp',
+    ganesh.slice(beginIdx, endIdx).includes('hg-v1435 FIRST BAKE')
+      && ganesh.slice(beginIdx, endIdx).includes('ZERO tickets'));
 
   /* FATAL on missing markers (hg-v959 trap): point the writer at a file
      without markers and verify it exits 1. */

@@ -398,12 +398,44 @@ function swingSwings(rows){
 function render(result){
   var head, body;
   if (result.status === 'setup'){
-    head = result.name + ' · ' + (result.side === 'long' ? 'LONG' : 'SHORT') + (result.lead === false ? ' · WATCH' : '');
-    body = result.why
-      + '<br>Entry ' + px(result.entry) + ' · Stop ' + px(result.stop)
-      + ' · T1 ' + px(result.t1.level) + ' (' + result.t1.name + ', ' + result.r1.toFixed(2) + 'R)'
-      + (result.t2 ? ' · T2 ' + px(result.t2.level) + ' (' + result.t2.name + ')' : '')
-      + '<br><span class="dim">Stop is the sweep, not a fixed dollar stop. Risk 0.5% of equity. Equity is not on this desk.</span>';
+    /* hg-v1435: the SCALP lane is evidence-only. The Wave D census
+       (desks/pinemeta, 34,518 scalp scans on the 14.2-month PAXG tape, XM
+       0.02% RT + PAXG taker 0.26% RT, both halves) settled the whole scalp
+       book at -1.89R avg at XM costs, negative in BOTH halves (n=528 fills;
+       PAXG taker -26.2R avg) — and 523/528 stops sat inside the 4x cost
+       floor, so no cost-floor lever rescues it. Demote-not-hide: the chain
+       and the structure steps keep painting; the entry/stop/target block
+       does not. Lever HG_SHIVA_SCALP_EVIDENCE=false restores the old card
+       for the forward-ledger comparison. The swing lane is untouched — its
+       book is n=10, too thin to judge (refused as noise, not as negative). */
+    var scalpEvidence = (result.name === 'SCALP') && W.HG_SHIVA_SCALP_EVIDENCE !== false;
+    head = result.name + ' · ' + (result.side === 'long' ? 'LONG' : 'SHORT') + (result.lead === false ? ' · WATCH' : '')
+      + (scalpEvidence ? ' · EVIDENCE' : '');
+    if (scalpEvidence){
+      body = result.why
+        + '<br><span class="dim"><b>EVIDENCE ONLY — measured negative (hg-v1435):</b> the scalp book settled '
+        + '-1.89R avg at XM costs, negative in both halves (n=528; -26.2R at PAXG taker); 523 of 528 stops sat '
+        + 'inside the 4x cost floor. The chain below stays as evidence — no entry, stop or target prints on '
+        + 'this lane until the forward record says otherwise.</span>';
+    } else {
+      body = result.why
+        + '<br>Entry ' + px(result.entry) + ' · Stop ' + px(result.stop)
+        + ' · T1 ' + px(result.t1.level) + ' (' + result.t1.name + ', ' + result.r1.toFixed(2) + 'R)'
+        + (result.t2 ? ' · T2 ' + px(result.t2.level) + ' (' + result.t2.name + ')' : '')
+        + '<br><span class="dim">Stop is the sweep, not a fixed dollar stop. Risk 0.5% of equity. Equity is not on this desk.</span>';
+      /* hg-v1435: the house geometry-verdict line on every level-printing
+         card (the swing lane, and the scalp lane when the evidence lever is
+         off) — tests/test-geometry-tab-coverage.mjs made this a rule the
+         moment the tab joined HG_NAV_GROUPS. Fail-open, same shape as
+         goldscalp's gsxGeoLine. */
+      try{
+        if (typeof W.hgPlanGeometryLineHtml === 'function'){
+          body += W.hgPlanGeometryLineHtml(
+            { dir: result.side, entry: +result.entry, stop: +result.stop, t1: +result.t1.level },
+            null, { cls: 'note warn', style: 'margin-top:4px' }) || '';
+        }
+      }catch(eG){}
+    }
   } else {
     head = result.name + ' · NO SETUP';
     body = result.why || 'the chain is not complete';
@@ -498,9 +530,11 @@ async function refresh(){
       ? pools('short', levels, asian, h4Closed ? swingSwings(h4Closed) : [])
       : pools('long', levels, asian, h4Closed ? swingSwings(h4Closed) : []);
     var swing = evaluate('SWING', h4Closed, mark1, htf, h4Closed, swingPools, levels, asian, dClosed ? swingSwings(dClosed) : [], macro, news, true, 'swing — any session');
+    shivaRecordForward(scalp, swing, m5Closed, h4Closed, mark5, mark1);
     var src = [daily.source, h4.source, m5.source].filter(Boolean).join(' · ') || 'no tape';
     var html = '<div class="note"><b>SHIVA GOLD TRADING FIRM</b>'
-      + '<br><span class="dim">Higher-timeframe structure, then liquidity, then a sweep, displacement, a structure shift, and a retest. No RSI. No MACD. No moving-average cross. ' + esc(src) + '.</span></div>';
+      + '<br><span class="dim">Higher-timeframe structure, then liquidity, then a sweep, displacement, a structure shift, and a retest. No RSI. No MACD. No moving-average cross. ' + esc(src) + '.</span>'
+      + '<br><span class="dim">hg-v1435 measured (desks/pinemeta census, 14.2mo PAXG tape, both cost models, both halves): the <b>scalp book settled -1.89R avg at XM costs, negative both halves</b> — scalp setups print as EVIDENCE, no levels; the swing book is n=10, too thin to judge, so it still prints. Both lanes now record to the forward ledger (ticket:false).</span></div>';
     html += render(scalp) + render(swing);
     if (out) out.innerHTML = html;
     bumpBadge();
@@ -509,6 +543,53 @@ async function refresh(){
   }
   painting = false;
   return 'ok';
+}
+/* hg-v1435: SHIVA GOLD's first forward-ledger seam. The desk minted cards
+   and recorded NOTHING (against the hg-v985 record-first doctrine — its own
+   "measure, don't assume" line had no measurements). Every setup records on
+   the desk's OWN tape and horizon, ticket:false — the scalp book measured
+   -1.89R avg at XM costs, negative both halves (desks/pinemeta census), so
+   it ships as EVIDENCE and the ledger keeps it measurable. Deduped per
+   bar+levels (refresh runs every 90s on the same bar). Fail-open: a missing
+   ledger never blocks the paint, and this never throws. */
+function shivaRecordForward(scalp, swing, m5Closed, h4Closed, mark5, mark1){
+  try{
+    if (typeof W.hgFwdRecordScan !== 'function') return false;
+    var lanes = [
+      { key: 'SCALP', res: scalp, tf: '15m', horizon: 96, rows: m5Closed, mark: mark5 },
+      { key: 'SWING', res: swing, tf: '4h', horizon: 20, rows: h4Closed, mark: mark1 }
+    ];
+    var recorded = 0;
+    for (var li = 0; li < lanes.length; li++){
+      var L = lanes[li], r = L.res;
+      if (!r || r.status !== 'setup') continue;
+      if (!(isFinite(+r.entry) && isFinite(+r.stop) && r.t1 && isFinite(+r.t1.level))) continue;
+      if (+r.entry === +r.stop) continue;
+      var barT = (L.rows && L.rows.length && isFinite(+L.rows[L.rows.length - 1].t)) ? +L.rows[L.rows.length - 1].t : null;
+      var fwdKey = L.key + '|' + r.side + '|' + (+r.entry).toFixed(2) + '|' + (+r.stop).toFixed(2) + '|' + barT;
+      W.__hgShivaFwdKey = W.__hgShivaFwdKey || {};
+      if (W.__hgShivaFwdKey[L.key] === fwdKey) continue;
+      W.__hgShivaFwdKey[L.key] = fwdKey;
+      W.hgFwdRecordScan('SHIVAGOLD', L.tf, [{
+        sym: 'XAUUSD', dir: r.side,
+        /* hg-v979/hg-v1435: the feed these levels were priced on — the desk's
+           own tape is the PAXGUSDT proxy (getGoldCandles), so the ledger
+           settles them on that feed (the goldscalp.js:591 pattern) */
+        feed: 'PAXG',
+        entry: +r.entry, stop: +r.stop, t1: +r.t1.level,
+        t2: (r.t2 && isFinite(+r.t2.level)) ? +r.t2.level : undefined,
+        mark: (isFinite(+L.mark) && +L.mark > 0) ? +L.mark : undefined,
+        barT: barT,
+        mechanic: ('SHIVA-' + L.key).slice(0, 24),
+        ticket: false,
+        evidence: (L.key === 'SCALP')
+          ? 'hg-v1435: scalp book -1.89R avg @XM, negative both halves (n=528; 523/528 inside the 4x cost floor) — evidence, not a call'
+          : 'hg-v1435: swing book n=10 — too thin to judge; recorded for measurement'
+      }], { horizonBars: L.horizon });
+      recorded++;
+    }
+    return recorded > 0;
+  }catch(eFwd){ return false; }
 }
 function mount(pane){
   pane.innerHTML = '<div class="panel"><h2>SHIVA GOLD TRADING FIRM <span>structure · liquidity · displacement</span></h2><div id="shivaOut"><div class="note">reading the tape…</div></div></div>';
@@ -523,6 +604,11 @@ W.hgShivaBias = biasOf;
 W.hgShivaChain = chain;
 W.hgShivaSession = sessionOf;
 W.hgShivaRefresh = refresh;
+/* hg-v1435: render + ledger seams exported so the desk's first logic pins
+   (tests/test-pinemeta-v1425.mjs) can behaviorally prove the evidence
+   framing and the ticket:false record — this desk had ZERO logic tests. */
+W.hgShivaRender = render;
+W.hgShivaRecordForward = shivaRecordForward;
 if (!W.__hgShivaTimer) W.__hgShivaTimer = setInterval(function(){
   if (document.getElementById('shivaOut')) refresh();
 }, 90000);

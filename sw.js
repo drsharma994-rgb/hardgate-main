@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1434';
+const HG_CACHE = 'hg-v1435';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -46,7 +46,13 @@ const HG_SHELL = [
   './data/strategy-weights.json', './data/strategy-regime-state.json', './data/fund-config.json',
   './conviction-lock.js', './macro-feeds.js', './venuepremium.js', './formation-live.js',
   './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './gstack-brain.js', './brain.js', './scorecard.js', './fixpack13-core.js', './fixpack14-core.js', './fixpack15-core.js', './fixpack16-core.js', './fixpack17-core.js', './crypto-position-risk.js', './risk-tab.js', './reliability.js', './goldcoint.js', './optigold.js', './structure-levels.js', './formation-engine.js', './formation-patch.js', './macro-calendar.js', './audio-annunciator.js', './ws-multiplex.js', './alert-dispatcher.js', './liq-clusters.js', './risk-allocator.js', './journal-db.js', './execute-order.js', './quant-desk.js', './formation.js', './freqtrade-formation.js', './best-levels.js', './gold-best-levels.js', './gold-extra-strategies.js', './walkforward-ui.js', './formation-instr-ui.js', './meta-label.js', './tear-sheet.js', './purged-cv.js', './agent-debate.js', './formation-lab.js',
-  './pinemath.js', './pinegate.js', './pine.js', './pine-sub.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js', './pinesmc.js', './pinecipher.js', './pinerf.js', './pinenw.js', './pineavwap.js'
+  './pinemath.js', './pinegate.js', './pine.js', './pine-sub.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js', './pinesmc.js', './pinecipher.js', './pinerf.js', './pinenw.js', './pineavwap.js',
+  /* hg-v1435: the two SHIVA GOLD files were runtime-injected but never
+     precached, so a first-visit offline client lost the desk — and the
+     hg-api-base.js comment claimed they were here. Now they are.
+     (No apostrophes in this comment: tests/test-sw-precache.mjs extracts
+     quoted urls from this array with a regex.) */
+  './shivagold.js', './shiva-nav.js'
 ];
 
 /* true → the request/response must NEVER touch the cache (fresh market data

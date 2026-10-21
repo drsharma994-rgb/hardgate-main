@@ -1531,6 +1531,72 @@ function snapshotLayers(){
   return o;
 }
 
+/* hg-v1435 — MEMBER FRESHNESS LABELS. BRAIN synthesizes ~20 member snapshots
+   (snapshotLayers above) and, until now, nothing on the desk said how OLD
+   each member's answer was — a 3-minute regime read and a 6-hour engine
+   snapshot weighed the same on the card. This is the hg-v1403/v1417
+   member-floor pattern as LABELS ONLY: every member gets a freshness line
+   (fresh / aging / stale / no clock / dark) painted beside the entry ticket.
+   NOTHING is gated, demoted or reweighted on it — the decision layer and the
+   desk's own pricing mint are byte-identical; the labels exist so a reader
+   (and the next census) can see member staleness instead of assuming it.
+   Fail-open: pure data in, plain text out, never throws. */
+function brainLayerAgeMs(v){
+  if (!v || typeof v !== 'object') return null;
+  var KEYS = ['at', 'ts', 't', 'asOf', 'updated', 'updatedAt', 'fetchedAt', 'time', 'stamp', 'generatedAt'];
+  for (var i = 0; i < KEYS.length; i++){
+    var x = v[KEYS[i]];
+    if (typeof x === 'number' && isFinite(x) && x > 0){
+      var ms = x < 1e12 ? x * 1000 : x;   /* seconds -> ms */
+      if (ms > 1.4e12 && ms < 4e12) return ms;   /* plausible-epoch guard */
+    } else if (typeof x === 'string' && x){
+      var p = Date.parse(x);
+      if (!isNaN(p)) return p;
+    }
+  }
+  return null;
+}
+var BRAIN_MEMBERS = [
+  ['newsState', 'news'], ['regime', 'regime'], ['rotation', 'rotation'],
+  ['onchain', 'onchain'], ['engine', 'gate engine'], ['oiflow', 'oi flow'],
+  ['squeeze', 'squeeze'], ['tape', 'tape'], ['fng', 'fear&greed'],
+  ['carry', 'carry'], ['termbasis', 'term basis'], ['liqSnap', 'liquidations'],
+  ['macro', 'gold macro'], ['stables', 'stables'], ['dvol', 'deribit vol'],
+  ['familyRoute', 'family route'], ['venuePrem', 'venue premium'],
+  ['goldBasis', 'gold spot'], ['goldDeep', 'gold deep'], ['goldSetup', 'gold setup'],
+  ['yieldSnap', 'yields'], ['smtSnap', 'smt']
+];
+function brainMemberFreshness(snap, nowMs){
+  var out = { at: (typeof nowMs === 'number' ? nowMs : Date.now()), rows: [], line: '' };
+  try{
+    var now = out.at, parts = [];
+    snap = snap || {};
+    for (var i = 0; i < BRAIN_MEMBERS.length; i++){
+      var key = BRAIN_MEMBERS[i][0], label = BRAIN_MEMBERS[i][1];
+      var v = snap[key];
+      var row = { layer: label, state: 'dark', ageMin: null };
+      if (v === undefined || v === null){
+        parts.push(label + ' DARK');
+      } else {
+        var ageMs = brainLayerAgeMs(v);
+        if (ageMs === null){
+          row.state = 'no clock';
+          parts.push(label + ' no-clock');
+        } else {
+          var ageMin = Math.max(0, Math.round((now - ageMs) / 60000));
+          row.ageMin = ageMin;
+          row.state = (ageMin < 20) ? 'fresh' : (ageMin < 120 ? 'aging' : 'stale');
+          parts.push(label + ' ' + (ageMin < 120 ? (ageMin + 'm') : (Math.round(ageMin / 60) + 'h'))
+            + (row.state === 'stale' ? ' STALE' : ''));
+        }
+      }
+      out.rows.push(row);
+    }
+    out.line = parts.join(' · ');
+  }catch(e){ out.line = ''; }
+  return out;
+}
+
 function newsFor(sym){
   try{
     if (typeof G.hgNewsRisk !== 'function') return undefined;
@@ -4002,6 +4068,18 @@ function paintEntryTickets(el, rows){
     var age = el.querySelector('#brainTicketAge');
     if (age) age.textContent = 'levels as of ' + new Date().toTimeString().slice(0, 8)
       + ' — refreshed by every synthesis, including the AUTO cycle';
+    /* hg-v1435: member-freshness labels — each member snapshot the votes
+       just read, with its age. Labels only; nothing is gated on them. */
+    try{
+      var mf = el.querySelector('#brainMemberFresh');
+      if (mf){
+        var mfLine = (__memberFresh && __memberFresh.line) ? __memberFresh.line : '';
+        mf.textContent = mfLine
+          ? ('member freshness — ' + mfLine + ' · labels only, nothing gates on them (hg-v1435)')
+          : '';
+        mf.style.display = mfLine ? 'block' : 'none';
+      }
+    }catch(eMF){}
     wrap.style.display = 'block';
     /* alert seam — publish the painted tickets and ping the alert engine
        (hgalert.js owns chime/push policy; plain data only, never awaited) */
@@ -5090,6 +5168,7 @@ var __mountedEl = null;
 var __lastResult = null;  /* {rows, uni, at} — quick rescan rechecks this, never the wire */
 var __lastTicketSnap = null; /* last painted entry tickets — alert seam snapshot */
 var __regimeSnap = null;      /* {score, label, fng} from the last completed synthesis — chop banner */
+var __memberFresh = null;     /* hg-v1435: brainMemberFreshness(snap) from the last completed synthesis — labels only */
 
 async function brainRefresh(){
   try{
@@ -5416,6 +5495,10 @@ async function runBrain(el){
 
     var snap = snapshotLayers();
     snap = await enrichLiqSetup(snap);
+    /* hg-v1435: member-freshness labels — computed once per synthesis from
+       the SAME snap the votes read, painted beside the entry ticket. Labels
+       only; nothing gates on them. */
+    try{ __memberFresh = brainMemberFreshness(snap, Date.now()); }catch(eMF0){ __memberFresh = null; }
     __regimeSnap = {
       score: (snap.regime && isFinite(+snap.regime.score)) ? +snap.regime.score : null,
       label: (snap.regime && snap.regime.label) ? String(snap.regime.label) : '',
@@ -5731,6 +5814,10 @@ async function runQuick(el){
 
     var snap = snapshotLayers();
     snap = await enrichLiqSetup(snap);
+    /* hg-v1435: member-freshness labels — computed once per synthesis from
+       the SAME snap the votes read, painted beside the entry ticket. Labels
+       only; nothing gates on them. */
+    try{ __memberFresh = brainMemberFreshness(snap, Date.now()); }catch(eMF0){ __memberFresh = null; }
     __regimeSnap = {
       score: (snap.regime && isFinite(+snap.regime.score)) ? +snap.regime.score : null,
       label: (snap.regime && snap.regime.label) ? String(snap.regime.label) : '',
@@ -6138,7 +6225,8 @@ function mount(el){
       + 'when a side has nothing, the ticket says so honestly</span></h2>'
       + '<div id="brainTicket"></div>'
       + '<div class="note warn" id="brainRegimeBanner" style="display:none;margin-top:8px;font-size:11.5px"></div>'
-      + '<div class="note" id="brainTicketAge" style="margin-top:6px;font-size:10px"></div></div>'
+      + '<div class="note" id="brainTicketAge" style="margin-top:6px;font-size:10px"></div>'
+      + '<div class="note" id="brainMemberFresh" style="display:none;margin-top:6px;font-size:10px"></div></div>'
       + '<div class="panel" id="brainBoardWrap" style="display:none;margin-top:10px">'
       + '<div class="note warn" id="brainStandDown" style="display:none;margin-bottom:8px;font-size:11.5px"></div>'
       + '<h2>LIMIT BOARD <span>every qualified setup, one exact resting limit each — sorted like the ticket '
@@ -6325,6 +6413,9 @@ function mount(el){
 /* ---------------- registration ---------------- */
 G.brainCollect = brainCollect;
 G.brainDecide = brainDecide;
+/* hg-v1435: member-freshness seam — (snap[, nowMs]) -> {at, rows, line};
+   pure, never throws; the paint is labels-only by contract */
+G.hgBrainMemberFreshness = brainMemberFreshness;
 G.brainSetupConflict = brainSetupConflict;
 G.brainConvictionMesh = brainConvictionMesh;
 G.smartCrossForAliases = smartCrossForAliases;
