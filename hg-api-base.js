@@ -57,6 +57,6 @@
      deploy) and neither file was precached — a first-visit OFFLINE client lost
      the whole Shiva desk while the stale cachebuster hid it. Both files are
      in HG_SHELL now, and the cache-bump check scans runtime literals here. */
-  add('hgShivaDesk', 'shivagold.js?v=1428');
-  add('hgShivaNav', 'shiva-nav.js?v=1428');
+  add('hgShivaDesk', 'shivagold.js?v=1429');
+  add('hgShivaNav', 'shiva-nav.js?v=1429');
 })();

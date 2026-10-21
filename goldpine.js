@@ -1610,7 +1610,7 @@ function mount(el){
       var html = fundNote + gpFundPanelHtml() + tapeNote + heldNote + killedNote + recordNote
         + '<div class="gp-board"><aside class="gp-mp-col" aria-label="Most probable setup">'
         + (mpList.length
-          ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1))
+          ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1) + '<div class="gp-mp-banner" id="gp-mp-banner"></div>')
           : ('<div class="gp-eye">NO LEAD</div><div class="note">Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.</div>'))
         + '</aside><div class="gp-rest">'
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
@@ -1624,6 +1624,7 @@ function mount(el){
         + '</div></div>';
 
       if (out) out.innerHTML = html;
+      try { if (mpList.length && mpList[0] && typeof W.hgGoldAiReviewRun === 'function') W.hgGoldAiReviewRun(mpList[0], (result && result.catalogCtx) ? result.catalogCtx : {}, document.getElementById('gp-mp-banner')); } catch (eAiGp) {}
       try { if (typeof W.hgMpPin === 'function') W.hgMpPin('goldpine', mpList, null, out); } catch (eMp) {}
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       if (stat) stat.textContent = 'done · top ' + swingTop.length + '/' + result.swing.length + ' swing · top '

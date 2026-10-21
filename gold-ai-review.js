@@ -40,6 +40,21 @@
     if (fin(+setup.t2)) lines.push('  TP2: ' + px(setup.t2));
     if (setup.grade) lines.push('  grade: ' + setup.grade);
     if (setup.killzone) lines.push('  killzone: ' + setup.killzone);
+    if (setup.layerLabel) lines.push('  pine layer: ' + setup.layerLabel);
+    if (setup.planSrc) lines.push('  plan source: ' + setup.planSrc);
+    if (Array.isArray(setup.factors) && setup.factors.length){
+      var fsum = setup.factors.map(function(f){ return (f && f.cat ? f.cat : '') + (f && f.ok ? '+' : '-') + (f && isFinite(+f.pts) ? f.pts : ''); }).join(', ');
+      lines.push('  factors: ' + fsum.slice(0, 400));
+    }
+    if (setup.freeReads && typeof setup.freeReads === 'object'){
+      var withN = 0, againstN = 0, tot = 0;
+      for (var rk in setup.freeReads){ if (Object.prototype.hasOwnProperty.call(setup.freeReads, rk)){ tot++; if (setup.freeReads[rk] === true) withN++; else if (setup.freeReads[rk] === false) againstN++; } }
+      lines.push('  confluence reads: ' + withN + ' with / ' + againstN + ' against of ' + tot);
+    }
+    if (setup.pineStates && typeof setup.pineStates === 'object'){
+      lines.push('  pine stack: ' + (setup.pineStates.readable || 0) + ' readable, ' + (setup.pineStates.allLong || 0) + ' long, ' + (setup.pineStates.allShort || 0) + ' short');
+    }
+    if (setup.familyCount != null) lines.push('  family count: ' + setup.familyCount);
     if (setup.why) lines.push('  engine rationale: ' + String(setup.why).slice(0, 400));
     lines.push('');
     lines.push('MARKET CONTEXT (best-effort, may be partial):');
@@ -48,7 +63,7 @@
     if (ctx.fng) lines.push('  fear&greed: ' + JSON.stringify(ctx.fng));
     if (ctx.spot) lines.push('  spot: ' + JSON.stringify(ctx.spot).slice(0, 300));
     lines.push('');
-    lines.push('TASK: judge whether the levels are internally consistent and well-placed for the stated direction. Check: stop distance vs ATR, TP1 vs nearest structure, direction vs macro, R:R >= 1.2. Be strict: disagree when R:R < 1.2 or direction fights the macro stack.');
+    lines.push('TASK: you are a senior gold (XAUUSD) trader with decades of experience. Fuse the Pine-script indicator stack, native strategy signals, fundamentals (macro/real-rates/COT), technical structure (EMA/ATR/levels) and sentiment (fear&greed, positioning, news) to judge this setup. Check: stop distance vs ATR, TP1 vs nearest structure, direction vs macro stack and confluence reads, R:R >= 1.2. Be strict: disagree when R:R < 1.2, direction fights the macro stack, or confluence reads are net against. Return a one-sentence rationale naming the deciding factor.');
     lines.push('Return ONLY this JSON (no prose, no markdown):');
     lines.push('{ "confidence": <0-100 integer>, "verdict": "agree"|"caution"|"disagree", "rationale": "<one sentence, <=160 chars>" }');
     return lines.join('\n');
