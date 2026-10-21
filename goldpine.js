@@ -382,7 +382,12 @@ function probScore(s){
   else if (s.tier === 'native') form += 8;
   var rr = fin(+s.rr) ? Math.min(+s.rr, 4) * 2 : 0;
   var fam = fin(+s.familyCount) ? +s.familyCount * 1.5 : 0;
-  return base + form + gradeRank(s.grade) * 3 + rr + fam;
+  /* hg-v1429: fuse sentiment + macro tilt into the ranking so a setup that
+     rides WITH fear&greed and the macro stack leads over one that fights it.
+     Small weights: confluence reads dominate, this just breaks ties honestly. */
+  var sent = (s.freeReads && s.freeReads['free:fearGreed'] === true) ? 3 : 0;
+  var tilt = (s.freeReads && s.freeReads['free:macroTilt'] === true) ? 2 : 0;
+  return base + form + gradeRank(s.grade) * 3 + rr + fam + sent + tilt;
 }
 
 function topProbSetups(list, limit){
