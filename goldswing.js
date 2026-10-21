@@ -938,7 +938,7 @@ var GW_CSS = ''
 + '.gsw-dir span{display:block;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.14em;color:#0F172A;margin-top:4px}'
 + '.gsw-plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0 4px}'
 + '.gsw-plan>div{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:9px 11px}'
-+ '.gsw-plan i{display:block;font-style:normal;font-size:9px;letter-spacing:.16em;color:#1E293B;font-weight:700}'
++ '.gsw-plan i{display:block;font-style:normal;font-size:9px;letter-spacing:.16em;color:#F8FAFC;font-weight:700}'
 + '.gsw-plan b{display:block;font-size:16px;color:#047857;font-weight:800;margin:3px 0}'
 + '.gsw-plan u{text-decoration:none;font-size:10px;color:#0F172A;opacity:1;font-weight:500;line-height:1.45}'
 + '.gsw-why{font-size:11px;margin-top:8px;color:#0F172A;font-weight:600}'
@@ -950,7 +950,7 @@ var GW_CSS = ''
 + '.gsw-inv{font-size:11px;color:#0F172A;margin-top:8px;line-height:1.55;font-weight:500}'
 + '.gsw-inv b{color:#B91C1C;letter-spacing:.12em;font-size:10px;font-weight:800}'
 + '.gsw-lock{margin-top:10px;font-size:10px;letter-spacing:.08em;color:#047857;font-weight:600;border-top:1px dashed #BBF7D0;padding-top:8px}'
-+ '.gsw-lock.new{color:#1E293B}'
++ '.gsw-lock.new{color:#F8FAFC}'
 + '.gsw-card.long{border-left:4px solid #059669;background:linear-gradient(180deg,rgba(5,150,105,.14),transparent 48%),rgba(15,23,42,.94);color:#F1F5F9}'
 + '.gsw-card.short{border-left:4px solid #DC2626;background:linear-gradient(180deg,rgba(220,38,38,.12),transparent 48%),rgba(15,23,42,.94);color:#F1F5F9}'
 + '.gsw-card.best{box-shadow:0 0 0 2px rgba(5,150,105,.35),0 12px 28px -14px rgba(5,150,105,.18)}'
@@ -992,7 +992,7 @@ var GW_CSS = ''
 + '.gsw-grade{font-weight:800}'
 + '.gsw-grade.A{color:#047857}'
 + '.gsw-grade.B{color:#0891B2}'
-+ '.gsw-grade.C{color:#1E293B}'
++ '.gsw-grade.C{color:#F8FAFC}'
 + '.gsw-tallynum{font-weight:800}'
 + '.gsw-tallynum.up{color:#047857}'
 + '.gsw-tallynum.dn{color:#B91C1C}'
@@ -1001,7 +1001,7 @@ var GW_CSS = ''
 + '.gsw-invline{font-size:10px;color:#0F172A;margin-top:5px;line-height:1.55;font-weight:500}'
 + '.gsw-invline b{color:#B91C1C;letter-spacing:.08em;font-weight:800}'
 + '.gsw-hist{margin-top:18px}'
-+ '.gsw-hhead{font-size:10px;letter-spacing:.2em;color:#1E293B;margin-bottom:6px;font-weight:700}'
++ '.gsw-hhead{font-size:10px;letter-spacing:.2em;color:#F8FAFC;margin-bottom:6px;font-weight:700}'
 + '.gsw-hrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
 + '.gsw-hrow.stopped{border-left-color:#DC2626}'
 + '.gsw-hrow.target{border-left-color:#059669}'
@@ -1015,7 +1015,7 @@ var GW_CSS = ''
 + '.gsw-wrow.armed .gsw-wst{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
 + '.gsw-wrow.promoted{border-left-color:#0891B2;background:rgba(8,145,178,.06)}'
 + '.gsw-wrow.promoted .gsw-wst{color:#0891B2;border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.10)}'
-+ '.gsw-wrow.idle .gsw-wst{color:#1E293B;border-color:#E2E8F0;background:#F8FAFC}'
++ '.gsw-wrow.idle .gsw-wst{color:#F8FAFC;border-color:#334155;background:#1E293B}'
 + '.gsw-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
 + '.gsw-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
 + '.gsw-weekend-wrap,.gsw-weekend-wrap{margin:0 0 12px}'
@@ -1023,7 +1023,7 @@ var GW_CSS = ''
 + '.gsw-weekend b,.gsw-weekend b{letter-spacing:.12em;font-size:10px;font-weight:800}'
 + '.gsw-weekend-detail,.gsw-weekend-detail{margin-top:6px;font-weight:500}'
 + '.gsw-weekend-ok,.gsw-weekend-ok{border-color:#BBF7D0;background:#F0FDF4;color:#047857}'
-+ '.gsw-weekend-muted,.gsw-weekend-muted{border-color:#E2E8F0;background:#F8FAFC;color:#1E293B}'
++ '.gsw-weekend-muted,.gsw-weekend-muted{border-color:#334155;background:#1E293B;color:#F8FAFC}'
 + '.gsw-weekend-caution,.gsw-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
 + '.gsw-weekend-warn,.gsw-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
 
@@ -1218,10 +1218,10 @@ function bannerHTML(best, ranked){
     try{
       var __peSw = W.hgPerfectCohortEdge('GOLDSWING');
       if (__peSw && __peSw.settled > 0 && isFinite(__peSw.expR)){
-        perfectEdgeNote = '<span style="margin-left:6px;font-size:10px;font-weight:700;color:#57534E">measured '
+        perfectEdgeNote = '<span style="margin-left:6px;font-size:10px;font-weight:700;color:#A8A29E">measured '
           + (__peSw.expR > 0 ? '+' : '') + __peSw.expR.toFixed(1) + 'R · n=' + __peSw.settled + '</span>';
       } else {
-        perfectEdgeNote = '<span style="margin-left:6px;font-size:10px;font-weight:700;color:#57534E">unmeasured (n=0)</span>';
+        perfectEdgeNote = '<span style="margin-left:6px;font-size:10px;font-weight:700;color:#A8A29E">unmeasured (n=0)</span>';
       }
     }catch(ePeSw){}
   }
@@ -1298,7 +1298,7 @@ function cardHTML(c, isBest, season, tape){
     ? '<span class="gsw-tallynum ' + (c.tally >= 0 ? 'up' : 'dn') + '">tally ' + (c.tally > 0 ? '+' : '') + c.tally + '</span>' : '';
   var lockLine = c.locked
     ? '<div class="gsw-lockline">⬤ CONVICTION LOCK — levels as of ' + esc(c.asOf || '') + ' (restored verbatim)</div>'
-    : '<div class="gsw-lockline" style="color:#1E293B">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
+    : '<div class="gsw-lockline" style="color:#F8FAFC">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
   var tradeOnclick = (c.sym && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(c.sym, c.dir, c.entry, c.stop, c.t1, { t2: c.t2, stack: c.stack, scanner: 'goldswing', strategy: 'goldswing' })
