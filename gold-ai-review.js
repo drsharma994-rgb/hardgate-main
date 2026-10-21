@@ -21,7 +21,9 @@
     } catch (e) {}
     return cfg;
   }
+  function threshold(){ try { var v = parseInt(localStorage.getItem('hg_gold_ai_threshold'),10); if (isFinite(v) && v>=0 && v<=100) return v; } catch(e){} return 40; }
   function available(){ var c = loadCfg(); return !!(c && c.endpoint); }
+  function shouldDemote(review){ if (!review) return false; if (review.verdict === 'disagree') return true; if (review.confidence != null && review.confidence < threshold()) return true; return false; }
   function px(n){ if (!fin(+n)) return '\u2014'; var x = Math.abs(+n); if (x >= 10000) return (+n).toFixed(2); if (x >= 100) return (+n).toFixed(2); if (x >= 1) return (+n).toFixed(4); return (+n).toFixed(6); }
   function buildPrompt(setup, ctx){
     ctx = ctx || {};
@@ -46,7 +48,7 @@
     if (ctx.fng) lines.push('  fear&greed: ' + JSON.stringify(ctx.fng));
     if (ctx.spot) lines.push('  spot: ' + JSON.stringify(ctx.spot).slice(0, 300));
     lines.push('');
-    lines.push('TASK: judge whether the levels are internally consistent and well-placed for the stated direction. Check: stop distance vs ATR, TP1 vs nearest structure, direction vs macro, R:R >= 1.2.');
+    lines.push('TASK: judge whether the levels are internally consistent and well-placed for the stated direction. Check: stop distance vs ATR, TP1 vs nearest structure, direction vs macro, R:R >= 1.2. Be strict: disagree when R:R < 1.2 or direction fights the macro stack.');
     lines.push('Return ONLY this JSON (no prose, no markdown):');
     lines.push('{ "confidence": <0-100 integer>, "verdict": "agree"|"caution"|"disagree", "rationale": "<one sentence, <=160 chars>" }');
     return lines.join('\n');
@@ -93,6 +95,7 @@
   }
   function renderReview(container, review){
     if (!container || !review) return;
+    if (shouldDemote(review)) { try { container.style.opacity = '0.72'; } catch(e){} } else { try { container.style.opacity = ''; } catch(e){} }
     var id = 'hg-ai-review-line';
     var old = container.querySelector('#' + id);
     if (old && old.parentNode) old.parentNode.removeChild(old);
@@ -109,11 +112,15 @@
     review(setup, ctx).then(function(r){
       if (!r) return;
       setup.aiReview = r;
+      setup.aiDemoted = shouldDemote(r);
       try { renderReview(container, r); } catch(e){}
+      if (setup.aiDemoted) try { container.setAttribute('data-ai-demoted','1'); } catch(e){}
     }).catch(function(){});
   }
   W.hgGoldAiReview = review;
   W.hgGoldAiReviewAvailable = available;
+  W.hgGoldAiReviewThreshold = threshold;
+  W.hgGoldAiShouldDemote = shouldDemote;
   W.hgGoldAiReviewRender = renderReview;
   W.hgGoldAiReviewRun = runAndRender;
 })();
