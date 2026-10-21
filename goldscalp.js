@@ -1372,7 +1372,7 @@ function bannerHTML(best, ranked){
       }
     }catch(ePeSc){}
   }
-  return '<div class="gsx-banner"><div class="gsx-banner-in">'
+  return '<div class="gsx-banner" id="gsx-mp-banner"><div class="gsx-banner-in">'
     + '<div class="gsx-eye">MOST PROBABLE SETUP' + perfectBadge + perfectPlusBadge + perfectEdgeNote + '</div>'
     + '<div class="gsx-dir ' + best.dir + '">' + dirUp
     + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
@@ -3852,6 +3852,7 @@ async function runScan(ui, scanSt){
           + gsRejectFunnelHTML(rejectedAll, preGateAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
+        try { if (displayBest && typeof W.hgGoldAiReviewRun === 'function') W.hgGoldAiReviewRun(displayBest, ctx, document.getElementById('gsx-mp-banner')); } catch(eAiSc){}
       } else if (rejectedAll.length || armedAll.length){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
