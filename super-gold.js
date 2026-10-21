@@ -3794,6 +3794,12 @@ function mount(el){
     '    <div>',
     '      <div class="hg-title">Super Gold</div>',
     '      <div class="hg-note">Conviction desk — merges GOLD SCALP + GOLD SWING. GRADE A + audit + spot sizing = trade-ready.</div>',
+    /* hg-v1433: the wave-C census label, paint-level honesty only. The desk's
+       crowned book over 12.6mo of replay: gross +0.067R, net +0.005R @XM —
+       but the halves SIGN-FLIP (+0.184 first, −0.170 second), so the
+       conviction layer is not proven; at PAXG taker it is −0.740R in both
+       halves. The forward ledger decides. No behavior reads this. */
+    '      <div class="hg-note">Measured (hg-v1433 census, 12.6mo PAXG replay): crowned picks gross +0.067R, net +0.005R @XM — halves <b>sign-flip</b> (+0.184 / −0.170), so treat the crown as unproven; −0.740R @PAXG taker both halves. The forward ledger decides.</div>',
     '    </div>',
     '    <div class="hg-super-badge">Super Gold · GRADE desk</div>',
     '  </div>',

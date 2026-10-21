@@ -215,7 +215,7 @@ const chopRowsVol = mkRows('chop+vol', 60);
   /* levers */
   run('window.HG_INLINE_FLOOR = false;');
   r = run('hgInlineScanFloor("liq-trap", { dir:"long", entry:100, stop:99.6, t1:101 }, window.__chopV)');
-  assert(r.demote === false, 'lever HG_INLINE_FLOOR=false restores pre-v1422 admission');
+  assert(r.demote === false, 'lever HG_INLINE_FLOOR=false restores pre-v1432 admission');
   run('window.HG_INLINE_FLOOR = true; window["HG_INLINE_FLOOR_LIQ-TRAP"] = false;');
   r = run('hgInlineScanFloor("liq-trap", { dir:"long", entry:100, stop:99.6, t1:101 }, window.__chopV)');
   assert(r.demote === false, 'per-scanner lever HG_INLINE_FLOOR_LIQ-TRAP=false retires one clause set');
@@ -329,7 +329,7 @@ const chopRowsVol = mkRows('chop+vol', 60);
 
   console.log('== 6) the stamp ==');
   {
-    assert(HG_VER === 'hg-v1432', 'build-stamp version is hg-v1432 (got ' + HG_VER + ')');
+    assert(HG_VER === 'hg-v1433', 'build-stamp version is hg-v1433 (got ' + HG_VER + ')');
     assert(swCacheOk(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw.js HG_CACHE is ' + HG_VER);
     assert(!/\?v=1433/.test(html), 'index.html carries no ?v=1433 byte left');
     assert(/hg-v1435/.test(readFileSync(path.join(root, 'AGENTS.md'), 'utf8')), 'AGENTS.md records hg-v1435');

@@ -986,6 +986,106 @@ function ogRegimeChipHtml(s){
   }catch(e){ return ''; }
 }
 
+/* hg-v1433 — THE WAVE-C MEASURED FLOOR PACK (census: /mnt/agents/output/
+   desks/goldsingles, 14.2mo PAXG spot, desk's own ogSignals seam, both
+   venues, both halves). Two stand-asides and one record-only mark:
+
+   ① HTF-STRUCTURE CONFIRMATION (scalp + intraday lanes). A break that runs
+   AGAINST the 4h tape's prevailing side (close vs EMA-50, sliced at the
+   BREAK BAR — the hg-v950 per-shape rule) never takes a TOP PICK slot.
+   Measured dropped cohorts: scalp n=335 −0.213R @XM (−0.232/−0.194 by half),
+   intraday n=64 −0.348R (−0.295/−0.401) — negative in BOTH halves on both
+   lanes; kept improves (scalp −0.133→−0.068, intraday −0.029→+0.146).
+   Lever HG_OG_HTF_FLOOR (set false to restore the old board).
+
+   ② SCALP GOLD-WEEKEND STAND-ASIDE. The hg-v950 goldShut mark becomes a
+   pick-slot bar on the scalp lane only: the admitted weekend cohort settled
+   −0.155R @XM in both halves and PASSED the hg-v944 4-window protocol
+   (−0.028 / −0.517 / −0.180 / +0.014 — 3/4 negative, none above +0.02R;
+   the raw minted population fails W1 at +0.061R, named here because the
+   gate reads the admitted population it actually bars). Refused on
+   intraday (h1 +0.201R) and swing (n=2). Lever HG_OG_WEEKEND_FLOOR.
+
+   ③ ER(20) RECORD-ONLY MARKS (og:er20ok, every lane, sliced at the break
+   bar). The census re-verified the programme's refuted chop veto: for the
+   first time on a gold desk the dropped cohort IS negative in both halves
+   (scalp n=531 −0.139R, intraday n=120 −0.087R) — but the kept cohort stays
+   negative (−0.120R) and every prior gold desk refuted it, so it rides as a
+   reads-bag mark the forward ledger judges out of sample (the hg-v1420
+   gp:er20ok shape). It gates NOTHING anywhere.
+
+   Demote-not-hide throughout: barred setups keep their card, their levels
+   and their ledger row — only the TOP PICK slot is refused, with the reason
+   named on the card. Third state (hg-v989): an unread 4h tape / weekend
+   calendar / ER window bars NOTHING — fail-open, always. */
+function ogHtfFloorOn(){ return W.HG_OG_HTF_FLOOR !== false; }
+function ogWeekendFloorOn(){ return W.HG_OG_WEEKEND_FLOOR !== false; }
+
+function ogEr20Ok(rows, s){
+  try{
+    if (!Array.isArray(rows) || !s) return null;
+    var iR = fin(s.i);
+    if (iR === null) return null;
+    var i = Math.floor(iR);
+    if (i < 20 || i >= rows.length) return null;
+    var last = +rows[i].c, first = +rows[i - 20].c;
+    if (!isFinite(last) || !isFinite(first)) return null;
+    var sum = 0, k, prev = first;
+    for (k = i - 19; k <= i; k++){
+      var c = +rows[k].c;
+      if (!isFinite(c)) return null;
+      sum += Math.abs(c - prev); prev = c;
+    }
+    if (!(sum > 0)) return null;
+    return (Math.abs(last - first) / sum) >= 0.30;
+  }catch(e){ return null; }
+}
+
+function ogHtfMark(rows4h, s){
+  try{
+    if (!Array.isArray(rows4h) || !s || (s.dir !== 'long' && s.dir !== 'short')) return null;
+    var tSec = fin(s.t);
+    if (tSec === null) return null;
+    var closes = [], k;
+    for (k = 0; k < rows4h.length; k++){
+      var bt = +rows4h[k].t;
+      if (!isFinite(bt) || bt > tSec) break;          /* evidence stops at the break bar */
+      var c = +rows4h[k].c;
+      if (isFinite(c)) closes.push(c);
+    }
+    if (closes.length < 55) return null;              /* EMA-50 unread — fail open */
+    var _ema = (typeof ema === 'function') ? ema : null;
+    if (!_ema) return null;
+    var ea = _ema(closes, 50);
+    var e = ea && ea.length ? +ea[ea.length - 1] : NaN;
+    var cl = closes[closes.length - 1];
+    if (!isFinite(e) || !isFinite(cl) || !(cl > 0)) return null;
+    var above = cl > e;
+    return { with: (s.dir === 'long') ? above : !above, ema50: e, close: cl };
+  }catch(e){ return null; }
+}
+
+function ogHtfBlocked(s){
+  return ogHtfFloorOn()
+      && !!(s && (s.lane === 'scalp' || s.lane === 'intraday') && s.htf && s.htf.with === false);
+}
+function ogWeekendBlocked(s){
+  return ogWeekendFloorOn()
+      && !!(s && s.lane === 'scalp' && s.goldShut && s.goldShut.inWeekend === true);
+}
+function ogHtfChipHtml(s){
+  if (!s || !s.htf || (s.lane !== 'scalp' && s.lane !== 'intraday')) return '';
+  if (s.htf.with === false)
+    return '<span class="stamp bad">HTF AGAINST — the 4h tape\'s prevailing side (close vs EMA-50) is against this break; never a TOP PICK</span>';
+  if (s.htf.with === true)
+    return '<span class="stamp ok">HTF WITH IT — the 4h EMA-50 side backs the break</span>';
+  return '';
+}
+function ogWeekendChipHtml(s){
+  if (!s || s.lane !== 'scalp' || !s.goldShut || s.goldShut.inWeekend !== true) return '';
+  return '<span class="stamp bad">GOLD SHUT — formed inside the gold weekend on a 24/7 proxy bar no broker quoted; never a TOP PICK</span>';
+}
+
 /* The single best live setup in each of the two lanes the panel leads with.
    Deliberately ONE EACH and never "top two overall" - two scalps at the top
    would answer a different question than the one asked. A lane with nothing
@@ -1010,6 +1110,12 @@ function ogTopPicks(setups, px){
        bars a slot; favored, caution and neutral inform and never bar, and an
        unstamped setup (module absent, tape unreadable) stays eligible. */
     if (ogRegimeBlocked(s)) return;
+    /* hg-v1433: nor does a break the 4h tape's prevailing side runs AGAINST
+       (measured −0.213R/−0.348R both halves), nor a scalp break formed while
+       GOLD WAS SHUT (−0.155R both halves, hg-v944 4-window pass). Both
+       demote-not-hide: the card, the levels and the ledger row stand. */
+    if (ogHtfBlocked(s)) return;
+    if (ogWeekendBlocked(s)) return;
     var e = ogProb(s, px);
     if (!e || !isFinite(e.p)) return;
     var reach = ogReach(s, px);
@@ -1051,6 +1157,8 @@ function card(s, mark){
   var fundChip = ogFundChipHtml(s);   /* hg-v1005: the stack's verdict beside the state */
   var confChip = ogConfirmChipHtml(s); /* hg-v1006: and the confirmation floor's verdict beside both */
   var regimeChip = ogRegimeChipHtml(s); /* hg-v1007: and the house regime's posture beside all three */
+  var htfChip = ogHtfChipHtml(s);       /* hg-v1433: the 4h EMA-50 stand-aside verdict */
+  var weekendChip = ogWeekendChipHtml(s); /* hg-v1433: and the scalp gold-weekend stand-aside */
 
   /* The reading depends on whether the order has FILLED. A resting order is
      described by how far the mark is from its entry; a running position by
@@ -1075,7 +1183,7 @@ function card(s, mark){
     + '<span class="stamp">' + esc(s.laneLabel || '') + '</span>'
     + '<span class="dir">' + (filled ? (s.dir === 'long' ? 'LONG — filled' : 'SHORT — filled')
                                      : (s.dir === 'long' ? 'BUY LIMIT' : 'SELL LIMIT')) + '</span></div>'
-    + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + fundChip + confChip + regimeChip + '</div>'
+    + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + fundChip + confChip + regimeChip + htfChip + weekendChip + '</div>'
     + '<div class="mini">'
     + (filled && op
         ? '<span class="k">unrealised</span><span><b>' + (op.unrealR >= 0 ? '+' : '') + fmt(op.unrealR, 2) + 'R</b></span>'
@@ -1376,6 +1484,17 @@ function render(ui, lanes, mark, note, opts){
      nothing; a lane drawn from impossible candles now says which lane. */
   /* hg-v913: this desk reads the records it writes. */
   var tapeNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('optigold') : '');
+  /* hg-v1433: the ledger's read split for the wave-C marks (og:er20ok /
+     og:htfwith). Display only — the shared renderer paints NOTHING until
+     settled records carry a mark (hg-forward.js:3442), and nothing anywhere
+     gates on the split. */
+  try{
+    if (typeof W.hgFwdReadSplitHtml === 'function'){
+      tapeNote += (W.hgFwdReadSplitHtml('OPTI GOLD:15m') || '')
+               + (W.hgFwdReadSplitHtml('OPTI GOLD:1h') || '')
+               + (W.hgFwdReadSplitHtml('OPTI GOLD:4h') || '');
+    }
+  }catch(eOgSplit){}
   if (typeof W.hgGoldTapeNotes === 'function'){
     (lanes || []).forEach(function(L){
       if (!L || !L.rows || !L.rows.length) return;
@@ -1545,6 +1664,34 @@ async function runOptiGold(ui){
       }
     }catch(eRS){}
 
+    /* hg-v1433: the wave-C marks, stamped per setup BEFORE the board and the
+       picks read them — the ER(20) record-only mark on the lane's own tape
+       sliced at the break bar, and the HTF stand-aside stamp (scalp +
+       intraday only) off the SAME 4h rows the regime read used, sliced at
+       the break bar. Both fail-open: an unread tape stamps nothing, and an
+       unstamped setup stays eligible (hg-v989). */
+    try{
+      var ogHtfRows = null;
+      for (var ogh = 0; ogh < lanes.length; ogh++){
+        if (lanes[ogh] && lanes[ogh].cfg && lanes[ogh].cfg.key === 'swing'
+            && lanes[ogh].rows && lanes[ogh].rows.length){ ogHtfRows = lanes[ogh].rows; break; }
+      }
+      for (var ogm = 0; ogm < lanes.length; ogm++){
+        var ogLane = lanes[ogm];
+        if (!ogLane || !ogLane.setups || !ogLane.setups.length || !ogLane.cfg) continue;
+        for (var ogs = 0; ogs < ogLane.setups.length; ogs++){
+          var ogS = ogLane.setups[ogs];
+          if (!ogS || (ogS.dir !== 'long' && ogS.dir !== 'short')) continue;
+          var ogEr = ogEr20Ok(ogLane.rows, ogS);
+          if (ogEr === true || ogEr === false) ogS.er20ok = ogEr;
+          if (ogLane.cfg.key === 'scalp' || ogLane.cfg.key === 'intraday'){
+            var ogHm = ogHtfMark(ogHtfRows, ogS);
+            if (ogHm) ogS.htf = ogHm;
+          }
+        }
+      }
+    }catch(eOGM){}
+
     /* hg-v1007: the forward log, per lane exactly as it ran inside the fetch
        loop, moved to here so every recorded row can carry row.regime beside
        row.conf — the book can then ask whether regime-ALIGNED breaks pay
@@ -1663,6 +1810,14 @@ function ogFwdRows(setups, lane, rows, feed){
        into the mechanic string: the mechanic's grouping must stay continuous
        with every row already logged. An unstamped setup invents none. */
     if (s.regime && typeof s.regime.posture === 'string') row.regime = s.regime.posture;
+    /* hg-v1433: the wave-C marks ride the ledger row's reads bag, so the
+       REPLAY READ SPLIT can judge them out of sample — og:er20ok (record-only,
+       gates NOTHING), og:htfwith (the stand-aside's stamp: the ledger sees
+       the cohort the pick loop refused) and the gold-weekend flag. Additive
+       keys, never folded into the mechanic string; absent when unread. */
+    if (s.er20ok === true || s.er20ok === false){ row.reads = row.reads || {}; row.reads['og:er20ok'] = s.er20ok; }
+    if (s.htf && (s.htf.with === true || s.htf.with === false)){ row.reads = row.reads || {}; row.reads['og:htfwith'] = s.htf.with; }
+    if (s.goldShut && s.goldShut.inWeekend === true) row.goldShut = true;
     out.push(row);
   }
   return out;
@@ -1722,6 +1877,16 @@ W.__ogConfirmChipHtml = ogConfirmChipHtml;
    ogRegimeChipHtml the card chip behind its call-time feature-check. */
 W.__ogRegimeBlocked = ogRegimeBlocked;
 W.__ogRegimeChipHtml = ogRegimeChipHtml;
+
+/* hg-v1433: the wave-C seams, exported the same way — the pure pick-loop
+   predicates, the stamps (sliced at the break bar, fail-open) and the card
+   chips, all drivable in tests without a feed. */
+W.__ogEr20Ok = ogEr20Ok;
+W.__ogHtfMark = ogHtfMark;
+W.__ogHtfBlocked = ogHtfBlocked;
+W.__ogWeekendBlocked = ogWeekendBlocked;
+W.__ogHtfChipHtml = ogHtfChipHtml;
+W.__ogWeekendChipHtml = ogWeekendChipHtml;
 
 W.HG_tabs = W.HG_tabs || [];
 /* hg-v1005: the stack seams, on the registration object and one export for

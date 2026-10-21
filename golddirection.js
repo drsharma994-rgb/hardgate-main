@@ -1871,6 +1871,13 @@ function mount(el){
       + 'swing-prefer, or a live forward ledger that reads has-paid), holds the v699/v700 lead invariant (a demoted '
       + 'or vetoed card is never crowned; an all-demoted side gets no execution banner), lists every held-back '
       + 'reason, and stamps AGAINST DESK TAPE when gold’s own bars disagree with you.</div>'
+      /* hg-v1433: the wave-C census disclosure, paint-level honesty only. Over
+         12.6 months of PAXG replay this desk crowned ZERO picks — every
+         matched card arrived demoted by the measured EDGE table (plus
+         OFF-SESSION / post-gate demotes), and the lead invariant refuses
+         demoted cards. The board you see is the whole desk; an execution
+         banner here is historically rare, not broken. No behavior reads this. */
+      + '<div class="note" style="margin-top:4px">Measured (hg-v1433 census, 12.6mo PAXG replay): this desk crowned <b>0 picks</b> — every matched card was demoted by the measured EDGE table, and the lead invariant never crowns a demoted card. The board is the desk; a quiet banner is the measured norm, not a malfunction.</div>'
       + '<div class="prog" id="gdProg"><i></i></div>'
       + '</div>'
       + '<div class="cards" id="gdCards"></div>'
