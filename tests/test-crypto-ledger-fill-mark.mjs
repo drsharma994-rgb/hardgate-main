@@ -226,8 +226,13 @@ console.log('== 5) every crypto record map forwards the mark it had in hand (tex
      never match the raw-sym resolves the scan loops hand back; that evidence
      looked recorded and was frozen. The mark/bar contract this pin guards is
      unchanged — tests/test-edge-gate-v1000.mjs drives the strip behaviorally. */
-  assert(/const fwdMark = \(typeof hgMpMarkOf === 'function'\) \? hgMpMarkOf\(bookMeta, bookMeta, \{\}\) : NaN;\s*const fwdBar = \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(bookMeta\.rows\) : \{\};\s*hgFwdRecordScan\('CARD:' \+ scanId, '4h',\s*\[\{ sym: String\(sym\)\.replace\(\/\^\\\[\[\^\\\]\]\*\\\]\\s\*\/, ''\), dir: dir, entry: entry, stop: stop, t1: t1,\s*mark: \(isFinite\(fwdMark\) && fwdMark > 0\) \? fwdMark : undefined, barT: fwdBar\.barT,/.test(shell),
-    'index.html: the inline CARD choke point (SMC, ORDER BLOCKS, TRAP, DIV, COIL, APEX) records the RAW sym (venue tag stripped, hg-v1000) and forwards the mark its own geometry line reads and the bar off bookMeta.rows');
+  /* hg-v1432 re-pin: the tf literal '4h' became hgInlineScanTf(scanId,
+     bookMeta) — the hardcoded tf settled liq-trap/scalp 15m plans on 4h
+     bars — and `ticket: true` became `ticket: tradeable` so NEAR/FORMING
+     tiers record ticket:false instead of not at all. The mark/bar contract
+     this pin guards is unchanged. */
+  assert(/const fwdMark = \(typeof hgMpMarkOf === 'function'\) \? hgMpMarkOf\(bookMeta, bookMeta, \{\}\) : NaN;\s*const fwdBar = \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(bookMeta\.rows\) : \{\};\s*hgFwdRecordScan\('CARD:' \+ scanId, hgInlineScanTf\(scanId, bookMeta\),\s*\[\{ sym: String\(sym\)\.replace\(\/\^\\\[\[\^\\\]\]\*\\\]\\s\*\/, ''\), dir: dir, entry: entry, stop: stop, t1: t1,\s*mark: \(isFinite\(fwdMark\) && fwdMark > 0\) \? fwdMark : undefined, barT: fwdBar\.barT,/.test(shell),
+    'index.html: the inline CARD choke point (SMC, ORDER BLOCKS, TRAP, DIV, COIL, APEX) records the RAW sym (venue tag stripped, hg-v1000) on the scanner\'s own tf (hg-v1432) and forwards the mark its own geometry line reads and the bar off bookMeta.rows');
   assert((shell.match(/\.\.\.c, barT: \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(c\.rows\)\.barT : undefined, mechanic: kind\.toUpperCase\(\) \+ '-(CLEAN|NEAR)'/g) || []).length === 2,
     'index.html: the BEST/SWING/SCALP publish spreads the candidate (its mark rides the spread) and reads the bar off its rows, CLEAN and NEAR alike');
 }
