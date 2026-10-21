@@ -8643,6 +8643,16 @@ function trendmxCrownPanelHTML(state){
         }
       }
     }catch(eMe){ }
+    /* hg-v1430: advisory AI review on the crown, mirrors the gold tabs */
+    try{
+      if (crown && plan && typeof W.hgGoldAiReviewRun === 'function'){
+        var _tmSetup = { strategy: 'TrendMatrix', dir: dir, sym: (crown.sym || crown.symbol || 'CRYPTO'),
+          entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2, rr: plan.rr,
+          grade: crown.grade || crown.tier || '—', score: crown.score, maxScore: 5,
+          freeReads: crown.perfectReads || null };
+        setTimeout(function(){ try { var c = document.querySelector('[data-r="crown"]'); if (c) W.hgGoldAiReviewRun(_tmSetup, {}, c); } catch(e){} }, 0);
+      }
+    }catch(e){}
     return html;
   }catch(e){ return ''; }
 }
