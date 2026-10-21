@@ -15,6 +15,355 @@
   if (!isFinite(vwap)) hard.push('VWAP unread');
   else if (dir === 'long' && !(px > vwap)) hard.push('below VWAP');
   else if (dir === 'short' && !(px < vwap)) hard.push('above VWAP');
+  var wave1 = rows1 ? tmWaveOk(rows1, dir) : null;
+  var st4 = tmSuperTrend(rows4, 10, 3);
+  var st1 = rows1 ? tmSuperTrend(rows1, 10, 3) : null;
+  if (!st4 || !st1) hard.push('supertrend unread');
+  else if (dir === 'long' && !(st4.up && st1.up)) hard.push('supertrend against');
+  else if (dir === 'short' && (st4.up || st1.up)) hard.push('supertrend against');
+  var cmf = rows1 ? tmCmf(rows1, 20) : null;
+  if (cmf == null) hard.push('money flow unread');
+  else if (dir === 'long' && cmf < 0.05) hard.push('money flow ' + cmf.toFixed(2) + ' is under 0.05');
+  else if (dir === 'short' && cmf > -0.05) hard.push('money flow ' + cmf.toFixed(2) + ' is above -0.05');
+  var ker = rows1 ? tmKernel(rows1, 24, 8) : null;
+  if (!ker) hard.push('kernel unread');
+  else if (dir === 'long' && !(ker.slopeUp && ker.above)) hard.push('kernel is not rising under price');
+  else if (dir === 'short' && !(!ker.slopeUp && !ker.above)) hard.push('kernel is not falling over price');
+  var coiled = rows1 ? tmSqueezeHigh(rows1) : null;
+  if (coiled == null) hard.push('squeeze unread');
+  else if (coiled) hard.push('still inside the high squeeze');
+  var qqe = rows1 ? tmQqe(rows1, dir) : null;
+  if (qqe == null) hard.push('qqe unread');
+  else if (!qqe) hard.push('qqe is not with the trade');
+  var hull = rows1 ? tmHullRising(rows1, 21) : null;
+  if (hull == null) hard.push('hull unread');
+  else if (dir === 'long' && !hull) hard.push('hull slope is down');
+  else if (dir === 'short' && hull) hard.push('hull slope is up');
+  var vfi = rows1 ? tmVfi(rows1, 20, 0.2) : null;
+  if (vfi == null) hard.push('volume flow unread');
+  else if (dir === 'long' && !(vfi > 0)) hard.push('volume flow is not in');
+  else if (dir === 'short' && !(vfi < 0)) hard.push('volume flow is not out');
+  var diverged = rows1 ? tmWtDiverging(rows1, dir) : null;
+  if (diverged == null) hard.push('wavetrend divergence unread');
+  else if (diverged) hard.push('wavetrend is diverging');
+  var block = rows1 ? tmFreshOb(rows1, dir) : null;
+  if (block == null) hard.push('order block unread');
+  else if (!block) hard.push('not at a fresh order block');
+  var magic = rows1 ? tmTrendMagic(rows1, dir) : null;
+  if (magic == null) hard.push('trend magic unread');
+  else if (!magic) hard.push('trend magic is against the trade');
+  var alpha = rows1 ? tmAlpha(rows1, dir) : null;
+  if (alpha == null) hard.push('alphatrend unread');
+  else if (!alpha) hard.push('alphatrend is against the trade');
+  var band = rows1 ? tmRangeFilter(rows1, dir) : null;
+  if (band == null) hard.push('range filter unread');
+  else if (!band) hard.push('range filter is against the trade');
+  var ml = rows1 ? tmLorentz(rows1, dir) : null;
+  if (ml == null) hard.push('lorentz unread');
+  else if (!ml) hard.push('lorentz is not with the trade');
+  var half = rows1 ? tmHalfTrend(rows1, dir) : null;
+  if (half == null) hard.push('halftrend unread');
+  else if (!half) hard.push('halftrend is against the trade');
+  var boom = rows1 ? tmWae(rows1, dir) : null;
+  if (boom == null) hard.push('explosion unread');
+  else if (!boom) hard.push('no explosion above the dead zone');
+  var mom = rows1 ? tmSqueezeMom(rows1, dir) : null;
+  if (mom == null) hard.push('squeeze momentum unread');
+  else if (!mom) hard.push('momentum is not accelerating with the trade');
+  var noise = rows1 ? tmDamiani(rows1) : null;
+  if (noise == null) hard.push('volatility unread');
+  else if (!noise) hard.push('chop, volatility is not above the noise');
+  var aroon = rows1 ? tmAroon(rows1, dir) : null;
+  if (aroon == null) hard.push('aroon unread');
+  else if (!aroon) hard.push('aroon says the extreme is stale');
+  var elder = rows1 ? tmElder(rows1, dir) : null;
+  if (elder == null) hard.push('elder ray unread');
+  else if (!elder) hard.push('elder ray is against the trade');
+  var vwma = rows1 ? tmVwmaSide(rows1, dir) : null;
+  if (vwma == null) hard.push('volume average unread');
+  else if (!vwma) hard.push('volume is not sitting with the trade');
+  var dmi = rows1 ? tmDmi(rows1, dir) : null;
+  if (dmi == null) hard.push('dmi unread');
+  else if (!dmi) hard.push('dmi is flat or the directional index is against the trade');
+  var bandPos = rows1 ? tmBbSide(rows1, dir) : null;
+  if (bandPos == null) hard.push('bollinger unread');
+  else if (!bandPos) hard.push('price is outside the band or on the wrong side of the midline');
+  var ichi = rows1 ? tmIchiSignal(rows1, dir) : null;
+  if (ichi == null) hard.push('ichimoku line unread');
+  else if (!ichi) hard.push('tenkan, kijun or chikou is against the trade');
+  var stretch = rows1 ? tmVwapStretch(rows1, dir) : null;
+  if (stretch == null) hard.push('vwap band unread');
+  else if (!stretch) hard.push('price is stretched more than 2 ATR from VWAP');
+  var ssl = rows1 ? tmSsl(rows1, dir) : null;
+  if (ssl == null) hard.push('ssl unread');
+  else if (!ssl) hard.push('ssl channel is against the trade');
+  var stoch = rows1 ? tmStochRsi(rows1, dir) : null;
+  if (stoch == null) hard.push('stoch rsi unread');
+  else if (!stoch) hard.push('stoch rsi is not with the trade');
+  var fisher = rows1 ? tmFisher(rows1, dir) : null;
+  if (fisher == null) hard.push('fisher unread');
+  else if (!fisher) hard.push('fisher is against the trade');
+  var psar = rows1 ? tmPsar(rows1, dir) : null;
+  if (psar == null) hard.push('parabolic sar unread');
+  else if (!psar) hard.push('parabolic sar is against the trade');
+  var schaff = rows1 ? tmSchaff(rows1, dir) : null;
+  if (schaff == null) hard.push('schaff unread');
+  else if (!schaff) hard.push('schaff trend cycle is against the trade');
+  var vortex = rows1 ? tmVortex(rows1, dir) : null;
+  if (vortex == null) hard.push('vortex unread');
+  else if (!vortex) hard.push('vortex is against the trade');
+  var ao = rows1 ? tmAwesome(rows1, dir) : null;
+  if (ao == null) hard.push('awesome oscillator unread');
+  else if (!ao) hard.push('awesome oscillator is against the trade');
+  var mfi = rows1 ? tmMfi(rows1, dir) : null;
+  if (mfi == null) hard.push('money flow index unread');
+  else if (!mfi) hard.push('money flow index is against the trade');
+  var gator = rows1 ? tmAlligator(rows1, dir) : null;
+  if (gator == null) hard.push('alligator unread');
+  else if (!gator) hard.push('alligator is not feeding with the trade');
+  var cci = rows1 ? tmCci(rows1, dir) : null;
+  if (cci == null) hard.push('cci unread');
+  else if (!cci) hard.push('cci is against the trade');
+  var chop = rows1 ? tmChop(rows1, dir) : null;
+  if (chop == null) hard.push('choppiness unread');
+  else if (!chop) hard.push('choppiness is above 61.8');
+  var rvi = rows1 ? tmRvi(rows1, dir) : null;
+  if (rvi == null) hard.push('vigor unread');
+  else if (!rvi) hard.push('relative vigor is against the trade');
+  var trix = rows1 ? tmTrix(rows1, dir) : null;
+  if (trix == null) hard.push('trix unread');
+  else if (!trix) hard.push('trix is against the trade');
+  var ult = rows1 ? tmUltimate(rows1, dir) : null;
+  if (ult == null) hard.push('ultimate oscillator unread');
+  else if (!ult) hard.push('ultimate oscillator is against the trade');
+  var obv = rows1 ? tmObv(rows1, dir) : null;
+  if (obv == null) hard.push('on-balance volume unread');
+  else if (!obv) hard.push('on-balance volume is against the trade');
+  var ha = rows1 ? tmHeikin(rows1, dir) : null;
+  if (ha == null) hard.push('heikin ashi unread');
+  else if (!ha) hard.push('heikin ashi is against the trade');
+  var force = rows1 ? tmForce(rows1, dir) : null;
+  if (force == null) hard.push('force index unread');
+  else if (!force) hard.push('force index is against the trade');
+  var kst = rows1 ? tmKst(rows1, dir) : null;
+  if (kst == null) hard.push('kst unread');
+  else if (!kst) hard.push('know sure thing is against the trade');
+  var macd = rows1 ? tmMacd(rows1, dir) : null;
+  if (macd == null) hard.push('macd unread');
+  else if (!macd) hard.push('macd is against the trade');
+  var don = rows1 ? tmDonchian(rows1, dir) : null;
+  if (don == null) hard.push('donchian unread');
+  else if (!don) hard.push('price is on the wrong side of the donchian midpoint');
+  var cmo = rows1 ? tmCmo(rows1, dir) : null;
+  if (cmo == null) hard.push('chande unread');
+  else if (!cmo) hard.push('chande momentum is against the trade');
+  var kumo = rows1 ? tmKumo(rows1, dir) : null;
+  if (kumo == null) hard.push('cloud unread');
+  else if (!kumo) hard.push('price is inside or through the wrong side of the cloud');
+  var tsi = rows1 ? tmTsi(rows1, dir) : null;
+  if (tsi == null) hard.push('true strength unread');
+  else if (!tsi) hard.push('true strength is against the trade');
+  var chaikin = rows1 ? tmChaikin(rows1, dir) : null;
+  if (chaikin == null) hard.push('chaikin unread');
+  else if (!chaikin) hard.push('chaikin oscillator is against the trade');
+  var dpo = rows1 ? tmDpo(rows1, dir) : null;
+  if (dpo == null) hard.push('dpo unread');
+  else if (!dpo) hard.push('detrended price is against the trade');
+  var ease = rows1 ? tmEase(rows1, dir) : null;
+  if (ease == null) hard.push('ease of movement unread');
+  else if (!ease) hard.push('ease of movement is against the trade');
+  var relvol = rows1 ? tmRelVol(rows1, dir) : null;
+  if (relvol == null) hard.push('relative volatility unread');
+  else if (!relvol) hard.push('relative volatility is against the trade');
+  var cop = rows1 ? tmCoppock(rows1, dir) : null;
+  if (cop == null) hard.push('coppock unread');
+  else if (!cop) hard.push('coppock is against the trade');
+  var lagu = rows1 ? tmLaguerre(rows1, dir) : null;
+  if (lagu == null) hard.push('laguerre unread');
+  else if (!lagu) hard.push('laguerre rsi is against the trade');
+  var slope = rows1 ? tmLinreg(rows1, dir) : null;
+  if (slope == null) hard.push('regression unread');
+  else if (!slope) hard.push('regression slope is against the trade');
+  var will = rows1 ? tmWilliams(rows1, dir) : null;
+  if (will == null) hard.push('williams unread');
+  else if (!will) hard.push('williams %R is against the trade');
+  var bop = rows1 ? tmBop(rows1, dir) : null;
+  if (bop == null) hard.push('balance of power unread');
+  else if (!bop) hard.push('balance of power is against the trade');
+  var kling = rows1 ? tmKlinger(rows1, dir) : null;
+  if (kling == null) hard.push('klinger unread');
+  else if (!kling) hard.push('klinger volume is against the trade');
+  var smi = rows1 ? tmSmi(rows1, dir) : null;
+  if (smi == null) hard.push('smi unread');
+  else if (!smi) hard.push('stochastic momentum is against the trade');
+  var tema = rows1 ? tmTema(rows1, dir) : null;
+  if (tema == null) hard.push('tema unread');
+  else if (!tema) hard.push('triple ema is against the trade');
+  var impulse = rows1 ? tmImpulse(rows1, dir) : null;
+  if (impulse == null) hard.push('impulse unread');
+  else if (!impulse) hard.push('elder impulse is sloping against the trade');
+  var div = rows1 ? tmRsiDiv(rows1, dir) : null;
+  if (div == null) hard.push('rsi divergence unread');
+  else if (!div) hard.push('rsi divergence is against the trade');
+  var pvt = rows1 ? tmPvt(rows1, dir) : null;
+  if (pvt == null) hard.push('price volume trend unread');
+  else if (!pvt) hard.push('price volume trend is against the trade');
+  var struct = rows1 ? tmStructure(rows1, dir) : null;
+  if (struct == null) hard.push('structure unread');
+  else if (!struct) hard.push('market structure is against the trade');
+  var failBr = rows1 ? tmFailedBreak(rows1, dir) : null;
+  if (failBr == null) hard.push('failed break unread');
+  else if (!failBr) hard.push('the 20-bar extreme was pierced and closed back inside');
+  var lostVwap = rows1 ? tmVwapLost(rows1, dir) : null;
+  if (lostVwap == null) hard.push('session vwap unread');
+  else if (!lostVwap) hard.push('price lost the session VWAP');
+  var bos = rows1 ? tmBos(rows1, dir) : null;
+  if (bos == null) hard.push('break of structure unread');
+  else if (!bos) hard.push('structure broke against the trade');
+  var yday = rows1 ? tmPriorDay(rows1, dir) : null;
+  if (yday == null) hard.push('prior day unread');
+  else if (!yday) hard.push('yesterday extreme was pierced and closed back inside');
+  var engulf = rows1 ? tmEngulf(rows1, dir) : null;
+  if (engulf == null) hard.push('engulf unread');
+  else if (!engulf) hard.push('a candle engulfed the prior body against the trade');
+  var inside = rows1 ? tmInsideFail(rows1, dir) : null;
+  if (inside == null) hard.push('inside bar unread');
+  else if (!inside) hard.push('an inside bar broke and closed back inside');
+  var obvDiv = rows1 ? tmObvDiv(rows1, dir) : null;
+  if (obvDiv == null) hard.push('obv divergence unread');
+  else if (!obvDiv) hard.push('on-balance volume diverged against the trade');
+  var dayOpen = rows1 ? tmDayOpen(rows1, dir) : null;
+  if (dayOpen == null) hard.push('day open unread');
+  else if (!dayOpen) hard.push('price lost the day open');
+  var round = rows1 ? tmRound(rows1, dir) : null;
+  if (round == null) hard.push('round level unread');
+  else if (!round) hard.push('a round level was pierced and closed back through');
+  var cross = rows1 ? tmEmaCross(rows1, dir) : null;
+  if (cross == null) hard.push('ema cross unread');
+  else if (!cross) hard.push('the 9 EMA just crossed against the trade');
+  var eq = rows1 ? tmEqSweep(rows1, dir) : null;
+  if (eq == null) hard.push('equal levels unread');
+  else if (!eq) hard.push('equal highs or equal lows were swept and closed back inside');
+  var fib = rows1 ? tmFibLost(rows1, dir) : null;
+  if (fib == null) hard.push('fib unread');
+  else if (!fib) hard.push('price lost the 61.8 of the last swing');
+  var climax = rows1 ? tmClimax(rows1, dir) : null;
+  if (climax == null) hard.push('climax unread');
+  else if (!climax) hard.push('a climax bar closed against the trade');
+  var week = rows1 ? tmWeekOpen(rows1, dir) : null;
+  if (week == null) hard.push('week open unread');
+  else if (!week) hard.push('price lost the weekly open');
+  var macdDiv = rows1 ? tmMacdDiv(rows1, dir) : null;
+  if (macdDiv == null) hard.push('macd divergence unread');
+  else if (!macdDiv) hard.push('macd histogram diverged against the trade');
+  var rsiX = rows1 ? tmRsiCross(rows1, dir) : null;
+  if (rsiX == null) hard.push('rsi cross unread');
+  else if (!rsiX) hard.push('RSI just crossed against the trade');
+  var fvg = rows1 ? tmFvgLost(rows1, dir) : null;
+  if (fvg == null) hard.push('fair value gap unread');
+  else if (!fvg) hard.push('price lost the fair value gap');
+  var bb = rows1 ? tmBbReject(rows1, dir) : null;
+  if (bb == null) hard.push('bollinger unread');
+  else if (!bb) hard.push('a Bollinger band was pierced and closed back inside');
+  var poc = rows1 ? tmPocLost(rows1, dir) : null;
+  if (poc == null) hard.push('point of control unread');
+  else if (!poc) hard.push('price lost the session point of control');
+  var pivot = rows1 ? tmPivot(rows1, dir) : null;
+  if (pivot == null) hard.push('pivot unread');
+  else if (!pivot) hard.push('a daily pivot was pierced and closed back through');
+  var ob = rows1 ? tmObLost(rows1, dir) : null;
+  if (ob == null) hard.push('order block unread');
+  else if (!ob) hard.push('price closed through the order block');
+  var kelt = rows1 ? tmKeltner(rows1, dir) : null;
+  if (kelt == null) hard.push('keltner unread');
+  else if (!kelt) hard.push('a Keltner band was pierced and closed back inside');
+  var asia = rows1 ? tmAsiaSweep(rows1, dir) : null;
+  if (asia == null) hard.push('asian range unread');
+  else if (!asia) hard.push('the Asian range was swept and closed back inside');
+  var vwapBand = rows1 ? tmVwapBand(rows1, dir) : null;
+  if (vwapBand == null) hard.push('vwap band unread');
+  else if (!vwapBand) hard.push('a VWAP band was pierced and closed back inside');
+  var cam = rows1 ? tmCamarilla(rows1, dir) : null;
+  if (cam == null) hard.push('camarilla unread');
+  else if (!cam) hard.push('a Camarilla level was pierced and closed back through');
+  var kijun = rows1 ? tmKijunLost(rows1, dir) : null;
+  if (kijun == null) hard.push('kijun unread');
+  else if (!kijun) hard.push('price lost the Kijun');
+  var vah = rows1 ? tmVahLost(rows1, dir) : null;
+  if (vah == null) hard.push('value area unread');
+  else if (!vah) hard.push('price lost the value area');
+  var stoch = rows1 ? tmStochCross(rows1, dir) : null;
+  if (stoch == null) hard.push('stochastic unread');
+  else if (!stoch) hard.push('stochastic crossed against the trade from the extreme');
+  var h4 = rows1 ? tmH4Open(rows1, dir) : null;
+  if (h4 == null) hard.push('4h open unread');
+  else if (!h4) hard.push('price lost the 4h open');
+  var naked = rows1 ? tmNakedPoc(rows1, dir) : null;
+  if (naked == null) hard.push('prior point of control unread');
+  else if (!naked) hard.push('price lost yesterday point of control');
+  var reg = rows1 ? tmRegress(rows1, dir) : null;
+  if (reg == null) hard.push('regression unread');
+  else if (!reg) hard.push('a regression channel was pierced and closed back inside');
+  var cci = rows1 ? tmCciExit(rows1, dir) : null;
+  if (cci == null) hard.push('cci extreme unread');
+  else if (!cci) hard.push('CCI crossed back from the extreme');
+  var ext = rows1 ? tmExt(rows1, dir) : null;
+  if (ext == null) hard.push('extension unread');
+  else if (!ext) hard.push('the 1.272 extension was pierced and closed back through');
+  var mfiX = rows1 ? tmMfiExit(rows1, dir) : null;
+  if (mfiX == null) hard.push('mfi extreme unread');
+  else if (!mfiX) hard.push('money flow crossed back from the extreme');
+  var willX = rows1 ? tmWillExit(rows1, dir) : null;
+  if (willX == null) hard.push('williams extreme unread');
+  else if (!willX) hard.push('Williams crossed back from the extreme');
+  var ny = rows1 ? tmNySweep(rows1, dir) : null;
+  if (ny == null) hard.push('new york hour unread');
+  else if (!ny) hard.push('the New York hour was swept and closed back inside');
+  var london = rows1 ? tmLondonSweep(rows1, dir) : null;
+  if (london == null) hard.push('london hour unread');
+  else if (!london) hard.push('the London hour was swept and closed back inside');
+  var ema50 = rows1 ? tmEma50(rows1, dir) : null;
+  if (ema50 == null) hard.push('ema 50 unread');
+  else if (!ema50) hard.push('price lost the 50 EMA');
+  var don55 = rows1 ? tmDonchian55(rows1, dir) : null;
+  if (don55 == null) hard.push('donchian unread');
+  else if (!don55) hard.push('the 55-bar extreme was pierced and closed back inside');
+  var rsiX = rows1 ? tmRsiExit(rows1, dir) : null;
+  if (rsiX == null) hard.push('rsi extreme unread');
+  else if (!rsiX) hard.push('RSI crossed back from 70');
+  var h4s = rows1 ? tmH4Sweep(rows1, dir) : null;
+  if (h4s == null) hard.push('prior 4h block unread');
+  else if (!h4s) hard.push('the prior 4h block was pierced and closed back inside');
+  var star = rows1 ? tmStar(rows1, dir) : null;
+  if (star == null) hard.push('star unread');
+  else if (!star) hard.push('a star printed at the local extreme');
+  var pp = rows1 ? tmPpLost(rows1, dir) : null;
+  if (pp == null) hard.push('pivot point unread');
+  else if (!pp) hard.push('price lost the daily pivot point');
+  var weak = rows1 ? tmWeakBreak(rows1, dir) : null;
+  if (weak == null) hard.push('breakout volume unread');
+  else if (!weak) hard.push('the breakout printed on weak volume');
+  var accept = rows1 ? tmBbAccept(rows1, dir) : null;
+  if (accept == null) hard.push('band acceptance unread');
+  else if (!accept) hard.push('price closed back inside the Bollinger band');
+  var mid = rows1 ? tmMidLost(rows1, dir) : null;
+  if (mid == null) hard.push('midpoint unread');
+  else if (!mid) hard.push('price lost yesterday midpoint');
+  var keltA = rows1 ? tmKeltAccept(rows1, dir) : null;
+  if (keltA == null) hard.push('keltner acceptance unread');
+  else if (!keltA) hard.push('price closed back inside the Keltner band');
+  var td = rows1 ? tmTd9(rows1, dir) : null;
+  if (td == null) hard.push('td unread');
+  else if (!td) hard.push('a TD 9 closed against the trade');
+  var fundH = rows1 ? tmFundingHour(rows1, dir) : null;
+  if (fundH == null) hard.push('funding hour unread');
+  else if (!fundH) hard.push('the funding hour was swept and closed back inside');
+  var ema21 = rows1 ? tmEma21(rows1, dir) : null;
+  if (ema21 == null) hard.push('ema 21 unread');
+  else if (!ema21) hard.push('price lost the 21 EMA');
+  var yClose = rows1 ? tmPriorClose(rows1, dir) : null;
+  if (yClose == null) hard.push('prior close unread');
+  else if (!yClose) hard.push('price lost yesterday close');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) hard.push('volume unread');
   else if (vz < 0) hard.push('volume declining');
@@ -22,14 +371,23 @@
   var a = tmAtrLast(rows4);
   var risk = Math.abs(+ticket.entry - +ticket.stop);
   if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) hard.push('stop outside ATR');
+  var hot = tmParkinsonHot(rows4);
+  if (!hot) hard.push('volatility unread');
+  else if (hot.hot && risk < 1.45 * a) hard.push('stop is inside 1.45 ATR while volatility is elevated');
   if (typeof row.fundingPct !== 'number' || !isFinite(row.fundingPct)) hard.push('funding unread');
   else if (dir === 'long' && row.fundingPct >= 0.04) hard.push('funding crowded long');
   else if (dir === 'short' && row.fundingPct <= -0.04) hard.push('funding crowded short');
   if (tmBaseOf(row) !== 'BTC'){
     var coinRet = tmFourHourReturn(row.rows4h);
     if (coinRet == null || !ctx || ctx.btcRet == null) hard.push('relative strength unread');
-    else if (dir === 'long' && (coinRet - ctx.btcRet) < -0.01) hard.push('weaker than BTC');
-    else if (dir === 'short' && (coinRet - ctx.btcRet) > 0.01) hard.push('stronger than BTC');
+    else if (dir === 'long' && (coinRet - ctx.btcRet) < 0.015) hard.push('not leading BTC');
+    else if (dir === 'short' && (ctx.btcRet - coinRet) < 0.015) hard.push('not lagging BTC');
+    if (ctx && ctx.btcRows){
+      var ratio = tmAltBtcLowerLow(rows4, ctx.btcRows);
+      if (!ratio) hard.push('ALT/BTC unread');
+      else if (dir === 'long' && ratio.lowerLow) hard.push('ALT/BTC made a lower low');
+      else if (dir === 'short' && ratio.higherHigh) hard.push('ALT/BTC made a higher high');
+    }
   }
   if (row.mark > 0 && px > 0){
     var basis = (row.mark - px) / px;
@@ -54,6 +412,11 @@
   if (ctx && ctx.totalOk === true && dir === 'long' && (ctx.totalFalling || ctx.altsFalling) && tmBaseOf(row) !== 'BTC') hard.push('TOTAL / alts falling');
   if (ctx && ctx.macroOk === true && dir === 'long' && ctx.riskOff) hard.push('macro risk-off');
   if (ctx && ctx.macroOk === true && dir === 'short' && ctx.riskOn) hard.push('macro risk-on');
+  if (tmSettlementFreeze()) hard.push('funding settlement window');
+  if (tmAsiaChop()) hard.push('asian session');
+  var room = tmLiquidityRoom(rows4, dir, +ticket.entry, risk);
+  if (room == null) hard.push('liquidity map unread');
+  else if (!room.open) hard.push('next pool is only ' + room.room.toFixed(1) + 'R away');
   if (hard.length) return hard;
 
   var weeks = tmWeeklyRows(row.rows1d || rowsD);
@@ -100,9 +463,17 @@
     tm5mVolumeOk(row, dir),
     tmMicroOk(row, dir),
     tmTradingView(row),
-    tmTopTrader(row)
+    tmTopTrader(row),
+    tmFundingZ(row),
+    tmTakerShare(row),
+    tmOiPercentile(row),
+    tmPerpPremium(row),
+    tmBookRatio(row, dir),
+    tmFundingVelocity(row, dir),
+    tmAbsorption(row, dir),
+    tmCvdSlope(row, dir)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8], fundZ = net[9], takerShare = net[10], oiPct = net[11], prem = net[12], book = net[13], fundVel = net[14], absorb = net[15], slope = net[16];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -110,6 +481,69 @@
   else if (dir === 'short' && !(oi.priceDown && oi.oiUp)) hard.push('OI not confirming the drop');
   if (!m15) hard.push('15m unread');
   else if (!tm15Confirm(m15, dir)) hard.push('15m no sweep and CHOCH');
+  else if (tm15HeavyAgainst(m15, dir)) hard.push('15m breaking against on volume');
+  if (m15){
+    var trig = tmTriggerRvol(m15);
+    if (trig == null) hard.push('15m trigger volume unread');
+    else if (trig < 1.6) hard.push('15m trigger volume ' + trig.toFixed(2) + 'x is under 1.6x');
+    var body = tmBodyCommit(m15, dir);
+    if (body == null) hard.push('15m body commit unread');
+    else if (!body) hard.push('15m body did not close past the swing');
+    var gap = tmDisplacementFvg(m15, dir);
+    if (gap == null) hard.push('15m displacement unread');
+    else if (!gap) hard.push('15m displacement gap missing');
+    var soup = tmTurtleReclaim(m15, dir);
+    if (soup == null) hard.push('sweep unread');
+    else if (!soup) hard.push('no sweep and reclaim on the close');
+    var stalled = tmStalled(m15, dir);
+    if (stalled == null) hard.push('15m progress unread');
+    else if (stalled) hard.push('15m has not expanded in 3 bars');
+    var wave15 = tmWaveOk(m15, dir);
+    if (wave1 !== true && wave15 !== true){
+      if (wave1 == null && wave15 == null) hard.push('wavetrend unread');
+      else hard.push('no wavetrend cross from the extreme');
+    }
+    var ut = tmUtBot(m15, 2);
+    if (ut == null) hard.push('ut bot unread');
+    else if (dir === 'long' && ut !== 'buy') hard.push('ut bot is not long');
+    else if (dir === 'short' && ut !== 'sell') hard.push('ut bot is not short');
+  }
+  if (fundZ != null && dir === 'long' && fundZ > 2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (fundZ != null && dir === 'short' && fundZ < -2) hard.push('funding z ' + fundZ.toFixed(1) + ' is crowded');
+  if (takerShare == null) hard.push('taker share unread');
+  else if (dir === 'long' && takerShare < 0.60) hard.push('taker buy ' + (takerShare * 100).toFixed(0) + '% is under 60%');
+  else if (dir === 'short' && (1 - takerShare) < 0.60) hard.push('taker sell ' + ((1 - takerShare) * 100).toFixed(0) + '% is under 60%');
+  if (m15 && takerShare != null && typeof atr === 'function'){
+    var a15 = atr(m15, 14);
+    var atr15 = a15 && a15.length ? a15[a15.length - 1] : NaN;
+    var trap = tmEffortTrap(m15[m15.length - 1], atr15, takerShare, dir);
+    if (trap == null) hard.push('effort unread');
+    else if (trap) hard.push('effort without result');
+  }
+  if (fundZ == null || oiPct == null) hard.push('crowding density unread');
+  else if (dir === 'long' && fundZ * oiPct > 2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too long');
+  else if (dir === 'short' && fundZ * oiPct < -2.5) hard.push('crowding density ' + (fundZ * oiPct).toFixed(2) + ' is too short');
+  if (prem == null) hard.push('perp premium unread');
+  else if (dir === 'long' && prem > 0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is rich');
+  else if (dir === 'short' && prem < -0.0012) hard.push('perp premium ' + (prem * 100).toFixed(2) + '% is cheap');
+  if (book == null) hard.push('book unread');
+  else if (book < 1.35) hard.push('book ' + book.toFixed(2) + 'x is under 1.35x');
+  if (fundVel == null) hard.push('funding velocity unread');
+  else if (fundVel) hard.push('funding is accelerating against the trade');
+  if (absorb == null) hard.push('absorption unread');
+  else if (!absorb) hard.push('the pullback was not absorbed');
+  if (slope == null) hard.push('delta slope unread');
+  else if (!slope) hard.push('5-bar delta is against the trade');
+  if (m15){
+    var chand = tmChandelier(m15, dir, +ticket.entry);
+    if (chand != null) ticket.chandelier = chand;
+  }
+  var syn = tmSynergy(row, dir, {
+    body: m15 ? tmBodyCommit(m15, dir) === true : false,
+    takerOk: takerShare != null && (dir === 'long' ? takerShare >= 0.60 : (1 - takerShare) >= 0.60)
+  });
+  row.tmSynergy = syn;
+  if (syn < 85) hard.push('synergy ' + syn + '% is under 85%');
   if (hard.length) return hard;
 
   if (crowd == null) vote('positioning', 0);
@@ -154,6 +588,10 @@
   var got = votes.filter(function(v){ return v.v > 0; }).length;
   if (got < 8) return ['confluence ' + got + '/' + votes.length + ', need 8'];
   ticket.confluence = got + '/' + votes.length;
+  ticket.synergy = row.tmSynergy;
+  var atr4 = tmAtrLast(rows4);
+  if (atr4 > 0 && isFinite(+ticket.entry)) ticket.trailBe = dir === 'long' ? +ticket.entry + 0.35 * atr4 : +ticket.entry - 0.35 * atr4;
+  ticket.pine = 'Coppock, Laguerre RSI and the regression slope agree with the earlier crypto scripts';
   return [];
 }
 
@@ -243,9 +681,11 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
   var ctx = ctxReady || await trendmxLoadContext(rows);
   if (!ctx.ethOk) tmStampEth(ctx, rows);
   ctx.btcRet = null;
+  ctx.btcRows = null;
   if (Array.isArray(rows)){
     for (var bi = 0; bi < rows.length; bi++){
       if (tmBaseOf(rows[bi]) !== 'BTC') continue;
+      ctx.btcRows = tmClosedRows(rows[bi].rows4h, 14400);
       ctx.btcRet = tmFourHourReturn(rows[bi].rows4h);
       if (ctx.btcRet != null) break;
     }
@@ -268,6 +708,10 @@ async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
         if (bad.length) out.held.stack.push({ sym: ticket.sym, reasons: bad });
         else {
           ticket.note = (ticket.note || '') + (ticket.confluence ? (' · confluence ' + ticket.confluence) : ' · full stack');
+          if (isFinite(ticket.synergy)) ticket.note += ' · synergy ' + ticket.synergy + '%';
+          if (isFinite(ticket.trailBe)) ticket.note += ' · after the first target, example stop ' + ticket.trailBe;
+          if (isFinite(ticket.chandelier)) ticket.note += ' · chandelier ' + ticket.chandelier;
+          if (ticket.pine) ticket.note += ' · ' + ticket.pine;
           out.push(ticket);
         }
       }
@@ -294,6 +738,32 @@ async function trendmxScan(opts){
   var golden = trendmxGoldenCrossSetups(core.rows);
   var death = trendmxDeathCrossSetups(core.rows);   /* hg-v1014: the mirrored desk */
   tmSmcScanPass(core.rows, golden, death);
+
+  // Integrate Candlestick Pattern Recognition into confluence
+  if (typeof W.hgCfCandlePatterns === 'function') {
+    var patterns = W.hgCfCandlePatterns(core.rows);
+    if (patterns && patterns.length > 0) {
+      for (var pIdx = 0; pIdx < core.rows.length; pIdx++) {
+        var row = core.rows[pIdx];
+        row.candlePatterns = [];
+        // Find all patterns that occurred at this bar index
+        for (var patIdx = 0; patIdx < patterns.length; patIdx++) {
+          if (patterns[patIdx].i === pIdx) {
+            var pattern = patterns[patIdx];
+            row.candlePatterns.push(pattern.name);
+            // Boost score if pattern matches row direction
+            if (pattern.dir && pattern.dir === row.dir) {
+              row.score += 1; // Add +1 to confluence score for matching pattern
+              row.confluence = (row.confluence || 0) + 1;
+            } else if (pattern.dir && pattern.dir !== row.dir) {
+              // Pattern against trend - slight penalty or just note it
+              row.score -= 0.5;
+            }
+          }
+        }
+      }
+    }
+  }
   /* hg-v1012: the evidence layer — one capped, paced pass over the promoted
      slice, AFTER the tier inputs (score/gate/conviction) exist and BEFORE
      the snap the boards read. Never throws; what it cannot read it leaves

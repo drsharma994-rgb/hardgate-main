@@ -1713,6 +1713,10 @@ var SW_NAME = {
   ogmmove:     'MEASURED MOVE (OMNIGOLD)',
   ogtrend:     'TREND RECLAIM (OMNIGOLD)',
   ogbosretest: 'BOS RETEST (OMNIGOLD)',
+  /* hg-v1404: names for the three ports the re-walked roster promoted */
+  ognydrive:   'NY OPEN DRIVE (OMNIGOLD)',
+  oginsidebreak: 'INSIDE BREAK (OMNIGOLD)',
+  ogorb:       'OPENING RANGE BREAK (OMNIGOLD)',
   p9prem:   'S65 PERP-PREMIUM FADE'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';

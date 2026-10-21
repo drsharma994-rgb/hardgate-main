@@ -193,9 +193,13 @@ const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" 
    the shipped composition so they cannot drift silently again. */
 assert(groupTabs('overview') === 'brain,book,trade,log,signallog,setupconfirm,news,bias,regime,trendmx,rotation,execute,startrader',
   'COMMAND group: workflow then context (incl. signallog since v658)');
-assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse,ninetypercent',
+assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse,ninetypercent,syndicate',
   'CRYPTO group: BTC desk first, then anticipation, ranked scans → structure → flow → funding → ultra → scan');
-assert(groupTabs('gold') === 'super-gold,omnigold,omnigold1,milligold,optigold,newgold,golddirection,goldswing,goldscalp,ganeshgold,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,tauric,80percent',
+/* hg-v1329: 'candle-forecast' appended. The CANDLE FORECAST tab joined GOLD and this
+   pin read the composition before it did. The pin exists so the shipped group cannot
+   drift silently — not to freeze membership — so it records the tab in its real
+   position rather than being loosened to a pattern. */
+assert(groupTabs('gold') === 'super-gold,omnigold,omnigold1,milligold,optigold,newgold,golddirection,goldswing,goldscalp,ganeshgold,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,tauric,80percent,candle-forecast',
   'GOLD group: super desk first, then scanners (signallog moved to COMMAND at v658)');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',

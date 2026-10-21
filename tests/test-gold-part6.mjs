@@ -103,5 +103,29 @@ console.log('\n== S35 event filter demote ==');
   ok(cand.demoted && cand.stamps.some(s => /S35/.test(s)), 'event filter demotes');
 }
 
+console.log('\n== gold–BTC corr is a daily overlap, not the 15m tape ==');
+{
+  const intra = [];
+  const day = Math.floor(Date.UTC(2026, 0, 6) / 1000);
+  for (let i = 0; i < 48; i++){
+    intra.push({ t: day + i * 900, o: 2600, h: 2601, l: 2599, c: 2600, v: 10 });
+  }
+  const btc = [], gold = [];
+  const t0 = Math.floor(Date.UTC(2025, 0, 1) / 1000);
+  for (let d = 0; d < 40; d++){
+    const g = 2000 + d;
+    const b = 100 + d * 2;
+    gold.push({ t: t0 + d * 86400, o: g, h: g + 1, l: g - 1, c: g, v: 1 });
+    btc.push({ t: t0 + d * 86400, o: b, h: b + 1, l: b - 1, c: b, v: 1 });
+  }
+  const bare = W.hgGoldPart6Engine(intra, { btcRows: btc });
+  ok(bare.corr && bare.corr.ok !== true, '15m gold vs daily BTC stays unread (' + (bare.corr && bare.corr.why) + ')');
+  const hit = W.hgGoldPart6Engine(intra, { btcRows: btc, goldDaily: gold });
+  ok(hit.corr && hit.corr.ok === true && hit.corr.corr > 0.6,
+    'daily overlap measures the correlation (' + (hit.corr && hit.corr.corr) + ')');
+  const none = W.hgGoldPart6Engine(intra, {});
+  ok(none.corr && /unread/i.test(none.corr.why || ''), 'missing BTC stays unread');
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

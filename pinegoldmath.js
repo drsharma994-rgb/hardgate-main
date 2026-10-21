@@ -164,6 +164,34 @@ function pineGoldNearLevel(price, level, atr, mult){
   return Math.abs(price - level) <= (mult || 0.6) * atr;
 }
 
+/* LBMA Gold Price auctions, 10:30 and 15:00 London local. The scalp stands
+   down from five minutes before until ten minutes after. London is UTC in
+   winter and UTC+1 in summer, so the window is the London clock, not a
+   fixed UTC hour. A clock that cannot be read does not lock. */
+function pineGoldLondonMinutes(now){
+  try{
+    var ms = fin(+now) ? +now : Date.now();
+    var d = new Date(ms);
+    if (isNaN(d.getTime())) return null;
+    var fmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    });
+    var parts = fmt.formatToParts(d), hh = NaN, mm = NaN, i;
+    for (i = 0; i < parts.length; i++){
+      if (parts[i].type === 'hour') hh = +parts[i].value;
+      else if (parts[i].type === 'minute') mm = +parts[i].value;
+    }
+    if (hh === 24) hh = 0;
+    if (!isFinite(hh) || !isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  }catch(e){ return null; }
+}
+function pineGoldFixLock(now){
+  var m = pineGoldLondonMinutes(now);
+  if (m == null) return false;
+  return (m >= 625 && m <= 640) || (m >= 895 && m <= 910);
+}
+
 function pineGoldGrade(score, max){
   max = max || PINE_GOLD_MAX;
   var pct = max > 0 ? score / max : 0;
@@ -373,7 +401,11 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
   var kzFn = gfn('goldKillzone');
   if (kzFn){
     try{
-      var kz = kzFn(Date.now());
+      /* hg-v1400: read the signal bar the caller is judging (opts.now, the
+         same read the fix-lock clause below already honors) — the wall clock
+         re-scored the same bar differently on every re-run (hg-v952/v963).
+         Absent opts.now: Date.now(), exactly as before. */
+      var kz = kzFn(fin(+opts.now) ? +opts.now : Date.now());
       if (mode === 'scalp'){
         if (kz.weight >= 3){ timePts += 2; families.session = true; factors.push({ cat: 'Timing', ok: true, pts: 2, note: kz.label }); }
         else if (kz.weight >= 1){ timePts += 1; families.session = true; factors.push({ cat: 'Timing', ok: true, pts: 1, note: kz.label }); }
@@ -489,6 +521,48 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
   if (rrFailPrimary){
     pass = false;
     factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'R:R ' + rr.toFixed(2) + ' < ' + tierCfg.rrPrimary + ' min' });
+  }
+  if (mode === 'scalp' && native.pd && !hasSweep && !hasOb){
+    if (dir === 'long' && native.pd.zone === 'PREMIUM'){
+      pass = false;
+      factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Scalp long in premium without a sweep or order block' });
+    } else if (dir === 'short' && native.pd.zone === 'DISCOUNT'){
+      pass = false;
+      factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Scalp short in discount without a sweep or order block' });
+    }
+  }
+  if (native.rsi && dir === 'long' && native.rsi.zone === 'OVERBOUGHT' && String(native.rsi.div || '').toLowerCase() === 'bearish'){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Gold RSI is overbought and diverging' });
+  } else if (native.rsi && dir === 'short' && native.rsi.zone === 'OVERSOLD' && String(native.rsi.div || '').toLowerCase() === 'bullish'){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Gold RSI is oversold and diverging' });
+  }
+  if (mode === 'scalp' && native.asian && native.asian.hi > native.asian.lo && price > 0){
+    var asiaW = (native.asian.hi - native.asian.lo) / price;
+    if (asiaW >= 0.01 && ((dir === 'long' && native.asian.state === 'SHORT_BREAK') || (dir === 'short' && native.asian.state === 'LONG_BREAK'))){
+      pass = false;
+      factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Asian range already expanded. Do not fade it.' });
+    }
+  }
+  try{
+    var adrFn = gfn('goldADR');
+    var adrR = adrFn ? adrFn(primaryRows, 14) : null;
+    if (adrR && adrR.exhausted === 'YES' && adrR.bias && adrR.bias !== dir){
+      pass = false;
+      factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'The day has used its average range. A continuation does not pass.' });
+    }
+  }catch(eAdr){}
+  if (mode === 'scalp' && pineGoldFixLock(opts.now)){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'London fix auction. A scalp does not pass in this window.' });
+  }
+  if (hint === 'HEADWIND' && dir === 'long' && !hasSweep){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Real-rate headwind against a long without a sweep' });
+  } else if (hint === 'TAILWIND' && dir === 'short' && !hasSweep){
+    pass = false;
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Real-rate tailwind against a short without a sweep' });
   }
 
   var isNew = false;
@@ -724,7 +798,84 @@ var PINE_GOLD_RECORD_LAYERS = [
   { id: 'cci', label: 'CCI Re-entry', fn: 'pineGoldCciReentry', minBars: 60,
     opts: { len: 20, band: 100, swing: 5 }, twin: 'CCI-EXTREME' },
   { id: 'aroon', label: 'Aroon Cross', fn: 'pineGoldAroonCross', minBars: 60,
-    opts: { len: 25, swing: 5 }, twin: null }
+    opts: { len: 25, swing: 5 }, twin: null },
+  /* hg-v1171: three more bar-only Pine ports a gold trader runs. Williams
+     %R re-entry (distance from recent high, different series from Stochastic
+     which measures position within the range); TRIX zero cross (triple-
+     smoothed momentum, different from MACD which crosses its signal line);
+     Fisher Transform zero cross (Ehlers' Gaussian mapping of hl2, a scale
+     no other layer here reads). None has an exact OMNIGOLD twin: the
+     closest sibling of Williams %R is WILLIAMS-FAIL and that mechanic is
+     NOT registered on OMNIGOLD today (confirmed by hgGoldSiblingRecord
+     returning null), and a loose analogy is not a twin (hg-v943). */
+  { id: 'williams', label: 'Williams %R Re-entry', fn: 'pineGoldWilliamsReentry', minBars: 60,
+    opts: { len: 14, os: -80, ob: -20, swing: 5 }, twin: null },
+  { id: 'trix', label: 'TRIX Zero Cross', fn: 'pineGoldTrixCross', minBars: 60,
+    opts: { len: 15, swing: 5 }, twin: null },
+  { id: 'fisher', label: 'Fisher Transform', fn: 'pineGoldFisherZero', minBars: 60,
+    opts: { len: 10, swing: 5 }, twin: null },
+  /* Price-only ports (origin/main hg-v1173 and earlier). Volume on a gold
+     feed is often the tokenized proxy, so these three do not read volume
+     except session VWAP, which falls back to equal-weight typical price
+     when the bar has none. */
+  { id: 'adx', label: 'ADX + DI', fn: 'pineGoldAdxDi', minBars: 50,
+    opts: { len: 14, minAdx: 20, swing: 5 }, twin: null },
+  { id: 'heikin', label: 'Heikin Ashi Flip', fn: 'pineGoldHeikin', minBars: 20,
+    opts: { swing: 5 }, twin: null },
+  { id: 'sessvwap', label: 'Session VWAP', fn: 'pineGoldSessVwap', minBars: 20,
+    opts: { swing: 5 }, twin: null },
+  /* QQE is a smoothed-RSI trail (not MACD, not Stochastic). TTM Squeeze is
+     the volatility regime (BB inside KC) plus its momentum. Weekly AVWAP is
+     location for the week, not the session. Kaufman efficiency votes only
+     when the move is actually efficient. Each fires only on the last closed
+     bar. None names an OMNIGOLD twin. */
+  { id: 'qqe', label: 'QQE', fn: 'pineGoldQqe', minBars: 80,
+    opts: { rsiLen: 14, sf: 5, qqe: 4.236, swing: 5 }, twin: null },
+  { id: 'squeeze', label: 'TTM Squeeze', fn: 'pineGoldSqueezeFire', minBars: 50,
+    opts: { len: 20, bbMult: 2, kcMult: 1.5, swing: 5 }, twin: null },
+  { id: 'wavwap', label: 'Weekly AVWAP', fn: 'pineGoldWeeklyAvwap', minBars: 30,
+    opts: { swing: 5 }, twin: null },
+  { id: 'efficiency', label: 'Kaufman Efficiency', fn: 'pineGoldEfficiency', minBars: 30,
+    opts: { len: 10, trend: 0.30, swing: 5 }, twin: null },
+  /* hg-v1202 (ported from this branch's hg-v1172): Balanced Price Range
+     (BPR) — one new concept, record-only. Overlap of a bull FVG and a bear
+     FVG within the last ~20 bars forms a shelf; the port fires on a
+     last-closed-bar reclaim from the opposite side (prev bar closed outside
+     the shelf, this bar wicked in and closed back out). Not registered as
+     an OMNIGOLD mechanic (grep: no BPR, BALANCED-PRICE or balancedPrice in
+     omnigold.js), `twin: null`. */
+  { id: 'bpr', label: 'Balanced Price Range', fn: 'pineGoldBpr', minBars: 60,
+    opts: { lookback: 20, minGapAtr: 0.10 }, twin: null },
+  /* hg-v1207: Optimal Trade Entry. The last closed bar tags the 0.62–0.79
+     retrace of the latest swing and closes back out of it. A wick through
+     0.79 is a failed pocket, not a signal. It does not join the five-layer
+     majority. Record-only until the ledger measures it. */
+  { id: 'ote', label: 'OTE 0.705', fn: 'pineGoldOte', minBars: 50,
+    opts: { look: 40 }, twin: null },
+  /* hg-v1220: three more bar-only Pine ports a gold trader runs, each
+     distinct from every layer above and from every live-lane port on GOLD
+     PINE. HalfTrend (an amplitude-pivot ATR trend flip, different from
+     Supertrend's HL2 ATR bands and Chandelier's trail-from-extreme);
+     Range Filter (gu5tavo's smoothed close-based regime flip, different
+     from Donchian's channel midline, Keltner's EMA50-slope pullback and
+     Supertrend); NW Envelope (Nadaraya-Watson Gaussian-kernel mean with
+     ATR bands and a wick-pierce reversion, no analog in the twenty-four
+     layers above). None names an OMNIGOLD twin: the closest shapes
+     (TREND-RECLAIM / BOS-RETEST / EMA50-HOLD / STRUCT-BOS / VOL-EXPANSION
+     / CUSUM-SHIFT / POC-REVERT / VWAP-BAND / OU-REVERT) are each a
+     different mathematical construction, and hg-v943 refuses loose
+     analogies. The ports already exist in pinemath.js (hg-v949 one home);
+     HalfTrend returns {dir, entry, stop, t1, t2} on the flip and so names
+     'pineHalfTrend' directly; Range Filter and NW Envelope return
+     direction + reference levels but not entry/stop/t1/t2, so a thin
+     wrapper (pineGoldRangeFilter / pineGoldNwEnvelope) composes those
+     through pgrResult on the flip bar. */
+  { id: 'halftrend', label: 'HalfTrend', fn: 'pineHalfTrend', minBars: 110,
+    opts: { amplitude: 2, atrLen: 100, atrMult: 2.0 }, twin: null },
+  { id: 'rangefilter', label: 'Range Filter', fn: 'pineGoldRangeFilter', minBars: 210,
+    opts: { period: 100, mult: 3 }, twin: null },
+  { id: 'nwenvelope', label: 'NW Envelope', fn: 'pineGoldNwEnvelope', minBars: 110,
+    opts: { bandwidth: 8, mult: 2.5, lookback: 50, atrLen: 100 }, twin: null }
 ];
 /* hg-v1165's majority mark is the majority of the FIVE hg-v1164 layers --
    records written since then carry that meaning, so the three hg-v1166
@@ -1095,6 +1246,82 @@ function pgrAroonSeries(rows, len){
   }
   return { up: up, down: dn };
 }
+/* hg-v1171: Williams %R(len) = -100 * (highH - close) / (highH - lowL) across
+   the len-bar window ending at i. Scale: 0 at the high, -100 at the low. On a
+   flat window (highH === lowL) the formula divides by zero -- NaN here, which
+   downstream unread is absent and never a guessed zero (hg-v989). */
+function pgrWilliamsSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len + 2) return null;
+  var out = new Array(n), i, k;
+  for (i = 0; i < n; i++){
+    if (i < len - 1){ out[i] = NaN; continue; }
+    var hi = -Infinity, lo = Infinity, bad = false;
+    for (k = i - len + 1; k <= i; k++){
+      var h = pgrNum(rows[k].h), l = pgrNum(rows[k].l);
+      if (!isFinite(h) || !isFinite(l)){ bad = true; break; }
+      if (h > hi) hi = h;
+      if (l < lo) lo = l;
+    }
+    var c = pgrNum(rows[i].c);
+    if (bad || !isFinite(c) || !(hi > lo)){ out[i] = NaN; continue; }
+    out[i] = -100 * (hi - c) / (hi - lo);
+  }
+  return out;
+}
+/* hg-v1171: TRIX(len) is the 1-period momentum of a triple-smoothed EMA of
+   close. Pine's trix() does exactly this; it is NOT the MACD arithmetic
+   (hg-v949). We compute it inline rather than borrow a one-off EMA helper
+   because the three-stage smoothing is the mechanic. A dead-flat tape leaves
+   NaN rather than 0 -- a close-equal series gives TRIX zero, which the port
+   reads as NEITHER (hg-v989's third state). */
+function pgrTrixSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < 3 * len + 3) return null;
+  var k = 2 / (len + 1);
+  var e1 = new Array(n), e2 = new Array(n), e3 = new Array(n), out = new Array(n), i;
+  for (i = 0; i < n; i++){
+    var c = pgrNum(rows[i].c);
+    if (!isFinite(c)){ e1[i] = NaN; e2[i] = NaN; e3[i] = NaN; out[i] = NaN; continue; }
+    e1[i] = (i === 0 || !isFinite(e1[i - 1])) ? c : (e1[i - 1] + k * (c - e1[i - 1]));
+    e2[i] = (i === 0 || !isFinite(e2[i - 1])) ? e1[i] : (e2[i - 1] + k * (e1[i] - e2[i - 1]));
+    e3[i] = (i === 0 || !isFinite(e3[i - 1])) ? e2[i] : (e3[i - 1] + k * (e2[i] - e3[i - 1]));
+    if (i < 3 * (len - 1) + 1 || !(e3[i - 1] > 0)){ out[i] = NaN; continue; }
+    out[i] = 10000 * (e3[i] - e3[i - 1]) / e3[i - 1];
+  }
+  return out;
+}
+/* hg-v1171: Fisher Transform(len) -- Ehlers' price-to-Gaussian mapping. Scale
+   the hl2 midpoint into [-1, 1] over the len-bar window, clamp away from the
+   singularities at +/-1 (ln(0) and ln(inf) are both undefined, so a bar that
+   closed exactly at the window extreme is clamped to +/-0.999 rather than
+   NaN; this is Ehlers' own clamp, not an invention), then recursively
+   half-weight the previous Fisher. A flat window reads NaN; the state is
+   unread when fisher is exactly zero. */
+function pgrFisherSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len + 2) return null;
+  var x = new Array(n), fi = new Array(n), i, k;
+  for (i = 0; i < n; i++){
+    if (i < len - 1){ x[i] = NaN; fi[i] = NaN; continue; }
+    var hi = -Infinity, lo = Infinity, bad = false;
+    for (k = i - len + 1; k <= i; k++){
+      var h = pgrNum(rows[k].h), l = pgrNum(rows[k].l);
+      if (!isFinite(h) || !isFinite(l)){ bad = true; break; }
+      if (h > hi) hi = h;
+      if (l < lo) lo = l;
+    }
+    var hc = pgrNum(rows[i].h), lc = pgrNum(rows[i].l);
+    if (bad || !isFinite(hc) || !isFinite(lc) || !(hi > lo)){ x[i] = NaN; fi[i] = NaN; continue; }
+    var mid = (hc + lc) / 2;
+    var raw = 2 * ((mid - lo) / (hi - lo)) - 1;
+    if (raw > 0.999) raw = 0.999; else if (raw < -0.999) raw = -0.999;
+    x[i] = raw;
+    var pf = (i > 0 && isFinite(fi[i - 1])) ? fi[i - 1] : 0;
+    fi[i] = 0.5 * Math.log((1 + raw) / (1 - raw)) + 0.5 * pf;
+  }
+  return fi;
+}
 /* Chandelier Exit 22 x 3: the direction flips on the last closed bar. Stop is
    the trail the flip put under / over price. */
 function pineGoldChandelierExit(rows, opts){
@@ -1167,6 +1394,3334 @@ function pineGoldAroonCross(rows, opts){
     if (u < d && uP >= dP) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { up: u, down: d });
     return { dir: null };
   }catch(e){ return { dir: null }; }
+}
+/* hg-v1171: Williams %R 14 re-entry. The prior bar's %R sat below -80
+   (oversold) and the last closed bar's is back above -80 for a long, or
+   mirror -- above -20 then back inside for a short. The close must also
+   agree with the re-entry direction, so a reclaim through -80 that ends in a
+   lower close is not a long signal. Stop is the prior 5-bar swing. Williams
+   %R and Stochastic are related but not duplicated (hg-v949): %R measures
+   distance from the recent HIGH alone, Stoch measures position within the
+   recent RANGE and uses %K/%D smoothing. */
+function pineGoldWilliamsReentry(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 14, osB = opts.os || -80, obB = opts.ob || -20, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 3) return { dir: null };
+    var W = pgrWilliamsSeries(rows, len);
+    if (!W) return { dir: null };
+    var i = n - 1;
+    var v = pgrNum(W[i]), p = pgrNum(W[i - 1]), c = pgrNum(rows[i].c), pc = pgrNum(rows[i - 1].c);
+    if (![v, p, c, pc].every(isFinite)) return { dir: null };
+    if (p <= osB && v > osB && c > pc) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { wr: v, prev: p });
+    if (p >= obB && v < obB && c < pc) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { wr: v, prev: p });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+/* hg-v1171: TRIX 15 zero-line cross. The prior bar's TRIX was below zero and
+   the last closed bar's is above zero for a long; mirror for a short. Stop is
+   the prior 5-bar swing. TRIX = 1-period rate of change of a triple-smoothed
+   EMA, so a zero cross means the three-stage smoothed momentum has turned.
+   Different from MACD (which crosses its SIGNAL line, not zero, and uses a
+   two-stage subtraction) and so is not a duplicated port of the hg-v1166
+   MACD layer (hg-v949). TRIX exactly equal to zero is unread, never guessed
+   as either side. */
+function pineGoldTrixCross(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 15, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < 3 * len + sw + 3) return { dir: null };
+    var T = pgrTrixSeries(rows, len);
+    if (!T) return { dir: null };
+    var i = n - 1;
+    var v = pgrNum(T[i]), p = pgrNum(T[i - 1]), c = pgrNum(rows[i].c);
+    if (![v, p, c].every(isFinite)) return { dir: null };
+    if (p < 0 && v > 0) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { trix: v, prev: p });
+    if (p > 0 && v < 0) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { trix: v, prev: p });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+/* hg-v1171: Fisher Transform 10 zero-line cross (Ehlers). The transform
+   maps hl2 into a Gaussian-shaped series; a zero cross says the mid-point
+   has moved from the lower half of the window into the upper half (or
+   mirror). Stop is the prior 5-bar swing. The clamp at +/-0.999 inside the
+   series handles bars that closed exactly at the window extreme (ln is
+   undefined at the singularities); it is the series' own rule, applied
+   once. */
+function pineGoldFisherZero(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 10, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 3) return { dir: null };
+    var F = pgrFisherSeries(rows, len);
+    if (!F) return { dir: null };
+    var i = n - 1;
+    var v = pgrNum(F[i]), p = pgrNum(F[i - 1]), c = pgrNum(rows[i].c);
+    if (![v, p, c].every(isFinite)) return { dir: null };
+    if (p < 0 && v > 0) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { fisher: v, prev: p });
+    if (p > 0 && v < 0) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { fisher: v, prev: p });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
+/* hg-v1202: Balanced Price Range (BPR) — the one new concept in this pack
+   that is not already registered somewhere else on the gold stack. A BPR
+   is the price overlap of a bullish three-bar FVG and a bearish three-bar
+   FVG that formed within the same recent window — a shelf where opposing
+   institutional orders both left imbalance, which price tends to rebalance
+   against. Distinct from the Pine ports above (none of them reads an FVG
+   overlap) and from OMNIGOLD's registry (grep: no BPR / BALANCED-PRICE /
+   balancedPrice mechanic exists, `twin: null`); distinct too from the
+   plain FVG mint on GOLD SCALP, which fires on a single-gap retrace. The
+   port fires on a last-closed-bar reclaim of the shelf — price traded
+   into the shelf from the opposite side and closed back out — and never
+   on a wick that failed to close through. State for the record stack is
+   where the close sits relative to the latest readable shelf: close
+   above shelf.top is 'long' (shelf acts as support below), close below
+   shelf.bottom is 'short' (shelf acts as resistance above), inside the
+   shelf is NEITHER. Shelves without a readable ATR gap floor are
+   skipped (a feed with no ATR is not a shelf, not a shelf of zero size).
+   Record-only like every port in this table — mints DEMOTED, both
+   handoffs withheld on the card, released by `pineGoldRecordJudge` per
+   mechanic and per desk once the forward ledger measures it paying. */
+function pgrBprShelves(rows, lookback, minGapAtr){
+  var out = [];
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < 6) return out;
+    lookback = lookback && isFinite(+lookback) ? Math.max(6, Math.min(+lookback, n - 1)) : 20;
+    var atrFn = gfn('atr') || gfn('pineAtr');
+    if (typeof atrFn !== 'function') return out;
+    var a = atrFn(rows, 14);
+    if (!a || !a.length) return out;
+    var floor = isFinite(+minGapAtr) ? +minGapAtr : 0.10;
+    /* Collect three-bar FVGs within the lookback window. c0 = rows[i-2],
+       c1 = rows[i-1], c2 = rows[i]. A bull FVG needs c2.low > c0.high AND
+       the impulse bar c1 closed up; mirror for bear. The gap must be at
+       least floor * ATR at bar i-1 to count as a shelf. */
+    var fvgs = [];
+    var start = Math.max(2, n - lookback);
+    for (var i = start; i < n; i++){
+      var c0 = rows[i - 2], c1 = rows[i - 1], c2 = rows[i];
+      var atr1 = pgrNum(a[i - 1]);
+      if (!c0 || !c1 || !c2 || !isFinite(atr1) || !(atr1 > 0)) continue;
+      var h0 = pgrNum(c0.h), l0 = pgrNum(c0.l), h2 = pgrNum(c2.h), l2 = pgrNum(c2.l);
+      var o1 = pgrNum(c1.o), cc1 = pgrNum(c1.c);
+      if (![h0, l0, h2, l2, o1, cc1].every(isFinite)) continue;
+      var minGap = floor * atr1;
+      /* bull gap: rows[i].low above rows[i-2].high, impulse bar closed up */
+      if (l2 - h0 >= minGap && cc1 > o1){
+        fvgs.push({ type: 'bull', top: l2, bottom: h0, barIndex: i - 1 });
+      }
+      /* bear gap: rows[i-2].low above rows[i].high, impulse bar closed down */
+      if (l0 - h2 >= minGap && cc1 < o1){
+        fvgs.push({ type: 'bear', top: l0, bottom: h2, barIndex: i - 1 });
+      }
+    }
+    if (fvgs.length < 2) return out;
+    /* Pair each FVG with the nearest earlier opposite FVG; keep the overlap. */
+    for (var j = 1; j < fvgs.length; j++){
+      var later = fvgs[j];
+      for (var k = j - 1; k >= 0; k--){
+        var earlier = fvgs[k];
+        if (earlier.type === later.type) continue;
+        if (Math.abs(later.barIndex - earlier.barIndex) > lookback) break;
+        var overlapTop = Math.min(later.top, earlier.top);
+        var overlapBottom = Math.max(later.bottom, earlier.bottom);
+        if (overlapTop > overlapBottom){
+          out.push({
+            top: overlapTop,
+            bottom: overlapBottom,
+            mid: (overlapTop + overlapBottom) / 2,
+            size: overlapTop - overlapBottom,
+            formedBarIndex: later.barIndex
+          });
+          break;
+        }
+      }
+    }
+    return out;
+  }catch(e){ return out; }
+}
+function pineGoldBpr(rows, opts){
+  opts = opts || {};
+  var lookback = opts.lookback || 20, minGap = opts.minGapAtr != null ? opts.minGapAtr : 0.10;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < 6) return { dir: null };
+    var shelves = pgrBprShelves(rows, lookback, minGap);
+    if (!shelves.length) return { dir: null };
+    var i = n - 1;
+    var c = pgrNum(rows[i].c), o = pgrNum(rows[i].o), lo = pgrNum(rows[i].l), hi = pgrNum(rows[i].h);
+    var pc = pgrNum(rows[i - 1].c);
+    if (![c, o, lo, hi, pc].every(isFinite)) return { dir: null };
+    var atrFn = gfn('atr') || gfn('pineAtr');
+    if (typeof atrFn !== 'function') return { dir: null };
+    var a = atrFn(rows, 14);
+    var atr = pgrNum(a && a[i]);
+    if (!isFinite(atr) || !(atr > 0)) return { dir: null };
+    /* Walk shelves newest first; fire on the first that the last closed bar
+       reclaimed from the opposite side. A shelf whose formation includes
+       the last bar is not a reclaim (the imbalance has not resolved yet). */
+    for (var s = shelves.length - 1; s >= 0; s--){
+      var shelf = shelves[s];
+      if (shelf.formedBarIndex >= i - 1) continue;
+      /* Bullish reclaim: prev bar closed above the shelf top; last bar
+         wicked into the shelf (low <= shelf.top) and closed back above
+         the shelf top with a bullish body. */
+      if (pc > shelf.top && lo <= shelf.top && c > shelf.top && c > o){
+        var longStop = shelf.bottom - 0.15 * atr;
+        return pgrResult('long', c, longStop, { shelf: [shelf.bottom, shelf.top], age: i - 1 - shelf.formedBarIndex });
+      }
+      /* Bearish reclaim: prev bar closed below the shelf bottom; last bar
+         wicked into the shelf (high >= shelf.bottom) and closed back below
+         the shelf bottom with a bearish body. */
+      if (pc < shelf.bottom && hi >= shelf.bottom && c < shelf.bottom && c < o){
+        var shortStop = shelf.top + 0.15 * atr;
+        return pgrResult('short', c, shortStop, { shelf: [shelf.bottom, shelf.top], age: i - 1 - shelf.formedBarIndex });
+      }
+    }
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
+/* The latest swing inside the lookback, not including the signal bar.
+   Up impulse: the low printed before the high. The pocket is 62–79% back
+   from that high. A flat swing is no swing. */
+function pgrOteSwing(rows, look){
+  var n = rows ? rows.length : 0;
+  look = look || 40;
+  if (n < look + 2) return null;
+  var i = n - 1, from = i - look, hiI = from, loI = from, k, bar;
+  for (k = from; k < i; k++){
+    bar = rows[k];
+    if (!bar || !isFinite(bar.h) || !isFinite(bar.l)) return null;
+    if (bar.h >= rows[hiI].h) hiI = k;
+    if (bar.l <= rows[loI].l) loI = k;
+  }
+  var hi = rows[hiI].h, lo = rows[loI].l;
+  if (!(hi > lo) || hiI === loI) return null;
+  var rng = hi - lo, up = loI < hiI;
+  return {
+    hi: hi, lo: lo, up: up,
+    zoneTop: up ? (hi - 0.62 * rng) : (lo + 0.79 * rng),
+    zoneBot: up ? (hi - 0.79 * rng) : (lo + 0.62 * rng)
+  };
+}
+function pineGoldOte(rows, opts){
+  opts = opts || {};
+  try{
+    var sw = pgrOteSwing(rows, opts.look || 40);
+    if (!sw) return { dir: null };
+    var bar = rows[rows.length - 1];
+    var c = pgrNum(bar.c), o = pgrNum(bar.o), h = pgrNum(bar.h), l = pgrNum(bar.l);
+    if (![c, o, h, l].every(isFinite)) return { dir: null };
+    if (sw.up){
+      if (l <= sw.zoneTop && l >= sw.zoneBot && c > o && c > sw.zoneTop) return pgrResult('long', c, sw.lo, { oteTop: sw.zoneTop, oteBot: sw.zoneBot });
+      return { dir: null };
+    }
+    if (h >= sw.zoneBot && h <= sw.zoneTop && c < o && c < sw.zoneBot) return pgrResult('short', c, sw.hi, { oteTop: sw.zoneTop, oteBot: sw.zoneBot });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
+/* hg-v1220: Nadaraya-Watson Gaussian kernel smoother. The port's own
+   compute path (see pineNwEnvelope in pinemath.js), lifted here so the
+   state read in pineGoldLayerStates can compare close against the
+   kernel center on EVERY bar -- not only the bars the port fires on.
+   One home (hg-v949) -- the fire-time center is still read off the
+   port, this is only the between-fires state. */
+function pgrNwCenter(rows, bandwidth, lookback){
+  if (!rows || !rows.length) return NaN;
+  var n = rows.length, bi = n - 1;
+  var h = isFinite(+bandwidth) && +bandwidth > 0 ? +bandwidth : 8.0;
+  var lb = isFinite(+lookback) && +lookback > 1 ? Math.floor(+lookback) : 50;
+  if (bi < lb - 1) return NaN;
+  var sumW = 0, sumYw = 0;
+  for (var i = 0; i < lb; i++){
+    var idx = bi - i;
+    if (idx < 0) break;
+    var c = pgrNum(rows[idx] && rows[idx].c);
+    if (!isFinite(c)) return NaN;
+    var w = Math.exp(-(i * i) / (2 * h * h));
+    sumW += w;
+    sumYw += c * w;
+  }
+  if (!(sumW > 0)) return NaN;
+  return sumYw / sumW;
+}
+
+/* hg-v1220: Range Filter builder. Calls the pinemath port and promotes
+   its flip-bar output to the hg-v1164 shape {dir, entry, stop, t1, t2}
+   through pgrResult. On a long flip the stop sits below the lower edge
+   of the active range (filterLevel - rng - 0.15*ATR via pgrResult's
+   wrong-side guard); on a short flip the mirror. A context-only read
+   (opts.includeContext, no flip bar) returns no signal here -- state
+   reads live in pineGoldLayerStates. */
+function pineGoldRangeFilter(rows, opts){
+  opts = opts || {};
+  try{
+    var portFn = gfn('pineRangeFilter');
+    if (typeof portFn !== 'function') return { dir: null };
+    var res = portFn(rows, { period: opts.period || 100, mult: opts.mult !== undefined ? +opts.mult : 3.0 });
+    if (!res || !res.dir) return { dir: null };
+    if (!res.newLong && !res.newShort) return { dir: null };
+    var dir = res.newLong ? 'long' : 'short';
+    var entry = pgrNum(res.price);
+    var filterLevel = pgrNum(res.filterLevel), rng = pgrNum(res.rng);
+    if (!isFinite(entry) || !isFinite(filterLevel) || !isFinite(rng) || !(rng > 0)) return { dir: null };
+    var stop = dir === 'long' ? (filterLevel - rng) : (filterLevel + rng);
+    return pgrResult(dir, entry, stop, { filterLevel: filterLevel, rng: rng, period: res.period, mult: res.mult });
+  }catch(e){ return { dir: null }; }
+}
+
+/* hg-v1220: Nadaraya-Watson envelope builder. The port fires on a wick
+   that pierced +/-mult*ATR of the kernel center and closed back inside.
+   Entry is the close on that bar; stop sits beyond the band plus a
+   0.15*ATR buffer (same shape as BPR, hg-v1203); t1/t2 follow the
+   2R/3.5R ladder via pgrResult. The kernel center is reported on the
+   row as `nwCenter` for a reader that wants the mean target. */
+function pineGoldNwEnvelope(rows, opts){
+  opts = opts || {};
+  try{
+    var portFn = gfn('pineNwEnvelope');
+    if (typeof portFn !== 'function') return { dir: null };
+    var res = portFn(rows, {
+      bandwidth: opts.bandwidth !== undefined ? +opts.bandwidth : 8.0,
+      mult: opts.mult !== undefined ? +opts.mult : 2.5,
+      lookback: opts.lookback || 50,
+      atrLen: opts.atrLen || 100
+    });
+    if (!res || !res.dir) return { dir: null };
+    if (!res.newLong && !res.newShort) return { dir: null };
+    var dir = res.newLong ? 'long' : 'short';
+    var entry = pgrNum(res.price);
+    var lower = pgrNum(res.lower), upper = pgrNum(res.upper), atr = pgrNum(res.atr), nwCenter = pgrNum(res.nwCenter);
+    if (!isFinite(entry) || !isFinite(atr) || !(atr > 0)) return { dir: null };
+    var stop;
+    if (dir === 'long'){
+      if (!isFinite(lower)) return { dir: null };
+      stop = lower - 0.15 * atr;
+    } else {
+      if (!isFinite(upper)) return { dir: null };
+      stop = upper + 0.15 * atr;
+    }
+    return pgrResult(dir, entry, stop, { nwCenter: nwCenter, lower: lower, upper: upper, atr: atr });
+  }catch(e){ return { dir: null }; }
+}
+
+function pgrAdxRead(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len * 2 + 2) return null;
+  var tr = [], pdm = [], mdm = [], i;
+  for (i = 1; i < n; i++){
+    var h = pgrNum(rows[i].h), l = pgrNum(rows[i].l), ph = pgrNum(rows[i - 1].h), pl = pgrNum(rows[i - 1].l), pc = pgrNum(rows[i - 1].c);
+    if (![h, l, ph, pl, pc].every(isFinite)) return null;
+    var up = h - ph, dn = pl - l;
+    pdm.push(up > dn && up > 0 ? up : 0);
+    mdm.push(dn > up && dn > 0 ? dn : 0);
+    tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  function wilder(arr){
+    var out = new Array(arr.length).fill(NaN), s = 0, k;
+    for (k = 0; k < len; k++) s += arr[k];
+    out[len - 1] = s;
+    for (k = len; k < arr.length; k++) out[k] = out[k - 1] - out[k - 1] / len + arr[k];
+    return out;
+  }
+  var trS = wilder(tr), pS = wilder(pdm), mS = wilder(mdm);
+  var last = tr.length - 1, prev = last - 1;
+  if (!(trS[last] > 0) || !(trS[prev] > 0)) return null;
+  var plus = 100 * pS[last] / trS[last], minus = 100 * mS[last] / trS[last];
+  var pPlus = 100 * pS[prev] / trS[prev], pMinus = 100 * mS[prev] / trS[prev];
+  var dx = [], k, adx = NaN, seed = 0, cnt = 0;
+  for (k = 0; k < tr.length; k++){
+    if (!(trS[k] > 0)){ dx.push(NaN); continue; }
+    var pdi = 100 * pS[k] / trS[k], mdi = 100 * mS[k] / trS[k], den = pdi + mdi;
+    dx.push(den > 0 ? 100 * Math.abs(pdi - mdi) / den : NaN);
+  }
+  for (k = 0; k < dx.length; k++){
+    if (!isFinite(dx[k])) continue;
+    if (cnt < len){ seed += dx[k]; cnt++; if (cnt === len) adx = seed / len; }
+    else if (isFinite(adx)) adx = (adx * (len - 1) + dx[k]) / len;
+  }
+  if (!isFinite(adx) || ![plus, minus, pPlus, pMinus].every(isFinite)) return null;
+  return { adx: adx, plus: plus, minus: minus, prevPlus: pPlus, prevMinus: pMinus };
+}
+function pineGoldAdxDi(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 14, minAdx = opts.minAdx || 20, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    var r = pgrAdxRead(rows, len);
+    if (!r || n < sw + 2) return { dir: null };
+    var c = pgrNum(rows[n - 1].c);
+    if (!isFinite(c) || !(r.adx >= minAdx)) return { dir: null, adx: r.adx, plus: r.plus, minus: r.minus };
+    var i = n - 1;
+    if (r.prevPlus <= r.prevMinus && r.plus > r.minus) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), r);
+    if (r.prevMinus <= r.prevPlus && r.minus > r.plus) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), r);
+    return { dir: null, adx: r.adx, plus: r.plus, minus: r.minus };
+  }catch(e){ return { dir: null }; }
+}
+function pgrHeikin(rows){
+  var out = [], i;
+  for (i = 0; i < rows.length; i++){
+    var o = pgrNum(rows[i].o), h = pgrNum(rows[i].h), l = pgrNum(rows[i].l), c = pgrNum(rows[i].c);
+    if (![o, h, l, c].every(isFinite)) return null;
+    var hc = (o + h + l + c) / 4;
+    var ho = i === 0 ? (o + c) / 2 : (out[i - 1].o + out[i - 1].c) / 2;
+    out.push({ o: ho, c: hc });
+  }
+  return out;
+}
+function pineGoldHeikin(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var ha = pgrHeikin(rows);
+    var n = ha ? ha.length : 0;
+    if (n < sw + 2) return { dir: null };
+    var prev = ha[n - 2], last = ha[n - 1], c = pgrNum(rows[n - 1].c);
+    var wasUp = prev.c >= prev.o, nowUp = last.c >= last.o;
+    if (wasUp === nowUp || !isFinite(c)) return { dir: null };
+    if (nowUp) return pgrResult('long', c, pgrLowest(rows, n - 1 - sw, n - 2, 'l'), { ha: last.c });
+    return pgrResult('short', c, pgrHighest(rows, n - 1 - sw, n - 2, 'h'), { ha: last.c });
+  }catch(e){ return { dir: null }; }
+}
+function pgrSessionVwap(rows){
+  var n = rows ? rows.length : 0;
+  if (n < 2) return null;
+  var lastT = rows[n - 1].t > 1e12 ? rows[n - 1].t : rows[n - 1].t * 1000;
+  var day = new Date(lastT); day.setUTCHours(0, 0, 0, 0);
+  var start = day.getTime(), anchor = 0, k;
+  for (k = n - 1; k >= 0; k--){
+    var tk = rows[k].t > 1e12 ? rows[k].t : rows[k].t * 1000;
+    if (tk < start){ anchor = k + 1; break; }
+  }
+  var pv = 0, vv = 0;
+  for (k = anchor; k < n; k++){
+    var tp = (pgrNum(rows[k].h) + pgrNum(rows[k].l) + pgrNum(rows[k].c)) / 3;
+    var v = pgrNum(rows[k].v);
+    if (!(v > 0)) v = 1;
+    if (!isFinite(tp)) return null;
+    pv += tp * v; vv += v;
+  }
+  return vv > 0 ? pv / vv : null;
+}
+function pineGoldSessVwap(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < sw + 2) return { dir: null };
+    var vwap = pgrSessionVwap(rows);
+    var c = pgrNum(rows[n - 1].c), p = pgrNum(rows[n - 2].c);
+    if (!isFinite(vwap) || !isFinite(c) || !isFinite(p)) return { dir: null };
+    if (p <= vwap && c > vwap) return pgrResult('long', c, Math.min(vwap, pgrLowest(rows, n - 1 - sw, n - 2, 'l')), { vwap: vwap });
+    if (p >= vwap && c < vwap) return pgrResult('short', c, Math.max(vwap, pgrHighest(rows, n - 1 - sw, n - 2, 'h')), { vwap: vwap });
+    return { dir: null, vwap: vwap };
+  }catch(e){ return { dir: null }; }
+}
+function pgrEma(src, len){
+  var out = new Array(src.length).fill(NaN);
+  if (!(len >= 1) || src.length < len) return out;
+  var k = 2 / (len + 1), s = 0, seen = 0, seeded = -1, i;
+  for (i = 0; i < src.length; i++){
+    if (!isFinite(src[i])){ seen = 0; s = 0; continue; }
+    seen++; s += src[i];
+    if (seen === len){ out[i] = s / len; seeded = i; break; }
+  }
+  if (seeded < 0) return out;
+  for (i = seeded + 1; i < src.length; i++){
+    if (!isFinite(src[i]) || !isFinite(out[i - 1])) continue;
+    out[i] = src[i] * k + out[i - 1] * (1 - k);
+  }
+  return out;
+}
+function pgrRsi(closes, len){
+  var out = new Array(closes.length).fill(NaN);
+  if (closes.length <= len) return out;
+  var gain = 0, loss = 0, i;
+  for (i = 1; i <= len; i++){
+    var d = closes[i] - closes[i - 1];
+    if (!isFinite(d)) return out;
+    if (d >= 0) gain += d; else loss -= d;
+  }
+  gain /= len; loss /= len;
+  out[len] = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  for (i = len + 1; i < closes.length; i++){
+    var d2 = closes[i] - closes[i - 1];
+    if (!isFinite(d2)) return out;
+    var g = d2 > 0 ? d2 : 0, l = d2 < 0 ? -d2 : 0;
+    gain = (gain * (len - 1) + g) / len;
+    loss = (loss * (len - 1) + l) / len;
+    out[i] = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  }
+  return out;
+}
+function pgrQqeSeries(rows, rsiLen, sf, qqe){
+  rsiLen = rsiLen || 14; sf = sf || 5; qqe = qqe || 4.236;
+  var n = rows.length, closes = [], i;
+  for (i = 0; i < n; i++){
+    var c = pgrNum(rows[i].c);
+    if (!isFinite(c)) return null;
+    closes.push(c);
+  }
+  var rsi = pgrRsi(closes, rsiLen);
+  var rsiMa = pgrEma(rsi, sf);
+  var wild = rsiLen * 2 - 1;
+  var tr = new Array(n).fill(NaN);
+  for (i = 1; i < n; i++){
+    if (isFinite(rsiMa[i]) && isFinite(rsiMa[i - 1])) tr[i] = Math.abs(rsiMa[i] - rsiMa[i - 1]);
+  }
+  var maAtr = pgrEma(tr, wild);
+  var dar = pgrEma(maAtr, wild);
+  for (i = 0; i < n; i++){ if (isFinite(dar[i])) dar[i] *= qqe; }
+  var longb = new Array(n).fill(NaN), shortb = new Array(n).fill(NaN), trend = new Array(n).fill(0);
+  for (i = 1; i < n; i++){
+    if (!isFinite(rsiMa[i]) || !isFinite(dar[i])){ trend[i] = trend[i - 1] || 0; continue; }
+    var nshort = rsiMa[i] + dar[i], nlong = rsiMa[i] - dar[i];
+    var prevMa = rsiMa[i - 1];
+    var prevLong = longb[i - 1], prevShort = shortb[i - 1];
+    if (isFinite(prevLong) && isFinite(prevMa) && prevMa > prevLong && rsiMa[i] > prevLong) longb[i] = Math.max(prevLong, nlong);
+    else longb[i] = nlong;
+    if (isFinite(prevShort) && isFinite(prevMa) && prevMa < prevShort && rsiMa[i] < prevShort) shortb[i] = Math.min(prevShort, nshort);
+    else shortb[i] = nshort;
+    var crossUp = isFinite(prevShort) && isFinite(prevMa) && prevMa <= prevShort && rsiMa[i] > prevShort;
+    var crossDn = isFinite(prevLong) && isFinite(prevMa) && prevMa >= prevLong && rsiMa[i] < prevLong;
+    if (crossUp) trend[i] = 1;
+    else if (crossDn) trend[i] = -1;
+    else if (trend[i - 1] === 1 || trend[i - 1] === -1) trend[i] = trend[i - 1];
+    else trend[i] = 0;
+  }
+  return { trend: trend, rsiMa: rsiMa };
+}
+function pineGoldQqe(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < ((opts.rsiLen || 14) * 4) + sw) return { dir: null };
+    var S = pgrQqeSeries(rows, opts.rsiLen || 14, opts.sf || 5, opts.qqe || 4.236);
+    if (!S) return { dir: null };
+    var i = n - 1, t0 = S.trend[i], t1 = S.trend[i - 1], c = pgrNum(rows[i].c);
+    if (t1 !== 1 && t0 === 1) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { qqe: S.rsiMa[i] });
+    if (t1 !== -1 && t0 === -1) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { qqe: S.rsiMa[i] });
+    return { dir: null, trend: t0 };
+  }catch(e){ return { dir: null }; }
+}
+function pgrSmaAt(src, i, len){
+  if (i < len - 1) return NaN;
+  var s = 0, k;
+  for (k = i - len + 1; k <= i; k++){
+    if (!isFinite(src[k])) return NaN;
+    s += src[k];
+  }
+  return s / len;
+}
+function pgrStdevAt(src, i, len){
+  var m = pgrSmaAt(src, i, len);
+  if (!isFinite(m)) return NaN;
+  var s = 0, k;
+  for (k = i - len + 1; k <= i; k++) s += (src[k] - m) * (src[k] - m);
+  return Math.sqrt(s / len);
+}
+function pgrLinregAt(src, i, len){
+  if (i < len - 1) return NaN;
+  var sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, k, y;
+  for (k = 0; k < len; k++){
+    y = src[i - len + 1 + k];
+    if (!isFinite(y)) return NaN;
+    sumX += k; sumY += y; sumXY += k * y; sumXX += k * k;
+  }
+  var den = len * sumXX - sumX * sumX;
+  if (den === 0) return NaN;
+  var slope = (len * sumXY - sumX * sumY) / den;
+  var intercept = (sumY - slope * sumX) / len;
+  return intercept + slope * (len - 1);
+}
+function pgrSqueezeRead(rows, len, bbMult, kcMult){
+  len = len || 20; bbMult = bbMult || 2; kcMult = kcMult || 1.5;
+  var n = rows ? rows.length : 0;
+  if (n < len * 2 + 2) return null;
+  var closes = [], trs = [], i;
+  for (i = 0; i < n; i++){
+    var c = pgrNum(rows[i].c), h = pgrNum(rows[i].h), l = pgrNum(rows[i].l);
+    if (![c, h, l].every(isFinite)) return null;
+    closes.push(c);
+    var pc = i ? pgrNum(rows[i - 1].c) : c;
+    trs.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  var src = new Array(n).fill(NaN), on = new Array(n).fill(false);
+  for (i = len - 1; i < n; i++){
+    var basis = pgrSmaAt(closes, i, len), dev = pgrStdevAt(closes, i, len), rangeMa = pgrSmaAt(trs, i, len);
+    if (![basis, dev, rangeMa].every(isFinite)) return null;
+    var upperBB = basis + bbMult * dev, lowerBB = basis - bbMult * dev;
+    var upperKC = basis + kcMult * rangeMa, lowerKC = basis - kcMult * rangeMa;
+    on[i] = lowerBB > lowerKC && upperBB < upperKC;
+    var hh = pgrHighest(rows, i - len + 1, i, 'h'), ll = pgrLowest(rows, i - len + 1, i, 'l');
+    src[i] = closes[i] - (((hh + ll) / 2 + basis) / 2);
+  }
+  var i0 = n - 1;
+  var mom = pgrLinregAt(src, i0, len), momPrev = pgrLinregAt(src, i0 - 1, len);
+  if (!isFinite(mom) || !isFinite(momPrev)) return null;
+  return { on: on[i0], prevOn: on[i0 - 1], mom: mom, prevMom: momPrev };
+}
+function pineGoldSqueezeFire(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    var r = pgrSqueezeRead(rows, opts.len || 20, opts.bbMult || 2, opts.kcMult || 1.5);
+    if (!r || n < sw + 2) return { dir: null };
+    var c = pgrNum(rows[n - 1].c);
+    if (r.prevOn && !r.on && r.mom > 0) return pgrResult('long', c, pgrLowest(rows, n - 1 - sw, n - 2, 'l'), { mom: r.mom });
+    if (r.prevOn && !r.on && r.mom < 0) return pgrResult('short', c, pgrHighest(rows, n - 1 - sw, n - 2, 'h'), { mom: r.mom });
+    return { dir: null, squeezeOn: r.on, mom: r.mom };
+  }catch(e){ return { dir: null }; }
+}
+function pgrWeekStart(t){
+  var ms = t > 1e12 ? t : t * 1000;
+  var d = new Date(ms);
+  var mondayOffset = (d.getUTCDay() + 6) % 7;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - mondayOffset * 86400000;
+}
+function pgrWeeklyVwapRun(rows){
+  var n = rows ? rows.length : 0;
+  if (n < 3) return null;
+  var week = null, pv = 0, vv = 0, prev = null, last = null, i;
+  for (i = 0; i < n; i++){
+    var tk = rows[i].t > 1e12 ? rows[i].t : rows[i].t * 1000;
+    var ws = pgrWeekStart(tk);
+    if (week !== ws){ week = ws; pv = 0; vv = 0; }
+    var tp = (pgrNum(rows[i].h) + pgrNum(rows[i].l) + pgrNum(rows[i].c)) / 3;
+    var v = pgrNum(rows[i].v);
+    if (!(v > 0)) v = 1;
+    if (!isFinite(tp)) return null;
+    pv += tp * v; vv += v;
+    var vw = pv / vv;
+    if (i === n - 2) prev = { vwap: vw, c: pgrNum(rows[i].c), week: ws };
+    if (i === n - 1) last = { vwap: vw, c: pgrNum(rows[i].c), week: ws };
+  }
+  if (!last || !prev || !isFinite(last.vwap) || !isFinite(prev.vwap)) return null;
+  return { vwap: last.vwap, prev: prev.vwap, c: last.c, prevC: prev.c, sameWeek: last.week === prev.week };
+}
+function pineGoldWeeklyAvwap(rows, opts){
+  opts = opts || {};
+  var sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    var r = pgrWeeklyVwapRun(rows);
+    if (!r || n < sw + 2 || !r.sameWeek) return r ? { dir: null, vwap: r.vwap } : { dir: null };
+    if (r.prevC <= r.prev && r.c > r.vwap) return pgrResult('long', r.c, Math.min(r.vwap, pgrLowest(rows, n - 1 - sw, n - 2, 'l')), { vwap: r.vwap });
+    if (r.prevC >= r.prev && r.c < r.vwap) return pgrResult('short', r.c, Math.max(r.vwap, pgrHighest(rows, n - 1 - sw, n - 2, 'h')), { vwap: r.vwap });
+    return { dir: null, vwap: r.vwap };
+  }catch(e){ return { dir: null }; }
+}
+function pgrEfficiencyAt(rows, i, len){
+  if (i < len) return null;
+  var c0 = pgrNum(rows[i].c), c1 = pgrNum(rows[i - len].c);
+  if (!isFinite(c0) || !isFinite(c1)) return null;
+  var vol = 0, k;
+  for (k = i - len + 1; k <= i; k++){
+    var a = pgrNum(rows[k].c), b = pgrNum(rows[k - 1].c);
+    if (!isFinite(a) || !isFinite(b)) return null;
+    vol += Math.abs(a - b);
+  }
+  var er = vol > 0 ? Math.abs(c0 - c1) / vol : 0;
+  var dir = c0 > c1 ? 'long' : (c0 < c1 ? 'short' : null);
+  return { er: er, dir: dir };
+}
+function pineGoldEfficiency(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 10, gate = opts.trend || 0.30, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 2) return { dir: null };
+    var now = pgrEfficiencyAt(rows, n - 1, len), prev = pgrEfficiencyAt(rows, n - 2, len);
+    if (!now || !prev) return { dir: null };
+    var c = pgrNum(rows[n - 1].c);
+    if (prev.er < gate && now.er >= gate && now.dir === 'long') return pgrResult('long', c, pgrLowest(rows, n - 1 - sw, n - 2, 'l'), { er: now.er });
+    if (prev.er < gate && now.er >= gate && now.dir === 'short') return pgrResult('short', c, pgrHighest(rows, n - 1 - sw, n - 2, 'h'), { er: now.er });
+    return { dir: null, er: now.er };
+  }catch(e){ return { dir: null }; }
+}
+function pgrEmaSeries(values, n){
+  var out = new Array(values.length), k = 2 / (n + 1), prev = null;
+  for (var i = 0; i < values.length; i++){
+    var v = pgrNum(values[i]);
+    if (!isFinite(v)){ out[i] = NaN; continue; }
+    if (prev == null){
+      if (i < n - 1){ out[i] = NaN; continue; }
+      var s = 0, ok = true;
+      for (var j = i - n + 1; j <= i; j++){
+        var x = pgrNum(values[j]);
+        if (!isFinite(x)) ok = false;
+        else s += x;
+      }
+      prev = ok ? s / n : null;
+      out[i] = prev == null ? NaN : prev;
+    } else {
+      prev = (v * k) + (prev * (1 - k));
+      out[i] = prev;
+    }
+  }
+  return out;
+}
+function pgrSideOf(a, b){
+  if (!isFinite(a) || !isFinite(b)) return null;
+  var scale = Math.max(1, Math.abs(a), Math.abs(b));
+  if (Math.abs(a - b) <= scale * 1e-8) return null;
+  return a > b ? 'long' : 'short';
+}
+/* Vortex, DEMA 21/55, 20-bar regression slope, Elder Ray, EMA 50/200,
+   Chande momentum, close against the Bollinger midline, and choppiness.
+   A missing read stays null. Equality stays null. These cannot mint. */
+function pineGoldFormRead(rows){
+  var blank = { vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null,
+    ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null,
+    alligator: null, rvi: null, bop: null, alma: null, kst: null, mcginley: null, rsi50: null,
+    stack5: null, macdZero: null, macdHist: null, psarStand: null, stochStand: null, emaSlope: null, rsiDiv: null,
+    structure: null, goldEma: null, laguerre: null, lrsi: null, rsi3: null, tdBuy: 0, tdSell: 0, regT: null, regDir: null, atrPct: null, cloud: null };
+  if (!rows || rows.length < 60) return blank;
+  var i = rows.length - 1, c = pgrNum(rows[i].c);
+  if (!isFinite(c)) return blank;
+  var closes = rows.map(function(r){ return pgrNum(r.c); });
+  if (i >= 14){
+    var up = 0, down = 0, range = 0, k;
+    for (k = i - 13; k <= i; k++){
+      up += Math.abs(pgrNum(rows[k].h) - pgrNum(rows[k - 1].l));
+      down += Math.abs(pgrNum(rows[k].l) - pgrNum(rows[k - 1].h));
+      var pc = pgrNum(rows[k - 1].c);
+      range += Math.max(pgrNum(rows[k].h) - pgrNum(rows[k].l), Math.abs(pgrNum(rows[k].h) - pc), Math.abs(pgrNum(rows[k].l) - pc));
+    }
+    if (range > 0) blank.vortex = pgrSideOf(up / range, down / range);
+    var sum = 0, hi = -Infinity, lo = Infinity;
+    for (k = i - 13; k <= i; k++){
+      var prevC = pgrNum(rows[k - 1].c);
+      sum += Math.max(pgrNum(rows[k].h) - pgrNum(rows[k].l), Math.abs(pgrNum(rows[k].h) - prevC), Math.abs(pgrNum(rows[k].l) - prevC));
+      hi = Math.max(hi, pgrNum(rows[k].h));
+      lo = Math.min(lo, pgrNum(rows[k].l));
+    }
+    if (hi > lo && sum > 0) blank.chop = (100 * Math.log(sum / (hi - lo)) / Math.LN10) / (Math.log(14) / Math.LN10);
+  }
+  var e21 = pgrEmaSeries(closes, 21), e55 = pgrEmaSeries(closes, 55);
+  var d21 = pgrEmaSeries(e21, 21), d55 = pgrEmaSeries(e55, 55);
+  if (isFinite(e21[i]) && isFinite(d21[i]) && isFinite(e55[i]) && isFinite(d55[i])){
+    blank.dema = pgrSideOf((2 * e21[i]) - d21[i], (2 * e55[i]) - d55[i]);
+  }
+  var e13 = pgrEmaSeries(closes, 13);
+  if (isFinite(e13[i])){
+    var bull = pgrNum(rows[i].h) - e13[i], bear = pgrNum(rows[i].l) - e13[i];
+    if (bull > 0 && bear > 0) blank.elder = 'long';
+    else if (bull < 0 && bear < 0) blank.elder = 'short';
+  }
+  if (rows.length >= 200){
+    var e50 = pgrEmaSeries(closes, 50), e200 = pgrEmaSeries(closes, 200);
+    blank.ribbon = pgrSideOf(e50[i], e200[i]);
+  }
+  if (i >= 20){
+    var n = 20, sumX = ((n - 1) * n) / 2, sumX2 = ((n - 1) * n * (2 * n - 1)) / 6;
+    var den = (n * sumX2) - (sumX * sumX), sumY = 0, sumXY = 0, t;
+    for (t = 0; t < n; t++){
+      var y = closes[i - n + 1 + t];
+      sumY += y; sumXY += t * y;
+    }
+    if (den !== 0 && isFinite(sumY)){
+      var slope = ((n * sumXY) - (sumX * sumY)) / den;
+      if (slope > 0) blank.linreg = 'long';
+      else if (slope < 0) blank.linreg = 'short';
+    }
+    var mean = 0;
+    for (t = i - 19; t <= i; t++) mean += closes[t];
+    mean /= 20;
+    blank.boll = pgrSideOf(c, mean);
+  }
+  if (i >= 14){
+    var gain = 0, loss = 0, u;
+    for (u = i - 13; u <= i; u++){
+      var d = closes[u] - closes[u - 1];
+      if (d > 0) gain += d;
+      else if (d < 0) loss -= d;
+    }
+    if (gain + loss > 0) blank.cmo = pgrSideOf(gain - loss, 0);
+  }
+  var hl2 = rows.map(function(r){ return (pgrNum(r.h) + pgrNum(r.l)) / 2; });
+  if (i >= 33) blank.ao = pgrSideOf(pgrSmaAt(hl2, i, 5), pgrSmaAt(hl2, i, 34));
+  if (i >= 28){
+    var bp = function(len){
+      var b = 0, tr = 0, k;
+      for (k = i - len + 1; k <= i; k++){
+        var pc = closes[k - 1], lo = Math.min(pgrNum(rows[k].l), pc), hi = Math.max(pgrNum(rows[k].h), pc);
+        b += closes[k] - lo; tr += hi - lo;
+      }
+      return tr > 0 ? b / tr : NaN;
+    };
+    var a7 = bp(7), a14 = bp(14), a28 = bp(28);
+    if (isFinite(a7) && isFinite(a14) && isFinite(a28)) blank.uo = pgrSideOf((4 * a7 + 2 * a14 + a28) / 7, 0.5);
+  }
+  if (i >= 40){
+    var mom = closes.map(function(v, idx){ return idx === 0 ? NaN : v - closes[idx - 1]; });
+    var abs = mom.map(function(v){ return isFinite(v) ? Math.abs(v) : NaN; });
+    var sm = pgrEmaSeries(pgrEmaSeries(mom, 25), 13);
+    var sa = pgrEmaSeries(pgrEmaSeries(abs, 25), 13);
+    if (isFinite(sm[i]) && isFinite(sa[i]) && sa[i] !== 0) blank.tsi = pgrSideOf(sm[i] / sa[i], 0);
+  }
+  if (i >= 12) blank.roc = pgrSideOf(closes[i] - closes[i - 12], 0);
+  if (i >= 9){
+    var highs = rows.map(function(r){ return pgrNum(r.h); });
+    var lows = rows.map(function(r){ return pgrNum(r.l); });
+    var sh = pgrSmaAt(highs, i, 10), sl = pgrSmaAt(lows, i, 10);
+    if (isFinite(sh) && c > sh) blank.ssl = 'long';
+    else if (isFinite(sl) && c < sl) blank.ssl = 'short';
+  }
+  if (i >= 28){
+    var rsi = [], r;
+    for (r = i - 13; r <= i; r++) rsi.push(pgrRsiAt(closes, r, 14));
+    var hiR = Math.max.apply(null, rsi), loR = Math.min.apply(null, rsi);
+    if (isFinite(hiR) && isFinite(loR) && hiR > loR) blank.stochrsi = pgrSideOf((rsi[rsi.length - 1] - loR) / (hiR - loR), 0.5);
+  }
+  if (i >= 30){
+    var sma20 = pgrSmaAt(closes, i, 20);
+    if (isFinite(sma20) && isFinite(closes[i - 10])) blank.dpo = pgrSideOf(closes[i - 10] - sma20, 0);
+  }
+  var e8s = pgrEmaSeries(closes, 8), e13s = pgrEmaSeries(closes, 13), e34s = pgrEmaSeries(closes, 34);
+  var e8 = e8s[i], e13 = e13s[i], e34 = e34s[i];
+  if (isFinite(e21[i]) && isFinite(e21[i - 3])) blank.emaSlope = pgrSideOf(e21[i], e21[i - 3]);
+  if (isFinite(e8) && isFinite(e13) && isFinite(e21[i]) && isFinite(e34) && isFinite(e55[i])){
+    if (e8 > e13 && e13 > e21[i] && e21[i] > e34 && e34 > e55[i]) blank.stack5 = 'long';
+    else if (e8 < e13 && e13 < e21[i] && e21[i] < e34 && e34 < e55[i]) blank.stack5 = 'short';
+  }
+  var ef = pgrEmaSeries(closes, 12), es = pgrEmaSeries(closes, 26);
+  if (isFinite(ef[i]) && isFinite(es[i])){
+    var line = ef.map(function(v, idx){ return (isFinite(v) && isFinite(es[idx])) ? v - es[idx] : NaN; });
+    var sig = pgrEmaSeries(line, 9);
+    blank.macdZero = pgrSideOf(line[i], 0);
+    if (isFinite(sig[i])) blank.macdHist = pgrSideOf(line[i] - sig[i], 0);
+  }
+  try{
+    var sar = pgrPsarSeries(rows, 0.02, 0.2);
+    if (sar && isFinite(sar.sar[i])) blank.psarStand = (sar.up[i] === true) ? 'long' : ((sar.up[i] === false) ? 'short' : pgrSideOf(c, sar.sar[i]));
+  }catch(eSar){}
+  try{
+    var stoch = pgrStochSeries(rows, 14, 3, 3);
+    if (stoch) blank.stochStand = pgrSideOf(stoch.k[i], stoch.d[i]);
+  }catch(eSt){}
+  blank.rsiDiv = pgrRsiDivergence(rows, closes);
+  blank.structure = pgrSwingStructure(rows);
+  if (rows.length >= 200){
+    var ge20 = pgrEmaSeries(closes, 20), ge50 = pgrEmaSeries(closes, 50), ge200 = pgrEmaSeries(closes, 200);
+    if (isFinite(ge20[i]) && isFinite(ge50[i]) && isFinite(ge200[i])){
+      if (ge20[i] > ge50[i] && ge50[i] > ge200[i] && c > ge200[i]) blank.goldEma = 'long';
+      else if (ge20[i] < ge50[i] && ge50[i] < ge200[i] && c < ge200[i]) blank.goldEma = 'short';
+    }
+  }
+  var lr = pgrLaguerre(closes, 0.5);
+  if (isFinite(lr)){ blank.lrsi = lr; blank.laguerre = pgrSideOf(lr, 50); }
+  var r3 = pgrRsiAt(closes, i, 3);
+  if (isFinite(r3)) blank.rsi3 = r3;
+  var td = pgrTdSetup(closes);
+  blank.tdBuy = td.buy; blank.tdSell = td.sell;
+  blank.cloud = pgrCloudState(rows);
+  var reg = pgrRegT(closes, 40);
+  if (reg){ blank.regT = reg.t; blank.regDir = reg.dir; }
+  blank.atrPct = pgrAtrPct(rows, 14, 100);
+  if (i >= 21){
+    var sm5 = pgrSmmaSeries(hl2, 5), sm8 = pgrSmmaSeries(hl2, 8), sm13 = pgrSmmaSeries(hl2, 13);
+    var lips = sm5[i - 3], teeth = sm8[i - 5], jaw = sm13[i - 8];
+    if (isFinite(lips) && isFinite(teeth) && isFinite(jaw)){
+      if (lips > teeth && teeth > jaw) blank.alligator = 'long';
+      else if (lips < teeth && teeth < jaw) blank.alligator = 'short';
+    }
+  }
+  if (i >= 12){
+    var rv = [pgrRviAt(rows, closes, i), pgrRviAt(rows, closes, i - 1), pgrRviAt(rows, closes, i - 2), pgrRviAt(rows, closes, i - 3)];
+    if (rv.every(isFinite)){
+      var sig = (rv[0] + (2 * rv[1]) + (2 * rv[2]) + rv[3]) / 6;
+      blank.rvi = pgrSideOf(rv[0], sig);
+    }
+  }
+  if (i >= 9){
+    var bsum = 0, bn = 0, bk;
+    for (bk = i - 9; bk <= i; bk++){
+      var bh = pgrNum(rows[bk].h), bl = pgrNum(rows[bk].l), br = bh - bl;
+      if (!(br > 0)) continue;
+      bsum += (closes[bk] - pgrNum(rows[bk].o)) / br;
+      bn++;
+    }
+    if (bn >= 8) blank.bop = pgrSideOf(bsum / bn, 0);
+  }
+  if (i >= 19) blank.alma = pgrSideOf(c, pgrAlmaAt(closes, i, 20, 0.85, 6));
+  if (i >= 44){
+    var k1 = pgrSmaOfRoc(closes, i, 10, 10), k2 = pgrSmaOfRoc(closes, i, 15, 10);
+    var k3 = pgrSmaOfRoc(closes, i, 20, 10), k4 = pgrSmaOfRoc(closes, i, 30, 15);
+    if (isFinite(k1) && isFinite(k2) && isFinite(k3) && isFinite(k4)) blank.kst = pgrSideOf(k1 + (2 * k2) + (3 * k3) + (4 * k4), 0);
+  }
+  if (rows.length >= 20){
+    var md = pgrMcginleyAt(closes, 14);
+    if (isFinite(md)) blank.mcginley = pgrSideOf(c, md);
+  }
+  if (i >= 14) blank.rsi50 = pgrSideOf(pgrRsiAt(closes, i, 14), 50);
+  return blank;
+}
+function pgrSmaAt(values, i, n){
+  if (i < n - 1) return NaN;
+  var s = 0, k;
+  for (k = i - n + 1; k <= i; k++){
+    var v = pgrNum(values[k]);
+    if (!isFinite(v)) return NaN;
+    s += v;
+  }
+  return s / n;
+}
+function pgrRsiAt(closes, i, n){
+  if (i < n) return NaN;
+  var g = 0, l = 0, k, d;
+  for (k = i - n + 1; k <= i; k++){
+    d = closes[k] - closes[k - 1];
+    if (d > 0) g += d;
+    else if (d < 0) l -= d;
+  }
+  if (!(g + l > 0)) return 50;
+  if (!(l > 0)) return 100;
+  var rs = g / l;
+  return 100 - (100 / (1 + rs));
+}
+function pgrSmmaSeries(values, n){
+  var out = new Array(values.length), prev = null, i;
+  for (i = 0; i < values.length; i++){
+    var v = pgrNum(values[i]);
+    if (!isFinite(v)){ out[i] = NaN; continue; }
+    if (prev == null){
+      if (i < n - 1){ out[i] = NaN; continue; }
+      var s = 0, ok = true, j;
+      for (j = i - n + 1; j <= i; j++){
+        var x = pgrNum(values[j]);
+        if (!isFinite(x)) ok = false;
+        else s += x;
+      }
+      prev = ok ? s / n : null;
+      out[i] = prev == null ? NaN : prev;
+    } else {
+      prev = ((prev * (n - 1)) + v) / n;
+      out[i] = prev;
+    }
+  }
+  return out;
+}
+function pgrRviAt(rows, closes, i){
+  if (i < 9) return NaN;
+  var co = 0, hl = 0, k;
+  for (k = i - 9; k <= i; k++){
+    var o = pgrNum(rows[k].o), h = pgrNum(rows[k].h), l = pgrNum(rows[k].l), c = closes[k];
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return NaN;
+    co += c - o;
+    hl += h - l;
+  }
+  if (!(hl > 0)) return 0;
+  return co / hl;
+}
+function pgrAlmaAt(values, i, n, offset, sigma){
+  if (i < n - 1) return NaN;
+  var m = offset * (n - 1), s = n / sigma, wsum = 0, vsum = 0, k;
+  for (k = 0; k < n; k++){
+    var v = pgrNum(values[i - n + 1 + k]);
+    if (!isFinite(v)) return NaN;
+    var w = Math.exp(-((k - m) * (k - m)) / (2 * s * s));
+    wsum += w;
+    vsum += w * v;
+  }
+  return wsum ? vsum / wsum : NaN;
+}
+function pgrRocAt(closes, i, n){
+  if (i < n || !isFinite(closes[i]) || !isFinite(closes[i - n]) || closes[i - n] === 0) return NaN;
+  return ((closes[i] - closes[i - n]) / closes[i - n]) * 100;
+}
+function pgrSmaOfRoc(closes, i, rocN, smaN){
+  if (i < rocN + smaN - 1) return NaN;
+  var s = 0, k, r;
+  for (k = i - smaN + 1; k <= i; k++){
+    r = pgrRocAt(closes, k, rocN);
+    if (!isFinite(r)) return NaN;
+    s += r;
+  }
+  return s / smaN;
+}
+function pgrMcginleyAt(closes, n){
+  var seed = pgrSmaAt(closes, n - 1, n), i, prev;
+  if (!isFinite(seed) || seed === 0) return NaN;
+  prev = seed;
+  for (i = n; i < closes.length; i++){
+    var p = closes[i];
+    if (!isFinite(p) || p === 0 || prev === 0) return NaN;
+    var den = n * Math.pow(p / prev, 4);
+    if (!isFinite(den) || den === 0) return NaN;
+    prev = prev + ((p - prev) / den);
+  }
+  return prev;
+}
+function pgrRsiDivergence(rows, closes){
+  var n = rows.length, i = n - 1;
+  if (i < 40) return null;
+  function pivots(kind){
+    var out = [], k, right = 3, left = 3, j;
+    for (k = i - right; k >= left && out.length < 2; k--){
+      var v = pgrNum(kind === 'h' ? rows[k].h : rows[k].l);
+      if (!isFinite(v)) continue;
+      var ok = true;
+      for (j = k - left; j <= k + right; j++){
+        if (j === k) continue;
+        var o = pgrNum(kind === 'h' ? rows[j].h : rows[j].l);
+        if (!isFinite(o) || (kind === 'h' ? !(v > o) : !(v < o))) ok = false;
+      }
+      if (ok) out.push(k);
+    }
+    return out;
+  }
+  var bear = false, bull = false, hs = pivots('h'), ls = pivots('l');
+  if (hs.length === 2){
+    var rNew = pgrRsiAt(closes, hs[0], 14), rOld = pgrRsiAt(closes, hs[1], 14);
+    var pNew = pgrNum(rows[hs[0]].h), pOld = pgrNum(rows[hs[1]].h);
+    if (isFinite(rNew) && isFinite(rOld) && pNew > pOld && rNew < rOld - 1) bear = true;
+  }
+  if (ls.length === 2){
+    var qNew = pgrRsiAt(closes, ls[0], 14), qOld = pgrRsiAt(closes, ls[1], 14);
+    var lNew = pgrNum(rows[ls[0]].l), lOld = pgrNum(rows[ls[1]].l);
+    if (isFinite(qNew) && isFinite(qOld) && lNew < lOld && qNew > qOld + 1) bull = true;
+  }
+  if (bear === bull) return null;
+  return bear ? 'short' : 'long';
+}
+function pgrSwingStructure(rows){
+  var i = rows.length - 1;
+  function pivots(kind){
+    var out = [], k, left = 3, right = 3, j;
+    for (k = i - right; k >= left && out.length < 2; k--){
+      var v = pgrNum(kind === 'h' ? rows[k].h : rows[k].l);
+      if (!isFinite(v)) continue;
+      var ok = true;
+      for (j = k - left; j <= k + right; j++){
+        if (j === k) continue;
+        var o = pgrNum(kind === 'h' ? rows[j].h : rows[j].l);
+        if (!isFinite(o) || (kind === 'h' ? !(v > o) : !(v < o))) ok = false;
+      }
+      if (ok) out.push(v);
+    }
+    return out;
+  }
+  var hs = pivots('h'), ls = pivots('l');
+  if (hs.length < 2 || ls.length < 2) return null;
+  if (hs[0] > hs[1] && ls[0] > ls[1]) return 'long';
+  if (hs[0] < hs[1] && ls[0] < ls[1]) return 'short';
+  return null;
+}
+function pgrLaguerre(closes, gamma){
+  var l0 = closes[0], l1 = closes[0], l2 = closes[0], l3 = closes[0], i, out = NaN;
+  if (!isFinite(l0)) return NaN;
+  for (i = 0; i < closes.length; i++){
+    var p = closes[i];
+    if (!isFinite(p)) continue;
+    var L0 = ((1 - gamma) * p) + (gamma * l0);
+    var L1 = ((-gamma) * L0) + l0 + (gamma * l1);
+    var L2 = ((-gamma) * L1) + l1 + (gamma * l2);
+    var L3 = ((-gamma) * L2) + l2 + (gamma * l3);
+    l0 = L0; l1 = L1; l2 = L2; l3 = L3;
+    var cu = Math.max(L0 - L1, 0) + Math.max(L1 - L2, 0) + Math.max(L2 - L3, 0);
+    var cd = Math.max(L1 - L0, 0) + Math.max(L2 - L1, 0) + Math.max(L3 - L2, 0);
+    if (cu + cd > 0) out = (100 * cu) / (cu + cd);
+  }
+  return out;
+}
+function pgrTdSetup(closes){
+  var sell = 0, buy = 0, t;
+  for (t = 4; t < closes.length; t++){
+    if (!isFinite(closes[t]) || !isFinite(closes[t - 4])){ sell = 0; buy = 0; continue; }
+    if (closes[t] > closes[t - 4]) sell++; else sell = 0;
+    if (closes[t] < closes[t - 4]) buy++; else buy = 0;
+  }
+  return { buy: buy, sell: sell };
+}
+function pgrRegT(values, n){
+  var i = values.length - 1;
+  if (i < n - 1) return null;
+  var sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, k, y;
+  for (k = 0; k < n; k++){
+    y = pgrNum(values[i - n + 1 + k]);
+    if (!isFinite(y)) return null;
+    sumX += k; sumY += y; sumXY += k * y; sumX2 += k * k;
+  }
+  var sxx = sumX2 - (sumX * sumX) / n;
+  if (!(sxx > 0)) return null;
+  var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  var intercept = (sumY - slope * sumX) / n;
+  var sse = 0;
+  for (k = 0; k < n; k++){
+    y = pgrNum(values[i - n + 1 + k]);
+    var err = y - (intercept + slope * k);
+    sse += err * err;
+  }
+  if (!(sse > 0)) return { t: slope > 0 ? 99 : (slope < 0 ? -99 : 0), dir: slope > 0 ? 'long' : (slope < 0 ? 'short' : null) };
+  var se = Math.sqrt(sse / (n - 2)) / Math.sqrt(sxx);
+  if (!(se > 0)) return null;
+  var t = slope / se;
+  if (Math.abs(t) > 99) t = t > 0 ? 99 : -99;
+  return { t: t, dir: t > 0 ? 'long' : (t < 0 ? 'short' : null) };
+}
+function pgrAtrPct(rows, len, look){
+  var tr = [], i, h, l, pc;
+  for (i = 1; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l); pc = pgrNum(rows[i - 1].c);
+    if (![h, l, pc].every(isFinite)) tr.push(NaN);
+    else tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  function atrAt(end){
+    if (end < len - 1) return NaN;
+    var s = 0, k;
+    for (k = end - len + 1; k <= end; k++){
+      if (!isFinite(tr[k])) return NaN;
+      s += tr[k];
+    }
+    return s / len;
+  }
+  var last = tr.length - 1, now = atrAt(last);
+  if (!isFinite(now)) return NaN;
+  var start = Math.max(len - 1, last - look + 1), below = 0, ties = 0, n = 0, j, a;
+  for (j = start; j <= last; j++){
+    a = atrAt(j);
+    if (!isFinite(a)) continue;
+    n++;
+    if (Math.abs(a - now) <= Math.max(1e-9, Math.abs(now) * 1e-9)) ties++;
+    else if (a < now) below++;
+  }
+  return n ? (100 * (below + ties * 0.5) / n) : NaN;
+}
+function pgrCloudState(rows){
+  var i = rows.length - 1, ci = i - 26;
+  if (ci < 51) return null;
+  function mid(end, len){
+    var hh = pgrHighest(rows, end - len + 1, end, 'h');
+    var ll = pgrLowest(rows, end - len + 1, end, 'l');
+    if (!isFinite(hh) || !isFinite(ll)) return NaN;
+    return (hh + ll) / 2;
+  }
+  var sA = (mid(ci, 9) + mid(ci, 26)) / 2, sB = mid(ci, 52), c = pgrNum(rows[i].c);
+  if (![sA, sB, c].every(isFinite)) return null;
+  var top = Math.max(sA, sB), bot = Math.min(sA, sB);
+  if (!(top > bot)) return null;
+  if (c > top) return 'long';
+  if (c < bot) return 'short';
+  return 'inside';
+}
+function pineGoldBlocksLead(states, dir){
+  if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
+  var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
+  var againstN = dir === 'long' ? states.agreeShort : states.agreeLong;
+  if (againstN >= PINE_GOLD_MAJORITY && againstN > withN) return 'pine majority against';
+  var ids = ['adx', 'heikin', 'sessvwap'], agree = 0, oppose = 0, i;
+  for (i = 0; i < ids.length; i++){
+    var v = states[ids[i]];
+    if (v === dir) agree++;
+    else if (v === 'long' || v === 'short') oppose++;
+  }
+  if (oppose >= 2 && oppose > agree) return 'ADX, Heikin Ashi and session VWAP against';
+  var ids2 = ['qqe', 'squeeze', 'wavwap', 'efficiency'], agree2 = 0, oppose2 = 0, read2 = 0;
+  for (i = 0; i < ids2.length; i++){
+    var v2 = states[ids2[i]];
+    if (v2 === dir){ agree2++; read2++; }
+    else if (v2 === 'long' || v2 === 'short'){ oppose2++; read2++; }
+  }
+  if (read2 >= 3 && oppose2 >= 3 && oppose2 > agree2) return 'QQE, squeeze, weekly AVWAP and efficiency against';
+  if (states.squeezeOn === true && isFinite(states.efficiencyEr) && states.efficiencyEr < 0.22 && withN < PINE_GOLD_MAJORITY) return 'squeeze on with no trend efficiency';
+  return null;
+}
+/* hg-v1408: GOLD PINE only. The wider record-layer stack, the Vortex family and
+   the pace family (Awesome, Ultimate, TSI, ROC, SSL, Stoch RSI, DPO) cannot
+   mint a ticket. This desk holds a lead when most of a readable family oppose
+   it, or when choppiness is a range. Other gold desks do not call this. */
+function pineGoldFormHold(states, dir){
+  if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
+  var stackWith = dir === 'long' ? states.allLong : states.allShort;
+  var stackAgainst = dir === 'long' ? states.allShort : states.allLong;
+  var stackRead = states.readable || 0;
+  if (stackRead >= 12 && stackAgainst >= 8 && stackAgainst > stackWith){
+    return 'wider Pine stack against (' + stackAgainst + ' of ' + stackRead + ')';
+  }
+  if (isFinite(states.chop) && states.chop > 61.8) return 'choppiness is a range (' + states.chop.toFixed(1) + ')';
+  var formIds = PINE_GOLD_FORM_IDS, fw = 0, fa = 0, fr = 0, fi;
+  if (!formIds) return null;
+  for (fi = 0; fi < formIds.length; fi++){
+    var fv = states[formIds[fi]];
+    if (fv === dir){ fw++; fr++; }
+    else if (fv === 'long' || fv === 'short'){ fa++; fr++; }
+  }
+  if (fr >= 5 && fa > fw) return 'formation Pine scripts disagree (' + fw + ' with, ' + fa + ' against)';
+  var pace = pgrFamilyHold(states, dir, PINE_GOLD_PACE_IDS, 4);
+  if (pace) return 'pace Pine scripts disagree (' + pace + ')';
+  var prime = pgrFamilyConfirm(states, dir, PINE_GOLD_PRIME_IDS, 4);
+  if (prime) return 'prime Pine scripts do not confirm (' + prime + ')';
+  var depth = pgrFamilyHold(states, dir, PINE_GOLD_DEPTH_IDS, 4);
+  if (depth) return 'standing Pine scripts disagree (' + depth + ')';
+  if ((states.rsiDiv === 'long' || states.rsiDiv === 'short') && states.rsiDiv !== dir) return 'RSI divergence against the lead';
+  if ((states.structure === 'long' || states.structure === 'short') && states.structure !== dir){
+    return 'market structure is ' + (states.structure === 'long' ? 'higher highs and higher lows' : 'lower highs and lower lows');
+  }
+  if ((states.goldEma === 'long' || states.goldEma === 'short') && states.goldEma !== dir) return 'EMA 20/50/200 stack is against';
+  if (dir === 'long' && states.tdSell === 9) return 'TD sell setup completed on this bar';
+  if (dir === 'short' && states.tdBuy === 9) return 'TD buy setup completed on this bar';
+  var backed = states.structure === dir || states.goldEma === dir;
+  if (!backed && dir === 'long' && isFinite(states.lrsi) && states.lrsi >= 80) return 'Laguerre RSI is extended and neither structure nor the EMA stack confirms (' + states.lrsi.toFixed(0) + ')';
+  if (!backed && dir === 'short' && isFinite(states.lrsi) && states.lrsi <= 20) return 'Laguerre RSI is washed out and neither structure nor the EMA stack confirms (' + states.lrsi.toFixed(0) + ')';
+  if (!backed && dir === 'long' && isFinite(states.rsi3) && states.rsi3 >= 85) return 'RSI(3) is extended and neither structure nor the EMA stack confirms (' + states.rsi3.toFixed(0) + ')';
+  if (!backed && dir === 'short' && isFinite(states.rsi3) && states.rsi3 <= 15) return 'RSI(3) is washed out and neither structure nor the EMA stack confirms (' + states.rsi3.toFixed(0) + ')';
+  if (isFinite(states.regT) && Math.abs(states.regT) >= 2 && states.regDir && states.regDir !== dir) return '40-bar regression is against the lead (t=' + states.regT.toFixed(1) + ')';
+  var trendBacked = isFinite(states.regT) && Math.abs(states.regT) >= 2 && states.regDir === dir;
+  if (!trendBacked && isFinite(states.atrPct) && states.atrPct >= 98) return 'ATR spike without a significant regression (' + states.atrPct.toFixed(0) + ')';
+  if (states.cloud === 'inside') return 'Price is inside the Ichimoku cloud.';
+  if (states.emaSlope && states.emaSlope === states.macdHist && states.emaSlope !== dir) return 'Elder Impulse is against the lead';
+  return null;
+}
+function pgrFamilyHold(states, dir, ids, need){
+  if (!ids) return null;
+  var w = 0, a = 0, r = 0, i, v;
+  for (i = 0; i < ids.length; i++){
+    v = states[ids[i]];
+    if (v === dir){ w++; r++; }
+    else if (v === 'long' || v === 'short'){ a++; r++; }
+  }
+  if (r >= need && a > w) return w + ' with, ' + a + ' against';
+  return null;
+}
+function pgrFamilyConfirm(states, dir, ids, need){
+  if (!ids) return null;
+  var w = 0, a = 0, r = 0, i, v;
+  for (i = 0; i < ids.length; i++){
+    v = states[ids[i]];
+    if (v === dir){ w++; r++; }
+    else if (v === 'long' || v === 'short'){ a++; r++; }
+  }
+  if (r >= need && w <= a) return w + ' with, ' + a + ' against';
+  return null;
+}
+/* The other timeframe. A 15m scalp is held by whatever would hold a 4h lead,
+   including a 4h family that does not confirm. A 4h swing is held only when
+   the 15m families are majority-against, not by a 15m split or a 15m range. */
+function pineGoldHtfHold(states, dir, mode){
+  if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return null;
+  if (mode === 'scalp'){
+    var why = pineGoldFormHold(states, dir);
+    return why ? ('4h ' + why) : null;
+  }
+  var stackWith = dir === 'long' ? states.allLong : states.allShort;
+  var stackAgainst = dir === 'long' ? states.allShort : states.allLong;
+  var stackRead = states.readable || 0;
+  if (stackRead >= 12 && stackAgainst >= 8 && stackAgainst > stackWith) return '15m wider Pine stack against (' + stackAgainst + ' of ' + stackRead + ')';
+  var form = pgrFamilyHold(states, dir, PINE_GOLD_FORM_IDS, 5);
+  if (form) return '15m formation Pine scripts disagree (' + form + ')';
+  var pace = pgrFamilyHold(states, dir, PINE_GOLD_PACE_IDS, 4);
+  if (pace) return '15m pace Pine scripts disagree (' + pace + ')';
+  var prime = pgrFamilyHold(states, dir, PINE_GOLD_PRIME_IDS, 4);
+  if (prime) return '15m prime Pine scripts disagree (' + prime + ')';
+  var depth = pgrFamilyHold(states, dir, PINE_GOLD_DEPTH_IDS, 4);
+  if (depth) return '15m standing Pine scripts disagree (' + depth + ')';
+  if ((states.rsiDiv === 'long' || states.rsiDiv === 'short') && states.rsiDiv !== dir) return '15m RSI divergence against the lead';
+  return null;
+}
+
+/* Gold-tape veto shared by GOLD SCALP and OMNIGOLD. A missing reading does
+   not veto. A reading that is actually against the trade does. */
+function pineGoldSwept(rows, dir){
+  var swFn = gfn('goldSweeps');
+  if (typeof swFn !== 'function') return false;
+  try{
+    var sw = swFn(rows);
+    if (!sw) return false;
+    if (dir === 'long' && ((sw.dir === 'bullish' && fin(+sw.barsAgo) && sw.barsAgo <= 8) || (sw.lowSweep && fin(+sw.lowSweep.barsAgo) && sw.lowSweep.barsAgo <= 8))) return true;
+    if (dir === 'short' && ((sw.dir === 'bearish' && fin(+sw.barsAgo) && sw.barsAgo <= 8) || (sw.highSweep && fin(+sw.highSweep.barsAgo) && sw.highSweep.barsAgo <= 8))) return true;
+  }catch(e){}
+  return false;
+}
+function pineGoldTapeVeto(rows, dir, opts){
+  opts = opts || {};
+  if (!rows || rows.length < 25 || (dir !== 'long' && dir !== 'short')) return null;
+  var mode = opts.mode === 'swing' ? 'swing' : 'scalp';
+  var price = pgrNum(rows[rows.length - 1] && rows[rows.length - 1].c);
+  if (!isFinite(price) || !(price > 0)) return null;
+  var swept = pineGoldSwept(rows, dir);
+  if (mode === 'scalp'){
+    try{
+      var pdFn = gfn('goldPremiumDiscount');
+      var pd = pdFn ? pdFn(rows) : null;
+      if (pd && dir === 'long' && pd.zone === 'PREMIUM' && !swept) return 'Scalp long in premium without a sweep';
+      if (pd && dir === 'short' && pd.zone === 'DISCOUNT' && !swept) return 'Scalp short in discount without a sweep';
+    }catch(ePd){}
+  }
+  try{
+    var rsiFn = gfn('goldRSIGold');
+    var rsi = rsiFn ? rsiFn(rows) : null;
+    var div = String(rsi && rsi.div || '').toLowerCase();
+    if (rsi && dir === 'long' && rsi.zone === 'OVERBOUGHT' && div === 'bearish') return 'Gold RSI is overbought and diverging';
+    if (rsi && dir === 'short' && rsi.zone === 'OVERSOLD' && div === 'bullish') return 'Gold RSI is oversold and diverging';
+  }catch(eRsi){}
+  if (mode === 'scalp'){
+    try{
+      var asiaFn = gfn('goldAsianRange');
+      var asian = asiaFn ? asiaFn(rows) : null;
+      if (asian && asian.hi > asian.lo && (asian.hi - asian.lo) / price >= 0.01){
+        if ((dir === 'long' && asian.state === 'SHORT_BREAK') || (dir === 'short' && asian.state === 'LONG_BREAK')) return 'Asian range already expanded. Do not fade it.';
+      }
+    }catch(eAs){}
+    if (pineGoldFixLock(opts.now)) return 'London fix auction. A scalp does not pass in this window.';
+  }
+  try{
+    var adrFn = gfn('goldADR');
+    var adr = adrFn ? adrFn(rows, 14) : null;
+    if (adr && adr.exhausted === 'YES' && adr.bias && adr.bias !== dir) return 'The day has used its average range. A continuation does not pass.';
+  }catch(eAd){}
+  var hint = String((opts.macro && (opts.macro.realRateHint || opts.macro.hint)) || '').toUpperCase();
+  if (hint === 'HEADWIND' && dir === 'long' && !swept) return 'Real-rate headwind against a long without a sweep';
+  if (hint === 'TAILWIND' && dir === 'short' && !swept) return 'Real-rate tailwind against a short without a sweep';
+  if (mode === 'scalp'){
+    var vwapWhy = pineGoldVwapChase(rows, dir);
+    if (vwapWhy) return vwapWhy;
+    var dayWhy = pineGoldPriorDayVeto(rows, dir);
+    if (dayWhy) return dayWhy;
+  }
+  try{
+    var rrFn = gfn('hgGoldRoundReject');
+    var rr = rrFn ? rrFn(rows) : null;
+    if (rr && (rr.dir === 'long' || rr.dir === 'short') && rr.dir !== dir) return rr.why || 'A round-dollar level rejected against this trade.';
+  }catch(eRr){}
+  if (mode === 'scalp'){
+    var orWhy = pineGoldOpeningReject(rows, dir);
+    if (orWhy) return orWhy;
+    var fvgWhy = pineGoldFvgInPath(rows, dir);
+    if (fvgWhy) return fvgWhy;
+  }
+  var eqWhy = pineGoldEqualPool(rows, dir);
+  if (eqWhy) return eqWhy;
+  var brWhy = pineGoldBreakerVeto(rows, dir);
+  if (brWhy) return brWhy;
+  if (mode === 'scalp'){
+    var viWhy = pineGoldVolImbalance(rows, dir);
+    if (viWhy) return viWhy;
+    var smtWhy = pineGoldSilverSmt(rows, dir, opts.silverRows);
+    if (smtWhy) return smtWhy;
+    var ibWhy = pineGoldIbVeto(rows, dir);
+    if (ibWhy) return ibWhy;
+    var nymoWhy = pineGoldNymoVeto(rows, dir);
+    if (nymoWhy) return nymoWhy;
+    var asiaWhy = pineGoldAsiaDriftVeto(rows, dir);
+    if (asiaWhy) return asiaWhy;
+    var fixWhy = pineGoldFixDriftVeto(rows, dir);
+    if (fixWhy) return fixWhy;
+    var rollWhy = pineGoldRolloverVeto(rows);
+    if (rollWhy) return rollWhy;
+    var deepWhy = pineGoldDeepRangeVeto(rows, dir);
+    if (deepWhy) return deepWhy;
+    var camWhy = pineGoldCamarillaVeto(rows, dir);
+    if (camWhy) return camWhy;
+    var pivWhy = pineGoldPivotVeto(rows, dir);
+    if (pivWhy) return pivWhy;
+    var cprWhy = pineGoldCprVeto(rows, dir);
+    if (cprWhy) return cprWhy;
+    var asiaFail = pineGoldAsiaFailVeto(rows, dir);
+    if (asiaFail) return asiaFail;
+    var murWhy = pineGoldMurreyVeto(rows, dir);
+    if (murWhy) return murWhy;
+    var fibWhy = pineGoldFibLostVeto(rows, dir);
+    if (fibWhy) return fibWhy;
+    var vwapLost = pineGoldVwapLostVeto(rows, dir);
+    if (vwapLost) return vwapLost;
+    var r2Why = pineGoldR2Veto(rows, dir);
+    if (r2Why) return r2Why;
+  }
+  var cvdWhy = pineGoldCvdVeto(rows, dir);
+  if (cvdWhy) return cvdWhy;
+  var pocWhy = pineGoldPocVeto(rows, dir);
+  if (pocWhy) return pocWhy;
+  var wickWhy = pineGoldWickVeto(rows, dir);
+  if (wickWhy) return wickWhy;
+  var kinWhy = pineGoldKineticVeto(rows, dir);
+  if (kinWhy) return kinWhy;
+  var swWhy = pineGoldSweep2Veto(rows, dir);
+  if (swWhy) return swWhy;
+  var ceWhy = pineGoldCeVeto(rows, dir);
+  if (ceWhy) return ceWhy;
+  var gannWhy = pineGoldGannVeto(rows);
+  if (gannWhy) return gannWhy;
+  var kelWhy = pineGoldKeltnerVeto(rows, dir);
+  if (kelWhy) return kelWhy;
+  var dispWhy = pineGoldDisplacementVeto(rows, dir);
+  if (dispWhy) return dispWhy;
+  var bbWhy = pineGoldBbFailVeto(rows, dir);
+  if (bbWhy) return bbWhy;
+  var openWhy = pineGoldDayOpenVeto(rows, dir);
+  if (openWhy) return openWhy;
+  var midWhy = pineGoldMidVeto(rows, dir);
+  if (midWhy) return midWhy;
+  var qWhy = pineGoldQuarterVeto(rows, dir);
+  if (qWhy) return qWhy;
+  var htfWhy = pineGoldHtfSlopeVeto(rows, dir);
+  if (htfWhy) return htfWhy;
+  var sfpWhy = pineGoldSfpVeto(rows, dir);
+  if (sfpWhy) return sfpWhy;
+  var lagWhy = pineGoldLagVeto(rows, dir);
+  if (lagWhy) return lagWhy;
+  var crossWhy = pineGoldEmaCrossVeto(rows, dir);
+  if (crossWhy) return crossWhy;
+  var stWhy = pineGoldSupertrendVeto(rows, dir);
+  if (stWhy) return stWhy;
+  var cciWhy = pineGoldCciVeto(rows, dir);
+  if (cciWhy) return cciWhy;
+  var engWhy = pineGoldEngulfVeto(rows, dir);
+  if (engWhy) return engWhy;
+  var kijWhy = pineGoldKijunVeto(rows, dir);
+  if (kijWhy) return kijWhy;
+  var macdWhy = pineGoldMacdVeto(rows, dir);
+  if (macdWhy) return macdWhy;
+  var lonWhy = pineGoldLondonHourVeto(rows, dir);
+  if (lonWhy) return lonWhy;
+  var emaWhy = pineGoldEma50Veto(rows, dir);
+  if (emaWhy) return emaWhy;
+  var tdWhy = pineGoldTd9Veto(rows, dir);
+  if (tdWhy) return tdWhy;
+  var comexWhy = pineGoldComexHourVeto(rows, dir);
+  if (comexWhy) return comexWhy;
+  var bbAcc = pineGoldBbAcceptVeto(rows, dir);
+  if (bbAcc) return bbAcc;
+  var h4Why = pineGoldH4OpenVeto(rows, dir);
+  if (h4Why) return h4Why;
+  var weakWhy = pineGoldWeakBreakVeto(rows, dir);
+  if (weakWhy) return weakWhy;
+  var starWhy = pineGoldStarVeto(rows, dir);
+  if (starWhy) return starWhy;
+  var rsiX = pineGoldRsiExitVeto(rows, dir);
+  if (rsiX) return rsiX;
+  var extWhy = pineGoldExtVeto(rows, dir);
+  if (extWhy) return extWhy;
+  var stochX = pineGoldStochExitVeto(rows, dir);
+  if (stochX) return stochX;
+  var donWhy = pineGoldDonchian55Veto(rows, dir);
+  if (donWhy) return donWhy;
+  var mfiWhy = pineGoldMfiExitVeto(rows, dir);
+  if (mfiWhy) return mfiWhy;
+  var willWhy = pineGoldWillExitVeto(rows, dir);
+  if (willWhy) return willWhy;
+  var h4sWhy = pineGoldH4SweepVeto(rows, dir);
+  if (h4sWhy) return h4sWhy;
+  var keltA = pineGoldKeltAcceptVeto(rows, dir);
+  if (keltA) return keltA;
+  var regWhy = pineGoldRegressVeto(rows, dir);
+  if (regWhy) return regWhy;
+  var ppWhy = pineGoldPpLostVeto(rows, dir);
+  if (ppWhy) return ppWhy;
+  var hrWhy = pineGoldFirstHourVeto(rows, dir);
+  if (hrWhy) return hrWhy;
+  var ema100 = pineGoldEma100Veto(rows, dir);
+  if (ema100) return ema100;
+  var tsiWhy = pineGoldTsiVeto(rows, dir);
+  if (tsiWhy) return tsiWhy;
+  var orbWhy = pineGoldOrbVeto(rows, dir);
+  if (orbWhy) return orbWhy;
+  var forceWhy = pineGoldForceVeto(rows, dir);
+  if (forceWhy) return forceWhy;
+  var pocWhy2 = pineGoldNakedPocVeto(rows, dir);
+  if (pocWhy2) return pocWhy2;
+  var cmfWhy = pineGoldCmfVeto(rows, dir);
+  if (cmfWhy) return cmfWhy;
+  var vahWhy = pineGoldVahVeto(rows, dir);
+  if (vahWhy) return vahWhy;
+  var nyOrb = pineGoldNyOrbVeto(rows, dir);
+  if (nyOrb) return nyOrb;
+  var aoWhy = pineGoldAoVeto(rows, dir);
+  if (aoWhy) return aoWhy;
+  var wkWhy = pineGoldWeekHighVeto(rows, dir);
+  if (wkWhy) return wkWhy;
+  var diWhy = pineGoldDiCrossVeto(rows, dir);
+  if (diWhy) return diWhy;
+  var shWhy = pineGoldShanghaiHourVeto(rows, dir);
+  if (shWhy) return shWhy;
+  try{
+    var woFn = gfn('hgGoldWeeklyOpen');
+    var wo = woFn ? woFn(rows) : null;
+    if (wo && (wo.dir === 'long' || wo.dir === 'short') && wo.dir !== dir) return wo.why || 'The weekly open was swept against this trade.';
+  }catch(eWo){}
+  return null;
+}
+function pineGoldSessionDayOk(rows){
+  if (!rows || rows.length < 2) return false;
+  var anch = pineGoldSessionVwapAnchor(rows);
+  if (anch > 0) return true;
+  var tL = rows[rows.length - 1].t, t0 = rows[0].t;
+  if (!fin(tL) || !fin(t0)) return false;
+  var sL = tL < 1e12 ? tL : tL / 1000, s0 = t0 < 1e12 ? t0 : t0 / 1000;
+  return Math.floor(sL / 86400) === Math.floor(s0 / 86400);
+}
+function pineGoldVwapChase(rows, dir){
+  try{
+    var vbFn = gfn('goldVWAPBands');
+    if (!vbFn || !pineGoldSessionDayOk(rows)) return null;
+    var bands = vbFn(rows, pineGoldSessionVwapAnchor(rows));
+    if (!bands || !isFinite(bands.stdev) || !(bands.stdev > 0)) return null;
+    if (bands.band !== 'AT_2σ' && bands.band !== 'AT_3σ') return null;
+    if (dir === 'long' && bands.pos === 'ABOVE') return 'Session VWAP is two sigma above. A scalp does not chase it.';
+    if (dir === 'short' && bands.pos === 'BELOW') return 'Session VWAP is two sigma below. A scalp does not chase it.';
+  }catch(eVw){}
+  return null;
+}
+function pineGoldBarAtr(rows){
+  var fn = gfn('atr');
+  if (typeof fn !== 'function') return NaN;
+  try{
+    var a = fn(rows, 14);
+    var v = a && a.length ? +a[a.length - 1] : NaN;
+    return isFinite(v) && v > 0 ? v : NaN;
+  }catch(e){ return NaN; }
+}
+function pineGoldPriorDayVeto(rows, dir){
+  try{
+    var pdFn = gfn('hgGoldPriorDayLevels');
+    if (!pdFn) return null;
+    var prior = pdFn(rows);
+    if (!prior || prior.ok !== true) return null;
+    var atrV = pineGoldBarAtr(rows);
+    var lastB = rows[rows.length - 1];
+    if (!lastB || !isFinite(atrV)) return null;
+    var c = pgrNum(lastB.c), h = pgrNum(lastB.h), l = pgrNum(lastB.l);
+    if (!isFinite(c) || !isFinite(h) || !isFinite(l)) return null;
+    if (dir === 'long' && isFinite(prior.hi)){
+      if (h > prior.hi && c < prior.hi) return 'The prior day high was pierced and closed back under.';
+      if (c < prior.hi && prior.hi - c <= 0.35 * atrV && !(h > prior.hi)) return 'Price is under the prior day high and has not swept it.';
+    }
+    if (dir === 'short' && isFinite(prior.lo)){
+      if (l < prior.lo && c > prior.lo) return 'The prior day low was pierced and closed back over.';
+      if (c > prior.lo && c - prior.lo <= 0.35 * atrV && !(l < prior.lo)) return 'Price is over the prior day low and has not swept it.';
+    }
+  }catch(eDy){}
+  return null;
+}
+/* London 07:00-08:00 and New York 13:00-14:00 UTC, from the desk's own
+   opening-range read. A pierce that closes back inside is a failed break.
+   A box still building, or a clean close through, is not this veto. */
+function pineGoldOpeningReject(rows, dir){
+  var orFn = gfn('goldOpeningRange');
+  if (typeof orFn !== 'function' || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last && last.h), l = pgrNum(last && last.l), c = pgrNum(last && last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var names = { london: 'London', ny: 'New York' };
+  var keys = ['london', 'ny'];
+  for (var i = 0; i < keys.length; i++){
+    var box = null;
+    try{ box = orFn(rows, keys[i]); }catch(eOr){ box = null; }
+    if (!box || !(box.hi > box.lo) || box.state === 'BUILDING') continue;
+    var name = names[keys[i]];
+    if (dir === 'long' && h > box.hi && c <= box.hi) return name + ' opening range high was pierced and closed back inside.';
+    if (dir === 'short' && l < box.lo && c >= box.lo) return name + ' opening range low was pierced and closed back over.';
+  }
+  return null;
+}
+/* A fresh $3 gold fair-value gap from the Pine gold library, still open,
+   and either touching price or within half an ATR. An old or mitigated
+   gap does not refuse. */
+function pineGoldFvgInPath(rows, dir){
+  var Eng = G.HG_PineGoldEngine;
+  if (typeof Eng !== 'function' || !rows || rows.length < 8) return null;
+  var fvgs = null;
+  try{ fvgs = new Eng().detectGoldFvg(rows, 3); }catch(eFg){ return null; }
+  if (!fvgs || !fvgs.length) return null;
+  var atrV = pineGoldBarAtr(rows);
+  var c = pgrNum(rows[rows.length - 1] && rows[rows.length - 1].c);
+  if (!isFinite(atrV) || !isFinite(c)) return null;
+  var n = rows.length, i;
+  for (i = fvgs.length - 1; i >= 0; i--){
+    var f = fvgs[i];
+    if (!f || f.mitigated || !isFinite(f.barIndex) || f.barIndex < n - 16) continue;
+    if (!(f.top > f.bottom)) continue;
+    if (dir === 'long' && f.type === 'BEARISH_FVG' && c < f.top){
+      if (c >= f.bottom) return 'Price is inside a fresh bearish fair value gap.';
+      if (f.bottom - c <= 0.5 * atrV) return 'A fresh bearish fair value gap sits in the way of this long.';
+    }
+    if (dir === 'short' && f.type === 'BULLISH_FVG' && c > f.bottom){
+      if (c <= f.top) return 'Price is inside a fresh bullish fair value gap.';
+      if (c - f.top <= 0.5 * atrV) return 'A fresh bullish fair value gap sits in the way of this short.';
+    }
+  }
+  return null;
+}
+/* Equal highs above a long, equal lows under a short, on this tape.
+   A close through the pool is a break, not this veto. */
+function pineGoldEqualPool(rows, dir){
+  try{
+    var eqFn = gfn('goldEqualLevels');
+    if (!eqFn) return null;
+    var eq = eqFn(rows);
+    if (!eq) return null;
+    var atrV = pineGoldBarAtr(rows);
+    var lastB = rows[rows.length - 1];
+    if (!lastB || !isFinite(atrV)) return null;
+    var c = pgrNum(lastB.c), h = pgrNum(lastB.h), l = pgrNum(lastB.l);
+    if (!isFinite(c) || !isFinite(h) || !isFinite(l)) return null;
+    var near = 0.35 * atrV;
+    if (dir === 'long' && eq.nearestHigh && isFinite(eq.nearestHigh.level)){
+      var hi = eq.nearestHigh.level;
+      if (hi > c && hi - c <= near){
+        if (h > hi) return 'Equal highs were pierced and closed back under.';
+        return 'Equal highs sit just above and have not been swept.';
+      }
+    }
+    if (dir === 'short' && eq.nearestLow && isFinite(eq.nearestLow.level)){
+      var lo = eq.nearestLow.level;
+      if (c > lo && c - lo <= near){
+        if (l < lo) return 'Equal lows were pierced and closed back over.';
+        return 'Equal lows sit just below and have not been swept.';
+      }
+    }
+  }catch(eEq){}
+  return null;
+}
+function pineGoldCore(){
+  var C = G.HG_GoldCoreEngine;
+  if (typeof C !== 'function') return null;
+  try{ return new C(); }catch(eC){ return null; }
+}
+/* A breaker only refuses while price is actually back inside it, and only
+   when the breaker faces the trade. No breaker, or a breaker that agrees, passes. */
+function pineGoldBreakerVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectBreakerBlock !== 'function') return null;
+  var found = null;
+  try{ found = core.detectBreakerBlock(rows); }catch(eBr){ return null; }
+  if (!found || found.retesting !== true) return null;
+  if (dir === 'long' && found.type === 'BEARISH_BREAKER') return 'Price is retesting a bearish breaker block.';
+  if (dir === 'short' && found.type === 'BULLISH_BREAKER') return 'Price is retesting a bullish breaker block.';
+  return null;
+}
+/* The last body-gap in the last eight bars. $0.80 is the library's own
+   minimum. An old gap, or none, does not refuse. */
+function pineGoldVolImbalance(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectVolumeImbalance !== 'function') return null;
+  var vi = null;
+  try{ vi = core.detectVolumeImbalance(rows); }catch(eVi){ return null; }
+  if (!vi || !(vi.gapTop > vi.gapBottom)) return null;
+  var atrV = pineGoldBarAtr(rows);
+  var c = pgrNum(rows[rows.length - 1] && rows[rows.length - 1].c);
+  if (!isFinite(atrV) || !isFinite(c)) return null;
+  if (dir === 'long' && vi.type === 'BEARISH_VI' && c < vi.gapTop){
+    if (c >= vi.gapBottom) return 'Price is inside a bearish volume imbalance.';
+    if (vi.gapBottom - c <= 0.5 * atrV) return 'A bearish volume imbalance sits in the way of this long.';
+  }
+  if (dir === 'short' && vi.type === 'BULLISH_VI' && c > vi.gapBottom){
+    if (c <= vi.gapTop) return 'Price is inside a bullish volume imbalance.';
+    if (c - vi.gapTop <= 0.5 * atrV) return 'A bullish volume imbalance sits in the way of this short.';
+  }
+  return null;
+}
+/* Silver must be loaded. Unread silver does not refuse. */
+function pineGoldSilverSmt(rows, dir, silverRows){
+  if (!silverRows || silverRows.length < 5) return null;
+  var core = pineGoldCore();
+  if (!core || typeof core.evaluateTripleSmt !== 'function') return null;
+  var smt = null;
+  try{ smt = core.evaluateTripleSmt(rows, silverRows); }catch(eSm){ return null; }
+  if (!smt || smt.unread) return null;
+  if (dir === 'long' && smt.tripleSmtBearish) return 'Silver confirmed the high. Bearish SMT.';
+  if (dir === 'short' && smt.tripleSmtBullish) return 'Silver refused the low. Bullish SMT.';
+  return null;
+}
+/* London 07:00-07:30 and New York 13:30-14:00 UTC. A wick through the
+   30-minute box that closes back inside is a failed break. No box, or a
+   close clean through it, does not refuse. */
+function pineGoldIbVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateInitialBalance !== 'function') return null;
+  var ib = null;
+  try{ ib = core.calculateInitialBalance(rows); }catch(eIb){ return null; }
+  if (!ib) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last && last.h), l = pgrNum(last && last.l), c = pgrNum(last && last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var boxes = [
+    ['London initial balance', ib.londonIb],
+    ['New York initial balance', ib.nyIb]
+  ];
+  var i, box;
+  for (i = 0; i < boxes.length; i++){
+    box = boxes[i][1];
+    if (!box || !(box.ibh > box.ibl)) continue;
+    if (dir === 'long' && h > box.ibh && c <= box.ibh) return boxes[i][0] + ' high was pierced and closed back inside.';
+    if (dir === 'short' && l < box.ibl && c >= box.ibl) return boxes[i][0] + ' low was pierced and closed back over.';
+  }
+  return null;
+}
+/* Close-location volume delta from the gold core. Unread volume does not
+   refuse. Absorption that diverges with the trade does not refuse. */
+function pineGoldCvdVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateCvdAbsorption !== 'function') return null;
+  var cvd = null;
+  try{ cvd = core.calculateCvdAbsorption(rows, dir); }catch(eCv){ return null; }
+  if (!cvd || cvd.unread || cvd.deltaDivergence) return null;
+  if (dir === 'long' && cvd.recentDelta < 0) return 'Volume delta is still selling. No absorption under the low.';
+  if (dir === 'short' && cvd.recentDelta > 0) return 'Volume delta is still buying. No absorption over the high.';
+  return null;
+}
+/* A migrated point of control with price back on the wrong side of it.
+   No migration does not refuse. */
+function pineGoldPocVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectPocMigration !== 'function') return null;
+  var poc = null;
+  try{ poc = core.detectPocMigration(rows); }catch(ePc){ return null; }
+  if (!poc || poc.unread || poc.trappedSide === 'NONE') return null;
+  if (dir === 'long' && poc.trappedSide === 'TRAPPED_LONGS') return 'The point of control rose and price is back under it.';
+  if (dir === 'short' && poc.trappedSide === 'TRAPPED_SHORTS') return 'The point of control fell and price is back over it.';
+  return null;
+}
+/* New York midnight open. A long more than one ATR above it, or a short
+   more than one ATR below it, is chasing the day. No midnight bar does not refuse. */
+function pineGoldNymoVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateTrueDayOpen !== 'function' || !rows || !rows.length) return null;
+  var day = null;
+  try{ day = core.calculateTrueDayOpen(rows); }catch(eNy){ return null; }
+  if (!day || day.unread || !(day.nymo > 0)) return null;
+  var atrV = pineGoldBarAtr(rows);
+  if (!(atrV > 0) && rows.length >= 16 && typeof core.calculateAtr === 'function'){
+    try{ atrV = core.calculateAtr(rows, 14); }catch(eAt){ atrV = NaN; }
+  }
+  if (!(atrV > 0)) return null;
+  var c = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(c)) return null;
+  if (dir === 'long' && c > day.nymo + atrV) return 'Price is more than one ATR above the New York midnight open.';
+  if (dir === 'short' && c < day.nymo - atrV) return 'Price is more than one ATR below the New York midnight open.';
+  return null;
+}
+/* Asian session already expanded and drifted. A scalp does not fade that
+   drift. A quiet Asia, or an unread one, does not refuse. */
+function pineGoldAsiaDriftVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.classifyAsianRegime !== 'function' || !rows || !rows.length) return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  var reg = null;
+  try{ reg = core.classifyAsianRegime(rows, px); }catch(eAs){ return null; }
+  if (!reg || reg.regime !== 'EXPANSION_TREND') return null;
+  if (dir === 'long' && reg.drift === 'DOWN') return 'Asia already trended down. A scalp does not fade it.';
+  if (dir === 'short' && reg.drift === 'UP') return 'Asia already trended up. A scalp does not fade it.';
+  return null;
+}
+/* The last candle's wick against the trade took most of the range.
+   A normal candle does not refuse. */
+function pineGoldWickVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateFootprintAbsorption !== 'function' || !rows || !rows.length) return null;
+  var against = dir === 'long' ? 'short' : 'long';
+  var fp = null;
+  try{ fp = core.calculateFootprintAbsorption(rows[rows.length - 1], against); }catch(eWk){ return null; }
+  if (!fp || fp.absorbed !== true) return null;
+  if (dir === 'long') return 'The last candle rejected higher. The upper wick took most of the range.';
+  return 'The last candle rejected lower. The lower wick took most of the range.';
+}
+/* Three closes still running, and the distance is more than 4 ATR.
+   A quiet tape does not refuse. */
+function pineGoldKineticVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateKineticEnergy !== 'function' || !rows || rows.length < 5) return null;
+  var atrV = pineGoldBarAtr(rows);
+  if (!(atrV > 0) && rows.length >= 16 && typeof core.calculateAtr === 'function'){
+    try{ atrV = core.calculateAtr(rows, 14); }catch(eAt){ atrV = NaN; }
+  }
+  if (!(atrV > 0)) return null;
+  var kin = null;
+  try{ kin = core.calculateKineticEnergy(rows, atrV); }catch(eKn){ return null; }
+  if (!kin) return null;
+  if (dir === 'long' && kin.downCascade === true) return 'Price is still cascading down. A long would be catching the knife.';
+  if (dir === 'short' && kin.upCascade === true) return 'Price is still cascading up. A short would be catching the knife.';
+  return null;
+}
+/* One sweep of yesterday's extreme is not the entry. The second, deeper
+   sweep is. No prior day, or no sweep, does not refuse. */
+function pineGoldSweep2Veto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.detectDoubleSweepExhaustion !== 'function' || !rows || rows.length < 8) return null;
+  var days = {}, order = [], i, b, t, key, rec;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    t = pgrNum(b && b.t);
+    if (!isFinite(t) || !isFinite(pgrNum(b.h)) || !isFinite(pgrNum(b.l))) return null;
+    if (t < 1e12) t = t * 1000;
+    key = new Date(t).toISOString().slice(0, 10);
+    rec = days[key];
+    if (!rec){ rec = days[key] = { hi: -Infinity, lo: Infinity, n: 0 }; order.push(key); }
+    if (b.h > rec.hi) rec.hi = +b.h;
+    if (b.l < rec.lo) rec.lo = +b.l;
+    rec.n++;
+  }
+  if (order.length < 2) return null;
+  var prior = days[order[order.length - 2]];
+  if (!prior || prior.n < 4 || !(prior.hi > prior.lo)) return null;
+  var level = dir === 'long' ? prior.lo : prior.hi;
+  if (!(level > 0)) return null;
+  var sw = null;
+  try{ sw = core.detectDoubleSweepExhaustion(rows, level, dir); }catch(eSw){ return null; }
+  if (!sw || sw.unread || sw.sweepStage !== 'STAGE_1') return null;
+  if (dir === 'long') return 'First sweep of the prior day low. The second sweep has not printed.';
+  return 'First sweep of the prior day high. The second sweep has not printed.';
+}
+/* The half hour into the London AM or PM fix. Fading a real drift into
+   the auction does not pass. Outside that window does not refuse. */
+function pineGoldFixDriftVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculatePreFixDrift !== 'function' || !rows || !rows.length) return null;
+  var drift = null;
+  try{ drift = core.calculatePreFixDrift(rows); }catch(eFx){ return null; }
+  if (!drift || drift.unread || drift.active !== true || !isFinite(drift.drift)) return null;
+  if (Math.abs(drift.drift) < 2) return null;
+  if (dir === 'short' && drift.drift > 0) return 'Price is drifting up into the London fix. A short does not fade it.';
+  if (dir === 'long' && drift.drift < 0) return 'Price is drifting down into the London fix. A long does not fade it.';
+  return null;
+}
+/* 20:45 UTC through the daily rollover. A missing time does not refuse.
+   The London fix is a different rule and is not this one. */
+function pineGoldRolloverVeto(rows){
+  var core = pineGoldCore();
+  if (!core || typeof core.checkTimeVeto !== 'function' || !rows || !rows.length) return null;
+  var t = pgrNum(rows[rows.length - 1].t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var hit = null;
+  try{ hit = core.checkTimeVeto(new Date(t)); }catch(eRl){ return null; }
+  if (!hit || hit.veto !== true) return null;
+  if (String(hit.reason || '').indexOf('Off-hours') < 0) return null;
+  return 'Gold rollover. A scalp does not pass in this window.';
+}
+/* The top or bottom 40% of the dealing range. A long in deep premium, or a
+   short in deep discount, needs a sweep. No range, or no sweep reader, does not refuse. */
+function pineGoldDeepRangeVeto(rows, dir){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateDealingRange !== 'function' || !rows || !rows.length) return null;
+  if (typeof gfn('goldSweeps') !== 'function') return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!(px > 0)) return null;
+  var range = null;
+  try{ range = core.calculateDealingRange(rows, px, rows.length); }catch(eDp){ return null; }
+  if (!range || range.unread === true) return null;
+  if (pineGoldSwept(rows, dir)) return null;
+  if (dir === 'long' && range.zone === 'DEEP_PREMIUM') return 'Price is in the deep premium of the dealing range and has not swept a low.';
+  if (dir === 'short' && range.zone === 'DEEP_DISCOUNT') return 'Price is in the deep discount of the dealing range and has not swept a high.';
+  return null;
+}
+/* A gap that price has already traded through its midpoint is used up.
+   A fresh gap does not refuse. */
+function pineGoldCeVeto(rows, dir){
+  var Eng = G.HG_PineGoldEngine;
+  if (typeof Eng !== 'function' || !rows || rows.length < 8) return null;
+  var fvgs = null;
+  try{ fvgs = new Eng().detectFreshFvgs(rows, 2); }catch(eCe){ return null; }
+  if (!fvgs || !fvgs.length) return null;
+  var c = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(c)) return null;
+  var i, f;
+  for (i = fvgs.length - 1; i >= 0; i--){
+    f = fvgs[i];
+    if (!f || f.state === 'FRESH' || !(f.top > f.bottom)) continue;
+    if (c < f.bottom || c > f.top) continue;
+    if (dir === 'long' && f.type === 'BULLISH_FVG') return 'This bullish gap is already mitigated past its midpoint.';
+    if (dir === 'short' && f.type === 'BEARISH_FVG') return 'This bearish gap is already mitigated past its midpoint.';
+  }
+  return null;
+}
+/* Yesterday's high, low, and last close. A short prior day does not count. */
+function pineGoldPriorOhlc(rows){
+  if (!rows || rows.length < 8) return null;
+  var days = {}, order = [], i, b, t, key, rec;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    t = pgrNum(b && b.t);
+    if (!isFinite(t) || !isFinite(pgrNum(b.h)) || !isFinite(pgrNum(b.l)) || !isFinite(pgrNum(b.c))) return null;
+    if (t < 1e12) t = t * 1000;
+    key = new Date(t).toISOString().slice(0, 10);
+    rec = days[key];
+    if (!rec){ rec = days[key] = { hi: -Infinity, lo: Infinity, c: NaN, n: 0 }; order.push(key); }
+    if (+b.h > rec.hi) rec.hi = +b.h;
+    if (+b.l < rec.lo) rec.lo = +b.l;
+    rec.c = +b.c;
+    rec.n++;
+  }
+  if (order.length < 2) return null;
+  rec = days[order[order.length - 2]];
+  if (!rec || rec.n < 4 || !(rec.hi > rec.lo) || !(rec.c > 0)) return null;
+  return rec;
+}
+/* Camarilla H3-H4 and L3-L4 from yesterday. A long inside the upper band,
+   or a short inside the lower band, does not pass. A close through H4 or L4 does.
+   A prior day smaller than $8 does not refuse. */
+function pineGoldCamarillaVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior) return null;
+  var range = prior.hi - prior.lo;
+  if (!(range >= 8)) return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(px)) return null;
+  var h3 = prior.c + range * 1.1 / 4;
+  var h4 = prior.c + range * 1.1 / 2;
+  var l3 = prior.c - range * 1.1 / 4;
+  var l4 = prior.c - range * 1.1 / 2;
+  if (dir === 'long' && px >= h3 && px < h4) return 'Price is between Camarilla H3 and H4. A long does not buy that band.';
+  if (dir === 'short' && px <= l3 && px > l4) return 'Price is between Camarilla L3 and L4. A short does not sell that band.';
+  return null;
+}
+/* Classic floor pivot. A wick through R1 or S1 that closes back inside
+   does not pass. A close clean through it does not refuse. */
+function pineGoldPivotVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var pp = (prior.hi + prior.lo + prior.c) / 3;
+  var r1 = 2 * pp - prior.lo;
+  var s1 = 2 * pp - prior.hi;
+  if (dir === 'long' && h > r1 && c <= r1) return 'R1 was pierced and closed back under.';
+  if (dir === 'short' && l < s1 && c >= s1) return 'S1 was pierced and closed back over.';
+  return null;
+}
+/* Square of 9 from yesterday's close. Sitting within $1.20 of a 90, 180,
+   270, or 360 degree level does not pass. Far from those levels does not refuse. */
+function pineGoldGannVeto(rows){
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateGannSquare9 !== 'function') return null;
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior) return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!(px > 0)) return null;
+  var gann = null;
+  try{ gann = core.calculateGannSquare9(prior.c, px); }catch(eGn){ return null; }
+  if (!gann || gann.unread || gann.isAtGannPivot !== true) return null;
+  return 'Price is sitting on a Gann cardinal from yesterday\'s close.';
+}
+/* Central pivot range from yesterday. A wick through the top that closes
+   back inside does not pass as a long. The bottom is the short. A range
+   narrower than $1 does not refuse. */
+function pineGoldCprVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var pivot = (prior.hi + prior.lo + prior.c) / 3;
+  var bc = (prior.hi + prior.lo) / 2;
+  var tc = 2 * pivot - bc;
+  var top = Math.max(tc, bc), bot = Math.min(tc, bc);
+  if (!(top - bot >= 1)) return null;
+  if (dir === 'long' && h > top && c <= top && c >= bot) return 'The central pivot top was pierced and closed back inside.';
+  if (dir === 'short' && l < bot && c >= bot && c <= top) return 'The central pivot bottom was pierced and closed back inside.';
+  return null;
+}
+function pineGoldEmaLast(rows, len){
+  if (!rows || rows.length < len) return NaN;
+  var k = 2 / (len + 1), ema = null, i, c;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return NaN;
+    ema = ema == null ? c : (c * k + ema * (1 - k));
+  }
+  return ema;
+}
+function pineGoldAtrNow(rows){
+  var atrV = pineGoldBarAtr(rows);
+  if (atrV > 0) return atrV;
+  var core = pineGoldCore();
+  if (!core || typeof core.calculateAtr !== 'function' || !rows || rows.length < 16) return NaN;
+  try{ atrV = core.calculateAtr(rows, 14); }catch(eAt){ return NaN; }
+  return atrV > 0 ? atrV : NaN;
+}
+/* Two ATR beyond the 20 EMA is a chase. A sweep of the other side still passes.
+   No sweep reader does not refuse. */
+function pineGoldKeltnerVeto(rows, dir){
+  if (typeof gfn('goldSweeps') !== 'function' || !rows || rows.length < 20) return null;
+  if (pineGoldSwept(rows, dir)) return null;
+  var atrV = pineGoldAtrNow(rows);
+  var ema = pineGoldEmaLast(rows, 20);
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!(atrV > 0) || !isFinite(ema) || !isFinite(px)) return null;
+  if (dir === 'long' && px > ema + 2 * atrV) return 'Price is more than two ATR above the 20 EMA. A long does not chase it.';
+  if (dir === 'short' && px < ema - 2 * atrV) return 'Price is more than two ATR below the 20 EMA. A short does not chase it.';
+  return null;
+}
+/* One candle whose body is at least 1.2 ATR against the trade.
+   A small candle does not refuse. */
+function pineGoldDisplacementVeto(rows, dir){
+  if (!rows || rows.length < 16) return null;
+  var last = rows[rows.length - 1];
+  var o = pgrNum(last && last.o), c = pgrNum(last && last.c);
+  var atrV = pineGoldAtrNow(rows);
+  if (!isFinite(o) || !isFinite(c) || !(atrV > 0)) return null;
+  if (dir === 'long' && o - c >= 1.2 * atrV) return 'The last candle is a bearish displacement. A long does not stand in front of it.';
+  if (dir === 'short' && c - o >= 1.2 * atrV) return 'The last candle is a bullish displacement. A short does not stand in front of it.';
+  return null;
+}
+/* A wick through the 20, 2 band that closes back inside. A band narrower
+   than $4 is noise and does not refuse. A close that stays outside does not refuse. */
+function pineGoldBbFailVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len) return null;
+  var slice = rows.slice(-len), sum = 0, i, c, d;
+  for (i = 0; i < len; i++){
+    c = pgrNum(slice[i].c);
+    if (!(c > 0)) return null;
+    sum += c;
+  }
+  var mean = sum / len, v = 0;
+  for (i = 0; i < len; i++){ d = pgrNum(slice[i].c) - mean; v += d * d; }
+  var sd = Math.sqrt(v / len);
+  if (!(sd > 0)) return null;
+  var upper = mean + 2 * sd, lower = mean - 2 * sd;
+  if (upper - lower < 4) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), cl = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(cl)) return null;
+  if (dir === 'long' && h > upper && cl <= upper) return 'The upper Bollinger band was pierced and closed back inside.';
+  if (dir === 'short' && l < lower && cl >= lower) return 'The lower Bollinger band was pierced and closed back inside.';
+  return null;
+}
+/* The first open of this UTC day. Price was on the trade side of it and
+   the last close crossed back. One bar for the day does not refuse. */
+function pineGoldDayOpenVeto(rows, dir){
+  if (!rows || rows.length < 4) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var day = new Date(t).toISOString().slice(0, 10);
+  var open = NaN, n = 0, i, b, tb, key;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    key = new Date(tb).toISOString().slice(0, 10);
+    if (key !== day) continue;
+    if (!isFinite(open)) open = pgrNum(b.o);
+    n++;
+  }
+  if (!(open > 0) || n < 2) return null;
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(last.c);
+  if (!isFinite(prevC) || !isFinite(c)) return null;
+  if (dir === 'long' && prevC > open && c < open) return 'Price lost the daily open. A long does not pass.';
+  if (dir === 'short' && prevC < open && c > open) return 'Price crossed back above the daily open. A short does not pass.';
+  return null;
+}
+/* Yesterday's midpoint. The bar opened on the trade side and closed back
+   through it. A prior day smaller than $8 does not refuse. */
+function pineGoldMidVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8 || !rows || !rows.length) return null;
+  var mid = (prior.hi + prior.lo) / 2;
+  var last = rows[rows.length - 1];
+  var o = pgrNum(last.o), h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c) || !(mid > 0)) return null;
+  if (dir === 'long' && o > mid && c < mid) return 'Price lost yesterday\'s midpoint. A long does not pass.';
+  if (dir === 'short' && o < mid && c > mid) return 'Price crossed back through yesterday\'s midpoint. A short does not pass.';
+  return null;
+}
+/* Asian high and low, 00:00-07:00 UTC. A later wick that closes back inside
+   does not pass. During Asia, or with no Asian box, this does not refuse. */
+function pineGoldAsiaFailVeto(rows, dir){
+  if (!rows || rows.length < 6) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var day = lastD.toISOString().slice(0, 10);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 7) return null;
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, key, hv;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    var dt = new Date(tb);
+    key = dt.toISOString().slice(0, 10);
+    if (key !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv >= 7) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi) return 'The Asian high was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo) return 'The Asian low was pierced and closed back over.';
+  return null;
+}
+/* The $25 level the bar reached and did not hold. A close through it does not refuse. */
+function pineGoldQuarterVeto(rows, dir){
+  if (!rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var o = pgrNum(last.o), h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var step = 25;
+  if (dir === 'long'){
+    var up = Math.floor(h / step) * step;
+    if (up > o && up >= c && h > up) return 'The $' + up.toFixed(0) + ' level was pierced and closed back under.';
+  } else {
+    var dn = Math.ceil(l / step) * step;
+    if (dn < o && dn <= c && l < dn) return 'The $' + dn.toFixed(0) + ' level was pierced and closed back over.';
+  }
+  return null;
+}
+/* Every fourth bar is the higher timeframe. A long under a falling average
+   does not pass. A dip under a rising average still passes. */
+function pineGoldHtfSlopeVeto(rows, dir){
+  if (!rows || rows.length < 84) return null;
+  var closes = [], i, c;
+  for (i = 3; i < rows.length; i += 4){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    closes.push(c);
+  }
+  if (closes.length < 21) return null;
+  function emaAt(end){
+    var k = 2 / 21, ema = null, j;
+    for (j = 0; j <= end; j++) ema = ema == null ? closes[j] : (closes[j] * k + ema * (1 - k));
+    return ema;
+  }
+  var now = emaAt(closes.length - 1);
+  var prev = emaAt(closes.length - 4);
+  var px = closes[closes.length - 1];
+  if (!isFinite(now) || !isFinite(prev) || !isFinite(px)) return null;
+  if (dir === 'long' && px < now && now < prev) return 'The higher-timeframe average is falling and price is under it.';
+  if (dir === 'short' && px > now && now > prev) return 'The higher-timeframe average is rising and price is over it.';
+  return null;
+}
+/* Yesterday split into eight. The top eighth is not a long. The bottom
+   eighth is not a short. A close through yesterday's high or low still passes.
+   A prior day under $8 does not refuse. */
+function pineGoldMurreyVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8) return null;
+  var px = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(px)) return null;
+  var eighth = (prior.hi - prior.lo) / 8;
+  if (dir === 'long' && px >= prior.lo + 7 * eighth && px <= prior.hi) return 'Price is in the top eighth of yesterday. A long does not buy it.';
+  if (dir === 'short' && px <= prior.lo + eighth && px >= prior.lo) return 'Price is in the bottom eighth of yesterday. A short does not sell it.';
+  return null;
+}
+/* The last bar took the prior swing and closed back inside, against the trade.
+   A close through the swing, or a swing under $3, does not refuse. */
+function pineGoldSfpVeto(rows, dir){
+  if (!rows || rows.length < 12) return null;
+  var last = rows[rows.length - 1];
+  var look = rows.slice(-12, -1);
+  var hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(pgrNum(look[i].h)) || !isFinite(pgrNum(look[i].l))) return null;
+    if (+look[i].h > hi) hi = +look[i].h;
+    if (+look[i].l < lo) lo = +look[i].l;
+  }
+  if (!(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'A swing high was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'A swing low was pierced and closed back over.';
+  return null;
+}
+/* Close versus the close 26 bars ago, and that close versus 26 bars before it.
+   A long under a falling lag does not pass. A dip while the lag is still rising does not refuse. */
+function pineGoldLagVeto(rows, dir){
+  if (!rows || rows.length < 53) return null;
+  var n = rows.length;
+  var c0 = pgrNum(rows[n - 1].c), c26 = pgrNum(rows[n - 27].c), c52 = pgrNum(rows[n - 53].c);
+  if (!(c0 > 0) || !(c26 > 0) || !(c52 > 0)) return null;
+  if (dir === 'long' && c0 < c26 && c26 < c52) return 'Price is under its close from 26 bars ago, and that close was already falling.';
+  if (dir === 'short' && c0 > c26 && c26 > c52) return 'Price is over its close from 26 bars ago, and that close was already rising.';
+  return null;
+}
+/* Yesterday's 61.8 and 38.2. A long that opens above 61.8 and closes back
+   under it does not pass. The 38.2 is the short. A prior day under $8 does not refuse. */
+function pineGoldFibLostVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8 || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(o) || !isFinite(c)) return null;
+  var range = prior.hi - prior.lo;
+  var fib618 = prior.lo + range * 0.618;
+  var fib382 = prior.lo + range * 0.382;
+  if (dir === 'long' && o > fib618 && c < fib618) return 'Price lost yesterday\'s 61.8. A long does not pass.';
+  if (dir === 'short' && o < fib382 && c > fib382) return 'Price crossed back through yesterday\'s 38.2. A short does not pass.';
+  return null;
+}
+/* Session VWAP from 00:00 UTC. The previous close was on the trade side
+   and the last close crossed back. Fewer than four session bars does not refuse. */
+function pineGoldVwapLostVeto(rows, dir){
+  if (!rows || rows.length < 4) return null;
+  var lastT = pgrNum(rows[rows.length - 1].t);
+  if (!isFinite(lastT)) return null;
+  if (lastT < 1e12) lastT = lastT * 1000;
+  var day = new Date(lastT).toISOString().slice(0, 10);
+  var sess = [], i, b, tb, key;
+  for (i = 0; i < rows.length; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    key = new Date(tb).toISOString().slice(0, 10);
+    if (key !== day) continue;
+    if (!(pgrNum(b.c) > 0) || !isFinite(pgrNum(b.h)) || !isFinite(pgrNum(b.l))) return null;
+    sess.push(b);
+  }
+  if (sess.length < 4) return null;
+  function vwap(list){
+    var s = 0, vol = 0, j, bar, v, tp;
+    for (j = 0; j < list.length; j++){
+      bar = list[j];
+      v = pgrNum(bar.v);
+      if (!(v > 0)) v = 1;
+      tp = (+bar.h + +bar.l + +bar.c) / 3;
+      s += tp * v;
+      vol += v;
+    }
+    return vol > 0 ? s / vol : NaN;
+  }
+  var prevV = vwap(sess.slice(0, -1));
+  var nowV = vwap(sess);
+  var prevC = pgrNum(sess[sess.length - 2].c);
+  var c = pgrNum(sess[sess.length - 1].c);
+  if (!isFinite(prevV) || !isFinite(nowV) || !isFinite(prevC) || !isFinite(c)) return null;
+  if (dir === 'long' && prevC > prevV && c < nowV) return 'Price lost the session VWAP. A long does not pass.';
+  if (dir === 'short' && prevC < prevV && c > nowV) return 'Price crossed back above the session VWAP. A short does not pass.';
+  return null;
+}
+/* A 9/21 cross that prints on this bar. An older cross does not refuse. */
+function pineGoldEmaCrossVeto(rows, dir){
+  if (!rows || rows.length < 30) return null;
+  function series(len){
+    var k = 2 / (len + 1), ema = null, out = [], i, c;
+    for (i = 0; i < rows.length; i++){
+      c = pgrNum(rows[i].c);
+      if (!(c > 0)) return null;
+      ema = ema == null ? c : (c * k + ema * (1 - k));
+      out.push(ema);
+    }
+    return out;
+  }
+  var e9 = series(9), e21 = series(21);
+  if (!e9 || !e21) return null;
+  var n = rows.length - 1;
+  if (dir === 'long' && e9[n - 1] >= e21[n - 1] && e9[n] < e21[n]) return 'The 9 EMA just crossed under the 21.';
+  if (dir === 'short' && e9[n - 1] <= e21[n - 1] && e9[n] > e21[n]) return 'The 9 EMA just crossed over the 21.';
+  return null;
+}
+/* Supertrend 10, 3. Only the bar that flips. An old trend does not refuse. */
+function pineGoldSupertrendVeto(rows, dir){
+  var period = 10, factor = 3;
+  if (!rows || rows.length < period + 2) return null;
+  var atr = [], i, h, l, c, tr, prevC;
+  for (i = 0; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l); c = pgrNum(rows[i].c);
+    if (!(c > 0) || !isFinite(h) || !isFinite(l)) return null;
+    if (i === 0) tr = h - l;
+    else {
+      prevC = pgrNum(rows[i - 1].c);
+      tr = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
+    }
+    atr.push(i === 0 ? tr : ((atr[i - 1] * (period - 1) + tr) / period));
+  }
+  var up = 0, dn = 0, trend = 1, prevUp = 0, prevDn = 0, prevTrend = 1, flip = null;
+  for (i = 0; i < rows.length; i++){
+    h = +rows[i].h; l = +rows[i].l; c = +rows[i].c;
+    var mid = (h + l) / 2;
+    var rawUp = mid - factor * atr[i];
+    var rawDn = mid + factor * atr[i];
+    if (i === 0){ up = rawUp; dn = rawDn; }
+    else {
+      var prevClose = +rows[i - 1].c;
+      up = (prevClose > prevUp) ? Math.max(rawUp, prevUp) : rawUp;
+      dn = (prevClose < prevDn) ? Math.min(rawDn, prevDn) : rawDn;
+      prevTrend = trend;
+      if (c > prevDn) trend = 1;
+      else if (c < prevUp) trend = -1;
+      else trend = prevTrend;
+      if (i === rows.length - 1 && trend !== prevTrend) flip = trend === -1 ? 'bear' : 'bull';
+    }
+    prevUp = up;
+    prevDn = dn;
+  }
+  if (dir === 'long' && flip === 'bear') return 'Supertrend just flipped down. A long does not pass.';
+  if (dir === 'short' && flip === 'bull') return 'Supertrend just flipped up. A short does not pass.';
+  return null;
+}
+function pineGoldCciValue(rows, end, len){
+  if (!rows || end < len - 1) return NaN;
+  var tps = [], i, tp, sum = 0, md = 0;
+  for (i = end - len + 1; i <= end; i++){
+    if (!(pgrNum(rows[i].c) > 0) || !isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))) return NaN;
+    tp = (+rows[i].h + +rows[i].l + +rows[i].c) / 3;
+    tps.push(tp);
+    sum += tp;
+  }
+  var mean = sum / len;
+  for (i = 0; i < tps.length; i++) md += Math.abs(tps[i] - mean);
+  md = md / len;
+  if (!(md > 0)) return 0;
+  return (tps[tps.length - 1] - mean) / (0.015 * md);
+}
+/* CCI leaving +100 or -100 on this bar. Staying beyond the line does not refuse. */
+function pineGoldCciVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 2) return null;
+  var n = rows.length - 1;
+  var prev = pineGoldCciValue(rows, n - 1, len);
+  var now = pineGoldCciValue(rows, n, len);
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= 100 && now < 100) return 'CCI just left +100. A long does not pass.';
+  if (dir === 'short' && prev <= -100 && now > -100) return 'CCI just left -100. A short does not pass.';
+  return null;
+}
+/* The last candle body covers the prior candle body, and the body is at least 0.6 ATR. */
+function pineGoldEngulfVeto(rows, dir){
+  if (!rows || rows.length < 16) return null;
+  var prev = rows[rows.length - 2], last = rows[rows.length - 1];
+  var atrV = pineGoldAtrNow(rows);
+  var o = pgrNum(last.o), c = pgrNum(last.c);
+  var po = pgrNum(prev.o), pc = pgrNum(prev.c);
+  if (!(atrV > 0) || !isFinite(o) || !isFinite(c) || !isFinite(po) || !isFinite(pc)) return null;
+  if (Math.abs(c - o) < 0.6 * atrV) return null;
+  var top = Math.max(po, pc), bot = Math.min(po, pc);
+  if (dir === 'long' && c < o && o >= top && c <= bot) return 'A bearish candle engulfed the prior body. A long does not pass.';
+  if (dir === 'short' && c > o && o <= bot && c >= top) return 'A bullish candle engulfed the prior body. A short does not pass.';
+  return null;
+}
+/* Floor pivot R2 and S2. A wick through R2 that closes back under does not
+   pass as a long. A close through it does not refuse. */
+function pineGoldR2Veto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || !rows || !rows.length) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+  var pp = (prior.hi + prior.lo + prior.c) / 3;
+  var span = prior.hi - prior.lo;
+  if (!(span >= 8)) return null;
+  var r2 = pp + span, s2 = pp - span;
+  if (dir === 'long' && h > r2 && c <= r2) return 'R2 was pierced and closed back under.';
+  if (dir === 'short' && l < s2 && c >= s2) return 'S2 was pierced and closed back over.';
+  return null;
+}
+/* The 26-bar midpoint. Losing it on this bar does not pass.
+   A close that was already on the other side does not refuse. */
+function pineGoldKijunVeto(rows, dir){
+  var len = 26;
+  if (!rows || rows.length < len + 2) return null;
+  function kijun(end){
+    var hi = -Infinity, lo = Infinity, i;
+    for (i = end - len + 1; i <= end; i++){
+      if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))) return NaN;
+      if (+rows[i].h > hi) hi = +rows[i].h;
+      if (+rows[i].l < lo) lo = +rows[i].l;
+    }
+    return (hi + lo) / 2;
+  }
+  var n = rows.length - 1;
+  var prevK = kijun(n - 1), nowK = kijun(n);
+  var prevC = pgrNum(rows[n - 1].c), c = pgrNum(rows[n].c);
+  if (!isFinite(prevK) || !isFinite(nowK) || !isFinite(prevC) || !isFinite(c)) return null;
+  if (dir === 'long' && prevC >= prevK && c < nowK) return 'Price lost the 26-bar midpoint. A long does not pass.';
+  if (dir === 'short' && prevC <= prevK && c > nowK) return 'Price reclaimed the 26-bar midpoint. A short does not pass.';
+  return null;
+}
+/* MACD 12, 26 crossing zero on this bar. Staying on one side does not refuse. */
+function pineGoldMacdVeto(rows, dir){
+  if (!rows || rows.length < 30) return null;
+  function ema(len){
+    var k = 2 / (len + 1), out = [], v = null, i, c;
+    for (i = 0; i < rows.length; i++){
+      c = pgrNum(rows[i].c);
+      if (!(c > 0)) return null;
+      v = v == null ? c : (c * k + v * (1 - k));
+      out.push(v);
+    }
+    return out;
+  }
+  var fast = ema(12), slow = ema(26);
+  if (!fast || !slow) return null;
+  var n = rows.length - 1;
+  var prev = fast[n - 1] - slow[n - 1];
+  var now = fast[n] - slow[n];
+  if (dir === 'long' && prev >= 0 && now < 0) return 'MACD just crossed under zero. A long does not pass.';
+  if (dir === 'short' && prev <= 0 && now > 0) return 'MACD just crossed over zero. A short does not pass.';
+  return null;
+}
+/* The 07:00 UTC hour. After 08:00, a wick back inside it does not pass.
+   Before 08:00, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldLondonHourVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 8) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 7 || hv >= 8) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The London open hour was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The London open hour was pierced and closed back over.';
+  return null;
+}
+/* Shanghai morning, 01:00–02:00 UTC. Gold's Asian benchmark prints in that
+   hour. A later bar that wicks through it and closes back does not pass.
+   A day with no bar in the hour, or a hour under $3, does not refuse. */
+function pineGoldShanghaiHourVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 2) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 1 || hv >= 2) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The Shanghai hour was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The Shanghai hour was pierced and closed back over.';
+  return null;
+}
+/* The 50 EMA. Losing it on this bar does not pass. A close already through it does not refuse. */
+function pineGoldEma50Veto(rows, dir){
+  var len = 50;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var k = 2 / (len + 1), ema = null, prevE = NaN, prevC = NaN, i, c;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    ema = ema == null ? c : (c * k + ema * (1 - k));
+    if (i === rows.length - 2){ prevE = ema; prevC = c; }
+  }
+  if (dir === 'long' && prevC >= prevE && c < ema) return 'Price lost the 50 EMA. A long does not pass.';
+  if (dir === 'short' && prevC <= prevE && c > ema) return 'Price reclaimed the 50 EMA. A short does not pass.';
+  return null;
+}
+/* A TD 9 whose last bar closes against the trade does not pass.
+   A count under 9, or a 9th bar that still closes with the trade, does not refuse. */
+function pineGoldTd9Veto(rows, dir){
+  if (!rows || rows.length < 13 || (dir !== 'long' && dir !== 'short')) return null;
+  var count = 0, i, c, back, o;
+  for (i = rows.length - 1; i >= 4; i--){
+    c = pgrNum(rows[i].c);
+    back = pgrNum(rows[i - 4].c);
+    o = pgrNum(rows[i].o);
+    if (!(c > 0) || !(back > 0) || !isFinite(o)) return null;
+    if (dir === 'long' && c > back) count++;
+    else if (dir === 'short' && c < back) count++;
+    else break;
+  }
+  if (count < 9) return null;
+  var last = rows[rows.length - 1];
+  if (dir === 'long' && pgrNum(last.c) < pgrNum(last.o)) return 'A TD 9 closed down. A long does not pass.';
+  if (dir === 'short' && pgrNum(last.c) > pgrNum(last.o)) return 'A TD 9 closed up. A short does not pass.';
+  return null;
+}
+/* The 13:00 UTC hour, New York cash and COMEX. After 14:00, a wick back inside it does not pass.
+   Before 14:00, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldComexHourVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 14) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 13 || hv >= 14) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The COMEX hour was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The COMEX hour was pierced and closed back over.';
+  return null;
+}
+/* A close back inside a Bollinger band after the previous close was outside it.
+   A close that never left the band, or a band under $4, does not refuse. */
+function pineGoldBbAcceptVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1);
+  var sum = 0, i, c;
+  for (i = 0; i < prior.length; i++){
+    c = pgrNum(prior[i].c);
+    if (!(c > 0)) return null;
+    sum += c;
+  }
+  var mean = sum / prior.length, acc = 0, d;
+  for (i = 0; i < prior.length; i++){
+    d = pgrNum(prior[i].c) - mean;
+    acc += d * d;
+  }
+  var sd = Math.sqrt(acc / prior.length);
+  if (!(sd > 0) || sd * 4 < 4) return null;
+  var prevC = pgrNum(prior[prior.length - 1].c);
+  var now = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(prevC) || !isFinite(now)) return null;
+  if (dir === 'long' && prevC > mean + 2 * sd && now <= mean + 2 * sd) return 'Price closed back inside the upper Bollinger band.';
+  if (dir === 'short' && prevC < mean - 2 * sd && now >= mean - 2 * sd) return 'Price closed back inside the lower Bollinger band.';
+  return null;
+}
+/* The open of the current 4-hour block. Losing it on this bar does not pass.
+   One bar in the block does not refuse. */
+function pineGoldH4OpenVeto(rows, dir){
+  if (!rows || rows.length < 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var start = Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), Math.floor(when.getUTCHours() / 4) * 4);
+  var open = NaN, n = 0, i, ms;
+  for (i = 0; i < rows.length; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms < start) continue;
+    if (!isFinite(open)) open = pgrNum(rows[i].o);
+    n++;
+  }
+  if (!(open > 0) || n < 2) return null;
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(prevC) || !isFinite(c)) return null;
+  if (dir === 'long' && prevC > open && c < open) return 'Price lost the 4-hour open. A long does not pass.';
+  if (dir === 'short' && prevC < open && c > open) return 'Price crossed back through the 4-hour open. A short does not pass.';
+  return null;
+}
+/* A new 20-bar extreme on less than half the average volume does not pass.
+   A bar that does not take the extreme, or a tape with no volume, does not refuse. */
+function pineGoldWeakBreakVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  var look = rows.slice(-(len + 1), -1);
+  var hi = -Infinity, lo = Infinity, vol = 0, i, v;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(pgrNum(look[i].h)) || !isFinite(pgrNum(look[i].l))) return null;
+    v = volOf(look[i]);
+    if (!(v > 0)) return null;
+    if (+look[i].h > hi) hi = +look[i].h;
+    if (+look[i].l < lo) lo = +look[i].l;
+    vol += v;
+  }
+  var avg = vol / look.length;
+  var last = rows[rows.length - 1];
+  v = volOf(last);
+  if (!(v > 0) || !isFinite(pgrNum(last.h)) || !isFinite(pgrNum(last.l)) || !(hi > lo)) return null;
+  if (dir === 'long' && +last.h > hi && v < avg * 0.5) return 'The breakout printed on weak volume. A long does not pass.';
+  if (dir === 'short' && +last.l < lo && v < avg * 0.5) return 'The breakdown printed on weak volume. A short does not pass.';
+  return null;
+}
+/* Evening star at the local high, or morning star at the local low. Anywhere else it does not refuse. */
+function pineGoldStarVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var n = rows.length, i;
+  var a = rows[n - 3], b = rows[n - 2], c = rows[n - 1];
+  if (!(pgrNum(a.c) > 0) || !(pgrNum(b.c) > 0) || !(pgrNum(c.c) > 0)) return null;
+  if (!isFinite(pgrNum(a.h)) || !isFinite(pgrNum(b.h)) || !isFinite(pgrNum(c.h))) return null;
+  var bodyA = Math.abs(pgrNum(a.c) - pgrNum(a.o)), rangeA = pgrNum(a.h) - pgrNum(a.l);
+  var bodyB = Math.abs(pgrNum(b.c) - pgrNum(b.o)), rangeB = pgrNum(b.h) - pgrNum(b.l);
+  if (!(rangeA > 0) || !(rangeB > 0)) return null;
+  if (dir === 'long'){
+    if (!(pgrNum(a.c) > pgrNum(a.o)) || bodyA < 0.6 * rangeA) return null;
+    if (bodyB > 0.35 * rangeA) return null;
+    if (!(pgrNum(c.c) < pgrNum(c.o))) return null;
+    if (!(pgrNum(c.c) < (pgrNum(a.o) + pgrNum(a.c)) / 2)) return null;
+    for (i = n - 8; i < n; i++) if (pgrNum(rows[i].h) > pgrNum(b.h)) return null;
+    return 'An evening star printed at the local high. A long does not pass.';
+  }
+  if (!(pgrNum(a.c) < pgrNum(a.o)) || bodyA < 0.6 * rangeA) return null;
+  if (bodyB > 0.35 * rangeA) return null;
+  if (!(pgrNum(c.c) > pgrNum(c.o))) return null;
+  if (!(pgrNum(c.c) > (pgrNum(a.o) + pgrNum(a.c)) / 2)) return null;
+  for (i = n - 8; i < n; i++) if (pgrNum(rows[i].l) < pgrNum(b.l)) return null;
+  return 'A morning star printed at the local low. A short does not pass.';
+}
+/* RSI(14) crossing back through 70. A reading already inside does not refuse. */
+function pineGoldRsiExitVeto(rows, dir){
+  if (!rows || rows.length < 20 || (dir !== 'long' && dir !== 'short')) return null;
+  var closes = [], i, c;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    closes.push(c);
+  }
+  var rsi = pgrRsi(closes, 14);
+  if (!rsi) return null;
+  var prev = rsi[rsi.length - 2], now = rsi[rsi.length - 1];
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= 70 && now < 70) return 'RSI crossed back from 70. A long does not pass.';
+  if (dir === 'short' && prev <= 30 && now > 30) return 'RSI crossed back from 30. A short does not pass.';
+  return null;
+}
+/* Yesterday's 1.272 extension. A wick back inside it does not pass.
+   A close through it, or a prior day under $8, does not refuse. */
+function pineGoldExtVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8 || !rows || !rows.length || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  var range = prior.hi - prior.lo;
+  var up = prior.hi + range * 0.272;
+  var dn = prior.lo - range * 0.272;
+  if (dir === 'long' && h > up && c <= up && c < o) return 'The 1.272 extension was pierced and closed back under.';
+  if (dir === 'short' && l < dn && c >= dn && c > o) return 'The 1.272 extension was pierced and closed back over.';
+  return null;
+}
+/* Slow stochastic leaving 80. A cross already inside 80 does not refuse. A flat range does not pass. */
+function pineGoldStochExitVeto(rows, dir){
+  var len = 14, smooth = 3;
+  if (!rows || rows.length < len + smooth + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var ks = [], i, j, hi, lo, c;
+  for (i = len - 1; i < rows.length; i++){
+    hi = -Infinity; lo = Infinity;
+    for (j = i - len + 1; j <= i; j++){
+      if (!isFinite(pgrNum(rows[j].h)) || !isFinite(pgrNum(rows[j].l)) || !(pgrNum(rows[j].c) > 0)) return null;
+      if (+rows[j].h > hi) hi = +rows[j].h;
+      if (+rows[j].l < lo) lo = +rows[j].l;
+    }
+    c = pgrNum(rows[i].c);
+    if (!(hi > lo)) return null;
+    ks.push(100 * (c - lo) / (hi - lo));
+  }
+  function sma(end){
+    var s = 0, k;
+    for (k = end - smooth + 1; k <= end; k++) s += ks[k];
+    return s / smooth;
+  }
+  var n = ks.length - 1;
+  var rawNow = ks[n], rawPrev = ks[n - 1], kNow = sma(n), kPrev = sma(n - 1);
+  if (!isFinite(rawNow) || !isFinite(rawPrev) || !isFinite(kNow) || !isFinite(kPrev)) return null;
+  if (dir === 'long' && rawPrev >= 80 && rawPrev >= kPrev && rawNow < kNow) return 'Stochastic crossed down from 80. A long does not pass.';
+  if (dir === 'short' && rawPrev <= 20 && rawPrev <= kPrev && rawNow > kNow) return 'Stochastic crossed up from 20. A short does not pass.';
+  return null;
+}
+/* A wick through the prior 55-bar extreme that closes back inside, against the trade.
+   A close through the extreme, or a channel under $8, does not refuse. */
+function pineGoldDonchian55Veto(rows, dir){
+  var len = 55;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var look = rows.slice(-(len + 1), -1);
+  var hi = -Infinity, lo = Infinity, i;
+  for (i = 0; i < look.length; i++){
+    if (!isFinite(pgrNum(look[i].h)) || !isFinite(pgrNum(look[i].l)) || !(pgrNum(look[i].c) > 0)) return null;
+    if (+look[i].h > hi) hi = +look[i].h;
+    if (+look[i].l < lo) lo = +look[i].l;
+  }
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c) || !(hi > lo)) return null;
+  if (hi - lo < 8) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The 55-bar high was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The 55-bar low was pierced and closed back over.';
+  return null;
+}
+/* MFI(14) crossing back through 80. A reading already inside, or a tape with no volume, does not refuse. */
+function pineGoldMfiExitVeto(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  var pos = [], neg = [], i, tp, prev, v, mf;
+  for (i = 0; i < rows.length; i++){
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l)) || !(pgrNum(rows[i].c) > 0)) return null;
+    v = volOf(rows[i]);
+    if (!(v > 0)) return null;
+    tp = (pgrNum(rows[i].h) + pgrNum(rows[i].l) + pgrNum(rows[i].c)) / 3;
+    if (i === 0){ prev = tp; continue; }
+    mf = tp * v;
+    pos.push(tp > prev ? mf : 0);
+    neg.push(tp < prev ? mf : 0);
+    prev = tp;
+  }
+  function at(end){
+    if (end < len - 1) return NaN;
+    var p = 0, n = 0, k;
+    for (k = end - len + 1; k <= end; k++){ p += pos[k]; n += neg[k]; }
+    if (p + n === 0) return NaN;
+    return n === 0 ? 100 : 100 - 100 / (1 + p / n);
+  }
+  var end = pos.length - 1;
+  var now = at(end), before = at(end - 1);
+  if (!isFinite(now) || !isFinite(before)) return null;
+  if (dir === 'long' && before >= 80 && now < 80) return 'MFI crossed back from 80. A long does not pass.';
+  if (dir === 'short' && before <= 20 && now > 20) return 'MFI crossed back from 20. A short does not pass.';
+  return null;
+}
+/* Williams %R crossing back through -20. A reading already inside does not refuse. */
+function pineGoldWillExitVeto(rows, dir){
+  if (!rows || rows.length < 16 || (dir !== 'long' && dir !== 'short')) return null;
+  var w = pgrWilliamsSeries(rows, 14);
+  if (!w) return null;
+  var prev = w[w.length - 2], now = w[w.length - 1];
+  if (!isFinite(prev) || !isFinite(now)) return null;
+  if (dir === 'long' && prev >= -20 && now < -20) return 'Williams %R crossed back from -20. A long does not pass.';
+  if (dir === 'short' && prev <= -80 && now > -80) return 'Williams %R crossed back from -80. A short does not pass.';
+  return null;
+}
+/* The completed 4-hour block before this one. A wick back inside it does not pass.
+   No prior block, or a block under $8, does not refuse. */
+function pineGoldH4SweepVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var start = Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), Math.floor(when.getUTCHours() / 4) * 4);
+  var prior = start - 4 * 3600 * 1000;
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms < prior || ms >= start) continue;
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 8) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The prior 4-hour block was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The prior 4-hour block was pierced and closed back over.';
+  return null;
+}
+/* A close back inside the Keltner band after the previous close was outside it.
+   A close that never left the band, or a band under $4, does not refuse. */
+function pineGoldKeltAcceptVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1), closes = [], i, atr = 0, pc, tr, c;
+  for (i = 0; i < prior.length; i++){
+    c = pgrNum(prior[i].c);
+    if (!(c > 0) || !isFinite(pgrNum(prior[i].h)) || !isFinite(pgrNum(prior[i].l))) return null;
+    closes.push(c);
+  }
+  for (i = 1; i < prior.length; i++){
+    pc = closes[i - 1];
+    tr = Math.max(pgrNum(prior[i].h) - pgrNum(prior[i].l), Math.abs(pgrNum(prior[i].h) - pc), Math.abs(pgrNum(prior[i].l) - pc));
+    atr += tr;
+  }
+  atr = atr / (prior.length - 1);
+  if (!(atr > 0) || atr * 4 < 4) return null;
+  var k = 2 / (len + 1), ema = null;
+  for (i = 0; i < closes.length; i++) ema = ema == null ? closes[i] : (closes[i] * k + ema * (1 - k));
+  var prevC = closes[closes.length - 1], now = pgrNum(rows[rows.length - 1].c);
+  if (!isFinite(now)) return null;
+  if (dir === 'long' && prevC > ema + 2 * atr && now <= ema + 2 * atr) return 'Price closed back inside the upper Keltner band.';
+  if (dir === 'short' && prevC < ema - 2 * atr && now >= ema - 2 * atr) return 'Price closed back inside the lower Keltner band.';
+  return null;
+}
+/* A wick back inside a 20-bar regression channel. A close through it, or a channel under $8, does not refuse. */
+function pineGoldRegressVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 1 || (dir !== 'long' && dir !== 'short')) return null;
+  var prior = rows.slice(-(len + 1), -1);
+  var sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, i, y;
+  for (i = 0; i < prior.length; i++){
+    y = pgrNum(prior[i].c);
+    if (!(y > 0)) return null;
+    sumX += i; sumY += y; sumXY += i * y; sumXX += i * i;
+  }
+  var n = prior.length;
+  var den = n * sumXX - sumX * sumX;
+  if (!(den > 0)) return null;
+  var slope = (n * sumXY - sumX * sumY) / den;
+  var intercept = (sumY - slope * sumX) / n;
+  var acc = 0, fit;
+  for (i = 0; i < n; i++){
+    fit = intercept + slope * i;
+    acc += (pgrNum(prior[i].c) - fit) * (pgrNum(prior[i].c) - fit);
+  }
+  var sd = Math.sqrt(acc / n);
+  if (!(sd > 0) || sd * 4 < 8) return null;
+  var last = rows[rows.length - 1];
+  var edge = intercept + slope * n;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > edge + 2 * sd && c <= edge + 2 * sd && c < o) return 'The regression channel was pierced and closed back under.';
+  if (dir === 'short' && l < edge - 2 * sd && c >= edge - 2 * sd && c > o) return 'The regression channel was pierced and closed back over.';
+  return null;
+}
+/* Yesterday pivot point. Losing it on this close does not pass.
+   A close already through it, or a prior day under $8, does not refuse. */
+function pineGoldPpLostVeto(rows, dir){
+  var prior = pineGoldPriorOhlc(rows);
+  if (!prior || prior.hi - prior.lo < 8 || !rows || rows.length < 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(rows[rows.length - 1].c);
+  if (!(prevC > 0) || !(c > 0)) return null;
+  var pp = (prior.hi + prior.lo + prior.c) / 3;
+  if (dir === 'long' && prevC > pp && c < pp) return 'Price lost the daily pivot point. A long does not pass.';
+  if (dir === 'short' && prevC < pp && c > pp) return 'Price reclaimed the daily pivot point. A short does not pass.';
+  return null;
+}
+/* The 00:00 UTC hour. After 01:00, a wick back inside it does not pass.
+   Before 01:00, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldFirstHourVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 1) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv >= 1) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The first hour was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The first hour was pierced and closed back over.';
+  return null;
+}
+/* The 100 EMA. Losing it on this bar does not pass. A close already through it does not refuse. */
+function pineGoldEma100Veto(rows, dir){
+  var len = 100;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var k = 2 / (len + 1), ema = null, prevE = NaN, prevC = NaN, i, c;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    ema = ema == null ? c : (c * k + ema * (1 - k));
+    if (i === rows.length - 2){ prevE = ema; prevC = c; }
+  }
+  if (dir === 'long' && prevC >= prevE && c < ema) return 'Price lost the 100 EMA. A long does not pass.';
+  if (dir === 'short' && prevC <= prevE && c > ema) return 'Price reclaimed the 100 EMA. A short does not pass.';
+  return null;
+}
+/* TSI 13/7 crossing under zero. Staying on one side does not refuse. */
+function pineGoldTsiVeto(rows, dir){
+  var slow = 13, fast = 7;
+  if (!rows || rows.length < slow + fast + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var ch = [], i, c, prev;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    if (!(c > 0)) return null;
+    if (i > 0) ch.push(c - prev);
+    prev = c;
+  }
+  function ema(src, len){
+    var k = 2 / (len + 1), v = null, out = [], j;
+    for (j = 0; j < src.length; j++){
+      if (!isFinite(src[j])) return null;
+      v = v == null ? src[j] : (src[j] * k + v * (1 - k));
+      out.push(v);
+    }
+    return out;
+  }
+  var abs = ch.map(function(x){ return Math.abs(x); });
+  var s1 = ema(ch, slow), a1 = ema(abs, slow);
+  if (!s1 || !a1) return null;
+  var s2 = ema(s1, fast), a2 = ema(a1, fast);
+  if (!s2 || !a2) return null;
+  var n = s2.length - 1;
+  if (!(a2[n] > 0) || !(a2[n - 1] > 0)) return null;
+  var now = 100 * s2[n] / a2[n], before = 100 * s2[n - 1] / a2[n - 1];
+  if (dir === 'long' && before >= 0 && now < 0) return 'TSI crossed under zero. A long does not pass.';
+  if (dir === 'short' && before <= 0 && now > 0) return 'TSI crossed over zero. A short does not pass.';
+  return null;
+}
+/* The 08:00-08:30 UTC London opening range. After 08:30, a wick back inside it does not pass.
+   Before 08:30, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldOrbVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 8.5) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 8 || hv >= 8.5) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The London opening range was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The London opening range was pierced and closed back over.';
+  return null;
+}
+/* Elder Force Index, EMA 13. Crossing under zero does not pass.
+   Staying on one side, or a tape with no volume, does not refuse. */
+function pineGoldForceVeto(rows, dir){
+  var len = 13;
+  if (!rows || rows.length < len + 3 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  var raw = [], i, c, prev, v;
+  for (i = 0; i < rows.length; i++){
+    c = pgrNum(rows[i].c);
+    v = volOf(rows[i]);
+    if (!(c > 0) || !(v > 0)) return null;
+    if (i > 0) raw.push((c - prev) * v);
+    prev = c;
+  }
+  var k = 2 / (len + 1), ema = null, before = NaN;
+  for (i = 0; i < raw.length; i++){
+    ema = ema == null ? raw[i] : (raw[i] * k + ema * (1 - k));
+    if (i === raw.length - 2) before = ema;
+  }
+  if (!isFinite(before) || !isFinite(ema)) return null;
+  if (dir === 'long' && before >= 0 && ema < 0) return 'Force Index crossed under zero. A long does not pass.';
+  if (dir === 'short' && before <= 0 && ema > 0) return 'Force Index crossed over zero. A short does not pass.';
+  return null;
+}
+/* Yesterday volume node. Losing it on this close does not pass.
+   No volume, no prior day, or a prior day under $8 does not refuse. */
+function pineGoldNakedPocVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  function dayOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key, hi = -Infinity, lo = Infinity, bins = {}, n = 0, px, v;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return null;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l)) || !(pgrNum(rows[i].c) > 0)) return null;
+    v = volOf(rows[i]);
+    if (!(v > 0)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    px = Math.round((pgrNum(rows[i].h) + pgrNum(rows[i].l) + pgrNum(rows[i].c)) / 3);
+    bins[px] = (bins[px] || 0) + v;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || hi - lo < 8) return null;
+  var poc = NaN, best = -1, keyS;
+  for (keyS in bins){
+    if (bins[keyS] > best){ best = bins[keyS]; poc = +keyS; }
+  }
+  if (!(poc > 0)) return null;
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(rows[rows.length - 1].c);
+  if (!(prevC > 0) || !(c > 0)) return null;
+  if (dir === 'long' && prevC > poc && c < poc) return 'Price lost yesterday volume node. A long does not pass.';
+  if (dir === 'short' && prevC < poc && c > poc) return 'Price reclaimed yesterday volume node. A short does not pass.';
+  return null;
+}
+/* CMF(20) crossing under zero. Staying on one side, or a tape with no volume, does not refuse. */
+function pineGoldCmfVeto(rows, dir){
+  var len = 20;
+  if (!rows || rows.length < len + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  var flow = [], vols = [], i, h, l, c, v, mfm;
+  for (i = 0; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l); c = pgrNum(rows[i].c); v = volOf(rows[i]);
+    if (!isFinite(h) || !isFinite(l) || !(c > 0) || !(v > 0)) return null;
+    mfm = h > l ? ((c - l) - (h - c)) / (h - l) : 0;
+    flow.push(mfm * v);
+    vols.push(v);
+  }
+  function at(end){
+    var f = 0, vv = 0, k;
+    for (k = end - len + 1; k <= end; k++){ f += flow[k]; vv += vols[k]; }
+    if (!(vv > 0)) return NaN;
+    return f / vv;
+  }
+  var now = at(flow.length - 1), before = at(flow.length - 2);
+  if (!isFinite(now) || !isFinite(before)) return null;
+  if (dir === 'long' && before >= 0 && now < 0) return 'Chaikin Money Flow crossed under zero. A long does not pass.';
+  if (dir === 'short' && before <= 0 && now > 0) return 'Chaikin Money Flow crossed over zero. A short does not pass.';
+  return null;
+}
+/* Yesterday value-area high, the top of the prices that held 70% of the volume.
+   Losing it on this close does not pass. No volume, or a prior day under $8, does not refuse. */
+function pineGoldVahVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function volOf(b){
+    var v = pgrNum(b && b.v);
+    if (!(v > 0)) v = pgrNum(b && b.volume);
+    return v;
+  }
+  function dayOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var today = dayOf(rows[rows.length - 1].t);
+  if (!today) return null;
+  var prevDay = null, i, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayOf(rows[i].t);
+    if (!key) return null;
+    if (key !== today) prevDay = key;
+  }
+  if (!prevDay) return null;
+  var hi = -Infinity, lo = Infinity, bins = {}, n = 0, total = 0, px, v;
+  for (i = 0; i < rows.length - 1; i++){
+    if (dayOf(rows[i].t) !== prevDay) continue;
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l)) || !(pgrNum(rows[i].c) > 0)) return null;
+    v = volOf(rows[i]);
+    if (!(v > 0)) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    px = Math.round((pgrNum(rows[i].h) + pgrNum(rows[i].l) + pgrNum(rows[i].c)) / 3);
+    bins[px] = (bins[px] || 0) + v;
+    total += v;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || hi - lo < 8 || !(total > 0)) return null;
+  var prices = Object.keys(bins).map(function(k){ return +k; }).sort(function(a, b){ return a - b; });
+  var pocI = 0, best = -1;
+  for (i = 0; i < prices.length; i++) if (bins[prices[i]] > best){ best = bins[prices[i]]; pocI = i; }
+  var loI = pocI, hiI = pocI, got = bins[prices[pocI]];
+  while (got < total * 0.7 && (loI > 0 || hiI < prices.length - 1)){
+    var left = loI > 0 ? bins[prices[loI - 1]] : -1;
+    var right = hiI < prices.length - 1 ? bins[prices[hiI + 1]] : -1;
+    if (right >= left){ hiI++; got += bins[prices[hiI]]; }
+    else { loI--; got += bins[prices[loI]]; }
+  }
+  var vah = prices[hiI], val = prices[loI];
+  var prevC = pgrNum(rows[rows.length - 2].c), c = pgrNum(rows[rows.length - 1].c);
+  if (!(prevC > 0) || !(c > 0) || !(vah > 0)) return null;
+  if (dir === 'long' && prevC > vah && c < vah) return 'Price lost yesterday value area high. A long does not pass.';
+  if (dir === 'short' && prevC < val && c > val) return 'Price reclaimed yesterday value area low. A short does not pass.';
+  return null;
+}
+/* The 13:30-14:00 UTC New York cash open. After 14:00, a wick back inside it does not pass.
+   Before 14:00, or no such bar, or a range under $3, this does not refuse. */
+function pineGoldNyOrbVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  var last = rows[rows.length - 1];
+  var t = pgrNum(last && last.t);
+  if (!isFinite(t)) return null;
+  if (t < 1e12) t = t * 1000;
+  var lastD = new Date(t);
+  var hour = lastD.getUTCHours() + lastD.getUTCMinutes() / 60;
+  if (hour < 14) return null;
+  var day = lastD.toISOString().slice(0, 10);
+  var hi = -Infinity, lo = Infinity, n = 0, i, b, tb, dt, hv;
+  for (i = 0; i < rows.length - 1; i++){
+    b = rows[i];
+    tb = pgrNum(b && b.t);
+    if (!isFinite(tb)) return null;
+    if (tb < 1e12) tb = tb * 1000;
+    dt = new Date(tb);
+    if (dt.toISOString().slice(0, 10) !== day) continue;
+    hv = dt.getUTCHours() + dt.getUTCMinutes() / 60;
+    if (hv < 13.5 || hv >= 14) continue;
+    if (!(pgrNum(b.h) > 0) || !isFinite(pgrNum(b.l))) return null;
+    if (+b.h > hi) hi = +b.h;
+    if (+b.l < lo) lo = +b.l;
+    n++;
+  }
+  if (n < 1 || !(hi > lo) || hi - lo < 3) return null;
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'The New York cash range was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'The New York cash range was pierced and closed back over.';
+  return null;
+}
+/* Awesome Oscillator, SMA 5 of the median minus SMA 34. Crossing under zero does not pass.
+   Staying on one side does not refuse. */
+function pineGoldAoVeto(rows, dir){
+  var fast = 5, slow = 34;
+  if (!rows || rows.length < slow + 2 || (dir !== 'long' && dir !== 'short')) return null;
+  var med = [], i, h, l;
+  for (i = 0; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l);
+    if (!isFinite(h) || !isFinite(l)) return null;
+    med.push((h + l) / 2);
+  }
+  function sma(end, len){
+    if (end < len - 1) return NaN;
+    var s = 0, k;
+    for (k = end - len + 1; k <= end; k++) s += med[k];
+    return s / len;
+  }
+  var n = med.length - 1;
+  var now = sma(n, fast) - sma(n, slow);
+  var before = sma(n - 1, fast) - sma(n - 1, slow);
+  if (!isFinite(now) || !isFinite(before)) return null;
+  if (dir === 'long' && before >= 0 && now < 0) return 'Awesome Oscillator crossed under zero. A long does not pass.';
+  if (dir === 'short' && before <= 0 && now > 0) return 'Awesome Oscillator crossed over zero. A short does not pass.';
+  return null;
+}
+/* Last week's high. A wick back inside it does not pass.
+   No prior week, or a week under $20, does not refuse. */
+function pineGoldWeekHighVeto(rows, dir){
+  if (!rows || rows.length < 8 || (dir !== 'long' && dir !== 'short')) return null;
+  function msOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  var lastMs = msOf(rows[rows.length - 1].t);
+  if (!isFinite(lastMs)) return null;
+  var when = new Date(lastMs);
+  var midnight = Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate());
+  var weekStart = midnight - ((when.getUTCDay() + 6) % 7) * 86400000;
+  var priorStart = weekStart - 7 * 86400000;
+  var hi = -Infinity, lo = Infinity, n = 0, i, ms;
+  for (i = 0; i < rows.length - 1; i++){
+    ms = msOf(rows[i].t);
+    if (!isFinite(ms)) return null;
+    if (ms < priorStart || ms >= weekStart) continue;
+    if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))) return null;
+    if (+rows[i].h > hi) hi = +rows[i].h;
+    if (+rows[i].l < lo) lo = +rows[i].l;
+    n++;
+  }
+  if (n < 4 || !(hi > lo) || hi - lo < 20) return null;
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !isFinite(c)) return null;
+  if (dir === 'long' && h > hi && c <= hi && c < o) return 'Last week high was pierced and closed back under.';
+  if (dir === 'short' && l < lo && c >= lo && c > o) return 'Last week low was pierced and closed back over.';
+  return null;
+}
+/* +DI crossing under -DI. A pair that was already on the wrong side does not refuse. A flat range does not pass. */
+function pineGoldDiCrossVeto(rows, dir){
+  var len = 14;
+  if (!rows || rows.length < len + 3 || (dir !== 'long' && dir !== 'short')) return null;
+  var trs = [], plus = [], minus = [], i, h, l, pc, up, dn, tr;
+  for (i = 1; i < rows.length; i++){
+    h = pgrNum(rows[i].h); l = pgrNum(rows[i].l); pc = pgrNum(rows[i - 1].c);
+    if (!isFinite(h) || !isFinite(l) || !(pc > 0) || !(pgrNum(rows[i].c) > 0)) return null;
+    up = h - pgrNum(rows[i - 1].h);
+    dn = pgrNum(rows[i - 1].l) - l;
+    plus.push(up > dn && up > 0 ? up : 0);
+    minus.push(dn > up && dn > 0 ? dn : 0);
+    tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+    trs.push(tr);
+  }
+  function wilder(src, end){
+    if (end < len - 1) return NaN;
+    var s = 0, k;
+    for (k = 0; k < len; k++) s += src[k];
+    for (k = len; k <= end; k++) s = s - s / len + src[k];
+    return s;
+  }
+  var n = trs.length - 1;
+  var tr0 = wilder(trs, n - 1), tr1 = wilder(trs, n);
+  if (!(tr0 > 0) || !(tr1 > 0)) return null;
+  var p0 = 100 * wilder(plus, n - 1) / tr0, m0 = 100 * wilder(minus, n - 1) / tr0;
+  var p1 = 100 * wilder(plus, n) / tr1, m1 = 100 * wilder(minus, n) / tr1;
+  if (!isFinite(p0) || !isFinite(m0) || !isFinite(p1) || !isFinite(m1)) return null;
+  if (dir === 'long' && p0 >= m0 && p1 < m1) return '+DI crossed under -DI. A long does not pass.';
+  if (dir === 'short' && m0 >= p0 && m1 < p1) return '-DI crossed under +DI. A short does not pass.';
+  return null;
+}
+
+/* Core gold plays on the last closed bar. A quiet tape returns nothing.
+   Judas is a sweep back inside the Asia box. The opening range is a close
+   through the 08:00-08:30 UTC box. The prior-day raid is a sweep back
+   inside yesterday high or low. */
+function pineGoldCoreHits(rows){
+  var out = [];
+  if (!rows || rows.length < 8) return out;
+  function msOf(t){
+    var ms = pgrNum(t);
+    if (!isFinite(ms)) return NaN;
+    if (ms < 1e12) ms = ms * 1000;
+    return ms;
+  }
+  function dayKey(t){
+    var ms = msOf(t);
+    if (!isFinite(ms)) return null;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  var last = rows[rows.length - 1];
+  var h = pgrNum(last.h), l = pgrNum(last.l), o = pgrNum(last.o), c = pgrNum(last.c);
+  var t = msOf(last.t);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(o) || !(c > 0) || !isFinite(t)) return out;
+  var when = new Date(t);
+  var hour = when.getUTCHours() + when.getUTCMinutes() / 60;
+  var today = when.toISOString().slice(0, 10);
+  var i, ms, at, hv;
+  if (hour >= 7){
+    var ahi = -Infinity, alo = Infinity, n = 0, bad = false;
+    for (i = 0; i < rows.length - 1; i++){
+      ms = msOf(rows[i].t);
+      if (!isFinite(ms)){ bad = true; break; }
+      at = new Date(ms);
+      if (at.toISOString().slice(0, 10) !== today) continue;
+      hv = at.getUTCHours() + at.getUTCMinutes() / 60;
+      if (hv >= 7) continue;
+      if (!(pgrNum(rows[i].h) > 0) || !isFinite(pgrNum(rows[i].l))){ bad = true; break; }
+      if (+rows[i].h > ahi) ahi = +rows[i].h;
+      if (+rows[i].l < alo) alo = +rows[i].l;
+      n++;
+    }
+    if (!bad && n >= 3 && ahi - alo >= 3){
+      if (l < alo && c >= alo && c > o) out.push({ key: 'judas', dir: 'long', entry: c, stop: l, why: 'Asia low was swept and the bar closed back inside. A long reclaim.', invalidates: 'a close back under the sweep wick' });
+      else if (h > ahi && c <= ahi && c < o) out.push({ key: 'judas', dir: 'short', entry: c, stop: h, why: 'Asia high was swept and the bar closed back inside. A short reclaim.', invalidates: 'a close back over the sweep wick' });
+    }
+  }
+  if (hour >= 8.5){
+    var ohi = -Infinity, olo = Infinity, on = 0, obad = false;
+    for (i = 0; i < rows.length - 1; i++){
+      ms = msOf(rows[i].t);
+      if (!isFinite(ms)){ obad = true; break; }
+      at = new Date(ms);
+      if (at.toISOString().slice(0, 10) !== today) continue;
+      hv = at.getUTCHours() + at.getUTCMinutes() / 60;
+      if (hv < 8 || hv >= 8.5) continue;
+      if (!(pgrNum(rows[i].h) > 0) || !isFinite(pgrNum(rows[i].l))){ obad = true; break; }
+      if (+rows[i].h > ohi) ohi = +rows[i].h;
+      if (+rows[i].l < olo) olo = +rows[i].l;
+      on++;
+    }
+    if (!obad && on >= 1 && ohi - olo >= 3){
+      if (c > ohi && c > o) out.push({ key: 'openrange', dir: 'long', entry: c, stop: olo, why: 'Price closed above the London opening range. A long break.', invalidates: 'a close back inside the opening range' });
+      else if (c < olo && c < o) out.push({ key: 'openrange', dir: 'short', entry: c, stop: ohi, why: 'Price closed below the London opening range. A short break.', invalidates: 'a close back inside the opening range' });
+    }
+  }
+  var prevDay = null, broken = false, key;
+  for (i = 0; i < rows.length - 1; i++){
+    key = dayKey(rows[i].t);
+    if (!key){ broken = true; break; }
+    if (key !== today) prevDay = key;
+  }
+  if (!broken && prevDay){
+    var phi = -Infinity, plo = Infinity, pn = 0, pbad = false;
+    for (i = 0; i < rows.length - 1; i++){
+      if (dayKey(rows[i].t) !== prevDay) continue;
+      if (!isFinite(pgrNum(rows[i].h)) || !isFinite(pgrNum(rows[i].l))){ pbad = true; break; }
+      if (+rows[i].h > phi) phi = +rows[i].h;
+      if (+rows[i].l < plo) plo = +rows[i].l;
+      pn++;
+    }
+    if (!pbad && pn >= 4 && phi - plo >= 8){
+      if (l < plo && c >= plo && c > o) out.push({ key: 'pdraid', dir: 'long', entry: c, stop: l, why: 'Yesterday low was swept and the bar closed back above it. A long raid.', invalidates: 'a close back under the sweep wick' });
+      else if (h > phi && c <= phi && c < o) out.push({ key: 'pdraid', dir: 'short', entry: c, stop: h, why: 'Yesterday high was swept and the bar closed back under it. A short raid.', invalidates: 'a close back over the sweep wick' });
+    }
+  }
+  return out;
 }
 
 /* hg-v1166: every record layer that fired on the last closed bar of a
@@ -1301,7 +4856,27 @@ function pgrStateOf(res){ return res && (res.dir === 'long' || res.dir === 'shor
 function pineGoldLayerStates(rows){
   var out = { ok: false, supertrend: null, ichimoku: null, donchian: null, emacross: null, keltner: null,
               /* hg-v1166 */ macd: null, psar: null, stoch: null,
-              /* hg-v1167 */ chandelier: null, hullma: null, cci: null, aroon: null, allLong: 0, allShort: 0,
+              /* hg-v1167 */ chandelier: null, hullma: null, cci: null, aroon: null,
+              /* hg-v1171 */ williams: null, trix: null, fisher: null,
+              /* price-only confirmation */ adx: null, heikin: null, sessvwap: null,
+              /* hg-v1173 formation family */ qqe: null, squeeze: null, wavwap: null, efficiency: null,
+              squeezeOn: false, efficiencyEr: NaN,
+              /* hg-v1202 */ bpr: null,
+              /* hg-v1207 */ ote: null,
+              /* hg-v1220 record-only scored layers */ halftrend: null, rangefilter: null, nwenvelope: null,
+              /* hg-v1220 state-only (not in the record-layer table) */ vumanchuCipher: null,
+              /* hg-v1407 formation family: state only, cannot mint a ticket */
+              vortex: null, dema: null, linreg: null, elder: null, ribbon: null, cmo: null, boll: null, chop: null,
+              /* hg-v1408 pace family */
+              ao: null, uo: null, tsi: null, roc: null, ssl: null, stochrsi: null, dpo: null,
+              /* hg-v1409 prime family: must confirm a GOLD PINE lead */
+              alligator: null, rvi: null, bop: null, alma: null, kst: null, mcginley: null, rsi50: null,
+              /* hg-v1410 standing sides and RSI divergence */
+              stack5: null, macdZero: null, macdHist: null, psarStand: null, stochStand: null, emaSlope: null, rsiDiv: null,
+              /* hg-v1411 researched gold filters */
+              structure: null, goldEma: null, laguerre: null, lrsi: null, rsi3: null, tdBuy: 0, tdSell: 0,
+              regT: null, regDir: null, atrPct: null, cloud: null,
+              allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
     if (!rows || rows.length < 60) return out;
@@ -1403,6 +4978,188 @@ function pineGoldLayerStates(rows){
         if (isFinite(au) && isFinite(ad)){ if (au > ad) out.aroon = 'long'; else if (au < ad) out.aroon = 'short'; }
       }
     }catch(eA){}
+    /* hg-v1171: the Williams %R sign (above its mid at -50 is 'long', below
+       is 'short', NEITHER at exactly -50); the TRIX sign (above zero is
+       'long', below is 'short', NEITHER at exactly 0); the Fisher Transform
+       sign (above zero is 'long', below is 'short', NEITHER at exactly 0).
+       Each is the state read for the record stack, not the port's signal
+       event -- the port fires on a last-closed-bar transition; the state is
+       the series' current side, read every record. */
+    try{
+      var wO = layerOpts('williams'), WR = pgrWilliamsSeries(rows, wO.len || 14);
+      if (WR){
+        var wv = pgrNum(WR[i]);
+        if (isFinite(wv)){ if (wv > -50) out.williams = 'long'; else if (wv < -50) out.williams = 'short'; }
+      }
+    }catch(eW){}
+    try{
+      var tO = layerOpts('trix'), TR = pgrTrixSeries(rows, tO.len || 15);
+      if (TR){
+        var tv = pgrNum(TR[i]);
+        if (isFinite(tv)){ if (tv > 0) out.trix = 'long'; else if (tv < 0) out.trix = 'short'; }
+      }
+    }catch(eT){}
+    try{
+      var fO = layerOpts('fisher'), FS = pgrFisherSeries(rows, fO.len || 10);
+      if (FS){
+        var fv = pgrNum(FS[i]);
+        if (isFinite(fv)){ if (fv > 0) out.fisher = 'long'; else if (fv < 0) out.fisher = 'short'; }
+      }
+    }catch(eF){}
+    try{
+      var ax = pgrAdxRead(rows, (layerOpts('adx').len) || 14);
+      var minAdx = (layerOpts('adx').minAdx) || 20;
+      if (ax && ax.adx >= minAdx){
+        if (ax.plus > ax.minus) out.adx = 'long';
+        else if (ax.minus > ax.plus) out.adx = 'short';
+      }
+    }catch(eAx){}
+    try{
+      var ha = pgrHeikin(rows);
+      if (ha && ha.length){
+        var hb = ha[ha.length - 1];
+        if (hb.c > hb.o) out.heikin = 'long';
+        else if (hb.c < hb.o) out.heikin = 'short';
+      }
+    }catch(eHa){}
+    try{
+      var sv = pgrSessionVwap(rows);
+      if (isFinite(sv)){
+        if (c > sv) out.sessvwap = 'long';
+        else if (c < sv) out.sessvwap = 'short';
+      }
+    }catch(eSv){}
+    try{
+      var qS = pgrQqeSeries(rows, (layerOpts('qqe').rsiLen) || 14, (layerOpts('qqe').sf) || 5, (layerOpts('qqe').qqe) || 4.236);
+      if (qS && (qS.trend[i] === 1 || qS.trend[i] === -1) && isFinite(qS.rsiMa[i])){
+        var qSide = qS.trend[i] === 1 ? 'long' : 'short';
+        var rSide = qS.rsiMa[i] > 55 ? 'long' : (qS.rsiMa[i] < 45 ? 'short' : null);
+        if (rSide && rSide === qSide) out.qqe = qSide;
+      }
+    }catch(eQq){}
+    try{
+      var sqO = layerOpts('squeeze');
+      var sq = pgrSqueezeRead(rows, sqO.len || 20, sqO.bbMult || 2, sqO.kcMult || 1.5);
+      if (sq){
+        out.squeezeOn = sq.on === true;
+        if (!sq.on && sq.mom > 0) out.squeeze = 'long';
+        else if (!sq.on && sq.mom < 0) out.squeeze = 'short';
+      }
+    }catch(eSq){}
+    try{
+      var wv = pgrWeeklyVwapRun(rows);
+      if (wv && isFinite(wv.vwap)){
+        if (c > wv.vwap) out.wavwap = 'long';
+        else if (c < wv.vwap) out.wavwap = 'short';
+      }
+    }catch(eWv){}
+    try{
+      var efO = layerOpts('efficiency');
+      var ef = pgrEfficiencyAt(rows, i, efO.len || 10);
+      var efGate = efO.trend || 0.30;
+      if (ef){
+        out.efficiencyEr = ef.er;
+        if (ef.er >= efGate && ef.dir) out.efficiency = ef.dir;
+      }
+    }catch(eEf){}
+    /* hg-v1202: BPR state. The latest readable Balanced Price Range shelf
+       in the lookback acts as a shelf of institutional support when the
+       close sits above it, and resistance when it sits below. Inside the
+       shelf, or with no shelf found, state is NEITHER. The read is the
+       most recent shelf by `formedBarIndex`; a stale earlier shelf that
+       has since been broken does not override it, which is why
+       `pgrBprShelves` already orders by formation. */
+    try{
+      var bO = layerOpts('bpr'), BS = pgrBprShelves(rows, bO.lookback || 20, bO.minGapAtr != null ? bO.minGapAtr : 0.10);
+      if (BS && BS.length){
+        var latest = BS[BS.length - 1];
+        if (c > latest.top) out.bpr = 'long';
+        else if (c < latest.bottom) out.bpr = 'short';
+      }
+    }catch(eB){}
+    try{
+      var oteSw = pgrOteSwing(rows, (layerOpts('ote').look) || 40);
+      if (oteSw){
+        if (oteSw.up && c > oteSw.zoneTop) out.ote = 'long';
+        else if (!oteSw.up && c < oteSw.zoneBot) out.ote = 'short';
+      }
+    }catch(eOte){}
+    /* hg-v1220: HalfTrend state. The port's own `trend` field is +1/-1
+       on every bar (not only the flip bar), so a readable amplitude
+       trend reads one side; the state is the trend-side, not the flip
+       event. The port itself returns null without enough bars (atrLen +
+       amplitude + 5), so a thin tape reads NEITHER. */
+    try{
+      var htFn = gfn('pineHalfTrend');
+      var hO = layerOpts('halftrend');
+      if (typeof htFn === 'function'){
+        var htRes = htFn(rows, { amplitude: hO.amplitude || 2, atrLen: hO.atrLen || 100, atrMult: hO.atrMult !== undefined ? +hO.atrMult : 2.0, includeContext: true });
+        if (htRes && (htRes.trend === 1 || htRes.trend === -1)) out.halftrend = htRes.trend === 1 ? 'long' : 'short';
+      }
+    }catch(eHt){}
+    /* hg-v1220: Range Filter state. The port's own `trend` field reads
+       the regime (+1 above the filter level with the range, -1 below),
+       so the state is the regime side on every bar; `includeContext`
+       returns the trend without needing a fresh flip. */
+    try{
+      var rfFn = gfn('pineRangeFilter');
+      var rO = layerOpts('rangefilter');
+      if (typeof rfFn === 'function'){
+        var rfRes = rfFn(rows, { period: rO.period || 100, mult: rO.mult !== undefined ? +rO.mult : 3.0, includeContext: true });
+        if (rfRes && (rfRes.trend === 1 || rfRes.trend === -1)) out.rangefilter = rfRes.trend === 1 ? 'long' : 'short';
+      }
+    }catch(eRf){}
+    /* hg-v1220: NW Envelope state. The port only returns on a wick
+       reversion, so for a continuous state read we compare close
+       against the Gaussian kernel center via pgrNwCenter (one home
+       with the port's own compute, hg-v949). NEITHER at exact
+       equality (and when the center is unreadable). */
+    try{
+      var nO = layerOpts('nwenvelope');
+      var nwC = pgrNwCenter(rows, nO.bandwidth !== undefined ? +nO.bandwidth : 8.0, nO.lookback || 50);
+      if (isFinite(nwC)){
+        if (c > nwC) out.nwenvelope = 'long';
+        else if (c < nwC) out.nwenvelope = 'short';
+      }
+    }catch(eNw){}
+    /* hg-v1220: VuManChu Cipher state (state-only, NOT in the record
+       table). WaveTrend sitting beyond +osLevel is overbought (reads
+       SHORT as a mean-reversion bias); sitting below -osLevel is
+       oversold (LONG); inside the band is NEITHER. The port's
+       `includeContext` returns {wt1, osLevel, obLevel} on every bar,
+       so the state is readable even where the port fires no divergence.
+       hg-v943: no OMNIGOLD twin — STOCHRSI-TURN reads Stoch RSI,
+       CCI-EXTREME reads CCI; both are loose analogies, refused. */
+    try{
+      var vcFn = gfn('pineVumanchuCipher');
+      if (typeof vcFn === 'function'){
+        var vcRes = vcFn(rows, { includeContext: true });
+        if (vcRes && isFinite(+vcRes.wt1) && isFinite(+vcRes.osLevel) && isFinite(+vcRes.obLevel)){
+          var wt = +vcRes.wt1, osL = +vcRes.osLevel, obL = +vcRes.obLevel;
+          /* strict inequality — hg-v989: WaveTrend sitting EXACTLY at the
+             band threshold is NEITHER, never a guessed side */
+          if (wt < osL) out.vumanchuCipher = 'long';
+          else if (wt > obL) out.vumanchuCipher = 'short';
+        }
+      }
+    }catch(eVc){}
+    try{
+      var formed = pineGoldFormRead(rows);
+      if (formed){
+        out.vortex = formed.vortex; out.dema = formed.dema; out.linreg = formed.linreg;
+        out.elder = formed.elder; out.ribbon = formed.ribbon; out.cmo = formed.cmo;
+        out.boll = formed.boll; out.chop = formed.chop;
+        out.ao = formed.ao; out.uo = formed.uo; out.tsi = formed.tsi; out.roc = formed.roc;
+        out.ssl = formed.ssl; out.stochrsi = formed.stochrsi; out.dpo = formed.dpo;
+        out.alligator = formed.alligator; out.rvi = formed.rvi; out.bop = formed.bop;
+        out.alma = formed.alma; out.kst = formed.kst; out.mcginley = formed.mcginley; out.rsi50 = formed.rsi50;
+        out.stack5 = formed.stack5; out.macdZero = formed.macdZero; out.macdHist = formed.macdHist;
+        out.psarStand = formed.psarStand; out.stochStand = formed.stochStand; out.emaSlope = formed.emaSlope; out.rsiDiv = formed.rsiDiv;
+        out.structure = formed.structure; out.goldEma = formed.goldEma; out.laguerre = formed.laguerre;
+        out.lrsi = formed.lrsi; out.rsi3 = formed.rsi3; out.tdBuy = formed.tdBuy; out.tdSell = formed.tdSell;
+        out.regT = formed.regT; out.regDir = formed.regDir; out.atrPct = formed.atrPct; out.cloud = formed.cloud;
+      }
+    }catch(eForm){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
       var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
@@ -1419,12 +5176,71 @@ function pineGoldLayerStates(rows){
    (at least three of the five with the plan is true, at least three
    against is false, anything else absent) */
 var PINE_GOLD_MAJORITY = 3;
+/* hg-v1220: state-only mark ids (NOT in PINE_GOLD_RECORD_LAYERS). The
+   state joins pineGoldLayerStates and pineGoldPineMarks for the PINE
+   STACK line and the forward record, but does NOT mint a record-only
+   layer and does NOT join readable/allLong/allShort counts or the
+   majority bar (PINE_GOLD_MAJORITY_IDS). */
+var PINE_GOLD_STATE_ONLY_IDS = ['vumanchuCipher'];
+/* hg-v1407: seven more Pine states. Not in the record-layer table, so they
+   cannot mint a card. pineGoldBlocksLead holds a ticket when choppiness is a
+   range, or when five of them read a side and more oppose than agree. */
+var PINE_GOLD_FORM_IDS = ['vortex', 'dema', 'linreg', 'elder', 'ribbon', 'cmo', 'boll'];
+var PINE_GOLD_FORM_LABEL = {
+  vortex: 'Vortex', dema: 'DEMA 21/55', linreg: 'Linreg 20', elder: 'Elder Ray',
+  ribbon: 'EMA 50/200', cmo: 'CMO 14', boll: 'Bollinger mid',
+  ao: 'Awesome Osc', uo: 'Ultimate Osc', tsi: 'TSI', roc: 'ROC 12',
+  ssl: 'SSL channel', stochrsi: 'Stoch RSI', dpo: 'DPO 20',
+  alligator: 'Alligator', rvi: 'RVI', bop: 'Balance of Power', alma: 'ALMA 20',
+  kst: 'KST', mcginley: 'McGinley 14', rsi50: 'RSI 50',
+  stack5: 'EMA 8-55', macdZero: 'MACD zero', macdHist: 'MACD hist',
+  psarStand: 'PSAR side', stochStand: 'Stoch side', emaSlope: 'EMA21 slope',
+  structure: 'Structure', goldEma: 'EMA 20/50/200', laguerre: 'Laguerre RSI'
+};
+/* hg-v1409: a third family. A GOLD PINE lead needs these to confirm when
+   four of them read. A split or a majority against holds the ticket.
+   They cannot mint. */
+var PINE_GOLD_PRIME_IDS = ['alligator', 'rvi', 'bop', 'alma', 'kst', 'mcginley', 'rsi50'];
+/* Standing sides the event layers never keep: the 8/13/21/34/55 ribbon,
+   MACD against zero, the histogram, PSAR and stochastic. Four must read
+   and more must oppose before they hold a GOLD PINE lead. */
+var PINE_GOLD_DEPTH_IDS = ['stack5', 'macdZero', 'macdHist', 'psarStand', 'stochStand', 'emaSlope'];
+var PINE_GOLD_RESEARCH_IDS = ['structure', 'goldEma', 'laguerre'];
+/* hg-v1408: a second family. Counted on its own so the first seven cannot
+   outvote it. Cannot mint. GOLD PINE holds when four read and more oppose. */
+var PINE_GOLD_PACE_IDS = ['ao', 'uo', 'tsi', 'roc', 'ssl', 'stochrsi', 'dpo'];
 function pineGoldPineMarks(states, dir){
   var m = {};
   if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return m;
   PINE_GOLD_RECORD_LAYERS.forEach(function(l){
     var v = states[l.id];
     if (v === 'long' || v === 'short') m['pine:' + l.id + 'With'] = (v === dir);
+  });
+  PINE_GOLD_STATE_ONLY_IDS.forEach(function(id){
+    var v = states[id];
+    if (v === 'long' || v === 'short') m['pine:' + id + 'With'] = (v === dir);
+  });
+  PINE_GOLD_FORM_IDS.forEach(function(id){
+    var fv = states[id];
+    if (fv === 'long' || fv === 'short') m['pine:' + id + 'With'] = (fv === dir);
+  });
+  PINE_GOLD_PACE_IDS.forEach(function(id){
+    var pv = states[id];
+    if (pv === 'long' || pv === 'short') m['pine:' + id + 'With'] = (pv === dir);
+  });
+  PINE_GOLD_PRIME_IDS.forEach(function(id){
+    var qv = states[id];
+    if (qv === 'long' || qv === 'short') m['pine:' + id + 'With'] = (qv === dir);
+  });
+  PINE_GOLD_DEPTH_IDS.forEach(function(id){
+    var dv = states[id];
+    if (dv === 'long' || dv === 'short') m['pine:' + id + 'With'] = (dv === dir);
+  });
+  if (states.rsiDiv === 'long' || states.rsiDiv === 'short') m['pine:rsiDivWith'] = (states.rsiDiv === dir);
+  if (states.regDir === 'long' || states.regDir === 'short') m['pine:regDirWith'] = (states.regDir === dir);
+  PINE_GOLD_RESEARCH_IDS.forEach(function(id){
+    var rv = states[id];
+    if (rv === 'long' || rv === 'short') m['pine:' + id + 'With'] = (rv === dir);
   });
   var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
   var againstN = dir === 'long' ? states.agreeShort : states.agreeLong;
@@ -1446,12 +5262,68 @@ function pineGoldStackLineHtml(states, marks){
       var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
       cells += '<span class="gsx-ind ' + cls + '" title="' + e('pine:' + l.id + 'With — ' + l.label + ' state on this tape') + '"><b>' + e(l.label) + '</b> ' + e(tag) + '</span>';
     });
+    /* hg-v1220: state-only cells live beside the scored record-layer cells
+       in the stack but are counted separately (they do not join the
+       readable-of-table count or the majority bar). Each adds its own
+       cell with a dashed-border class so a reader sees the shape
+       difference between a scored layer and a state read. */
+    PINE_GOLD_STATE_ONLY_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      var label = id === 'vumanchuCipher' ? 'VuManChu' : id;
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — state read, not scored') + '" style="border-style:dashed"><b>' + e(label) + '</b> ' + e(tag) + '</span>';
+    });
+    PINE_GOLD_FORM_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — can hold a lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
+    PINE_GOLD_PACE_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — pace family, can hold a GOLD PINE lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
+    PINE_GOLD_PRIME_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — prime family, must confirm a GOLD PINE lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
+    PINE_GOLD_DEPTH_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — standing side, can hold a GOLD PINE lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
+    if (states.rsiDiv === 'long' || states.rsiDiv === 'short'){
+      var dMk = marks['pine:rsiDivWith'];
+      cells += '<span class="gsx-ind gsx-stateonly ' + (dMk === true ? 'ok' : (dMk === false ? 'no' : 'na')) + '" title="' + e('pine:rsiDivWith — RSI swing divergence, can hold a GOLD PINE lead') + '" style="border-style:dashed"><b>RSI div</b> ' + e(states.rsiDiv.toUpperCase()) + '</span>';
+    }
+    PINE_GOLD_RESEARCH_IDS.forEach(function(id){
+      var v = states[id], mk = marks['pine:' + id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      if (id === 'laguerre' && isFinite(states.lrsi)) tag = (v ? v.toUpperCase() : 'MID') + ' ' + states.lrsi.toFixed(0);
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind gsx-stateonly ' + cls + '" title="' + e('pine:' + id + 'With — researched gold filter, can hold a lead, cannot mint one') + '" style="border-style:dashed"><b>' + e(PINE_GOLD_FORM_LABEL[id] || id) + '</b> ' + e(tag) + '</span>';
+    });
+    if (isFinite(states.rsi3)) cells += '<span class="gsx-ind gsx-stateonly na" title="RSI(3). An extended read holds a lead only when the EMA 20/50/200 stack does not confirm." style="border-style:dashed"><b>RSI 3</b> ' + e(states.rsi3.toFixed(0)) + '</span>';
+    if (states.tdSell === 9 || states.tdBuy === 9) cells += '<span class="gsx-ind gsx-stateonly no" title="Tom DeMark setup completed on this bar" style="border-style:dashed"><b>TD9</b> ' + (states.tdSell === 9 ? 'SELL' : 'BUY') + '</span>';
+    if (isFinite(states.regT)){
+      var regMk = (states.regDir === 'long' || states.regDir === 'short') ? marks['pine:regDirWith'] : undefined;
+      cells += '<span class="gsx-ind gsx-stateonly ' + (regMk === true ? 'ok' : (regMk === false ? 'no' : 'na')) + '" title="40-bar regression t-stat. |t| of 2 or more against the lead holds it." style="border-style:dashed"><b>Reg t</b> ' + e(states.regT.toFixed(1)) + '</span>';
+    }
+    if (isFinite(states.atrPct)) cells += '<span class="gsx-ind gsx-stateonly na" title="ATR(14) percentile versus the last 100 readings. A spike holds a lead only when the regression is not significant in its direction." style="border-style:dashed"><b>ATR pct</b> ' + e(states.atrPct.toFixed(0)) + '</span>';
+    if (states.cloud) cells += '<span class="gsx-ind gsx-stateonly ' + (states.cloud === 'inside' ? 'no' : 'na') + '" title="Ichimoku cloud 26 bars back. Inside the cloud holds a lead." style="border-style:dashed"><b>Cloud</b> ' + e(states.cloud === 'inside' ? 'INSIDE' : states.cloud.toUpperCase()) + '</span>';
+    if (states.emaSlope && states.emaSlope === states.macdHist) cells += '<span class="gsx-ind gsx-stateonly na" title="Elder Impulse: EMA21 slope and MACD histogram agree. Against the lead, it holds." style="border-style:dashed"><b>Elder</b> ' + e(states.emaSlope.toUpperCase()) + '</span>';
     var mj = marks['pine:majorityWith'];
     var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
     cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
-      + ' — recorded for the forward ledger’s read split, not part of this desk’s score, gates nothing.'
+      + ' — the five-layer majority, the ADX / Heikin / session VWAP family, and the QQE / squeeze / weekly AVWAP / efficiency family can hold a lead when they read against it. The tally gates nothing. On GOLD PINE a market structure of higher highs and higher lows, or the reverse, holds a lead that opposes it. So does a completed EMA 20/50/200 stack. Laguerre RSI and RSI(3) hold a lead only when they are extended and that stack does not confirm. A TD9 completion holds the bar it prints on. A 40-bar regression with |t| of 2 or more holds a lead that fights it. An ATR spike holds a lead only when that regression does not confirm the direction. The Shanghai hour and a weekly-open sweep hold a lead when price wicks through and closes back against it. Price inside the Ichimoku cloud holds a lead, and so does an Elder Impulse bar whose EMA slope and MACD histogram both point the other way. The tally gates nothing.'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
   }catch(e){ return ''; }
 }
@@ -1493,12 +5365,108 @@ G.pineGoldMacdCross = pineGoldMacdCross;
 G.pineGoldPsarFlip = pineGoldPsarFlip;
 G.pineGoldStochCross = pineGoldStochCross;
 G.pineGoldRecordLayerHits = pineGoldRecordLayerHits;
+G.pineGoldCoreHits = pineGoldCoreHits;
 /* hg-v1167 */
 G.pineGoldChandelierExit = pineGoldChandelierExit;
 G.pineGoldHullTurn = pineGoldHullTurn;
 G.pineGoldCciReentry = pineGoldCciReentry;
 G.pineGoldAroonCross = pineGoldAroonCross;
 G.pineGoldChandelierSeries = pgrChandelierSeries;   /* the trails, for a guard that pins the stop to its own trail */
+/* hg-v1171: the three new ports (dispatched by name through pineGoldRunLayer)
+   and their series helpers (exported so a guard can pin behaviour inside them
+   rather than only through the port facade). */
+G.pineGoldWilliamsReentry = pineGoldWilliamsReentry;
+G.pineGoldTrixCross = pineGoldTrixCross;
+G.pineGoldFisherZero = pineGoldFisherZero;
+G.pineGoldAdxDi = pineGoldAdxDi;
+G.pineGoldHeikin = pineGoldHeikin;
+G.pineGoldSessVwap = pineGoldSessVwap;
+G.pineGoldQqe = pineGoldQqe;
+G.pineGoldSqueezeFire = pineGoldSqueezeFire;
+G.pineGoldWeeklyAvwap = pineGoldWeeklyAvwap;
+G.pineGoldEfficiency = pineGoldEfficiency;
+G.pineGoldBlocksLead = pineGoldBlocksLead;
+G.pineGoldFormHold = pineGoldFormHold;
+G.pineGoldHtfHold = pineGoldHtfHold;
+G.pineGoldTapeVeto = pineGoldTapeVeto;
+G.pineGoldIbVeto = pineGoldIbVeto;
+G.pineGoldCvdVeto = pineGoldCvdVeto;
+G.pineGoldPocVeto = pineGoldPocVeto;
+G.pineGoldNymoVeto = pineGoldNymoVeto;
+G.pineGoldAsiaDriftVeto = pineGoldAsiaDriftVeto;
+G.pineGoldWickVeto = pineGoldWickVeto;
+G.pineGoldKineticVeto = pineGoldKineticVeto;
+G.pineGoldSweep2Veto = pineGoldSweep2Veto;
+G.pineGoldFixDriftVeto = pineGoldFixDriftVeto;
+G.pineGoldRolloverVeto = pineGoldRolloverVeto;
+G.pineGoldDeepRangeVeto = pineGoldDeepRangeVeto;
+G.pineGoldCeVeto = pineGoldCeVeto;
+G.pineGoldCamarillaVeto = pineGoldCamarillaVeto;
+G.pineGoldPivotVeto = pineGoldPivotVeto;
+G.pineGoldGannVeto = pineGoldGannVeto;
+G.pineGoldCprVeto = pineGoldCprVeto;
+G.pineGoldKeltnerVeto = pineGoldKeltnerVeto;
+G.pineGoldDisplacementVeto = pineGoldDisplacementVeto;
+G.pineGoldBbFailVeto = pineGoldBbFailVeto;
+G.pineGoldDayOpenVeto = pineGoldDayOpenVeto;
+G.pineGoldMidVeto = pineGoldMidVeto;
+G.pineGoldAsiaFailVeto = pineGoldAsiaFailVeto;
+G.pineGoldQuarterVeto = pineGoldQuarterVeto;
+G.pineGoldHtfSlopeVeto = pineGoldHtfSlopeVeto;
+G.pineGoldMurreyVeto = pineGoldMurreyVeto;
+G.pineGoldSfpVeto = pineGoldSfpVeto;
+G.pineGoldLagVeto = pineGoldLagVeto;
+G.pineGoldFibLostVeto = pineGoldFibLostVeto;
+G.pineGoldVwapLostVeto = pineGoldVwapLostVeto;
+G.pineGoldEmaCrossVeto = pineGoldEmaCrossVeto;
+G.pineGoldSupertrendVeto = pineGoldSupertrendVeto;
+G.pineGoldCciVeto = pineGoldCciVeto;
+G.pineGoldEngulfVeto = pineGoldEngulfVeto;
+G.pineGoldR2Veto = pineGoldR2Veto;
+G.pineGoldKijunVeto = pineGoldKijunVeto;
+G.pineGoldMacdVeto = pineGoldMacdVeto;
+G.pineGoldLondonHourVeto = pineGoldLondonHourVeto;
+G.pineGoldShanghaiHourVeto = pineGoldShanghaiHourVeto;
+G.pineGoldEma50Veto = pineGoldEma50Veto;
+G.pineGoldTd9Veto = pineGoldTd9Veto;
+G.pineGoldComexHourVeto = pineGoldComexHourVeto;
+G.pineGoldBbAcceptVeto = pineGoldBbAcceptVeto;
+G.pineGoldH4OpenVeto = pineGoldH4OpenVeto;
+G.pineGoldWeakBreakVeto = pineGoldWeakBreakVeto;
+G.pineGoldStarVeto = pineGoldStarVeto;
+G.pineGoldRsiExitVeto = pineGoldRsiExitVeto;
+G.pineGoldExtVeto = pineGoldExtVeto;
+G.pineGoldStochExitVeto = pineGoldStochExitVeto;
+G.pineGoldDonchian55Veto = pineGoldDonchian55Veto;
+G.pineGoldMfiExitVeto = pineGoldMfiExitVeto;
+G.pineGoldWillExitVeto = pineGoldWillExitVeto;
+G.pineGoldH4SweepVeto = pineGoldH4SweepVeto;
+G.pineGoldKeltAcceptVeto = pineGoldKeltAcceptVeto;
+G.pineGoldRegressVeto = pineGoldRegressVeto;
+G.pineGoldPpLostVeto = pineGoldPpLostVeto;
+G.pineGoldFirstHourVeto = pineGoldFirstHourVeto;
+G.pineGoldEma100Veto = pineGoldEma100Veto;
+G.pineGoldTsiVeto = pineGoldTsiVeto;
+G.pineGoldOrbVeto = pineGoldOrbVeto;
+G.pineGoldForceVeto = pineGoldForceVeto;
+G.pineGoldNakedPocVeto = pineGoldNakedPocVeto;
+G.pineGoldCmfVeto = pineGoldCmfVeto;
+G.pineGoldVahVeto = pineGoldVahVeto;
+G.pineGoldNyOrbVeto = pineGoldNyOrbVeto;
+G.pineGoldAoVeto = pineGoldAoVeto;
+G.pineGoldWeekHighVeto = pineGoldWeekHighVeto;
+G.pineGoldDiCrossVeto = pineGoldDiCrossVeto;
+G.pineGoldWilliamsSeries = pgrWilliamsSeries;
+G.pineGoldTrixSeries = pgrTrixSeries;
+G.pineGoldFisherSeries = pgrFisherSeries;
+G.pineGoldBpr = pineGoldBpr;                          /* hg-v1172 */
+G.pineGoldBprShelves = pgrBprShelves;                 /* hg-v1172 */
+G.pineGoldOte = pineGoldOte;                          /* hg-v1207 */
+G.pineGoldRangeFilter = pineGoldRangeFilter;          /* hg-v1220 */
+G.pineGoldNwEnvelope = pineGoldNwEnvelope;            /* hg-v1220 */
+G.pineGoldNwCenter = pgrNwCenter;                     /* hg-v1220 */
+G.PINE_GOLD_STATE_ONLY_IDS = PINE_GOLD_STATE_ONLY_IDS; /* hg-v1220 */
+G.pineGoldFixLock = pineGoldFixLock;
 G.pineGoldRecordJudge = pineGoldRecordJudge;
 G.pineGoldRecordFloor = pineGoldRecordFloor;
 G.pineGoldRecordChipHtml = pineGoldRecordChipHtml;
@@ -1530,7 +5498,16 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldLayerStates, pineGoldPineMarks, pineGoldStackLineHtml, PINE_GOLD_MAJORITY,
     pineGoldMacdCross, pineGoldPsarFlip, pineGoldStochCross, pineGoldRecordLayerHits,
     pineGoldRecordJudge, pineGoldRecordFloor, pineGoldRecordChipHtml, pineGoldRecordNoteHtml, PINE_GOLD_MAJORITY_IDS,
-    pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries
+    pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries,
+    /* hg-v1171 */
+    pineGoldWilliamsReentry, pineGoldTrixCross, pineGoldFisherZero,
+    pineGoldAdxDi, pineGoldHeikin, pineGoldSessVwap, pineGoldBlocksLead, pineGoldFormHold, pineGoldHtfHold, pineGoldTapeVeto,
+    pineGoldShanghaiHourVeto,
+    pineGoldQqe, pineGoldSqueezeFire, pineGoldWeeklyAvwap, pineGoldEfficiency,
+    pineGoldWilliamsSeries: pgrWilliamsSeries, pineGoldTrixSeries: pgrTrixSeries, pineGoldFisherSeries: pgrFisherSeries,
+    /* hg-v1202 */
+    pineGoldBpr, pineGoldBprShelves: pgrBprShelves,
+    pineGoldOte, pineGoldFixLock
   };
 }
 

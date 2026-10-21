@@ -60,7 +60,9 @@ console.log('== the deflation itself ==');
   ok(effN(1000, true) < 1000, 'an overlapping sample is deflated');
   ok(effN(1000, false) === 1000, 'a non-overlapping one is not');
   ok(effN(1000) < 1000, 'and overlap is the DEFAULT — the safe direction is wider intervals');
-  ok(Math.abs(effN(7670, true) - 7670 * 0.406) < 1, '7,670 replay rows carry ~3,113 trades of information');
+  /* hg-v1402 recalibration: the shipped ratio moved 0.406 -> 0.303 with the
+     re-walk (formed effN 2442.4 of 8,053, week-clustered). */
+  ok(Math.abs(effN(8053, true) - 8053 * 0.303) < 1, '8,053 replay rows carry ~2,440 trades of information');
   ok(effN(1, true) >= 1, 'a single row never deflates below one observation');
   ok(effN(2, true) >= 1, 'nor does a tiny sample collapse to zero and make the interval degenerate');
   ok(!isFinite(effN(0, true)), 'no sample yields no effective sample, not a fabricated one');
@@ -116,7 +118,7 @@ console.log('\n== the bake that produced the ratio ==');
   const f = j.populations.formed, sq = j.populations.sequential;
   ok(f && sq, 'both populations are reported');
   ok(f.effective.effN < f.n, 'the FORMED population is deflated (' + f.effective.effN + ' of ' + f.n + ')');
-  ok(Math.abs(f.effective.effN / f.n - 0.406) < 0.05,
+  ok(Math.abs(f.effective.effN / f.n - 0.303) < 0.05,
      'and its ratio is the one hgOgEffN ships — ' + (f.effective.effN / f.n).toFixed(3));
 
   /* the sequential book cannot overlap: the next trade starts after the
@@ -132,12 +134,20 @@ console.log('\n== the sequential book is the one a person could take ==');
   const j = JSON.parse(execFileSync(process.execPath,
     [path.join(ROOT, 'scripts', 'omnigold-evidence-bake.mjs'), '--json'],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
+  /* hg-v1402 recalibration: the gated ticket book is EMPTY on the re-walk
+     (the walk's ticket flag is 0 offline — the hg-v1003 macro lock fails
+     closed without live DXY/US10Y — so populations.sequentialTickets is
+     null, honestly). The claim this block guarded ("the ticket book nets
+     better than the firehose") has no population left to guard; the pins
+     now freeze the empty state, and the firehose comparison resumes the
+     day a walk produces a ticket. */
   const t = j.populations.sequentialTickets;
-  ok(t && t.n > 0, 'ticket-only, one at a time: ' + t.n + ' trades');
-  ok(t.netR_xm > j.populations.formed.netR_xm,
-     'it nets better at XM than the firehose (' + t.netR_xm + ' vs ' + j.populations.formed.netR_xm + ')');
-  ok(Math.abs(t.effective.tCluster) < 1.96,
-     'and it is still not distinguishable from zero — t=' + t.effective.tCluster);
+  ok(t === null, 'the gated ticket book is empty on the hg-v1402 walk — named, not zero-filled');
+  ok(j.populations.sequential && j.populations.sequential.n > 0,
+     'the ungated sequential book still exists: ' + j.populations.sequential.n + ' trades');
+  ok(j.populations.sequential.netR_xm > j.populations.formed.netR_xm,
+     'and one-at-a-time nets better at XM than the firehose ('
+     + j.populations.sequential.netR_xm + ' vs ' + j.populations.formed.netR_xm + ')');
 
   /* no cohort is invented: a cell with too few trades is absent, not 0 */
   for (const [k, v] of Object.entries(j.sequentialByCell)){

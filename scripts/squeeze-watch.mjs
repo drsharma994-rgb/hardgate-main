@@ -125,6 +125,10 @@ function watchBody(fires){
   });
   return lines.join('\n') + (fires.length > 6 ? '\n+' + (fires.length - 6) + ' more' : '')
     + '\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
+    /* hg-v1421 — first offline baseline: this classifier replayed over 12
+       majors (4h, one year, 0.20% RT) settled n=209, win 29%, -0.15R net,
+       negative in both halves. Fires are RECORD ONLY. */
+    + '\nRECORD ONLY — replay measured n=209, win 29%, -0.15R net, both halves negative (hg-v1421)'
     + '\n' + SITE;
 }
 

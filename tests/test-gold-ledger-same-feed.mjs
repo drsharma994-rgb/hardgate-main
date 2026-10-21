@@ -461,11 +461,25 @@ console.log('== 5) the census, derived from source ==');
      GOLD PINE, which records through a local alias -- so that desk's rows
      carried neither bar nor feed until this pack */
   /* fourteen since hg-v1154: GANESH GOLD (hg-v1072) names its feed on the row */
-  const EXP_WRITERS = ['eightypercent.js', 'ganeshgold.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
+  /* hg-v1389: FIFTEEN -- gold-confluence.js (CONFLUENCE tab, upstream hg-v1384)
+     writes a ticket row with sym 'XAUUSD' and is counted by the derived writer
+     census above. It is in EXP_WRITERS but DELIBERATELY ABSENT from the
+     feed-named invariant below: the CONFLUENCE record is a MEDIAN of plans
+     priced on different feeds (one XM, one Delta XAUT, one Yahoo), so naming
+     any one feed on the row would HOLD it waiting for bars under that label
+     forever (hg-v979's own rule). Fail-open on feed -- the record settles on
+     any gold bars -- is the honest answer here. The invariant below partitions
+     "every writer that CAN name one feed does" from this one explicit exception. */
+  const EXP_WRITERS = ['eightypercent.js', 'ganeshgold.js', 'gold-confluence.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
+  const FEED_FAIL_OPEN = ['gold-confluence.js'];
   assert(JSON.stringify(resolvers.sort()) === JSON.stringify(EXP_RESOLVERS), 'the files that settle XAUUSD records are exactly the nine expected (' + resolvers.join(', ') + ')');
   assert(bareResolve.length === 0, 'every XAUUSD resolve names a feed (4 args, or 3 on the multi entry)' + (bareResolve.length ? ' -- BARE: ' + bareResolve.join(' | ') : ''));
-  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP_WRITERS), 'the files that write gold records are exactly the fourteen expected (' + writers.join(', ') + ')');
-  assert(bareWrite.length === 0, 'every one of them names a feed on the row' + (bareWrite.length ? ' -- BARE: ' + bareWrite.join(', ') : ''));
+  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP_WRITERS), 'the files that write gold records are exactly the fifteen expected (' + writers.join(', ') + ')');
+  const bareExcept = bareWrite.filter(f => FEED_FAIL_OPEN.indexOf(f) < 0);
+  assert(bareExcept.length === 0, 'every single-feed writer names a feed on the row (CONFLUENCE excepted, multi-feed median -- hg-v979 fail-open)' + (bareExcept.length ? ' -- BARE: ' + bareExcept.join(', ') : ''));
+  /* And the exception must itself still appear in the bare list -- otherwise a
+     silent regression that names a feed on CONFLUENCE would hold its record. */
+  assert(FEED_FAIL_OPEN.every(f => bareWrite.indexOf(f) >= 0), 'the fail-open exception (CONFLUENCE) is still fail-open on feed');
   /* the crypto resolvers are deliberately untouched: they name no feed and
      settle as before -- asserted so a later pack knows it was a choice */
   const cs = strip(read('cryptoscan.js'));

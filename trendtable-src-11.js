@@ -1,3 +1,4 @@
+    candles: el.querySelector('[data-r="candles"]'),   /* hg-v1337 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -140,7 +141,7 @@
         '<td>' + trendmxCompPipsHtml(r.comps) + '</td>' +
         '<td><b>' + r.sym + '</b>' + tmVenueChip(r) + '</td>' +
         '<td class="' + scls + '"><b>' + (sc > 0 ? '+' : '') + sc + '</b></td>' +
-        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span>' + tmPostGateChip(r) + '</td>' +
+        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span>' + tmPostGateChip(r) + tmCandleChipHtml(r) + '</td>' +
         '<td>' + tri(r.comps.d1Trend, '▲ UP', '▼ DOWN') + '</td>' +
         '<td><span class="' + xcls + '">' + xtxt + '</span>' + fx + '</td>' +
         '<td>' + tri(r.comps.h4Cascade, '▲ ALIGN', '▼ INVERSE') + '</td>' +
@@ -224,6 +225,34 @@
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
             state.death = trendmxDeathCrossSetups(state.rows);
+            /* hg-v1332: THE CROSS DESKS NOW SAY WHY THEY ARE EMPTY.
+               Both desks drop a row at six points, and four of those
+               dropped it SILENTLY — so a board with no golden and no
+               death setup reported nothing at all, which is exactly
+               how it was reported to me. The counters are surfaced
+               here as plain words a reader can act on. */
+            try {
+              var gH = state.golden.held || {}, dH = state.death.held || {};
+              var why = function(h, tag) {
+                var bits = [];
+                if (h.noCross) bits.push(h.noCross + ' without a fresh ' + tag + ' cross');
+                if (h.noComps) bits.push(h.noComps + ' with the daily EMAs not aligned');
+                if (h.noPrice) bits.push(h.noPrice + ' with an unreadable price');
+                if (h.dir) bits.push(h.dir + ' on the wrong side of the cross');
+                if (h.conv) bits.push(h.conv + ' with no conviction');
+                if (h.cascade) bits.push(h.cascade + ' with no 4h cascade');
+                if (h.gates) bits.push(h.gates + ' held by the 7-gate matrix');
+                if (h.grade) bits.push(h.grade + ' refused at the grade');
+                if (h.waiting) bits.push(h.waiting + ' waiting on an EMA tag');
+                if (h.plan) bits.push(h.plan + ' with an invalid plan');
+                return bits.length ? bits.join(' · ') : 'nothing was held';
+              };
+              state.crossWhy = {
+                rows: (state.rows || []).length,
+                golden: why(gH, 'GOLDEN'),
+                death: why(dH, 'DEATH')
+              };
+            } catch (eWhy) { state.crossWhy = null; }
           } catch (eB) {}
           renderAll();
           setProg(info.total ? info.done / info.total : 0);
@@ -244,6 +273,22 @@
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
       renderAll();
+      /* hg-v1333: THE BOARD NAMES ITS OWN NUMBERS.
+         A tab that paints nothing in ANY of its categories (CLEAN, NEAR,
+         GOLDEN, DEATH, CONVICTION, STRONG) has to say which link broke: did
+         the scan produce no rows at all, did the fetches fail, or did rows
+         arrive and get held? Every one of those is a different bug and the
+         board used to look identical for all three. This line prints the
+         counts, and the cross desks' held reasons, right under the scan. */
+      try {
+        var whyX = state.crossWhy || {};
+        setStatus('Scan done · ' + results.length + ' rows on the board · '
+          + (state.crypto || []).length + ' crypto setup(s) · '
+          + (state.golden || []).length + ' GOLDEN · ' + (state.death || []).length + ' DEATH'
+          + (failed ? (' · ' + failed + ' fetch failure(s)') : '')
+          + (whyX.golden ? (' · golden held: ' + whyX.golden) : '')
+          + (whyX.death ? (' · death held: ' + whyX.death) : ''));
+      } catch (eWhy2) {}
       /* hg-v1039: THE CROWN JOINS THE FORWARD BOOK — the desk has crowned
          CLEAN / PERFECT rows for its whole life and never recorded one, so
          'does the trend-matrix crown pay?' could never be asked. Each 7/7
@@ -334,8 +379,143 @@
 
 /* ---------------- exports + tab registration ---------------- */
 
+W.trendmxClosedGate = trendmxClosedGate;   /* hg-v1335: the alert-desk gate, exported like its siblings */
+W.trendmxSetupGrade = trendmxSetupGrade;
+W.tmValueState = tmValueState;
+W.tmBodyCommit = tmBodyCommit;
+W.tmExampleSize = tmExampleSize;
+W.tmSynergy = tmSynergy;
+W.tmDisplacementFvg = tmDisplacementFvg;
+W.tmParkinsonHot = tmParkinsonHot;
+W.tmHurst = tmHurst;
+W.tmTurtleReclaim = tmTurtleReclaim;
+W.tmPocShift = tmPocShift;
+W.tmFundingSpike = tmFundingSpike;
+W.tmSettlementFreeze = tmSettlementFreeze;
+W.tmLiquidityRoom = tmLiquidityRoom;
+W.tmEffortTrap = tmEffortTrap;
+W.tmStalled = tmStalled;
+W.tmRunnerR = tmRunnerR;
+W.tmAsiaChop = tmAsiaChop;
+W.tmChandelier = tmChandelier;
+W.tmWaveOk = tmWaveOk;
+W.tmKernel = tmKernel;
+W.tmSuperTrend = tmSuperTrend;
+W.tmCmf = tmCmf;
+W.tmSqueezeHigh = tmSqueezeHigh;
+W.tmQqe = tmQqe;
+W.tmHullRising = tmHullRising;
+W.tmVfi = tmVfi;
+W.tmWtDiverging = tmWtDiverging;
+W.tmFreshOb = tmFreshOb;
+W.tmUtBot = tmUtBot;
+W.tmTrendMagic = tmTrendMagic;
+W.tmAlpha = tmAlpha;
+W.tmRangeFilter = tmRangeFilter;
+W.tmLorentz = tmLorentz;
+W.tmHalfTrend = tmHalfTrend;
+W.tmWae = tmWae;
+W.tmSqueezeMom = tmSqueezeMom;
+W.tmDamiani = tmDamiani;
+W.tmAroon = tmAroon;
+W.tmElder = tmElder;
+W.tmVwmaSide = tmVwmaSide;
+W.tmDmi = tmDmi;
+W.tmBbSide = tmBbSide;
+W.tmIchiSignal = tmIchiSignal;
+W.tmVwapStretch = tmVwapStretch;
+W.tmSsl = tmSsl;
+W.tmStochRsi = tmStochRsi;
+W.tmFisher = tmFisher;
+W.tmPsar = tmPsar;
+W.tmSchaff = tmSchaff;
+W.tmVortex = tmVortex;
+W.tmAwesome = tmAwesome;
+W.tmMfi = tmMfi;
+W.tmAlligator = tmAlligator;
+W.tmCci = tmCci;
+W.tmChop = tmChop;
+W.tmRvi = tmRvi;
+W.tmTrix = tmTrix;
+W.tmUltimate = tmUltimate;
+W.tmObv = tmObv;
+W.tmHeikin = tmHeikin;
+W.tmForce = tmForce;
+W.tmKst = tmKst;
+W.tmMacd = tmMacd;
+W.tmDonchian = tmDonchian;
+W.tmCmo = tmCmo;
+W.tmKumo = tmKumo;
+W.tmTsi = tmTsi;
+W.tmChaikin = tmChaikin;
+W.tmDpo = tmDpo;
+W.tmEase = tmEase;
+W.tmRelVol = tmRelVol;
+W.tmCoppock = tmCoppock;
+W.tmLaguerre = tmLaguerre;
+W.tmLinreg = tmLinreg;
+W.tmWilliams = tmWilliams;
+W.tmBop = tmBop;
+W.tmKlinger = tmKlinger;
+W.tmSmi = tmSmi;
+W.tmTema = tmTema;
+W.tmImpulse = tmImpulse;
+W.tmRsiDiv = tmRsiDiv;
+W.tmPvt = tmPvt;
+W.tmStructure = tmStructure;
+W.tmFailedBreak = tmFailedBreak;
+W.tmVwapLost = tmVwapLost;
+W.tmBos = tmBos;
+W.tmPriorDay = tmPriorDay;
+W.tmEngulf = tmEngulf;
+W.tmInsideFail = tmInsideFail;
+W.tmObvDiv = tmObvDiv;
+W.tmDayOpen = tmDayOpen;
+W.tmRound = tmRound;
+W.tmEmaCross = tmEmaCross;
+W.tmEqSweep = tmEqSweep;
+W.tmFibLost = tmFibLost;
+W.tmClimax = tmClimax;
+W.tmWeekOpen = tmWeekOpen;
+W.tmMacdDiv = tmMacdDiv;
+W.tmRsiCross = tmRsiCross;
+W.tmFvgLost = tmFvgLost;
+W.tmBbReject = tmBbReject;
+W.tmPocLost = tmPocLost;
+W.tmPivot = tmPivot;
+W.tmObLost = tmObLost;
+W.tmKeltner = tmKeltner;
+W.tmAsiaSweep = tmAsiaSweep;
+W.tmVwapBand = tmVwapBand;
+W.tmCamarilla = tmCamarilla;
+W.tmKijunLost = tmKijunLost;
+W.tmVahLost = tmVahLost;
+W.tmStochCross = tmStochCross;
+W.tmH4Open = tmH4Open;
+W.tmNakedPoc = tmNakedPoc;
+W.tmRegress = tmRegress;
+W.tmCciExit = tmCciExit;
+W.tmExt = tmExt;
+W.tmMfiExit = tmMfiExit;
+W.tmWillExit = tmWillExit;
+W.tmNySweep = tmNySweep;
+W.tmLondonSweep = tmLondonSweep;
+W.tmEma50 = tmEma50;
+W.tmDonchian55 = tmDonchian55;
+W.tmRsiExit = tmRsiExit;
+W.tmH4Sweep = tmH4Sweep;
+W.tmStar = tmStar;
+W.tmPpLost = tmPpLost;
+W.tmWeakBreak = tmWeakBreak;
+W.tmBbAccept = tmBbAccept;
+W.tmMidLost = tmMidLost;
+W.tmKeltAccept = tmKeltAccept;
+W.tmTd9 = tmTd9;
+W.tmCvdSlope = tmCvdSlope;
+W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
+W.tmIndependentSum = tmIndependentSum;
 W.trendmxGateEval = trendmxGateEval;
 W.trendmxClassify = trendmxClassify;
 W.hgTrendMatrixAlign = hgTrendMatrixAlign;   /* hg-v995 */
@@ -381,7 +561,11 @@ W.trendmxFundingChipHtml = trendmxFundingChipHtml;
 W.trendmxRowTier = trendmxRowTier;
 W.tmLegReads = tmLegReads;                 /* hg-v1159: the composite's legs as marks */
 W.tmRecordReads = tmRecordReads;           /* hg-v1159: the one reads bag both record sites hand the ledger */
+W.tmCandleRead = tmCandleRead;             /* hg-v1336: the one call into hgCfCandlePatterns (the one home) */
+W.tmCandleMarks = tmCandleMarks;           /* hg-v1336: the three-state marks tmRecordReads folds into each record */
+W.tmCandleChipHtml = tmCandleChipHtml;     /* hg-v1336: the pattern chip the matrix row paints beside the gate chip */
 W.tmTicketClaim = tmTicketClaim;           /* hg-v1159: the ticket claim is the board's clean tier */
+W.tmAdmissionFloor = tmAdmissionFloor;     /* hg-v1399: the measured admission floor every seam shares */
 W.tmValidSetup = tmValidSetup;             /* hg-v1160: the replay harness asks the desk's own plan validity rule */
 W.HG_TM_FACTOR_SEP = HG_TM_FACTOR_SEP;     /* hg-v1160: read by the panel, the drift guard and nothing else */
 W.tmFactorSepHtml = tmFactorSepHtml;       /* hg-v1160: the replay panel, measured or not */
@@ -395,12 +579,16 @@ W.trendmxLimitDeskHTML = trendmxLimitDeskHTML;
 W.trendmxSummaryLine = trendmxSummaryLine;
 W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
 W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
+W.trendmxCandleRead = trendmxCandleRead;               /* hg-v1337: shared candlestick engine, read only */
+W.trendmxCandleSetups = trendmxCandleSetups;           /* hg-v1337: trend side must agree; prices are trendmxPlan */
 W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
 W.trendmxGoldenDeskHTML = trendmxGoldenDeskHTML;   /* hg-v1015 */
 W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
+W.trendmxCandleDeskHTML = trendmxCandleDeskHTML; /* hg-v1337 */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
+W.trendmxPineMarks = trendmxPineMarks;     /* hg-v1399: the 13 record-only Pine ports, exported (the pin was always the mark home; the export was missing) */
 W.trendmxCrossState = function(){
   try{
     if (!__tmScanSnap) return null;

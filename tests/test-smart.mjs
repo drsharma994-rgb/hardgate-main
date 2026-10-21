@@ -74,7 +74,11 @@ let r = C({ chg24: 2, oiChgPct: 3, fundingPct: 0.01, retailLongPct: 50, topLongP
 ok(r.dir === 'long' && r.longEv.some(e => e.includes('trend fuel')), 'price↑+OI↑ → LONG trend fuel');
 
 r = C({ chg24: 2, oiChgPct: 3, fundingPct: 0.06, retailLongPct: 50, topLongPct: 50, takerRatio: 1.0 });
-ok(r.dir === 'short' && !r.longEv.some(e => e.includes('trend fuel')) && r.shortEv.some(e => e.includes('funding extreme')), 'price↑+OI↑ but funding extreme → fuel suppressed, SHORT fade');
+ok(r.dir === null && !r.longEv.some(e => e.includes('trend fuel')) && !r.shortEv.length && r.regime.some(e => e.includes('longs crowded')), 'hg-v1421: price↑+OI↑ but funding extreme → fuel suppressed, fade vote DEMOTED to context (no direction forms)');
+globalThis.HG_POS_CONTRARIAN_VOTES = true;
+r = C({ chg24: 2, oiChgPct: 3, fundingPct: 0.06, retailLongPct: 50, topLongPct: 50, takerRatio: 1.0 });
+ok(r.dir === 'short' && r.shortEv.some(e => e.includes('funding extreme')), 'hg-v1421 lever: HG_POS_CONTRARIAN_VOTES=true restores the funding fade vote');
+globalThis.HG_POS_CONTRARIAN_VOTES = false;
 
 r = C({ chg24: 2, oiChgPct: -3, fundingPct: 0.01, retailLongPct: 50, topLongPct: 50, takerRatio: 1.0 });
 ok(r.dir === 'short' && r.regime.some(e => e.includes('short-covering')), 'price↑+OI↓ → short-covering rally, SHORT fade risk');
@@ -86,19 +90,30 @@ r = C({ chg24: -2, oiChgPct: -3, fundingPct: 0.01, retailLongPct: 50, topLongPct
 ok(r.dir === 'long' && r.regime.some(e => e.includes('long liquidation')), 'price↓+OI↓ → long liquidation, capitulation LONG');
 
 r = C({ chg24: 0, oiChgPct: 0, fundingPct: -0.06, retailLongPct: 50, topLongPct: 50, takerRatio: 1.0 });
-ok(r.dir === 'long' && r.longEv.some(e => e.includes('shorts pay')), 'funding −0.06% → shorts crowded, LONG');
+ok(r.dir === null && !r.longEv.some(e => e.includes('shorts pay')) && r.regime.some(e => e.includes('shorts crowded')), 'hg-v1421: funding −0.06% → crowding prints as context, no LONG fade vote');
+globalThis.HG_POS_CONTRARIAN_VOTES = true;
+r = C({ chg24: 0, oiChgPct: 0, fundingPct: -0.06, retailLongPct: 50, topLongPct: 50, takerRatio: 1.0 });
+ok(r.dir === 'long' && r.longEv.some(e => e.includes('shorts pay')), 'hg-v1421 lever: funding fade vote restorable');
+globalThis.HG_POS_CONTRARIAN_VOTES = false;
 
 r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 70, topLongPct: 70, takerRatio: 1.0 });
-ok(r.dir === 'short' && r.shortEv.some(e => e.includes('≥65')), 'retail 70% long → contrarian SHORT');
+ok(r.dir === null && !r.shortEv.some(e => e.includes('≥65')) && r.regime.some(e => e.includes('retail extremely long')), 'hg-v1421: retail 70% long → contrarian vote DEMOTED to context (5 measured OOS failures), no SHORT forms');
 
 r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 30, topLongPct: 30, takerRatio: 1.0 });
-ok(r.dir === 'long' && r.longEv.some(e => e.includes('≤35')), 'retail 30% long → contrarian LONG');
+ok(r.dir === null && !r.longEv.some(e => e.includes('≤35')) && r.regime.some(e => e.includes('retail extremely short')), 'hg-v1421: retail 30% long → context only, no LONG forms');
 
 r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 40, topLongPct: 60, takerRatio: 1.0 });
-ok(r.dir === 'long' && r.longEv.some(e => e.includes('follow top')), 'top 60 vs retail 40 (+20pp) → follow top LONG');
+ok(r.dir === null && !r.longEv.some(e => e.includes('follow top')) && r.regime.some(e => e.includes('top traders long vs retail')), 'hg-v1421: top−retail +20pp → context only, no follow-top vote');
 
 r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 60, topLongPct: 40, takerRatio: 1.0 });
-ok(r.dir === 'short' && r.shortEv.some(e => e.includes('follow top')), 'top 40 vs retail 60 (−20pp) → follow top SHORT');
+ok(r.dir === null && !r.shortEv.some(e => e.includes('follow top')) && r.regime.some(e => e.includes('top traders short vs retail')), 'hg-v1421: top−retail −20pp → context only');
+
+globalThis.HG_POS_CONTRARIAN_VOTES = true;
+r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 70, topLongPct: 70, takerRatio: 1.0 });
+ok(r.dir === 'short' && r.shortEv.some(e => e.includes('≥65')), 'hg-v1421 lever: retail contrarian vote restorable');
+r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 40, topLongPct: 60, takerRatio: 1.0 });
+ok(r.dir === 'long' && r.longEv.some(e => e.includes('follow top')), 'hg-v1421 lever: follow-top vote restorable');
+globalThis.HG_POS_CONTRARIAN_VOTES = false;
 
 r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 50, topLongPct: 50, takerRatio: 1.25 });
 ok(r.dir === 'long' && r.longEv.some(e => e.includes('aggressive buyers')), 'taker 1.25 → LONG');
@@ -185,7 +200,12 @@ ok(cards.includes('CCCUSDT'), 'CCCUSDT card rendered (trend fuel + taker = SHORT
 ok(!cards.includes('BBBUSDT'), 'BBBUSDT skipped — total failure, counted');
 ok(stat.includes('1 symbols failed'), 'stat reports "1 symbols failed"');
 ok(stat.includes('universe 4') && stat.includes('(4 screened)'), 'stat reports universe 4 ≥$5M, 4 screened');
-ok(stat.includes('1 setups (1 confirmed)') && stat.includes('2 context'), 'stat tallies 1 confirmed setup + 2 context cards');
+ok(stat.includes('1 setups (1 confirmed)') && stat.includes('1 context'), 'stat tallies 1 confirmed setup + 1 context card');
+/* hg-v1421: XAUUSDT's old SHORT was built ENTIRELY from the demoted class
+   (funding fade + retail contrarian + follow-top) — with those reads
+   context-only it forms no evidence majority and earns no card. Its reads
+   still surface in the gold-perp callout below, which never voted. */
+ok(!cards.includes('>XAUUSDT<'), 'XAUUSDT: no card when the only reads are demoted-class (no fabricated majority)');
 ok(cards.indexOf('AAAUSDT') < cards.indexOf('CCCUSDT'), 'confirmed-setup card ranks above context card');
 const aaaCard = cards.slice(cards.indexOf('AAAUSDT'), cards.indexOf('CCCUSDT'));
 ok(aaaCard.includes('>SWING<') && aaaCard.includes('CONFIRMED') && aaaCard.includes('SEND TO TRADE PLAN'),

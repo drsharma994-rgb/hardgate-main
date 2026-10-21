@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1170';
+const HG_CACHE = 'hg-v1422';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -20,31 +20,17 @@ const HG_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon.svg', './icon-192.png', './icon-512.png', './bright.css', './hg-icons.css', './vendor/base-themes/tokens-data-dense-light.css', './mobile.css', './annunciator.css', './hardgate-desktop-shell.css',
-  /* task #12: the MAIN stylesheet was never in the shell — the offline app
-     booted unstyled. Guarded now by tests/test-offline-shell-parity.mjs. */
-  './trading-dashboard-pro.css',
-  './design-system.css',
-  /* task #12: the TRENDTABLE matrix loads its 12 literal fragments at runtime
-     (trendtable.js line ~10 fetches 'trendtable-src-'+i), so a first-visit
-     OFFLINE client had an empty matrix. ~200 bytes each — precache them. */
-  './trendtable-src-0.js', './trendtable-src-1.js', './trendtable-src-2.js', './trendtable-src-3.js',
-  './trendtable-src-4.js', './trendtable-src-5.js', './trendtable-src-6.js', './trendtable-src-7.js',
-  './trendtable-src-8.js', './trendtable-src-9.js', './trendtable-src-10.js', './trendtable-src-11.js',
-  /* task #12: the Shiva desk is RUNTIME-INJECTED by hg-api-base.js (never a
-     <script src> in index.html), so it was invisible to every shell-parity
-     sweep — a first-visit offline client lost the whole desk. */
-  './shivagold.js', './shiva-nav.js',
+  './icon.svg', './icon-192.png', './icon-512.png', './bright.css', './hg-icons.css', './vendor/base-themes/tokens-data-dense-light.css', './trading-dashboard-pro.css', './design-system.css', './mobile.css', './annunciator.css', './hardgate-desktop-shell.css',
   './build-stamp.js', './gold-iux.js',
   './hghost.js', './hardgate-desktop-shell.js',
-  './indicators.js', './indicators2.js', './store.js', './binance.js', './inc4-data-core.js', './hg-setup-core.js', './hg-perfect-setup.js', './coinalyze.js', './coinglass.js', './borrow-rates.js', './liquidity-gate.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './agent-alerts.js',
+  './indicators.js', './indicators2.js', './store.js', './binance.js', './inc4-data-core.js', './hg-setup-core.js', './hg-perfect-setup.js', './coinalyze.js', './coinglass.js', './borrow-rates.js', './liquidity-gate.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './syndicate.js', './agent-alerts.js',
   './setup-ui.js', './setup-solidity.js', './smc-lib.js', './smc-setups.js', './setup-calibration.js', './plans.js', './setup-stack.js', './gate-replay-oos.js', './cryptogates.js',
   /* hg-v1150: the matrix ships as a loader (trendtable.js fetches the 12
      parts at runtime). The COMBINED file is precached beside it: tests boot
      it, and an offline client that cannot fetch the parts has the fully
      assembled source in the shell cache. */
   './squeeze.js', './trendtable.js', './trendtable.combined.js', './oiflow.js', './regime.js', './carry.js', './hg-forward.js', './proven-edge.js', './desk-agree.js', './fundamental-stack.js', './regime-stack.js', './hg-mechanics.js', './hg-gates.js', './hg-plan.js', './crypto-catalog.js', './omniroute.js', './dex-screener.js', './setup-confirm.js', './combi.js', './gold-formation.js', './omnigold.js', './omnigold1.js', './milligold.js', './newgold.js', './golddirection.js', './goldultra.js', './cryptoultra.js', './cryptoscan.js', './omnipresent.js', './formation-nightly.js', './formation-nightly-boot.js', './desk-formation-edge.js', './hg-omni-strategy-bridge.js', './contract-report.js', './omnibtc-engines.js', './omnibtc.js', './termbasis.js',
-  './gold-forward-read.js', './gold-rank-evidence.js', './gold-tape-sanity.js', './goldpro.js', './strats.js', './meanrev.js', './supersetup.js', './super-desk-common.js', './super-gold.js', './super-best.js', './super-sniper.js', './super-book.js', './super-calibrate.js', './reversalsniper.js', './edge.js', './startradertab.js', './book-routing.js', './api-client.js', './tradeos.js', './hey-lens.js', './book.js', './setup-activation.js', './execute.js', './liqs.js', './xuniverse.js', './desk-scan-universe.js',
+  './gold-forward-read.js', './gold-rank-evidence.js', './gold-tape-sanity.js', './goldpro.js', './strats.js', './meanrev.js', './supersetup.js', './super-desk-common.js', './super-gold.js', './gold-confluence.js', './super-best.js', './super-sniper.js', './super-book.js', './super-calibrate.js', './reversalsniper.js', './edge.js', './startradertab.js', './book-routing.js', './api-client.js', './tradeos.js', './hey-lens.js', './book.js', './setup-activation.js', './execute.js', './liqs.js', './xuniverse.js', './desk-scan-universe.js',
   /* Vendored third-party libraries. Previously loaded from unpkg/jsdelivr, so
      the offline shell covered 126 local files and then broke on charts. */
   './vendor/lightweight-charts-4.2.0.js', './vendor/emailjs-browser-4.4.1.js',
@@ -54,11 +40,12 @@ const HG_SHELL = [
   './portfolio-allocation.js', './inc567-data-core.js', './inc567-config-loader.js', './inc567-regime-panels.js',
   './inc34-data-core.js', './backtest-tab-params.js', './data/param-drift.json', './data/desk-tab-params.json', './data/symbol-tier.json', './data/alert-precision.json',
   './recon-tab.js', './setup-activation.js', './rotation.js', './goldspot.js',
-  './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './goldscalp.js', './ganeshgold.js', './gold-free-evidence.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
+  './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './gold-core-engine.js', './gold-titan-engine.js', './gold-scalp.js', './ganesh-gold.js', './pinegold.js', './goldscalp.js', './ganeshgold.js', './gold-free-evidence.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './puregold.js', './gold-suite-unified.js', './signallog.js',
+  './candle-confluence.js', './gold-candle-forecast.js', './candle-forecast-intel.js', './candlestick_patterns.js', './gold_confluence_engine.js',
   './data/setup-profile.json', './data/regime-profile.json',
   './data/strategy-weights.json', './data/strategy-regime-state.json', './data/fund-config.json',
   './conviction-lock.js', './macro-feeds.js', './venuepremium.js', './formation-live.js',
-  './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './gstack-brain.js', './brain.js', './scorecard.js', './fixpack13-core.js', './fixpack14-core.js', './fixpack15-core.js', './fixpack16-core.js', './fixpack17-core.js', './crypto-position-risk.js', './risk-tab.js', './reliability.js', './goldcoint.js', './optigold.js', './structure-levels.js', './formation.js', './freqtrade-formation.js', './best-levels.js', './gold-best-levels.js', './gold-extra-strategies.js', './walkforward-ui.js', './formation-instr-ui.js', './meta-label.js', './tear-sheet.js', './purged-cv.js', './agent-debate.js', './formation-lab.js',
+  './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './gstack-brain.js', './brain.js', './scorecard.js', './fixpack13-core.js', './fixpack14-core.js', './fixpack15-core.js', './fixpack16-core.js', './fixpack17-core.js', './crypto-position-risk.js', './risk-tab.js', './reliability.js', './goldcoint.js', './optigold.js', './structure-levels.js', './formation-engine.js', './formation-patch.js', './macro-calendar.js', './audio-annunciator.js', './ws-multiplex.js', './alert-dispatcher.js', './liq-clusters.js', './risk-allocator.js', './journal-db.js', './execute-order.js', './quant-desk.js', './formation.js', './freqtrade-formation.js', './best-levels.js', './gold-best-levels.js', './gold-extra-strategies.js', './walkforward-ui.js', './formation-instr-ui.js', './meta-label.js', './tear-sheet.js', './purged-cv.js', './agent-debate.js', './formation-lab.js',
   './pinemath.js', './pinegate.js', './pine.js', './pine-sub.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js', './pinesmc.js', './pinecipher.js', './pinerf.js', './pinenw.js', './pineavwap.js'
 ];
 
@@ -105,7 +92,7 @@ function hgIsShellRequest(url){
 
    cache.addAll() is ATOMIC by specification: if any one request fails, the
    returned promise rejects and NOTHING is written to the cache. The shell
-   above is the app shell (~230 files) and the comment on it promises that "a single missing
+   above is 125 files and the comment on it promises that "a single missing
    file must never fail install" — which is exactly what addAll does not
    provide. One renamed or mistyped entry and the whole offline shell was
    silently empty, because the .catch() below swallowed the rejection and

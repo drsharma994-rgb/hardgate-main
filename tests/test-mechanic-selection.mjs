@@ -103,11 +103,12 @@ console.log('3. unanimity alone does not ship');
   const solid = M.contiguous([{ unanimous: false }, { unanimous: true }, { unanimous: true }]);
   eq(solid.runs, 1, 'an unbroken band is one run');
   eq(solid.contiguous, true, 'and is contiguous');
-  ok(R.shape.unanimousCount > 0,
-     'the real sweep DOES contain unanimous cells — ' + R.shape.unanimousCount
-     + ', which is why contiguity is the test that matters');
-  eq(R.shape.contiguous, false,
-     'and they are not contiguous — ' + R.shape.runs + ' separate runs');
+  /* hg-v1404 recalibration: on the hg-v1402 walk the real sweep contains NO
+     unanimous cell at all (unanimousCount 0) — the old walk's non-contiguous
+     flicker did not reproduce. The contiguity rule stays pinned on synthetic
+     sweeps above, and ships=false survives on the live one. */
+  eq(R.shape.unanimousCount, 0,
+     'the real sweep contains no unanimous cell on the hg-v1402 walk — the old flicker is gone');
   eq(R.ships, false, 'so no rule ships');
   ok(!R.ships || R.shape.contiguous,
      'ships can only be true when the unanimity is contiguous');
@@ -116,13 +117,19 @@ console.log('3. unanimity alone does not ship');
 /* ---- 4. the ceiling, so nobody reads this as the lever ---- */
 console.log('4. the best case is published, and it is still negative');
 {
-  ok(R.best && isFinite(R.best.netLift), 'a best unanimous cell is identified');
+  /* hg-v1404 recalibration: with zero unanimous cells the best cell is null
+     (was +0.0299R lift / -0.0861R ceiling on the old walk). The ceiling is
+     now derived from the strongest single-bar reading, and it is pinned the
+     same way: positive lift, negative ceiling, small in absolute terms. */
+  ok(R.best === null && R.ceilingNet === null,
+     'no unanimous cell exists to quote — best and ceiling are null, not invented');
   ok(R.bookNet < 0, 'the book is negative to begin with — ' + R.bookNet + 'R');
-  ok(R.ceilingNet < 0,
-     'and the most generous rule leaves it negative — ' + R.ceilingNet + 'R');
-  ok(R.ceilingNet > R.bookNet, 'better, but not profitable');
-  ok(R.best.netLift < 0.05,
-     'the lift is small in absolute terms — +' + R.best.netLift + 'R');
+  const topLift = Math.max(...R.sweep.map(r => r.netLift));
+  ok(topLift > 0 && topLift < 0.05,
+     'the strongest single-bar reading lifts net by +' + topLift.toFixed(4) + 'R — small in absolute terms');
+  ok(R.bookNet + topLift < 0,
+     'and even that leaves the book negative — ' + (R.bookNet + topLift).toFixed(4) + 'R');
+  ok(R.bookNet + topLift > R.bookNet, 'better, but not profitable');
   /* Volume is reported, because a filter that trades almost nothing can look
      good without being an edge (hg-v922 deleted 52% of volume that way). */
   for (const row of R.sweep) ok(isFinite(row.keptPct), 'every sweep row reports what it keeps');

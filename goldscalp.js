@@ -1988,7 +1988,21 @@ var GS_HELD_STAMP = 'HELD · ONE AT A TIME';
    "no mechanic is measured", not "every mechanic is", and the ACCURACY leg
    fails CLOSED on it (the hg-v946 GOLD ULTRA rule). */
 var GS_LEAD_MEASURED_ONLY_LS_KEY = 'hg_gs_lead_measured_only';
-var GS_LEAD_MEASURED_ONLY_DEFAULT = true;   /* hg-v1098: on instruction */
+var GS_LEAD_MEASURED_ONLY_DEFAULT = false;  /* hg-v1290: OFF by default on
+   user ask ("No confirmed setups in any of the gold tabs, fix it"). The
+   hg-v1098 instruction STILL stands as the lever — a scan can flip it ON
+   through the hg-v1156 override chain (window.HG_GS_LEAD_MEASURED_ONLY,
+   or localStorage hg_gs_lead_measured_only='1'), and setLeadMeasuredOnly(true)
+   persists it. What the OFF default changes: an edge-table row that is
+   measured neutral or better (bosalign, ribbon under hg-v928) can lead
+   if nothing else demotes it; the hg-v1289 UNMEASURED path for mechanics
+   not in the edge table is unchanged. What it does NOT change: the
+   geometry, macro, dxy+tnx and real-yield ACCURACY checks still fire
+   in the same loop, the hg-v946 fail-closed on an unreadable table
+   still fires, and on seed 102 the hg-v1156 measurement "all seven
+   candidates are still demoted by the desk's other rules with the
+   lever off, so the lever loosens no gate" still holds — this is a
+   policy toggle inside measured gates, not a loosening of any of them. */
 var GS_LEAD_MEASURED_ONLY = GS_LEAD_MEASURED_ONLY_DEFAULT;
 /* The hg-v1098 instruction is a POLICY on this desk ("leads only on the
    measured mechanics"), not a measurement of its own, and every policy this
@@ -3108,6 +3122,72 @@ async function runScan(ui, scanSt){
       scalpBundle.oiRows = ctx.perpNative.oi;
       scalpBundle.fundingRows = ctx.perpNative.funding;
     }
+    /* Free tapes the scalp engines already know how to read, fetched BEFORE
+       the mint. The daily dollar series on the macro object is close-only, so
+       it cannot draw an Asia box. Yahoo DX-Y.NYB 15m can. Silver 15m is the
+       other metal on the same clock. The gold/silver ratio and the gold–BTC
+       correlation are daily statistics: a 15m tape is a couple of sessions
+       and cannot satisfy them. Daily OHLC is fetched beside the 15m tapes.
+       A failed fetch leaves the field absent — it is not invented. */
+    try{
+      var silFn = gfn('getSilverCandles');
+      var freeFn = gfn('getFreeOHLC');
+      var alignFn = gfn('hgGoldAlignLogReturns');
+      var freeWaits = [];
+      if (gold.rows1d && gold.rows1d.length >= 30) scalpBundle.goldDaily = gold.rows1d;
+      function wantDaily(sym, field, minN){
+        if (!freeFn) return;
+        freeWaits.push(Promise.resolve().then(function(){ return freeFn(sym, '1d'); }).then(function(pack){
+          if (pack && pack.rows && pack.rows.length >= minN) scalpBundle[field] = pack.rows;
+        }).catch(function(){}));
+      }
+      if (silFn){
+        freeWaits.push(Promise.resolve().then(function(){ return silFn('15m', 160); }).then(function(sv){
+          if (sv && sv.rows && sv.rows.length >= 20){
+            scalpBundle.silverRows = sv.rows;
+            scalpBundle.xagCandles = sv.rows;
+            if (gold.rows15m && gold.rows15m.length) scalpBundle.xauCandles = gold.rows15m;
+            if (typeof W !== 'undefined' && W) W.__hgSilverRows = sv.rows;
+          }
+        }).catch(function(){}));
+      }
+      if (freeFn){
+        freeWaits.push(Promise.resolve().then(function(){ return freeFn('DX-Y.NYB', '15m'); }).then(function(dxy){
+          if (dxy && dxy.rows && dxy.rows.length >= 20) scalpBundle.dxyIntraday = dxy.rows;
+        }).catch(function(){}));
+      }
+      wantDaily('SI=F', 'silverDaily', 60);
+      wantDaily('BTC-USD', 'btcRows', 25);
+      wantDaily('DX-Y.NYB', 'dxyDaily', 41);
+      wantDaily('^GSPC', 'spxDaily', 41);
+      wantDaily('CL=F', 'oilDaily', 41);
+      if (freeWaits.length){
+        await Promise.race([Promise.all(freeWaits), new Promise(function(r){ setTimeout(r, 8000); })]);
+      }
+      if (alignFn && scalpBundle.goldDaily && scalpBundle.dxyDaily){
+        var aligned = alignFn(scalpBundle.goldDaily, {
+          dxy: scalpBundle.dxyDaily,
+          spx: scalpBundle.spxDaily || null,
+          oil: scalpBundle.oilDaily || null
+        });
+        if (aligned && aligned.rGold && aligned.rGold.length >= 40 && aligned.rDxy){
+          scalpBundle.rGold = aligned.rGold;
+          scalpBundle.rDxy = aligned.rDxy;
+          if (aligned.rSpx) scalpBundle.rSpx = aligned.rSpx;
+          if (aligned.rOil) scalpBundle.rOil = aligned.rOil;
+        }
+      }
+      if (scalpBundle.dxyIntraday) legs.push('DXY 15m (Yahoo DX-Y.NYB) ' + scalpBundle.dxyIntraday.length + ' bars');
+      if (scalpBundle.silverRows) legs.push('silver 15m ' + scalpBundle.silverRows.length + ' bars');
+      if (scalpBundle.silverDaily) legs.push('silver daily ' + scalpBundle.silverDaily.length + ' sessions');
+      if (scalpBundle.btcRows) legs.push('BTC daily ' + scalpBundle.btcRows.length + ' sessions');
+      if (scalpBundle.rGold){
+        var residLegs = 'gold, DXY';
+        if (scalpBundle.rSpx) residLegs += ', SPX';
+        if (scalpBundle.rOil) residLegs += ', oil';
+        legs.push('macro residual ' + scalpBundle.rGold.length + ' sessions (' + residLegs + ')');
+      }
+    }catch(eFree){}
     if (gold.rows15m.length){
       var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)
         : (stRoute ? stGoldVenueLabel(gold.source) : venueLabel(gold.source));
@@ -3219,6 +3299,61 @@ async function runScan(ui, scanSt){
       best = ranked.length ? ranked[0] : null;
       legs.push('goldRankSetups unavailable — ordered by grade/killzone only');
     }
+    try{
+      if (!W.__hgSilverRows && typeof W.getSilverCandles === 'function'){
+        var sv0 = await W.getSilverCandles('15m', 120);
+        if (sv0 && sv0.rows && sv0.rows.length) W.__hgSilverRows = sv0.rows;
+      }
+    }catch(eSv0){}
+    try{
+      var psFn = gfn('pineGoldLayerStates'), blkFn = gfn('pineGoldBlocksLead'), tapeFn = gfn('pineGoldTapeVeto');
+      var psLead = (psFn && gold.rows15m && gold.rows15m.length) ? psFn(gold.rows15m) : null;
+      var pineHeld = 0;
+      if (gold.rows15m && gold.rows15m.length && (tapeFn || (psLead && psLead.ok && blkFn))){
+        for (i = 0; i < ranked.length; i++){
+          if (!ranked[i] || ranked[i].demoted) continue;
+          var whyP = (psLead && psLead.ok && blkFn) ? blkFn(psLead, ranked[i].dir) : null;
+          if (!whyP && tapeFn){
+            try{ whyP = tapeFn(gold.rows15m, ranked[i].dir, { mode: 'scalp', now: Date.now(), macro: ctx.macro, silverRows: W.__hgSilverRows }); }
+            catch(eTv){ whyP = null; }
+          }
+          if (!whyP) continue;
+          ranked[i].demoted = true;
+          ranked[i].pineBlock = whyP;
+          if (!Array.isArray(ranked[i].stamps)) ranked[i].stamps = [];
+          if (ranked[i].stamps.indexOf('PINE AGAINST') < 0) ranked[i].stamps.push('PINE AGAINST');
+          var gnP = Array.isArray(ranked[i].gateNotes) ? ranked[i].gateNotes.slice() : [];
+          if (gnP.indexOf(whyP) < 0) gnP.push(whyP);
+          ranked[i].gateNotes = gnP;
+          pineHeld++;
+        }
+        best = null;
+        for (i = 0; i < ranked.length; i++){
+          if (ranked[i] && !ranked[i].demoted && !ranked[i].vetoed){ best = ranked[i]; break; }
+        }
+      }
+      if (pineHeld) legs.push('PINE AGAINST — ' + pineHeld + ' scalp' + (pineHeld === 1 ? '' : 's') + ' cannot lead');
+    }catch(ePine){}
+    var instHtml = '';
+    try{
+      if (typeof W.hgGoldInstApply === 'function'){
+        try{
+          if (!W.__hgSilverRows && typeof W.getSilverCandles === 'function'){
+            var sv = await W.getSilverCandles('15m', 120);
+            if (sv && sv.rows && sv.rows.length) W.__hgSilverRows = sv.rows;
+          }
+        }catch(eSv){}
+        var inst = W.hgGoldInstApply(ranked, gold.rows15m, ctx.macro, { desk: 'goldscalp', horizon: 'scalp', silverRows: W.__hgSilverRows });
+        if (inst){
+          instHtml = inst.html || '';
+          if (inst.demoted) legs.push('INSTITUTIONAL — ' + inst.demoted + ' candidate' + (inst.demoted === 1 ? '' : 's') + ' cannot lead (' + (inst.lead || 'session, macro, or an unfinished sweep') + ')');
+          best = null;
+          for (i = 0; i < ranked.length; i++){
+            if (ranked[i] && !ranked[i].demoted && !ranked[i].vetoed){ best = ranked[i]; break; }
+          }
+        }
+      }
+    }catch(eInst){}
     goldAnnotateXautBasis(ranked, spotRef);
 
     var filterFn = gfn('hgFilterGoldPostGate');
@@ -3335,7 +3470,33 @@ async function runScan(ui, scanSt){
            server. An unreadable table is NO measured mechanic: fail closed. */
         if (!leadOnlyA){ /* lever OFF: the lead-set demote is withheld, the checks below stand */ }
         else if (!leadKeysA) whyA.push('ACCURACY — the edge table is unreadable, so no mechanic on this desk is measured to lead. This is not the scalp.');
-        else if (leadKeysA.indexOf(sk) < 0) whyA.push('ACCURACY — only ' + gsLeadKeysLabel(leadKeysA) + ' has held up on this desk\'s own measured record. This is not the scalp.');
+        else if (leadKeysA.indexOf(sk) < 0){
+          /* hg-v1289: distinguish truly-unmeasured mechanics (no row in the
+             edge table at all) from measured-but-not-prefer rows. The hg-v1098
+             instruction was "lead only on measured mechanics with a prefer
+             record" — defensible when every stratKey in the mint had a row.
+             The 14 hg-v1270+ GS strategies (gs2–gs14) and any future mint have
+             NO row at all; the three-state hg-v989 rule says absence is not
+             negative evidence, so a row-less stratKey is not what hg-v1098
+             asked us to withhold. A measured neutral/demote/suppress row still
+             demotes (hg-v1098 preserved on measured mechanics). An unmeasured
+             mechanic is left to the geometry, macro and real-yield checks
+             below in this same loop — the hg-v1156 claim that only those two
+             mechanics have HELD UP is TRUE OF MEASURED mechanics, not of
+             mechanics the ledger has never judged. */
+          var T2 = (typeof W !== 'undefined' && W) ? W.HG_GOLD_SETUP_EDGE : null;
+          var hasRow = !!(T2 && T2.scalp && Object.prototype.hasOwnProperty.call(T2.scalp, sk));
+          if (hasRow){
+            whyA.push('ACCURACY — only ' + gsLeadKeysLabel(leadKeysA) + ' has held up on this desk\'s own measured record. This is not the scalp.');
+          } else {
+            /* UNMEASURED — stamp a chip so the reader sees why the leader is
+               a new mechanic rather than one of the two prefer rows. The
+               stamp is non-demoting: the card can still be demoted by the
+               geometry/macro/real-yield checks below, or by any other leg. */
+            if (!Array.isArray(ac.stamps)) ac.stamps = [];
+            if (ac.stamps.indexOf('UNMEASURED') < 0) ac.stamps.push('UNMEASURED');
+          }
+        }
         var dirA = String(ac.dir || '');
         var entryA = +ac.entry, stopA = +ac.stop, t1A = +ac.t1;
         if (dirA === 'long' || dirA === 'short'){
@@ -3683,7 +3844,7 @@ async function runScan(ui, scanSt){
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
+        ui.cards.innerHTML = instHtml + basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
           + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml()
           + gsxBoardHtml(displayBest, display, display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join(''))
           + formingLayersHtml(displayBest || display[0])
@@ -3695,7 +3856,7 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + uniHtml + gsOneAtATimeHtml(oneAtATime)
+        ui.cards.innerHTML = instHtml + basisHtml + mixedBanner + fundPanelHtml + uniHtml + gsOneAtATimeHtml(oneAtATime)
           + gsBreakevenHtml()
           + gsxBoardHtml(null, [], '')
           + (whySilent ? whySilentHTML(whySilent) : '')
@@ -3708,7 +3869,7 @@ async function runScan(ui, scanSt){
         /* feeds failed: cards stay empty (no fabricated setups);
            the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
            itself the answer the playbook asks for. Catalog lives on empty. */
-        ui.cards.innerHTML = basisHtml + fundPanelHtml + uniHtml + gsxBoardHtml(null, [], '') + sevenStepHtml();
+        ui.cards.innerHTML = instHtml + basisHtml + fundPanelHtml + uniHtml + gsxBoardHtml(null, [], '') + sevenStepHtml();
         var catH = gsCatalogHtml(ctx, gold.rows15m, null);   /* hg-v1158: the census reads the context even when the board is empty */
         if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent) + catH;
         else if (catH) ui.empty.innerHTML = catH;
@@ -3785,7 +3946,7 @@ function goldscalpMountInto(el, scanSt, cfg){
       + 'killzone) are demoted and held to a +2 tally bar, counter-trend entries against a sloping 200-EMA-15m/4H stack '
       + 'are demoted unless they are sweep-reclaims, a realized TP1 under 1.2R after structure-snapping drops the setup, '
       + 'Kaufman-ER chop (&lt; 0.25) demotes mean-reversion retests, and a high-impact news window vetoes NEW convictions '
-      + '— every gate names its reason on the card or on a held-back line below.</div>')
+      + '— every gate names its reason on the card or on a held-back line below. A lead is also refused when the gold tape says so: a scalp long in premium or short in discount without a sweep, a fade of an Asian range that already expanded by 1%, the London fix in London local time, a continuation after the day has used its average range, gold RSI divergence against the trade, a real-rate headwind without a sweep, a chase two sigma beyond session VWAP, a long into an unswept prior-day high or a short into an unswept prior-day low, a round-dollar rejection against the trade, a failed London or New York opening-range break, a fresh fair-value gap in the way, unswept equal highs or lows, a breaker block facing the trade, a volume imbalance in the way, or silver SMT against the trade when silver is loaded. A short history does not refuse. The card does not send an order.</div>')
     : '';
   var emptyMsg = cfg.emptyMsg || 'no A-grade confluence right now — gold respects levels; wait for the sweep.';
   try{

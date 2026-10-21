@@ -95,9 +95,12 @@ console.log('== the overlap is measured, not borrowed ==');
      '48h apart with a 20h hold is no overlap at all, so nothing is deflated');
   ok(ev.effSamples === ev.samples, 'and the effective sample equals the raw one');
 
-  /* THE REPLAY CONSTANT IS NOT REUSED. Borrowing 0.406 — measured on the
-     in-sample walk — is the error hgFwdOverlap exists to avoid. */
-  ok(C.HG_OG_EFF_N_RATIO === 0.406, 'the replay constant is still 0.406 where it belongs');
+  /* THE REPLAY CONSTANT IS NOT REUSED. Borrowing the walk's ratio — 0.303 on
+     the hg-v1402 re-walk (2442.4/8053; it was 0.406 = 3111.1/7670 on the
+     walk before) — is the error hgFwdOverlap exists to avoid. The constant
+     follows the bake; what is pinned is that the forward log never inherits
+     it. */
+  ok(C.HG_OG_EFF_N_RATIO === 0.303, 'the replay constant follows the hg-v1402 bake (0.303)');
   ok(ev.overlapRatio !== C.HG_OG_EFF_N_RATIO,
      'and this population measured its own, rather than inheriting that one');
 }

@@ -92,13 +92,19 @@ ok(r.dir === null, 'oiChg null → quadrant cannot fire on px alone');
 /* ================= D) funding z crowding ================= */
 console.log('== funding z-score crowding ==');
 r = C({ fundingZ: 2 });
-ok(r.dir === 'SHORT' && r.evidence[0].indexOf('CROWDED LONG (squeeze-down risk)') === 0, 'z = +2 (boundary) → CROWDED LONG → SHORT fade');
+ok(r.dir === null && !r.shortEv.length && /crowded long/.test(String(r.regime)), 'hg-v1421: z = +2 (boundary) → crowding prints as context, NO short fade vote');
 r = C({ fundingZ: -2 });
-ok(r.dir === 'LONG' && r.evidence[0].indexOf('CROWDED SHORT (squeeze-up risk)') === 0, 'z = −2 (boundary) → CROWDED SHORT → LONG fade');
+ok(r.dir === null && !r.longEv.length && /crowded short/.test(String(r.regime)), 'hg-v1421: z = −2 (boundary) → context only, no long fade vote');
 r = C({ fundingZ: 3.7 });
-ok(r.dir === 'SHORT', 'z = +3.7 → SHORT');
+ok(r.dir === null && /crowded long/.test(String(r.regime)), 'hg-v1421: z = +3.7 → context only');
 r = C({ fundingZ: -2.5 });
-ok(r.dir === 'LONG', 'z = −2.5 → LONG');
+ok(r.dir === null && /crowded short/.test(String(r.regime)), 'hg-v1421: z = −2.5 → context only');
+globalThis.HG_POS_CONTRARIAN_VOTES = true;
+r = C({ fundingZ: 2 });
+ok(r.dir === 'SHORT' && r.evidence[0].indexOf('CROWDED LONG (squeeze-down risk)') === 0, 'hg-v1421 lever: z = +2 fade vote restorable');
+r = C({ fundingZ: -2 });
+ok(r.dir === 'LONG' && r.evidence[0].indexOf('CROWDED SHORT (squeeze-up risk)') === 0, 'hg-v1421 lever: z = −2 fade vote restorable');
+globalThis.HG_POS_CONTRARIAN_VOTES = false;
 r = C({ fundingZ: 1.99 });
 ok(r.dir === null, 'z = +1.99 → inside band, no evidence');
 r = C({ fundingZ: -1.99 });
@@ -107,13 +113,19 @@ ok(r.dir === null, 'z = −1.99 → inside band, no evidence');
 /* ================= E) retail contrarian ================= */
 console.log('== retail contrarian ==');
 r = C({ longPct: 65 });
-ok(r.dir === 'SHORT' && r.evidence[0].indexOf('RETAIL MAX LONG (fade)') === 0, 'retail 65% long (boundary) → RETAIL MAX LONG → SHORT');
+ok(r.dir === null && !r.shortEv.length && /retail extremely long/.test(String(r.regime)), 'hg-v1421: retail 65% long (boundary) → context only, NO short fade');
 r = C({ longPct: 35 });
-ok(r.dir === 'LONG' && r.evidence[0].indexOf('RETAIL MAX SHORT (fade)') === 0, 'retail 35% long (boundary) → RETAIL MAX SHORT → LONG');
+ok(r.dir === null && !r.longEv.length && /retail extremely short/.test(String(r.regime)), 'hg-v1421: retail 35% long (boundary) → context only');
 r = C({ longPct: 82 });
-ok(r.dir === 'SHORT', 'retail 82% → SHORT fade');
+ok(r.dir === null, 'hg-v1421: retail 82% → context only, no direction');
 r = C({ longPct: 12 });
-ok(r.dir === 'LONG', 'retail 12% → LONG fade');
+ok(r.dir === null, 'hg-v1421: retail 12% → context only, no direction');
+globalThis.HG_POS_CONTRARIAN_VOTES = true;
+r = C({ longPct: 65 });
+ok(r.dir === 'SHORT' && r.evidence[0].indexOf('RETAIL MAX LONG (fade)') === 0, 'hg-v1421 lever: retail fade vote restorable (SHORT)');
+r = C({ longPct: 35 });
+ok(r.dir === 'LONG' && r.evidence[0].indexOf('RETAIL MAX SHORT (fade)') === 0, 'hg-v1421 lever: retail fade vote restorable (LONG)');
+globalThis.HG_POS_CONTRARIAN_VOTES = false;
 r = C({ longPct: 64.9 });
 ok(r.dir === null, 'retail 64.9% → no evidence');
 r = C({ longPct: 35.1 });
@@ -152,30 +164,31 @@ r = C({ fundingZ: Infinity, oiChg: -Infinity, pxChg: 3, takerAvg: 1.2, longPct: 
 ok(r.dir === 'LONG' && r.score === 1 && r.evidence[0].indexOf('AGGRESSIVE BUYERS') === 0,
    'Infinity legs ignored; remaining taker read still classifies');
 r = C({ fundingZ: 2.5, oiChg: NaN, pxChg: NaN, takerAvg: NaN, longPct: NaN });
-ok(r.dir === 'SHORT' && r.score === 1, 'NaN quadrant skipped, funding leg still fires');
+ok(r.dir === null && /crowded long/.test(String(r.regime)), 'hg-v1421: NaN quadrant skipped; funding leg prints as context, no fade vote');
 
 /* ================= H) majority scoring, ties, shape ================= */
 console.log('== majority scoring, ties, contract shape ==');
 r = C({ fundingZ: -2.5, oiChg: 4, pxChg: 2.5, takerAvg: 1.15, longPct: 20 });
-ok(r.dir === 'LONG' && r.score === 4 && r.evidence.length === 4 && r.total === 4,
-   'four agreeing LONG reads → dir LONG, score 4');
+ok(r.dir === 'LONG' && r.score === 2 && r.evidence.length === 2 && r.total === 2,
+   'hg-v1421: quadrant + taker agree LONG (score 2); funding/retail reads are context, not votes');
 r = C({ fundingZ: 2.5, oiChg: -4, pxChg: 2.5, takerAvg: 0.85, longPct: 80 });
-ok(r.dir === 'SHORT' && r.score === 4 && r.evidence.length === 4,
-   'four agreeing SHORT reads → dir SHORT, score 4');
+ok(r.dir === 'SHORT' && r.score === 2 && r.evidence.length === 2,
+   'hg-v1421: covering + sellers agree SHORT (score 2); funding/retail context');
 r = C({ fundingZ: 0, oiChg: 4, pxChg: 2.5, takerAvg: 1.15, longPct: 80 });
-ok(r.dir === 'LONG' && r.score === 2 && r.evidence.length === 2 && r.shortEv.length === 1,
-   '2 LONG vs 1 SHORT → LONG, score = agreeing count 2');
+ok(r.dir === 'LONG' && r.score === 2 && r.evidence.length === 2 && r.shortEv.length === 0,
+   'hg-v1421: 2 LONG votes; the retail read no longer votes SHORT (context)');
 r = C({ fundingZ: 2.5, oiChg: 4, pxChg: -2.5, takerAvg: 1.15, longPct: 50 });
-ok(r.dir === 'SHORT' && r.score === 2 && r.longEv.length === 1,
-   '2 SHORT (new shorts + crowded long) vs 1 LONG (taker) → SHORT, score 2');
+ok(r.dir === null && r.score === 0 && r.longEv.length === 1 && r.shortEv.length === 1,
+   'hg-v1421: new shorts vs taker = 1v1 tie (funding crowding is context, not the tiebreak)');
 r = C({ fundingZ: 2.5, oiChg: -4, pxChg: -2.5, takerAvg: 1.0, longPct: 50 });
-ok(r.dir === null && r.score === 0 && r.evidence.length === 0 && r.total === 2,
-   '1v1 tie → dir null, score 0, evidence empty (but total preserved)');
+ok(r.dir === 'LONG' && r.score === 1 && r.total === 1,
+   'hg-v1421: LONG FLUSH stands alone (funding context removed the opposing vote)');
 r = C({ fundingZ: 2.5, oiChg: 4, pxChg: -2.5, takerAvg: 1.15, longPct: 20 });
-ok(r.dir === null && r.total === 4, '2v2 tie → null dir');
-ok(r.longEv.length === 2 && r.shortEv.length === 2, 'tie keeps both evidence lists for the UI contra row');
+ok(r.dir === null && r.total === 2, 'hg-v1421: 1v1 tie → null dir (retail/funding reads context, total 2)');
+ok(r.longEv.length === 1 && r.shortEv.length === 1, 'tie keeps both evidence lists for the UI contra row');
 r = C({ fundingZ: -3, oiChg: -4, pxChg: -1 });
-ok(r.dir === 'LONG' && r.score === 2, 'LONG FLUSH + CROWDED SHORT → squeeze-up LONG, score 2 (the card-worthy combo)');
+ok(r.dir === 'LONG' && r.score === 1 && r.regime === 'LONG FLUSH (capitulation)' && r.shortEv.length === 0,
+   'hg-v1421: LONG FLUSH votes alone; CROWDED SHORT no longer adds a fade vote (regime exposes the quadrant label)');
 ok(['LONG', 'SHORT', null].indexOf(r.dir) >= 0, 'dir is always LONG | SHORT | null');
 ok(Array.isArray(r.evidence) && r.evidence.every(function(e){ return typeof e === 'string'; }),
    'evidence is an array of strings');

@@ -123,16 +123,27 @@ ok(/if \(!isFinite\(stop\) \|\| !isFinite\(t1\)\) return null;/.test(ogBody),
 ok(!/tier === 'watch'/.test(ogBody), 'the watch tier is never accepted here');
 
 /* ---- 5. and it cannot inherit the precursor's record ---- */
-console.log('5. NEVER OBSERVED, with the sibling record attributed not borrowed');
+console.log('5. hg-v1402: SWEEP-OB HAS a record now — thin, and the sibling note disengages');
+/* The hg-v923 pins froze SWEEP-OB as unobserved with the sibling record
+   attributed not borrowed. The hg-v1402 re-walk measured 28 settled firings
+   for it — the derivation followed the bake exactly as designed: it is THIN
+   (under the 40 bar), its card reads NOT MEASURED with the count, and the
+   sibling note correctly disengages (a mechanic with its own record borrows
+   no sibling's). The sibling-note machinery itself keeps its regression
+   pins below — via the cases that still exercise it. */
 const STATE = ctx.hgOgKindKnownState, UNOBS = ctx.hgOgUnobservedKinds;
 ok(typeof STATE === 'function' && typeof UNOBS === 'function', 'the state helpers are reachable');
 if (typeof STATE === 'function'){
-  eq(STATE('SWEEP-OB'), 'unobserved', 'SWEEP-OB has no record on this walk');
-  ok(UNOBS().indexOf('SWEEP-OB') >= 0, 'so it is in the derived unobserved set');
+  eq(STATE('SWEEP-OB'), 'thin', 'SWEEP-OB has a record on the re-walk — 28 settled, under the bar');
+  ok(UNOBS().indexOf('SWEEP-OB') < 0, 'so it is OUT of the derived unobserved set');
 }
 const NOTE = ctx.hgOgSiblingRecordNote, BELOW = ctx.hgOgReplayBelowBarHtml;
 ok(typeof NOTE === 'function', 'omnigold exports hgOgSiblingRecordNote');
 if (typeof NOTE === 'function'){
+  /* the sibling note still ATTRIBUTES (it fires for anything without a
+     measured record, thin included) — but the thin card line renders its
+     own count and does not borrow the note; attribution on the card is
+     reserved for the never-observed line */
   const n = NOTE('SWEEP-OB');
   ok(/GOLD SCALP walk does have a record/.test(n), 'the note admits the sibling record exists');
   ok(/sweepob/.test(n), 'names the stratKey it is filed under');
@@ -175,9 +186,14 @@ if (typeof NOTE === 'function'){
 }
 if (typeof BELOW === 'function'){
   const html = BELOW('SWEEP-OB');
-  ok(/NEVER OBSERVED/.test(html), 'the card line still leads with NEVER OBSERVED');
-  ok(/GOLD SCALP walk does have a record/.test(html), 'and carries the sibling note');
-  ok(/13 of 78/.test(html), 'and counts the register as it now stands');
+  ok(/NOT MEASURED/.test(html), 'the card line now leads with NOT MEASURED (thin, not unobserved)');
+  ok(/28 settled firing/.test(html), 'with the count it reached on the re-walk');
+  ok(/40/.test(html), 'and the bar it fell short of');
+  ok(!/%/.test(html), 'and no win rate at that n');
+  /* and a still-unobserved mechanic keeps the old rendering */
+  const un = BELOW('P9-PREM');
+  ok(/NEVER OBSERVED/.test(un), 'P9-PREM still leads with NEVER OBSERVED');
+  ok(/12 of 78/.test(un), 'and counts the register as it now stands (hg-v1402: 12, was 13)');
 }
 
 /* ---- 6. nothing was loosened ---- */

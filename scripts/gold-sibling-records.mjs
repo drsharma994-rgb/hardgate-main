@@ -87,10 +87,20 @@ export function buildRecords(twins, artifact){
          are in it) and it is NOT an error — but it must not silently become a
          record of zeros, so it is left out and the note falls back to the
          honest empty line. */
+<<<<<<< HEAD
       /* A twin observed in perKind but never formed in the walk is a real
          state (not every mechanic fires on every sample). Leave it out and
          warn rather than aborting the whole rebake. */
       console.warn('gold-sibling-records: skipping twin (never formed):', twin);
+=======
+      if (!perKind[twin]) continue;
+      /* hg-v1404: a twin can also be measured in the FROZEN hg-v699 perKind
+         map yet absent from the fresh formedByKind — the re-walk settled it
+         under the 40-trade bar (EQH-SWEEP, 39). That is the same state with
+         a history, not a corruption: there is no FRESH record to quote, so
+         the twin is left out and the skip is printed, never silent. */
+      console.log('  note — twin has no fresh measured record (thin on the re-walk), skipped: ' + twin);
+>>>>>>> origin/main
       continue;
     }
     out[twin] = {

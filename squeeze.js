@@ -1169,6 +1169,14 @@ function mount(el){
     + '<div class="prog" id="sqProg"><i></i></div>'
     + '<div class="note" id="sqSummary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>'
     + '<span class="note" id="sqStat">Full universe ≥ $' + floorM + 'M turnover · Delta + CoinDCX + Binance (no cap)</span>'
+    /* hg-v1421 — first offline baseline of this desk (own classifier replayed
+       over 12 majors, 4h, 2025-10-30..2026-10-07): the pooled fire is
+       negative-expectancy, so fires print as RECORD ONLY until the forward
+       record (the panel below) says otherwise. */
+    + '<div class="note" style="margin-top:4px">Measured, hg-v1421: this classifier replayed over 12 majors '
+    + '(4H, one year, house 1.5×ATR stop / 2R plan, 0.20% round trip) settled n=209, win 29%, '
+    + 'avg -0.15R net — negative in BOTH time halves. Fires are RECORD ONLY until the forward '
+    + 'record says otherwise.</div>'
     + '</div>'
     + '<div id="sqFiredDesk"></div>'
     + '<div class="cards" id="sqCards"></div>'

@@ -127,12 +127,15 @@ console.log('\n== the interval, against the real walk ==');
   const settled = walk.trades.filter(r => typeof r.rMultiple === 'number');
   const b = winRateBounds(settled);
 
-  ok(b.unprovable === 1751, 'the walk holds 1751 unprovable fills (' + b.unprovable + ')');
-  ok(b.unprovableScoredWins === 462, '462 of them the walk scored as wins');
-  ok(b.unprovableScoredLosses === 1289, 'and 1289 as losses');
+  /* hg-v1404 recalibration: re-derived on the hg-v1402 walk (8,201 settled
+     by this lib's row test; was 7,734/1,751/462/1,289 at 27.61%..38.32%).
+     The finding is untouched — the interval still straddles breakeven. */
+  ok(b.unprovable === 1859, 'the walk holds 1859 unprovable fills (' + b.unprovable + ')');
+  ok(b.unprovableScoredWins === 511, '511 of them the walk scored as wins');
+  ok(b.unprovableScoredLosses === 1348, 'and 1348 as losses');
 
-  ok(Math.abs(b.lower - 0.2761) < 0.001, 'the lower bound is ' + (100 * b.lower).toFixed(2) + '%');
-  ok(Math.abs(b.upper - 0.3832) < 0.001, 'the upper bound is ' + (100 * b.upper).toFixed(2) + '%');
+  ok(Math.abs(b.lower - 0.2795) < 0.001, 'the lower bound is ' + (100 * b.lower).toFixed(2) + '%');
+  ok(Math.abs(b.upper - 0.3882) < 0.001, 'the upper bound is ' + (100 * b.upper).toFixed(2) + '%');
 
   /* THE finding: 2R breakeven sits inside the interval, so this walk cannot
      say whether the book wins or loses */
@@ -171,8 +174,8 @@ console.log('\n== the interval, against the real walk ==');
      '17 mechanics read significantly below breakeven at the lower bound');
   ok(count(boundRows(settled, 'upper'), 'VETO') === 0,
      'and NOT ONE fails at its upper bound — every condemnation was a choice of bound');
-  ok(count(boundRows(settled, 'upper'), 'PASS') === 8,
-     '8 clear the significance bar at the upper bound');
+  ok(count(boundRows(settled, 'upper'), 'PASS') === 9,
+     '9 clear the significance bar at the upper bound (hg-v1404: was 8 — one mechanic crossed with the re-walk; the VETO count at the lower bound is unchanged at 17)');
   ok(count(boundRows(settled, 'lower'), 'PASS') === 0,
      'and not one clears it at the lower — so nothing is established either way');
 }

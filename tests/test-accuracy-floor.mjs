@@ -376,6 +376,12 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
       alias.add(m[1]);
     for (const m of src.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:W|w|G)\.(hgFwdRecord|hgFwdRecordScan)\b/g))
       alias.add(m[1]);
+    /* hg-v1417: the TERNARY capture — hgCfForwardMark (goldind.js) aliases via
+       `var record = (typeof hgFwdRecordScan === 'function') ? hgFwdRecordScan : (host && …)`,
+       which neither arm above can see. CANDLE FORECAST's pool was invisible to
+       this extraction until this arm existed. */
+    for (const m of src.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*\(\s*typeof\s+(hgFwdRecord|hgFwdRecordScan)\s*===\s*'function'\s*\)/g))
+      alias.add(m[1]);
     const consts = {};
     for (const m of src.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*'([^']+)'\s*;/g)) consts[m[1]] = m[2];
     const A = [...alias].join('|');
@@ -423,6 +429,14 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
      'every roster entry names something the sources actually write'
      + (bad.length ? ' — WRONG: ' + bad.join(', ') : ''));
 
+  /* hg-v1417: the candle-forecast roster entry resolves against goldind.js —
+     the writer lives there (hgCfForwardMark, pool 'CANDLE FORECAST'), not in
+     the tab file, and reaches the extraction only through the ternary alias
+     arm. Deleting the alias, the record call, or the roster entry goes RED. */
+  ok((byFile['goldind.js'] || []).indexOf('CANDLE FORECAST') >= 0
+     && (roster['candle-forecast'] || []).indexOf('CANDLE FORECAST') >= 0,
+     'CANDLE FORECAST is seen to record its pool in goldind.js (the ternary alias) and the roster resolves it');
+
   /* ---- direction 2: every recording desk tab is ON the roster ---- */
   const rosterStems = new Set();
   for (const tab of Object.keys(roster))
@@ -432,6 +446,22 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
   ok(!!navGold, 'the GOLD nav group is readable from index.html');
   const goldTabs = navGold[1].split(',').map(t => t.trim().replace(/^'|'$/g, ''));
   ok(goldTabs.length >= 14, 'it lists ' + goldTabs.length + ' gold tabs');
+
+  /* gold tabs that legitimately have NO forward record to grade, each with its
+     reason. An explicit map, so a new exemption is a deliberate edit with a stated
+     cause rather than a silent consequence of a module file being absent (hg-v1329). */
+  const NO_FORWARD_RECORD = {
+    'gold': 'the inline scan, which records under CARD:<scanId> rather than a tab pool',
+    'puregold': 'a live reading of one Pine script (IST EMA cross, stop and target from that close). It mints no ticket and writes no forward row — the strategy has no settled book to grade'
+  };
+  /* hg-v1417 self-guard: the stale exemption claimed CANDLE FORECAST "mints no
+     ticket and writes no forward row" — false since hg-v1358 (hgCfForwardMark
+     writes pool 'CANDLE FORECAST' from goldind.js with ticket on the record),
+     and vacuous before that (its probe read 'candle-forecast.js', a file that
+     does not exist). The desk is on the judged roster now; restoring the
+     exemption goes RED here. */
+  ok(!NO_FORWARD_RECORD['candle-forecast'],
+     'candle-forecast records forward rows since hg-v1358 — no no-forward-record exemption');
 
   const orphan = [];
   for (const f of Object.keys(byFile)){
@@ -490,11 +520,34 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
   const unjudged = goldTabs.filter(t => ids.indexOf(t) < 0);
   ok(judged.length >= 13,
      judged.length + ' of the ' + goldTabs.length + ' gold tabs are judged against the floor');
-  /* and the ones that are not are named, with a reason that holds */
+  /* and the ones that are not are named, with a reason that holds.
+     hg-v1329: a gold tab with NO forward record has nothing to judge, which is a
+     legitimate state — but it has to be NAMED, not inferred from a missing file.
+     This loop used to accept any unjudged tab whose module did not exist; that was
+     true of the inline `gold` scan and stayed true only while every other gold tab
+     recorded. So "no file" was the wrong test — "records nothing, and here is
+     why" is the right one. (hg-v1417: the example this comment used to cite,
+     CANDLE FORECAST, was itself wrong — the desk HAS written forward rows since
+     hg-v1358, from goldind.js rather than from its tab file, so the exemption
+     passed vacuously against a probe path that does not exist. The desk is on
+     the judged roster now, and the self-guard above keeps it there.) */
   for (const t of unjudged){
-    const file = t === 'gold' ? null : root + t + '.js';
-    if (!file || !fs.existsSync(file)){
-      ok(t === 'gold', 'unjudged gold tab "' + t + '" is the inline scan, which records under CARD:<scanId>');
+    if (NO_FORWARD_RECORD[t]){
+      /* The reason must HOLD: a tab claiming it records nothing must really record
+         nothing, or the exemption becomes a way to hide a floor miss. Both arms are
+         real assertions — an earlier draft wrote `ok(true, …)` for the no-file case
+         and the suite's own not-vacuous meta-guard caught it, which is exactly what
+         that guard is for. */
+      const exemptFile = root + t + '.js';
+      const exemptSrc = fs.existsSync(exemptFile) ? fs.readFileSync(exemptFile, 'utf8') : null;
+      ok(exemptSrc === null || !/hgFwdRecord|hgFwdRecordScan|recordForward/.test(exemptSrc),
+        'unjudged gold tab "' + t + '" is ' + NO_FORWARD_RECORD[t]
+        + (exemptSrc === null ? ' (and has no module of its own)' : ' (and its module writes no forward row)'));
+      continue;
+    }
+    const file = root + t + '.js';
+    if (!fs.existsSync(file)){
+      ok(false, 'unjudged gold tab "' + t + '" has no file and no recorded reason — name it in NO_FORWARD_RECORD');
       continue;
     }
     const src = fs.readFileSync(file, 'utf8');
@@ -524,7 +577,7 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
   }
   for (const g of ['omnigold', 'omnigold1', 'goldscalp', 'goldswing', 'goldultra',
                    'goldpro', 'goldpine', 'golddirection', 'newgold', 'optigold',
-                   'tauric', '80percent', 'super-gold'])
+                   'tauric', '80percent', 'super-gold', 'candle-forecast'])
     ok(ids.indexOf(g) >= 0, 'gold desk ' + g + ' is on the roster');
 }
 

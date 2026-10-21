@@ -53,7 +53,7 @@ function boot(extra){
   vm.createContext(ctx);
   /* hg-v1003: the stack moved to fundamental-stack.js (house-wide, shared);
      omnibtc-engines.js delegates. Load it first, exactly as index.html does. */
-  for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'fundamental-stack.js', 'omnibtc-engines.js', 'omnibtc.js']){
+  for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'fundamental-stack.js', 'hg-perfect-setup.js', 'omnibtc-engines.js', 'omnibtc.js']){
     vm.runInContext(read(f), ctx, { filename: f });
   }
   return ctx;
@@ -74,7 +74,15 @@ console.log('== all feeds silent: regime UNKNOWN, nothing faked ==');
   ok(r && r.regime === 'unknown', 'no directional leg measured -> unknown, never a guessed quiet');
   ok(r.bulls === 0 && r.bears === 0 && r.checked === 0, 'no votes invented from empty feeds');
   ok(r.blackout === false, 'no blackout invented from an unread calendar');
-  ok(Array.isArray(r.legs) && r.legs.length === 7, 'seven legs render even when every feed is dark');
+  /* hg-v1300 added TOP TRADERS vs RETAIL; hg-v1301 added PERP FUNDING and
+     COINBASE PREMIUM - sixteen legs */
+  ok(Array.isArray(r.legs) && r.legs.length === 16, 'sixteen legs render even when every feed is dark');
+  ok(r.legs.some(function(l){ return l.key === 'toptrader' && l.state === 'unchecked'; }),
+    'the smart-$ spread leg renders UNCHECKED when its feeds are dark');
+  ok(r.legs.some(function(l){ return l.key === 'funding' && l.state === 'unchecked'; }),
+    'the funding leg renders UNCHECKED when its feed is dark');
+  ok(r.legs.some(function(l){ return l.key === 'cbprem' && l.state === 'unchecked'; }),
+    'the Coinbase-premium leg renders UNCHECKED when its feeds are dark');
   ok(r.legs.every(function(l){ return l.state === 'unchecked'; }),
     'every dark leg says UNCHECKED — a missing feed is never a neutral vote');
 
@@ -237,12 +245,29 @@ console.log('\n== pick: the stack gates the MOST PROBABLE tier ==');
 
   const aligned = { fng: { v: 15, c: 'Extreme Fear' },
                     options: { rr25d: { rr25d: 9.2, extreme: true, bias: 'CALLS RICH' } } };
-  const pickClean = W.hgObtcPick([swing(aligned)]);
-  ok(pickClean && pickClean.tier === 'clean', 'a 2-0 tailwind leaves the CLEAN ticket standing');
+  /* hg-v1299: the crown is a triple gate (CLEAN + cross-family confirm +
+     score floor), so the tailwind case adds an independent micro-structure
+     sibling agreeing on direction — and now asserts the hg-v1299 flag the
+     aligned stack stamps. */
+  const sib = function(extra){
+    return { sym: 'BTCUSD', dir: 'long', entry: 100.5, stop: 98.4, t1: 104.5,
+             passed: 6, gatesTotal: 7, engine: 'SQUEEZE', _extra: extra };
+  };
+  const pickClean = W.hgObtcPick([swing(aligned), sib(aligned)]);
+  ok(pickClean && pickClean.tier === 'clean',
+    'a 2-0 tailwind with cross-family confirmation leaves the CLEAN ticket standing');
+  ok(pickClean.row.fundamentalAligned === true,
+    'hg-v1299: the aligned stack stamps fundamentalAligned on the crowned row');
 
   const oneWitness = { fng: { v: 85, c: 'Extreme Greed' } };
   const pickOne = W.hgObtcPick([swing(oneWitness)]);
-  ok(pickOne && pickOne.tier === 'clean', 'one opposing witness does not touch the tier');
+  /* hg-v1299: one opposing witness still does not DEMOTE (the evidence gate
+     needs two net votes, so passed stays 7 and no headwind chip prints),
+     but a lone uncorroborated CLEAN no longer crowns — WATCH, not a ticket. */
+  ok(pickOne && pickOne.tier === 'near' && pickOne.row && +pickOne.row.passed === 7,
+    'one opposing witness does not demote, but an uncorroborated CLEAN is a WATCH');
+  ok(!(pickOne.row.evidenceChips || []).some(function(c){ return /HEADWIND/.test(c); }),
+    'one opposing witness prints no headwind chip — the evidence tier is untouched');
 
   const blackout = { news: { risk: 'high', blackout: true, events: [{}] } };
   ok(W.hgObtcPick([swing(blackout)]) === null,
@@ -296,6 +321,267 @@ console.log('\n== gather pulls the real feeds, state-only ==');
     'a warmed host checks five-plus legs of the seven');
 }
 
+console.log('\n== Binance retail long/short votes only at the house 65/35 lines ==');
+{
+  const W = boot();
+  const retail = function(pct){
+    return W.hgObtcFundamentalRegime({ retailLs: { latest: { longPct: pct } } });
+  };
+  ok(leg(retail(71.2), 'retail').vote === 'bear' && leg(retail(71.2), 'retail').extreme === true,
+    '71% long is a crowded-long fade — bear');
+  ok(leg(retail(65), 'retail').vote === 'bear', 'exactly 65 is the house line — bear');
+  ok(leg(retail(35), 'retail').vote === 'bull', 'exactly 35 is the house line — bull');
+  ok(leg(retail(28), 'retail').vote === 'bull', '28% long is a crowded-short fade — bull');
+  const mid = leg(retail(52), 'retail');
+  ok(mid.state === 'checked' && mid.vote === 'neutral' && !mid.extreme,
+    '52% long is checked and silent — a lean is not a vote');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'retail').state === 'unchecked',
+    'no Binance print stays unread');
+  ok(leg(W.hgObtcFundamentalRegime({ retailLs: { latest: { longPct: 6500 } } }), 'retail').state === 'unchecked',
+    'a percent outside 0-100 is unread, not a fabricated crowd');
+
+  const alone = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: retail(71.2) });
+  ok(alone.demote === false && alone.chips.indexOf('RETAIL EXTREME') >= 0,
+    'ONE WITNESS NEVER FLIPS A SETUP — retail alone chips and does not demote');
+
+  const both = W.hgObtcFundamentalRegime({
+    fng: { v: 85, c: 'Extreme Greed' },
+    retailLs: { latest: { longPct: 71.2 } }
+  });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: both });
+  ok(hw.demote === true && /FUNDAMENTAL HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'F&G extreme plus crowded retail is two witnesses — the long becomes a watch');
+  ok(both.bulls === 0 && both.bears === 2, 'the two bear votes are counted, nothing else invented');
+}
+
+console.log('\n== hg-v1300: TOP TRADERS vs RETAIL votes only on the house ±15pp spread ==');
+{
+  const W = boot();
+  const spread = function(top, ret){
+    return W.hgObtcFundamentalRegime({
+      topLs: { latest: { longPct: top } },
+      retailLs: { latest: { longPct: ret } }
+    });
+  };
+  ok(leg(spread(70, 52), 'toptrader').vote === 'bull' && leg(spread(70, 52), 'toptrader').extreme === true,
+    'top 70% vs retail 52% is +18pp — smart $ long of retail, follow top traders: bull');
+  ok(leg(spread(37, 55), 'toptrader').vote === 'bear',
+    'top 37% vs retail 55% is -18pp — smart $ short of retail: bear');
+  ok(leg(spread(67, 52), 'toptrader').vote === 'bull', 'exactly +15pp is the house line — bull');
+  ok(leg(spread(37, 52), 'toptrader').vote === 'bear', 'exactly -15pp is the house line — bear');
+  const mid = leg(spread(58, 52), 'toptrader');
+  ok(mid.state === 'checked' && mid.vote === 'neutral' && !mid.extreme,
+    '+6pp is checked and silent — a lean is not a vote');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'toptrader').state === 'unchecked',
+    'no top-trader print stays unread');
+  ok(leg(W.hgObtcFundamentalRegime({ topLs: { latest: { longPct: 70 } } }), 'toptrader').state === 'unchecked',
+    'the spread needs BOTH sides — top without retail is unread, never a guess');
+  ok(leg(W.hgObtcFundamentalRegime({ retailLs: { latest: { longPct: 52 } } }), 'toptrader').state === 'unchecked',
+    'retail without top is unread too');
+  ok(leg(spread(700, 52), 'toptrader').state === 'unchecked',
+    'a percent outside 0-100 is unread, not a fabricated spread');
+
+  const alone = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: spread(37, 55) });
+  ok(alone.demote === false && alone.chips.indexOf('SMART-$ SPREAD EXTREME') >= 0,
+    'ONE WITNESS NEVER FLIPS A SETUP — the smart-$ spread chips and does not demote');
+
+  const both = W.hgObtcFundamentalRegime({
+    fng: { v: 85, c: 'Extreme Greed' },
+    topLs: { latest: { longPct: 37 } },
+    retailLs: { latest: { longPct: 55 } }
+  });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: both });
+  ok(hw.demote === true && /FUNDAMENTAL HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'F&G extreme plus a bearish smart-$ spread is two witnesses — the long becomes a watch');
+  ok(both.bulls === 0 && both.bears === 2, 'the spread vote is counted once, nothing else invented');
+
+  /* hg-v1299 seam: the aligned stack with the spread voting WITH stamps
+     fundamentalAligned on a surviving candidate. */
+  const swingLong = { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120,
+                      clean: true, passed: 7, engine: 'SWING clean plan' };
+  const alignedExtra = {
+    fng: { v: 15, c: 'Extreme Fear' },
+    options: { rr25d: { rr25d: 9.2, extreme: true, bias: 'CALLS RICH' } },
+    topLs: { latest: { longPct: 70 } },
+    retailLs: { latest: { longPct: 52 } }
+  };
+  const app = W.hgObtcApplyEvidence(Object.assign({}, swingLong), alignedExtra);
+  ok(app.ok === true && app.row && app.row.fundamentalAligned === true,
+    'three checked legs with the long (F&G fear, RR25 calls-rich, smart-$ spread) stamp fundamentalAligned');
+  const sib = { sym: 'BTCUSD', dir: 'long', entry: 100.5, stop: 90.4, t1: 120.5,
+                passed: 6, gatesTotal: 7, engine: 'SQUEEZE', _extra: alignedExtra };
+  const crowned = W.hgObtcPick([Object.assign({}, swingLong, { _extra: alignedExtra }), sib]);
+  ok(crowned && crowned.tier === 'clean' && crowned.row.fundamentalAligned === true,
+    'the aligned stack plus a cross-family sibling crowns the CLEAN ticket');
+}
+
+console.log('\n== hg-v1301: PERP FUNDING votes only past the house ±0.05 line ==');
+{
+  const W = boot();
+  const fund = function(pct){
+    return W.hgObtcFundamentalRegime({ btcFundingBinance: pct });
+  };
+  ok(leg(fund(0.09), 'funding').vote === 'bear' && leg(fund(0.09), 'funding').extreme === true,
+    '+0.09%/8h longs paying past the line is a crowded long — bear');
+  ok(leg(fund(0.05), 'funding').vote === 'bear', 'exactly +0.05 is the house line — bear');
+  ok(leg(fund(-0.05), 'funding').vote === 'bull', 'exactly -0.05 is the house line — bull');
+  ok(leg(fund(-0.12), 'funding').vote === 'bull', 'shorts paying past the line is a crowded short — bull');
+  const mid = leg(fund(0.004), 'funding');
+  ok(mid.state === 'checked' && mid.vote === 'neutral' && !mid.extreme,
+    '+0.004%/8h is checked and silent — inside the line, no vote');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'funding').state === 'unchecked',
+    'no Binance funding print stays unread');
+
+  const alone = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: fund(0.09) });
+  ok(alone.demote === false && alone.chips.indexOf('FUNDING EXTREME') >= 0,
+    'ONE WITNESS NEVER FLIPS A SETUP — funding alone chips and does not demote');
+
+  const both = W.hgObtcFundamentalRegime({ fng: { v: 85, c: 'Extreme Greed' }, btcFundingBinance: 0.09 });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: both });
+  ok(hw.demote === true && /FUNDAMENTAL HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'F&G extreme plus crowded funding is two witnesses — the long becomes a watch');
+  ok(both.bulls === 0 && both.bears === 2, 'the funding vote is counted once, nothing else invented');
+}
+
+console.log('\n== hg-v1301: COINBASE PREMIUM is a disclosed info read, never a vote ==');
+{
+  const W = boot();
+  ok(leg(W.hgObtcFundamentalRegime({}), 'cbprem').state === 'unchecked',
+    'no Coinbase print stays unread');
+  ok(leg(W.hgObtcFundamentalRegime({ cbSpot: 100000 }), 'cbprem').state === 'unchecked',
+    'the premium needs BOTH sides — Coinbase without the Binance mark is unread');
+  ok(leg(W.hgObtcFundamentalRegime({ btcMarkBinance: 100000 }), 'cbprem').state === 'unchecked',
+    'the Binance mark without Coinbase is unread too');
+  const on = W.hgObtcFundamentalRegime({ cbSpot: 100150, btcMarkBinance: 100000 });
+  const l = leg(on, 'cbprem');
+  ok(l.state === 'checked' && l.info === true && l.vote === 'neutral',
+    'a readable premium is INFO — it never votes');
+  ok(/\+15\.0 bp/.test(l.text) && /US spot above/.test(l.text),
+    'the premium prints in basis points: ' + l.text);
+  ok(on.checked === 0 && on.bulls === 0 && on.bears === 0,
+    'the info leg adds no checked count and no vote to the regime');
+  const neg = leg(W.hgObtcFundamentalRegime({ cbSpot: 99700, btcMarkBinance: 100000 }), 'cbprem');
+  ok(/-30\.0 bp/.test(neg.text) && /US spot below/.test(neg.text),
+    'a discount reads below the mark: ' + neg.text);
+}
+
+console.log('\n== a dark host fetches the free sentiment reads, and a failure stays unread ==');
+{
+  const hits = [];
+  const W = boot({
+    fetch: async function(url){
+      hits.push(String(url));
+      if (String(url).indexOf('alternative.me') >= 0){
+        return { ok: true, json: async function(){ return { data: [{ value: '18', value_classification: 'Extreme Fear' }] }; } };
+      }
+      if (String(url).indexOf('coingecko') >= 0){
+        return { ok: true, json: async function(){ return { data: { market_cap_percentage: { btc: 54.2 } } }; } };
+      }
+      return { ok: false, json: async function(){ return null; } };
+    },
+    binanceLongShort: async function(sym, period, limit){
+      hits.push(sym + '|' + period + '|' + limit);
+      return { latest: { longPct: 71.2, shortPct: 28.8, ratio: 2.47, t: 1 }, series: [{}] };
+    }
+  });
+  const extra = await W.hgObtcGatherExtra('BTCUSD', TICKER);
+  ok(extra.fng && extra.fng.v === 18 && extra.fng.c === 'Extreme Fear',
+    'alternative.me fills Fear & Greed when the host has none');
+  ok(extra.dom === 54.2, 'CoinGecko fills BTC dominance when the host has none');
+  ok(extra.retailLs && extra.retailLs.latest.longPct === 71.2, 'Binance BTCUSDT long/short is on the bag');
+  ok(hits.indexOf('BTCUSDT|4h|6') >= 0, 'the retail read is the 4h BTCUSDT print, six bars');
+  const regime = W.hgObtcFundamentalRegime(extra);
+  ok(leg(regime, 'fng').vote === 'bull' && leg(regime, 'retail').vote === 'bear',
+    'fear is contrarian bull and crowded retail is bear — they do not agree');
+
+  const W2 = boot({
+    fetch: async function(){ throw new Error('offline'); },
+    binanceLongShort: async function(){ throw new Error('fapi down'); }
+  });
+  const dead = await W2.hgObtcGatherExtra('BTCUSD', TICKER);
+  ok(dead && !(dead.fng && isFinite(+dead.fng.v)), 'a failed Fear & Greed fetch does not invent a number');
+  ok(dead.dom == null, 'a failed dominance fetch does not invent a number');
+  ok(dead.retailLs === null, 'a failed long/short fetch is null, not a throw');
+
+  let called = 0;
+  const W3 = boot({
+    S: { fng: { v: 77, c: 'Greed' }, dom: 58.4 },
+    fetch: async function(){ called++; return { ok: true, json: async function(){ return { data: [{ value: '1' }] }; } }; }
+  });
+  const held = await W3.hgObtcGatherExtra('BTCUSD', TICKER);
+  ok(held.fng.v === 77 && held.dom === 58.4,
+    'a warmed Fear & Greed and dominance print is not overwritten');
+  ok(called > 0, 'hashrate and CoinMetrics are still asked when the host has no copy');
+}
+
+console.log('\n== hashrate, NVT and OI divergence vote only when measured ==');
+{
+  const W = boot();
+  const hash = function(ch){ return W.hgObtcFundamentalRegime({ hashrate: { change30d: ch } }); };
+  ok(leg(hash(-0.06), 'hashrate').vote === 'bear' && leg(hash(-0.06), 'hashrate').extreme === true,
+    'hashrate -6% over 30d is miner stress — bear');
+  ok(leg(hash(-0.04), 'hashrate').state === 'checked' && leg(hash(-0.04), 'hashrate').vote === 'neutral',
+    'hashrate inside -5% is checked and silent');
+  ok(leg(W.hgObtcFundamentalRegime({}), 'hashrate').state === 'unchecked',
+    'a missing hashrate is unread, not a pass');
+
+  const cm = W.hgObtcCoinmetricsRead([
+    { AdrActCnt: '800000', TxTfrValMeanUSD: '500', CapMrktCurUSD: '1000000000000' },
+    { AdrActCnt: '1000000', TxTfrValMeanUSD: '400', CapMrktCurUSD: '40000000000' }
+  ]);
+  ok(cm && cm.activeAddresses === 1000000 && cm.nvt === 100, 'NVT is cap / (mean transfer * active addresses)');
+  const rich = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, adrChange30d: 0.1, nvt: 100 } });
+  ok(leg(rich, 'nvt').vote === 'bear', 'NVT 100 is at or above 90 — bear');
+  ok(leg(rich, 'addr').info === true && leg(rich, 'addr').vote === 'neutral',
+    'active addresses render and never vote');
+  const cheap = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, nvt: 40 } });
+  ok(leg(cheap, 'nvt').vote === 'neutral' && leg(cheap, 'nvt').state === 'checked',
+    'NVT under 90 is checked and silent');
+  const noNvt = W.hgObtcFundamentalRegime({ coinmetrics: { activeAddresses: 1000000, nvt: null } });
+  ok(leg(noNvt, 'nvt').state === 'unchecked', 'a null NVT is unread — it does not pass a gate');
+
+  const rows = [];
+  const ois = [];
+  for (let i = 0; i < 15; i++){
+    rows.push({ t: i, o: 100, h: 101, l: 99, c: 100 + i, v: 1 });
+    ois.push({ oi: 1000 + i, t: i });
+  }
+  for (let i = 15; i < 20; i++){
+    rows.push({ t: i, o: 100, h: 121, l: 99, c: 100 + i, v: 1 });
+    ois.push({ oi: 1014 - (i - 14) * 10, t: i });
+  }
+  const fresh = W.hgObtcOiDivRead(rows, { series: ois });
+  ok(fresh && fresh.dir === 'short', 'price up and open interest down is a fresh bearish divergence');
+  const standingRows = rows.slice();
+  const standingOi = ois.slice();
+  for (let k = 0; k < 5; k++){
+    standingRows.push({ t: 20 + k, o: 120, h: 121, l: 119, c: 120 + k, v: 1 });
+    standingOi.push({ oi: 980 - k, t: 20 + k });
+  }
+  ok(W.hgObtcOiDivRead(standingRows, { series: standingOi }) === null,
+    'the same divergence five bars earlier is a standing bias and does not vote');
+  const board = W.hgObtcFundamentalRegime({ oiDiv: { dir: 'short' }, hashrate: { change30d: -0.08 } });
+  const hw = W.hgObtcEvidenceDecide(Object.assign({}, LONG), { fundamental: board });
+  ok(hw.demote === true && /HEADWIND 2v0/.test((hw.chips || []).join(' ')),
+    'hashrate stress plus a fresh OI divergence is two witnesses — the long is a watch');
+  const one = W.hgObtcEvidenceDecide(Object.assign({}, LONG),
+    { fundamental: W.hgObtcFundamentalRegime({ oiDiv: { dir: 'short' } }) });
+  ok(one.demote === false && one.chips.indexOf('OI DIVERGENCE') >= 0,
+    'OI divergence alone does not flip the setup');
+
+  const stack = W.hgObtcFundamentalRegime({ emaStack: { side: 'bull' } });
+  ok(leg(stack, 'emastack').info === true && leg(stack, 'emastack').vote === 'neutral'
+    && leg(stack, 'emastack').state === 'checked',
+    'a bullish EMA 50/200 stack is shown and does not vote');
+  ok(stack.bulls === 0, 'the standing EMA stack does not add a bull vote');
+  const shortTape = W.hgObtcFundamentalRegime({ emaStack: null });
+  ok(leg(shortTape, 'emastack').state === 'unchecked' && /not a pass/.test(leg(shortTape, 'emastack').text),
+    'a tape shorter than 200 bars leaves the EMA stack unread');
+}
+
 console.log('\n== wiring: scan gathers, paint renders, header is honest ==');
 {
   const src = read('omnibtc.js');
@@ -310,6 +596,46 @@ console.log('\n== wiring: scan gathers, paint renders, header is honest ==');
       && /W\.hgObtcFundamentalPanelHtml/.test(eng), 'the stack is exported for the tab');
   ok(/one witness never flips/i.test(eng), 'the engine header states the one-witness rule');
   ok(!/dxyMock|dxyMock/i.test(eng), 'the mock macro feed is NOT wired in — no fabricated fundamentals');
+}
+
+console.log('\n== hg-v1295: the sentiment verdict is wired to the shared PERFECT tier ==');
+{
+  const W = boot();
+  // decisive tailwind (2 bulls v 0 bears) reads WITH for a long
+  ok(W.hgObtcFundamentalVerdict({ bulls: 2, bears: 0 }, 'long') === 'with',
+    '2-vote tailwind reads WITH for a long');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 2, bears: 0 }, 'short') === 'against',
+    'the SAME 2-vote bullish read is a decisive headwind for a short');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 3, bears: 1 }, 'long') === 'with',
+    'a 3v1 tailwind is still decisive WITH (2+ net)');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 1, bears: 0 }, 'long') === null,
+    'a single witness stays UNREAD — one witness never flips');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 0, bears: 0 }, 'long') === null,
+    'no checked votes stays UNREAD');
+  ok(W.hgObtcFundamentalVerdict(null, 'long') === null, 'absent stack stays UNREAD');
+  ok(W.hgObtcFundamentalVerdict({ bulls: 2, bears: 0 }, null) === null, 'no direction stays UNREAD');
+
+  // the wiring actually feeds the predicate: a WITH verdict earns PERFECT+
+  const W2 = boot();
+  const c = { dir: 'long', grade: 'A', demoted: false, vetoed: false, oppose: 0, tally: 6,
+    entry: 2300, stop: 2290, t1: 2313 };
+  const reads = { takerFlowVerdict: 'with', fundingAgainst: false, atrRegime: 'HEALTHY',
+    volumeRvol: 1.4, trendQuality: 'TREND', sess: 'participating', fundamentalVerdict: 'with' };
+  const pf = W2.hgPerfectFormation(c, reads);
+  ok(pf.perfect === true && pf.plus === true,
+    'every evidence leg WITH, incl the sentiment tailwind → ★ PERFECT⁺');
+  const readsAgainst = Object.assign({}, reads, { fundamentalVerdict: 'against' });
+  ok(W2.hgPerfectFormation(c, readsAgainst).perfect === false,
+    'a decisive sentiment headwind denies PERFECT (fail-closed belt)');
+  const readsUnread = Object.assign({}, reads, { fundamentalVerdict: undefined });
+  ok(W2.hgPerfectFormation(c, readsUnread).perfect === true,
+    'an UNREAD sentiment leg neither mints nor denies PERFECT');
+
+  const src = read('omnibtc.js');
+  ok(/W\.hgObtcFundamentalVerdict = hgObtcFundamentalVerdict/.test(src),
+    'the verdict helper is exported for the tab and its test');
+  ok(/pfReads\.fundamentalVerdict/.test(src),
+    'the scan wires the verdict into the reads the PERFECT tier consumes');
 }
 
 console.log('\npassed: ' + passed);

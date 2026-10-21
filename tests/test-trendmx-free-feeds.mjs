@@ -24,6 +24,9 @@
    The matrix ships as trendtable.combined.js (served as the twelve trendtable-src-N.js
    parts); this guard boots the combined file, which is what the parts concatenate to.
 
+   hg-v1399: tape recalibrated for the stopPct>=2% admission floor — the
+   tape wicks widen (±0.3 -> ±1.5, closes untouched); every assertion and
+   its coverage is unchanged.
    Run: node tests/test-trendmx-free-feeds.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -58,7 +61,8 @@ const now = Date.now() / 1000;
 /* a tape whose last closed bar sits one 4h bar behind the clock */
 function tape(n, step, slope, endT){
   const rows = []; let c = 100; const t0 = endT - (n - 1) * step;
-  for (let i = 0; i < n; i++){ c += slope; rows.push({ t: t0 + i * step, o: c, h: c + 0.3, l: c - 0.3, c, v: 1000 }); }
+  /* hg-v1399: wicks widen (±0.3 -> ±1.5, closes untouched) so the house stop prices >=2% of entry — the admission floor */
+  for (let i = 0; i < n; i++){ c += slope; rows.push({ t: t0 + i * step, o: c, h: c + 1.5, l: c - 1.5, c, v: 1000 }); }
   return rows;
 }
 const LAST4H = Math.floor(now / SEC4) * SEC4 - SEC4;
@@ -260,6 +264,22 @@ console.log('\n5. wired where it must be, one home, nothing read back');
   ok(!/hgFwdRecords|hgFwdStats|hgFwdPool|hgFwdReadSplit/.test(src), 'the desk reads nothing back from the ledger: no gate is fed by the record');
   for (const f of ['hg-gates.js', 'hg-solidity.js', 'cryptogates.js', 'engine.js', 'plans.js']) ok(!/postgate:veto/.test(strip(read(f))), f + ' knows nothing of the mark');
   ok(/'trendtable\.combined\.js'/.test(read('tests/test-crypto-funding-mark.mjs').split('const want = ')[1].split(';')[0]), 'the funding census counts the combined matrix as a carrier');
+}
+
+console.log('\n5b. the divergence helpers cannot shadow the indicators they call (hg-v1334)');
+{
+  /* hg-v1334: `const rsi = rsi(rows, 14)` inside tmRsiDivergence shadowed the
+     global RSI function with its own not-yet-initialized binding — every call
+     threw a TDZ ReferenceError, trendScore's catch swallowed it, and the
+     all-zero composite left every TREND MATRIX category empty (no direction,
+     no majority, no desks) for as long as the bug shipped. Both copies now
+     read the series into a NON-shadowing binding (rsiSeries) with a typeof
+     guard; this pin keeps the shadow from coming back in either copy. */
+  for (const f of ['trendtable-src-0.js', 'trendtable.combined.js']){
+    const s = read(f);
+    ok(!/const rsi = rsi\(/.test(s), f + ' never shadows the rsi indicator with a same-named binding');
+    ok(/rsiSeries = rsi\(/.test(s) && /typeof rsi !== 'function'/.test(s), f + ' reads the RSI series into rsiSeries behind a typeof guard (the divergence chip works)');
+  }
 }
 
 console.log('\n6. version stamps');

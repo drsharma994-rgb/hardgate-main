@@ -57,14 +57,14 @@
    enforcing it across independent classes.
 
    SESSION EVIDENCE (recon 3.3, computed from scripts/backtest-omnigold-
-   results.json trades[], 8,132 filled, PAXGUSDT proxy 2026-03-27..09-10).
-   UTC hour cohorts, gross R per trade:
+   results.json trades[], 8,564 filled on the hg-v1402 walk
+   2026-05-04..10-18; was 8,132). UTC hour cohorts, gross R per trade:
 
-     ASIA        00-06   n=2,320   gross +0.064   medCostR 0.51
-     LONDON      07-11   n=1,430   gross -0.137   medCostR 0.68
-     NY-OVERLAP  12-16   n=2,626   gross -0.081   medCostR 0.45
-     NY-PM       17-20   n=1,044   gross +0.109   medCostR 0.57
-     OFF         21-23   n=  712   gross -0.045   medCostR 0.81
+     ASIA        00-06   n=2,437   gross +0.069   medCostR 0.58
+     LONDON      07-11   n=1,525   gross -0.103   medCostR 0.73
+     NY-OVERLAP  12-16   n=2,797   gross -0.036   medCostR 0.47
+     NY-PM       17-20   n=1,087   gross +0.038   medCostR 0.64
+     OFF         21-23   n=  718   gross -0.040   medCostR 0.91
 
    (hg-v910: this block was a SECOND copy of the table, still carrying the
    7,270-row generation — n=2,082 +0.097 for ASIA and so on — while the live
@@ -76,10 +76,10 @@
 
    THE RULE THAT FOLLOWS, and nothing more: the SESSION leg of the
    session-htf class confirms only inside a window whose measured gross is
-   >= 0 — ASIA (+0.064 at n=2,320) and NY-PM (+0.109 at n=1,044). In LONDON
-   (-0.137 at n=1,430), NY-OVERLAP (-0.081 at n=2,626) and OFF (-0.045 at
-   n=712) the clock is not evidence FOR the trade, so it cannot be one of the
-   three confirmations. Every sign is what it was across all three bakes. It is NOT a veto: the HTF-tape leg satisfies the same
+   >= 0 — ASIA (+0.069 at n=2,437) and NY-PM (+0.038 at n=1,087). In LONDON
+   (-0.103 at n=1,525), NY-OVERLAP (-0.036 at n=2,797) and OFF (-0.040 at
+   n=718) the clock is not evidence FOR the trade, so it cannot be one of the
+   three confirmations. Every sign is what it was across all four bakes. It is NOT a veto: the HTF-tape leg satisfies the same
    class, and the OMNIGOLD gate ledger keeps `session` soft exactly as it was.
    ASIA and OFF carry the source's own caveat (meta.proxyNote: PAXG trades
    24/7, so those buckets include weekend bars a spot broker never printed) —
@@ -229,19 +229,17 @@
      cohort kept its SIGN from the 7,270-trade bake, so `confirms` behavior
      is unchanged — only the measured magnitudes moved. */
   var HG_GOLD_SESSION_EVIDENCE = [
-    /* hg-v910: re-derived from the file this table cites. The numbers above
-       were baked from an older generation of it — 8,155 rows against the
-       8,132 it now holds — so the line that claimed the derivation
-       "reproduces every line exactly" had stopped being true. medCostR was
-       the one field that still matched on all five buckets, which is what
-       said the METHOD was right and the data had moved under it.
+    /* hg-v910: re-derived from the file this table cites. hg-v1404: re-derived
+       again from the hg-v1402 walk (8,564 filled rows; was 8,132). The METHOD
+       was already pinned; the data moved under it once more.
        No verdict changes: confirms is grossR >= 0, and all five signs are
-       what they were. */
-    { from: 0,  to: 7,  key: 'ASIA',       label: 'ASIA 00-06 UTC',       n: 2320, grossR:  0.064, medCostR: 0.51, weekendCaveat: true },
-    { from: 7,  to: 12, key: 'LONDON',     label: 'LONDON 07-11 UTC',     n: 1430, grossR: -0.137, medCostR: 0.68, weekendCaveat: false },
-    { from: 12, to: 17, key: 'NY-OVERLAP', label: 'NY-OVERLAP 12-16 UTC', n: 2626, grossR: -0.081, medCostR: 0.45, weekendCaveat: false },
-    { from: 17, to: 21, key: 'NY-PM',      label: 'NY-PM 17-20 UTC',      n: 1044, grossR:  0.109, medCostR: 0.57, weekendCaveat: false },
-    { from: 21, to: 24, key: 'OFF',        label: 'OFF 21-23 UTC',        n:  712, grossR: -0.045, medCostR: 0.81, weekendCaveat: true }
+       what they were across all four bakes — ASIA and NY-PM confirm, LONDON,
+       NY-OVERLAP and OFF do not. */
+    { from: 0,  to: 7,  key: 'ASIA',       label: 'ASIA 00-06 UTC',       n: 2437, grossR:  0.069, medCostR: 0.58, weekendCaveat: true },
+    { from: 7,  to: 12, key: 'LONDON',     label: 'LONDON 07-11 UTC',     n: 1525, grossR: -0.103, medCostR: 0.73, weekendCaveat: false },
+    { from: 12, to: 17, key: 'NY-OVERLAP', label: 'NY-OVERLAP 12-16 UTC', n: 2797, grossR: -0.036, medCostR: 0.47, weekendCaveat: false },
+    { from: 17, to: 21, key: 'NY-PM',      label: 'NY-PM 17-20 UTC',      n: 1087, grossR:  0.038, medCostR: 0.64, weekendCaveat: false },
+    { from: 21, to: 24, key: 'OFF',        label: 'OFF 21-23 UTC',        n:  718, grossR: -0.040, medCostR: 0.91, weekendCaveat: true }
   ];
   /* The source's own caveat, carried verbatim wherever a caveated window is
      what confirmed. scripts/backtest-omnigold-results.json meta.proxyNote. */
@@ -939,7 +937,19 @@
     { desk: 'GOLD SPOT',  tab: 'goldspot',
       why: 'spot-vs-perp basis monitor: reads a live quote and prints a verdict, prices no entry, stop or target and writes no forward record' },
     { desk: 'GOLD COINT', tab: 'goldcoint',
-      why: 'cointegration context ledger: its own header says CONTEXT only, no spread execution path -- no levels, no ticket, no record' }
+      why: 'cointegration context ledger: its own header says CONTEXT only, no spread execution path -- no levels, no ticket, no record' },
+    /* hg-v1309: CANDLE FORECAST (gold-candle-forecast.js, upstream v14-3) is the
+       NINETEENTH gold tab and had no row here, so this census named it as a gap
+       the moment it appeared -- the mechanism working exactly as designed.
+       Classified from measurement, not from its name: it contains no `ticket:`,
+       no `ticket =`, no `hgFwdRecord`, no `recordForward`, no `entry` and no
+       `stopLoss`. It forecasts the NEXT candle's range and direction FROM ATR
+       and momentum and renders that forecast; it prices no entry, stop or
+       target and writes no forward record, so there is no ticket to withhold
+       and no ledger to contaminate. It is a non-minter on the GOLD SPOT
+       precedent, not a minter needing a weekend calendar. */
+    { desk: 'CANDLE FORECAST', tab: 'candle-forecast',
+      why: 'predictive forecast renderer: forecasts the next candle range and direction from ATR and momentum, prices no entry, stop or target and writes no forward record' }
   ];
 
   /* Reads the shell's own nav registry when it is reachable and names any

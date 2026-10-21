@@ -45,13 +45,13 @@ console.log('== 0) registration + mount ==');
   /* hg-v990: the literal is generated from the walk's artifact, and that walk chose
      no rule -- every plan it priced carried no stop or target, so it measured
      nothing. NOT MEASURED, not MEASURED-NOT-TRADABLE; the note says why. */
-  assert(!!E && E.measured === false, 'evidence is NOT measured -- the committed walk chose no rule');
+  assert(!!E && E.measured === true && E.tradable === false, 'evidence IS measured (hg-v1421 rebake) and judged NOT tradable');
   assert(E.tradable === false, 'evidence says NOT tradable');
-  assert(E.oosN === 0 && E.isN === 0, 'no in-sample or out-of-sample population exists (got ' + E.oosN + ')');
-  assert(/NOT YET MEASURED/.test(E.note) && /settled 0 trades in every one of its 14 cells/.test(E.note) && /defect of the walk, not a verdict on the strategy/.test(E.note), 'the note is the artifact\'s own account: zero settled trades in every cell, a defect of the walk');
+  assert(E.oosN === 77 && E.isN === 197, 'the rebake carries its populations (IS n=197, OOS n=77 — got ' + E.oosN + ')');
+  assert(E.note === null && E.isN === 197 && E.oosN === 77 && E.oosAvgR === -0.113 && /did NOT pay after Binance costs/.test(E.verdict), 'the verdict is the artifact\'s own account: the hg-v1421 rebake (n=197/-0.077R in, n=77/-0.113R out), not a hand-typed story');
   assert(E.symbol === 'BTCUSDT' && E.interval === '15m', 'evidence symbol + interval');
   const cards0 = stubs['#cuCards'].innerHTML;
-  assert(/NOT YET MEASURED/.test(cards0) && !/MEASURED NOT TRADABLE/.test(cards0), 'the panel prints NOT YET MEASURED (hg-v990), never a verdict the walk did not reach');
+  assert(/MEASURED NOT TRADABLE/.test(cards0) && !/NOT YET MEASURED/.test(cards0), 'the panel prints MEASURED NOT TRADABLE (hg-v1421 rebake), never a verdict the walk did not reach');
   let mThrew = false; try{ tab.mount(null); }catch(e){ mThrew = true; }
   assert(!mThrew, 'mount(null) never throws');
   assert(W.cryptoUltraState() === null, 'state null before the first scan');
@@ -78,7 +78,7 @@ console.log('== 2) direction: trend up fires LONG, trend down fires SHORT, noise
   const vc = { venue: 'Binance', rtFrac: 0.002 };
   const up = W.cryptoUltraEngine({ rows15m: up15, rows1h: mk1h(i => 58000 + i * 10), now: upNow, allowUnverified: true, venueCost: vc });
   assert(up.ok && up.count.lead === 'long' && up.count.long > 2 * up.count.short, 'clean uptrend: long votes dominate (' + up.count.long + ' vs ' + up.count.short + ')');
-  assert(up.fire === false && up.recordOnly === true && up.gates.some(g => /NOT YET MEASURED/.test(g)), 'uptrend yields NO ticket — the NOT YET MEASURED gate holds (hg-v990)');
+  assert(up.fire === false && up.recordOnly === true && up.gates.some(g => /MEASURED NOT TRADABLE/.test(g)), 'uptrend yields NO ticket — the MEASURED NOT TRADABLE gate holds (hg-v1421)');
   assert(up.plan && up.plan.stop < up.plan.entry && up.plan.t1 > up.plan.entry && up.plan.t2 > up.plan.t1, 'long geometry: stop < entry < TP1 < TP2');
   assert(Math.abs((up.plan.t1 - up.plan.entry) / (up.plan.entry - up.plan.stop) - 1.5) < 1e-9 && Math.abs((up.plan.t2 - up.plan.entry) / (up.plan.entry - up.plan.stop) - 2.5) < 1e-9, 'TP1 = 1.5R, TP2 = 2.5R exactly');
   assert(up.plan.orderType === 'BUY' && up.plan.entry === up.price, 'entry is a market BUY at the last CLOSED bar close');
@@ -98,7 +98,7 @@ console.log('== 3) honesty gates ==');
   const f1 = W.cryptoUltraEngine({ rows15m: forming, rows1h: [], now: upNow + 60 * 1000, allowUnverified: true });
   assert(f1.ok && f1.bar.t === up15[319].t && f1.price === up15[319].c, 'a still-forming bar is never read — the last CLOSED bar is the signal bar');
   const nov = W.cryptoUltraEngine({ rows15m: up15, rows1h: [], now: upNow });
-  assert(nov.fire === false && nov.gates.some(g => /NOT YET MEASURED/.test(g)), 'without allowUnverified, the NOT YET MEASURED gate blocks firing');
+  assert(nov.fire === false && nov.gates.some(g => /MEASURED NOT TRADABLE/.test(g)), 'without allowUnverified, the MEASURED NOT TRADABLE gate blocks firing');
   assert(nov.recordOnly === true && nov.plan && nov.plan.stop < nov.plan.entry && nov.dir === 'long', 'the would-be plan is still priced as RECORD ONLY');
   const a = W.cryptoUltraEngine({ rows15m: up15, rows1h: mk1h(i => 58000 + i * 10), now: upNow, allowUnverified: true });
   const b = W.cryptoUltraEngine({ rows15m: up15, rows1h: mk1h(i => 58000 + i * 10), now: upNow, allowUnverified: true });

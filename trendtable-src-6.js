@@ -73,7 +73,7 @@ function trendmxGoldenDeskHTML(golden){
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade, then the crypto formation: structure, relative strength versus BTC, open interest, CVD, the 15m sweep, and at least 8 confluence votes with none against.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade. The 4h RSI has to sit on the bull floor for a long or the bear ceiling for a short, the pullback has to tag the anchored VWAP from the last 4h swing, and an alt long has to be leading Bitcoin by at least 1.5 percent with no lower low in ALT/BTC. The 15m body has to close past the swing by a quarter of its own ATR, and the real 15m taker share has to be at least 60 percent on that side. Open interest has to rise with the break. The four reads have to add to at least 85 percent. A missing taker print is not 50 percent, and missing open interest is not new buying. Then structure, relative strength versus BTC, open interest, CVD, and at least 8 confluence votes with none against.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
@@ -96,6 +96,54 @@ function trendmxDeathDeskHTML(death){
   for (var i = 0; i < Math.min(death.length, 4); i++) cards += trendmxCrossCardHTML(death[i]);
   return '<div class="panel" style="margin:12px 0;border-left:4px solid #b91c1c">'
     + '<h2>⚡ DEATH CROSS DESK <span>EMA50/200 BEAR cross ≤10 daily bars — fresh SHORTS · conviction + valid plan · Telegram every 15m</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
+function trendmxCandleCardHTML(g){
+  if (!g || !fin(+g.entry) || !fin(+g.stop) || !fin(+g.t1)) return '';
+  var isShort = g.dir === 'short';
+  var col = isShort ? '#b91c1c' : '#047857';
+  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: 'trendmx-candle' })
+    : '';
+  var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(180,83,9,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:#fff">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + '</span>'
+    + '<span class="stamp">CANDLE</span>'
+    + '<span class="stamp ' + (isShort ? 'bad' : 'pass') + '">' + (isShort ? 'SHORT' : 'LONG') + '</span>'
+    + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.candleNote || '') + '</div>'
+    + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
+    + tradeBtn
+    + '</div>';
+}
+
+function trendmxCandleDeskHTML(list){
+  list = list || [];
+  var held = list.held || {};
+  var shown = Math.min(list.length, 6);
+  var cards = '';
+  for (var i = 0; i < shown; i++) cards += trendmxCandleCardHTML(list[i]);
+  var stood = list.length - shown;
+  var why = '';
+  if (!list.length){
+    why = list.why
+      ? '<div class="note">' + escH(list.why) + '</div>'
+      : ('<div class="note">No candle confluence setup. A setup needs the row\'s own trend side and a one-sided named shape from the shared candlestick engine. A clash is not a setup. A pattern against the trend is not a setup. Unread is not agreement. Nothing was invented.'
+        + (held.unread ? ' ' + held.unread + ' tapes unread.' : '')
+        + (held.clash ? ' ' + held.clash + ' clashed.' : '')
+        + (held.against ? ' ' + held.against + ' named a shape against the trend.' : '')
+        + (held.none ? ' ' + held.none + ' had no named shape.' : '')
+        + (held.noDir ? ' ' + held.noDir + ' had no trend side.' : '')
+        + (held.plan ? ' ' + held.plan + ' had no valid trend plan.' : '')
+        + '</div>');
+  }
+  var extra = stood > 0 ? '<div class="note">' + stood + ' more agreed and are stood down. Six are enough on this desk.</div>' : '';
+  return '<div class="panel" data-tm-candles="1" style="margin:12px 0;border-left:4px solid #b45309">'
+    + '<h2>CANDLE CONFLUENCE <span>shared candlestick engine · the trend side must agree · the pattern stop is not the trade stop</span></h2>'
+    + why + extra
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
     + '</div>';
 }
@@ -346,6 +394,16 @@ function trendmxPerfectState(r){
   if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
     try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
   }
+  /* hg-v1399: PERFECT never contradicts the admission floor — a fresh cross
+     riding with the majority or the 1D cloud against it disqualifies the
+     badge, and the stop-≥2% geometry bar applies when a priced plan is in
+     hand (r.plan); absent marks abstain (hg-v989), so a row the marks have
+     not landed on yet is never disqualified here. The |composite|/gates
+     clause of the floor is already implied (PERFECT is |5| + 7/7). Chop is
+     deliberately NOT added: the hg-v1160 replay measured chop-flagged rows
+     positive in H1 — a veto there would veto winners. Annotation-only, as
+     before: nothing here moves a tier, a plan or a desk. */
+  if (!tmAdmissionFloor(r, r.plan).ok) return false;
   return true;
 }
 

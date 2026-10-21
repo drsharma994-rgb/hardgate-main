@@ -122,19 +122,32 @@ console.log('\n== the walk records it, and says how to read it ==');
      'an all-zero mask is omitted rather than stored ten thousand times');
 }
 
-console.log('\n== the shipped artifact cannot answer it yet, and says so ==');
+console.log('\n== the shipped artifact carries the masks (hg-v1404) ==');
 {
   const walk = JSON.parse(fs.readFileSync(
     path.join(ROOT, 'scripts', 'backtest-omnigold-results.json'), 'utf8'));
+  /* hg-v1404 recalibration: the hg-v1402 walk regenerated the artifact with
+     the masks on, so the old honest-negative inverted into affirmative pins
+     — every row carries the verdict masks and meta names the key order. */
   const withGates = walk.trades.filter(r => r.gatesPass || r.gatesFail);
-  ok(withGates.length === 0,
-     'no row in the shipped walk carries gate verdicts — it predates this');
-  ok(!walk.meta.gateKeyOrder, 'and its meta has no key order');
-  /* so the participation split, and every other gate tuned the same way,
-     stays unverifiable until the next walk runs */
-  ok(walk.trades.length > 1000,
-     'which leaves every gate tuned on these ' + walk.trades.length
-     + ' rows taken on trust until then');
+  ok(withGates.length > 9000,
+     'the shipped walk carries gate verdicts on its rows (' + withGates.length + ')');
+  ok(Array.isArray(walk.meta.gateKeyOrder) && walk.meta.gateKeyOrder.length > 30,
+     'and its meta names the key order (' + walk.meta.gateKeyOrder.length + ' gates)');
+  /* decode one fail mask end-to-end against the shipped key order */
+  const row = walk.trades.find(r => r.gatesFail);
+  ok(row, 'a row with a fail mask exists');
+  if (row){
+    let v = BigInt('0x' + row.gatesFail.replace(/[^0-9a-f]/gi, '')), i = 0;
+    const keys = [];
+    while (v > 0n){ if (v & 1n) keys.push(walk.meta.gateKeyOrder[i]); v >>= 1n; i++; }
+    ok(keys.length > 0 && keys.every(k => typeof k === 'string' && k.length > 0),
+       'a fail mask decodes against the key order (' + keys.slice(0, 2).join(',') + (keys.length > 2 ? ',…' : '') + ')');
+  }
+  /* the participation split, and every other gate tuned the same way, is
+     verifiable on this artifact now */
+  ok(walk.trades.length > 10000,
+     'on ' + walk.trades.length + ' rows, no longer taken on trust');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

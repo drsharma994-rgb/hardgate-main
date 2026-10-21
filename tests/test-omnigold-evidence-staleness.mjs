@@ -99,12 +99,16 @@ console.log('\n== the drawdown panel quotes the CURRENT gate set ==');
   ok(E.proxy === true, 'and marks itself a proxy rather than a measurement');
   ok(/v752/.test(E.gateSet), 'naming the gate set it belongs to — ' + E.gateSet);
 
-  /* the v754 numbers were 18.3R at XM and 83R at PAXG, from the OLD ticket
-     flag. Under the gates that actually run they are 8.2R and 9.8R. */
-  ok(Math.abs(E.ticketsXm[2] - 8.21) < 0.05, 'XM drawdown is 8.2R, not the 18.3R v754 shipped');
-  ok(Math.abs(E.ticketsPaxg[2] - 9.81) < 0.05, 'PAXG drawdown is 9.8R, not 83R');
-  ok(E.ticketsXm[4] === 58, 'on 58 trades, not the 105 the old ticket flag counted');
-  ok(E.ticketsPaxg[4] === 34, 'and 34 at PAXG');
+  /* hg-v1402 re-pin (old -> new quoted in the commit note): the v754 numbers
+     were 18.3R at XM and 83R at PAXG, from the OLD ticket flag; under v752
+     they were 8.2R/9.8R on 58/34 trades. Under v752+v1402 (1.0% stop floor)
+     the gated sequential book is EMPTY — 0 trades at either venue — because
+     every sequential ticket on the walk carries a sub-1.0% stop. The drawdown
+     is 0R because the book takes no trades; that is the measurement. */
+  ok(Math.abs(E.ticketsXm[2] - 0) < 0.05, 'XM drawdown is 0R — the gated book is empty (was 8.2R under v752, 18.3R at v754)');
+  ok(Math.abs(E.ticketsPaxg[2] - 0) < 0.05, 'PAXG drawdown is 0R — empty too (was 9.8R / 83R)');
+  ok(E.ticketsXm[4] === 0, 'on 0 trades, not the 58 v752 counted or the 105 the old flag counted');
+  ok(E.ticketsPaxg[4] === 0, 'and 0 at PAXG');
   ok(E.ticketsXm[2] < 18.3 && E.ticketsPaxg[2] < 83,
      'both are SMALLER — the old numbers overstated the hole');
 

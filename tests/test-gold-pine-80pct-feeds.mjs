@@ -125,7 +125,7 @@ console.log('== 1) the home: three states per leg, both directions ==');
   const W = boot(RANK_BASE);
   assert(typeof W.hgGoldFreeFeedVerdicts === 'function' && typeof W.hgGoldFreeFeedFunding === 'function'
       && typeof W.hgGoldFreeFeedLineHtml === 'function' && Array.isArray(W.HG_GOLD_FREE_KEYS), 'the home, the funding reader, the line renderer and the key list are exported');
-  assert(W.HG_GOLD_FREE_KEYS.slice(0, 8).join(',') === FREE8.join(',') && W.HG_GOLD_FREE_KEYS.length === 23, 'the key list names the eight free-feed legs first, then the four hg-v1163 reads, the four hg-v1165 legs, the four hg-v1166 legs and the three hg-v1167 legs');
+  assert(W.HG_GOLD_FREE_KEYS.slice(0, 8).join(',') === FREE8.join(',') && W.HG_GOLD_FREE_KEYS.length === 26, 'the key list names the eight free-feed legs first, then the four hg-v1163 reads, the four hg-v1165 legs, the four hg-v1166 legs, the three hg-v1167 legs and the three hg-v1171 legs (26 keys)');
   const L = W.hgGoldFreeFeedVerdicts(FEEDS_ALL, 'long'), S = W.hgGoldFreeFeedVerdicts(FEEDS_ALL, 'short');
   assert(FREE8.every(k => L[k] === true), 'every leg aligned with a long reads WITH (' + JSON.stringify(L) + ')');
   assert(FREE8.every(k => S[k] === false), 'the same feeds read AGAINST a short on every leg (' + JSON.stringify(S) + ')');
@@ -153,12 +153,12 @@ console.log('== 1) the home: three states per leg, both directions ==');
       && Number.isNaN(W.hgGoldFreeFeedFunding({ fundingRate: null })) && Number.isNaN(W.hgGoldFreeFeedFunding(null)) && Number.isNaN(W.hgGoldFreeFeedFunding({ fundingRate: 'x' })),
     'the funding reader normalises exactly as the ranker does and reads NaN for null, no context or a string (+null is never 0 here)');
   const line = W.hgGoldFreeFeedLineHtml(L, { fundingPct: -0.05 });
-  assert(/data-hg-free-feeds="1"/.test(line) && /8 of 23 free internet feeds read/.test(line) && (line.match(/ WITH</g) || []).length === 8 && /funding -0\.0500%/.test(line),
-    'the line renderer prints every leg WITH and the funding print');
+  assert(/data-hg-free-feeds="1"/.test(line) && /8 of 26 free internet feeds read/.test(line) && (line.match(/ WITH</g) || []).length === 8 && /funding -0\.0500%/.test(line),
+    'the line renderer prints every leg WITH and the funding print (26 since hg-v1171)');
   const lineS = W.hgGoldFreeFeedLineHtml({ 'free:vix': false });
-  assert(/1 of 23/.test(lineS) && (lineS.match(/UNREAD</g) || []).length === 22 && /AGAINST</.test(lineS) && !/funding/.test(lineS),
-    'one mark prints one AGAINST and twenty-two UNREAD, and no funding line without a print');
-  assert(W.hgGoldFreeFeedLineHtml(null) !== '' && /0 of 23/.test(W.hgGoldFreeFeedLineHtml(null)), 'no marks still renders an honest 0 of 23 (the caller decides whether to print it)');
+  assert(/1 of 26/.test(lineS) && (lineS.match(/UNREAD</g) || []).length === 25 && /AGAINST</.test(lineS) && !/funding/.test(lineS),
+    'one mark prints one AGAINST and twenty-five UNREAD, and no funding line without a print');
+  assert(W.hgGoldFreeFeedLineHtml(null) !== '' && /0 of 26/.test(W.hgGoldFreeFeedLineHtml(null)), 'no marks still renders an honest 0 of 26 (the caller decides whether to print it)');
 }
 
 /* ------------------------------------------------------------------ 2 */

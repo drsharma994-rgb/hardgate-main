@@ -110,12 +110,22 @@ console.log('3. the finding is that one happened and the other did not');
 
   eq(R.trials, W.ENDS.length * W.SPLITS.length, 'every split at every fill bound is a trial');
   ok(R.beatsDeskCount > 0, 'the roster beats the desk somewhere — ' + R.beatsDeskCount + '/' + R.trials);
-  eq(R.beatsDeskAll, true, 'and at EVERY split and bound — unanimous');
+  /* hg-v1404 recalibration: the re-walked forward is 5 of 6, NOT unanimous —
+     at as-recorded @0.7 the roster reads -0.0976R against the desk's -0.075R
+     and loses. The finding this section pins (beats-desk but never pays) is
+     intact; the unanimity half is honestly gone. */
+  eq(R.beatsDeskAll, false, 'and NOT at every split and bound — 5 of 6 on the hg-v1402 walk');
   eq(R.paysCount, 0, 'and is net-positive in none of them');
   eq(R.paysAll, false, 'so it does not pay');
   for (const end of W.ENDS) for (const f of R.forward[end]){
-    ok(f.onTest.net > f.deskTest.net,
-       end + ' @' + f.split + ': roster ' + f.onTest.net + ' beats desk ' + f.deskTest.net);
+    if (end === 'as-recorded' && Math.abs(f.split - 0.7) < 1e-9){
+      ok(f.onTest.net < f.deskTest.net,
+         'as-recorded @0.7: roster ' + f.onTest.net + ' LOSES to desk ' + f.deskTest.net
+         + ' — the one trial that breaks unanimity, pinned so it is not quietly re-dropped');
+    } else {
+      ok(f.onTest.net > f.deskTest.net,
+         end + ' @' + f.split + ': roster ' + f.onTest.net + ' beats desk ' + f.deskTest.net);
+    }
     ok(f.onTest.net < 0,
        end + ' @' + f.split + ': and is still negative at ' + f.onTest.net);
   }

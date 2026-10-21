@@ -77,6 +77,16 @@ assert(PF(perfect('long'), { structureTrend: 'up' }).perfect === true, 'structur
 assert(PF(perfect('long'), { structureTrend: 'down' }).perfect === false, 'structure against → not perfect');
 assert(PF(perfect('long'), { structureTrend: 'range' }).perfect === true, 'structure range → not a disqualifier');
 
+console.log('== hg-v1295: the fundamental / sentiment verdict leg ==');
+assert(PF(perfect('long'), { fundamentalVerdict: 'with' }).perfect === true, 'sentiment stack WITH → still perfect');
+assert(PF(perfect('long'), { fundamentalVerdict: 'against' }).perfect === false, 'sentiment stack AGAINST → not perfect (headwind clears nothing)');
+assert(PF(perfect('long'), { fundamentalVerdict: null }).perfect === true, 'sentiment stack unread → NOT a disqualifier (honest third state)');
+assert(PF(perfect('long'), { fundamentalVerdict: undefined }).perfect === true, 'sentiment stack absent → NOT a disqualifier (other desks unchanged)');
+/* PERFECT⁺ still requires every readable leg WITH — a sentiment read must be WITH to earn plus */
+var base = { takerFlowVerdict: 'with', fundingAgainst: false, atrRegime: 'HEALTHY', volumeRvol: 1.3, trendQuality: 'TREND', sess: 'participating' };
+assert(PF(perfect('long'), Object.assign({}, base, { fundamentalVerdict: 'with' })).plus === true, 'all evidence WITH incl sentiment → earns ★ PERFECT⁺');
+assert(PF(perfect('long'), Object.assign({}, base, { fundamentalVerdict: 'against' })).perfect === false, 'sentiment against blocks perfect before plus is even considered');
+
 console.log('== the stamp + ledger mark ==');
 assert(typeof W.hgPerfectStamp === 'function' && typeof W.hgPerfectLedgerMark === 'function',
   'hgPerfectStamp + hgPerfectLedgerMark exported');

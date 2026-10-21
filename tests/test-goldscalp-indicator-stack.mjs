@@ -178,8 +178,8 @@ console.log('== 2) the marks: three states, direction mirror, ledger shape ==');
   /* hg-v1163 added COT, GVZ and the two correlations: fourteen free: + eighteen
      ind: = 32, EXACTLY the cap -- the next mark needs the cap moved first */
   /* hg-v1165: four more legs and the cap moved 32 -> 64 first */
-  assert(FREE_KEYS.length === 25 && KEYS.length + FREE_KEYS.length <= 64, 'twenty-five free: + eighteen ind: = ' + (KEYS.length + FREE_KEYS.length) + ' fits the 64-per-record cap');
-  assert(KEYS.length + FREE_KEYS.length > 16 && KEYS.every(k => k > 'free:') && FREE_KEYS.length - 2 === 23, 'and would NOT have fit the old 16 — every ind: key sorts AFTER free:, so at 16 only two of the eighteen indicator marks would have landed and sixteen would have been dropped silently');
+  assert(FREE_KEYS.length === 28 && KEYS.length + FREE_KEYS.length <= 64, 'twenty-eight free: + eighteen ind: = ' + (KEYS.length + FREE_KEYS.length) + ' fits the 64-per-record cap (hg-v1171: three more free legs)');
+  assert(KEYS.length + FREE_KEYS.length > 16 && KEYS.every(k => k > 'free:') && FREE_KEYS.length - 2 === 26, 'and would NOT have fit the old 16 — every ind: key sorts AFTER free:, so at 16 only two of the eighteen indicator marks would have landed and sixteen would have been dropped silently');
   const L = W.hgGoldIndicatorMarks(ir, 'long'), S = W.hgGoldIndicatorMarks(ir, 'short');
   const DIRECTIONAL = ['ind:dmiWith', 'ind:sma20With', 'ind:sma50With', 'ind:sma200With', 'ind:tsmomWith', 'ind:rsiWith', 'ind:linregWith'];
   const STATE = KEYS.filter(k => DIRECTIONAL.indexOf(k) < 0);
@@ -336,12 +336,18 @@ console.log('== 6) one home: nothing reads the marks back ==');
   assert(/ctx: inp\.catalogCtx \|\| null, ind: inp\.indReads \|\| null, killzone: inp\.killzone \|\| ''/.test(gi), 'goldind\'s forming stack passes the context to the census it paints');
   const files = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f));
   const namers = files.filter(f => /'ind:[A-Za-z0-9]+'/.test(strip(read(f))));
-  assert(namers.length === 1 && namers[0] === 'gold-catalog.js', 'the ind: key literals live in gold-catalog.js and nowhere else (' + namers.join(', ') + ')');
+  /* hg-v1297 ported the gold-side ind:* indicator-stack marks onto OMNIBTC
+     forward records through hgObtcIndicatorMarks (one home for the OMNIBTC
+     half). The gold half stays single-sourced in gold-catalog.js. */
+  const allowed = ['gold-catalog.js', 'omnibtc.js'];
+  const unexpected = namers.filter(f => !allowed.includes(f));
+  assert(unexpected.length === 0 && namers.length === allowed.length,
+    'the ind: key literals live only in gold-catalog.js (gold half) and omnibtc.js (crypto half, hg-v1297) (' + namers.join(', ') + ')');
   for (const g of ['hg-gates.js', 'cryptogates.js', 'gold-formation.js', 'hg-solidity.js', 'conviction-lock.js', 'hg-forward.js', 'gold-best-levels.js'])
     assert(!/ind:(adx|dmi|bb|sma|hv|park|vol|tsmom|hour|rsi|ker|atr|linreg|hurst|ac)/.test(strip(read(g))), g + ' names no indicator mark');
   assert(/freeReads/.test(strip(read('goldswing.js'))) && /indReads/.test(strip(read('goldswing.js'))), 'GOLD SWING forwards both bags since hg-v1166 — the hg-v1155 swing gap is closed (its own guard drives the record)');
   const hf = strip(read('hg-forward.js'));
-  assert(/FWD_READS_MAX = 64/.test(hf), 'the ledger cap reads 64 (hg-v1165)');
+  assert(/FWD_READS_MAX = 96/.test(hf), 'the ledger cap reads 96 (hg-v1173)');
 }
 
 /* ------------------------------------------------------------------ 7 */

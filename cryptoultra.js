@@ -81,23 +81,23 @@ function ruleVoteFloorText(){
    hand-edit -- generated literals write themselves (hg-v921). Every figure is
    read off backtest-cryptoultra-results.json; the guard re-runs the generator and fails on drift. */
 var HG_CRYPTO_ULTRA_EVIDENCE = {
-  measured: false,
+  measured: true,
   symbol: "BTCUSDT",
-  bars: 1999,
+  bars: 5999,
   interval: "15m",
-  span: "2026-08-22 .. 2026-09-12",
-  walk: {"cells":14,"fired":1628,"merged":1512,"settled":0,"barsWithLead":1768},
-  rule: null,
-  isAvgR: null,
-  isN: 0,
-  isWin: null,
-  oosAvgR: null,
-  oosN: 0,
-  oosWin: null,
+  span: "2026-08-18 .. 2026-10-20",
+  walk: {"cells":14,"fired":5340,"merged":4948,"settled":4539,"unpriced":0,"barsWithLead":5746},
+  rule: {"minPct":0.8,"minAvail":25,"regimeGate":true,"stopAtr":1.5,"t1R":1.5,"t2R":2.5,"timeoutBars":24,"costFloorMult":8},
+  isAvgR: -0.077,
+  isN: 197,
+  isWin: 0.076,
+  oosAvgR: -0.113,
+  oosN: 77,
+  oosWin: 0.026,
   tradable: false,
-  verdict: null,
-  note: "NOT YET MEASURED — the committed walk (2026-08-22 .. 2026-09-12, 1999 x 15m bars) fired 1628 times at its loosest cell and settled 0 trades in every one of its 14 cells — the walk had priced every plan without a stop or a target (a harness override replaced the rule, hg-v990), so no rule was chosen and NOTHING WAS MEASURED. A zero here is a defect of the walk, not a verdict on the strategy; fires print as RECORD ONLY until a walk that prices its plans is re-run.",
-  limitations: ["MARKET FILL AT THE SIGNAL CLOSE: the walk fills at the signal close, ignoring the next-bar open gap; BTC 15m gaps are typically small but can be large on liquidation cascades","SAME-BAR FILL->TARGET OPTIMISM: 0 of 0 OOS wins settle on the fill bar; both-touch bars ARE losses (0)","PORTFOLIO STATS NOT ATTAINABLE: one live trade per side, unlimited overlap between sides; read per-trade expectancy only","THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of BTC history — a different quarter can measure differently; the grid rows show how sensitive the choice is","BTCUSDT spot on Binance: 0.10% maker+taker each side = 0.20% round-trip; actual fees depend on VIP tier and BNB holdings","the 127 directional reads (of 470 fed) are heavily correlated (dozens are moving-average variants); agreement % is a count, not an independence-weighted probability — the backtest measures what the count is worth, nothing more"]
+  verdict: "Out-of-sample the rule did NOT pay after Binance costs (-0.113R per trade on n=77) — fires print for the record and are NOT tradable tickets.",
+  note: null,
+  limitations: ["MARKET FILL AT THE SIGNAL CLOSE: the walk fills at the signal close, ignoring the next-bar open gap; BTC 15m gaps are typically small but can be large on liquidation cascades","SAME-BAR FILL->TARGET OPTIMISM: 0 of 2 OOS wins settle on the fill bar; both-touch bars ARE losses (0)","PORTFOLIO STATS NOT ATTAINABLE: one live trade per side, unlimited overlap between sides; read per-trade expectancy only","THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of BTC history — a different quarter can measure differently; the grid rows show how sensitive the choice is","BTCUSDT spot on Binance: 0.10% maker+taker each side = 0.20% round-trip; actual fees depend on VIP tier and BNB holdings","the 127 directional reads (of 470 fed) are heavily correlated (dozens are moving-average variants); agreement % is a count, not an independence-weighted probability — the backtest measures what the count is worth, nothing more"]
 };
 /* --- END GENERATED HG_CRYPTO_ULTRA_EVIDENCE --- */
 

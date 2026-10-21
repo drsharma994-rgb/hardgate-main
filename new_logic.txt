@@ -1,0 +1,45 @@
+  // --- NEW ADVANCED CONFLUENCE ENGINE ---
+  window.hgCfUltimateConfluence = function(scalp, swing) {
+    if (!scalp || !swing) return null;
+    const dirMatch = scalp.dir === swing.dir;
+    const scoreMatch = Math.abs(scalp.score - swing.score) < 2;
+    return {
+      agreement: dirMatch && scoreMatch,
+      direction: scalp.dir,
+      confidence: (scalp.score + swing.score) / 10,
+      note: dirMatch ? 'Scalp and Swing in alignment' : 'Divergent horizons detected',
+      timestamp: Date.now()
+    };
+  };
+
+  window.hgCfBuildSetup = function(candles, options, forecast) {
+    if (!candles || candles.length < 20) return null;
+    const dir = forecast.dir === 'BULL' ? 'long' : (forecast.dir === 'BEAR' ? 'short' : null);
+    if (!dir) return null;
+
+    let patternConfluence = 0;
+    const patterns = window.hgCfCandlePatterns ? window.hgCfCandlePatterns(candles) : [];
+    patterns.forEach(p => { if (p.dir === dir || p.dir === null) patternConfluence += 1; });
+
+    let indicatorConfluence = 0;
+    const last = candles[candles.length - 1];
+    if ((dir === 'long' && last.c > last.o) || (dir === 'short' && last.c < last.o)) indicatorConfluence += 1;
+
+    let macroConfluence = forecast.macroRead ? 1 : 0;
+    const totalScore = patternConfluence + indicatorConfluence + macroConfluence;
+    if (totalScore < 2) return null;
+
+    const atr = 0.01; // Placeholder for real ATR calculation
+    const entry = last.c;
+    const stop = dir === 'long' ? entry - (atr * 2) : entry + (atr * 2);
+    const t1 = dir === 'long' ? entry + (atr * 3) : entry - (atr * 3);
+
+    return {
+      dir: dir, entry: entry, stop: stop, t1: t1, score: totalScore,
+      confluence: totalScore / 5, note: `Confluence Score: ${totalScore}/5`
+    };
+  };
+
+  window.hgCfMeasure = function(scalp, swing, candles) { return { volatility: 0.01 }; };
+  window.hgCfDaySwings = function() { return { ok: true, setups: [] }; };
+})();

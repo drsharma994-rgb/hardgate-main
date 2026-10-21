@@ -129,6 +129,20 @@ function trendmxCrownPanelHTML(state){
     if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
     if (isFinite(+pfR.dvolVal)) tech.push('DVOL ' + (+pfR.dvolVal).toFixed(1) + (pfR.dvolRegime ? ' ' + String(pfR.dvolRegime) : ''));
+    if (pfR.pineLorKnn || pfR.pineHalfTrend || pfR.pineSqueeze || pfR.pineSmf || pfR.pineMsb || pfR.pineCipher || pfR.pineRangeFilter || pfR.pineNwEnvelope || pfR.pineWavwap){
+      var pineBits = [];
+      if (pfR.pineLorKnn) pineBits.push('LorKNN ' + pfR.pineLorKnn);
+      if (pfR.pineHalfTrend) pineBits.push('half-trend ' + pfR.pineHalfTrend);
+      if (pfR.pineSqueeze) pineBits.push('squeeze ' + pfR.pineSqueeze);
+      if (pfR.pineSmf) pineBits.push('SMF ' + pfR.pineSmf);
+      if (pfR.pineMsb) pineBits.push('MSB ' + pfR.pineMsb);
+      if (pfR.pineSmc) pineBits.push('SMC ' + pfR.pineSmc);
+      if (pfR.pineCipher) pineBits.push('cipher ' + pfR.pineCipher);
+      if (pfR.pineRangeFilter) pineBits.push('range ' + pfR.pineRangeFilter);
+      if (pfR.pineNwEnvelope) pineBits.push('NW ' + pfR.pineNwEnvelope);
+      if (pfR.pineWavwap) pineBits.push('wAVWAP ' + pfR.pineWavwap);
+      tech.push('PINE ' + pineBits.join(' | '));
+    }
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
     html += dim('TECHNICAL', Math.abs(+crown.score || 0) >= 2 ? 'ALIGNED' : 'NEUTRAL', '', tech);
     var sent = [];
@@ -287,6 +301,46 @@ function tmStructureDir(rows){
   }catch(e){ return null; }
 }
 
+/* hg-v1187: THE CRYPTO PINE PORTS — five bar-only Pine strategies read off
+   the row's own 4h tape, returned as a light mark bag. Record-only: the
+   perfect predicate ignores them and the forward ledger decides whether
+   any of them separates. Each unreadable signal is null (the honest
+   third state).
+   hg-v1205: four more crypto-shaped Pine ports join the bag — VuManChu
+   Cipher B (Wave Trend oscillator, DIFFERENT from Lorentzian which is an
+   ML kernel), Range Filter (regime flip on adaptive range band, DIFFERENT
+   from Half-Trend which is a trailing stop), Nadaraya-Watson envelope
+   (Gaussian smoother reversion, no analog in the five), Weekly AVWAP
+   (location against the week's volume-weighted average, no analog in the
+   five). All four already exist in pinemath.js and were read by nothing on
+   this desk. Record-only like the five; nothing scores on them. */
+function trendmxPineMarks(rows){
+  var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null, supertrend: null, macd: null, cci: null };
+  try{
+    if (!Array.isArray(rows) || rows.length < 30) return out;
+    if (typeof W.pineLorentzianKernel === 'function'){ var l = W.pineLorentzianKernel(rows, {}); if (l && l.dir) out.lor = String(l.dir).toLowerCase(); }
+    if (typeof W.pineHalfTrend === 'function'){ var h = W.pineHalfTrend(rows, {}); if (h && h.dir) out.ht = String(h.dir).toLowerCase(); }
+    if (typeof W.pineSqueezeMomentum === 'function'){ var s = W.pineSqueezeMomentum(rows, {}); if (s && s.dir) out.sqz = String(s.dir).toLowerCase(); }
+    if (typeof W.pineSmartMoneyFlow === 'function'){ var f = W.pineSmartMoneyFlow(rows, {}); if (f && f.dir) out.smf = String(f.dir).toLowerCase(); }
+    if (typeof W.pineMsbOb === 'function'){ var m = W.pineMsbOb(rows, {}); if (m && m.dir) out.msb = String(m.dir).toLowerCase(); }
+    if (typeof W.pineVumanchuCipher === 'function'){ var vc = W.pineVumanchuCipher(rows, {}); if (vc && vc.dir) out.cipher = String(vc.dir).toLowerCase(); }
+    if (typeof W.pineRangeFilter === 'function'){ var rf = W.pineRangeFilter(rows, { includeContext: true }); if (rf && rf.dir) out.rfilter = String(rf.dir).toLowerCase(); }
+    if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
+    if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
+    if (typeof W.pineSmcCore === 'function'){ var sc = W.pineSmcCore(rows, { includeContext: true }); if (sc && sc.dir) out.smc = String(sc.dir).toLowerCase(); }
+    /* hg-v1295 (restored hg-v1403): three more bar-only Pine state readers.
+       Record-only like the ten above; the forward ledger measures each
+       separation out of sample. Supertrend/MACD/CCI are distinct from
+       HalfTrend/Squeeze/Cipher respectively (ATR-band flip vs
+       amplitude-pivot flip, signal-line cross vs BB-in-KC release,
+       extreme re-entry vs WaveTrend). */
+    if (typeof W.pineSupertrend === 'function'){ var st = W.pineSupertrend(rows, {}); if (st && st.dir) out.supertrend = String(st.dir).toLowerCase(); }
+    if (typeof W.pineMacd === 'function'){ var md = W.pineMacd(rows, {}); if (md && md.dir) out.macd = String(md.dir).toLowerCase(); }
+    if (typeof W.pineCci === 'function'){ var cc = W.pineCci(rows, {}); if (cc && cc.dir) out.cci = String(cc.dir).toLowerCase(); }
+  }catch(e){ }
+  return out;
+}
+
 async function trendmxPerfectEvidencePass(rows){
   try{
     if (!Array.isArray(rows) || !rows.length) return rows;
@@ -317,7 +371,10 @@ async function trendmxPerfectEvidencePass(rows){
       var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
       if (!plan) continue;
       var reads = {};
-      if (isFinite(+r.fundingPct)){
+      /* hg-v1288: dvol + liq-cluster reads attach PER ROW regardless of funding
+         — the 1f7bbd79 merge-repair re-nested them inside the funding guard,
+         silently costing CoinDCX rows these reads (hg-v1144's documented
+         'attached per row regardless of funding' intent). */
       if (dvol && isFinite(+dvol.dvol)){ reads.dvolVal = +dvol.dvol; reads.dvolRegime = dvol.regime || null; }
       if (cg){
         try{
@@ -327,3 +384,4 @@ async function trendmxPerfectEvidencePass(rows){
           if (isFinite(usd)) reads.liqClusterUsd = usd;
         }catch(eLc){ }
       }
+      if (isFinite(+r.fundingPct)){

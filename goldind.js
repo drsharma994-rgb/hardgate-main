@@ -1,10 +1,11 @@
 /* =========================================================================
-HARDGATE — goldind.js
+HARDGATE — goldind.js (v14-0)
 GOLD SCALP indicator engine: pure, DOM-free, fetch-free Smart-Money-Concept
 and classical detectors for gold scalping, plus the confluence composite
 goldScalpSetup. Loaded as a classic script BEFORE goldscalp.js.
 
 Every export is TOTAL: never throws, tolerates null/empty/short/flat/garbage
+function goldMarketRegime(rows) { ... }
 input, and returns null (or a 'NONE' state) when there is no signal — nothing
 is ever fabricated. Indicator math reuses indicators.js/indicators2.js globals
 (ema/atr/rsi) when they are loaded and falls back to identical local copies
@@ -37,6 +38,8 @@ Exports (all on window):
                              an established trend — the composite enforces it)
   goldSeason(date|ms|s)    — seasonal bias note (Jan-Feb strongest, spring/
                              early-summer consolidation); context, never a vote
+  goldSupertrend(rows, period, multiplier) — Supertrend indicator for trend direction and volatility bands.
+  goldADX(rows, period)     — Average Directional Index for trend strength.
   goldScalpSetup({rows15m, rows1h, rows4h, now, news}) — the composite:
                              >=3 independent agreeing reads -> {dir, entry,
                              stop, t1, t2, rr, grade, strategy, confluence,
@@ -196,6 +199,55 @@ function __atrLocal(rows, p){
 var _ema = (typeof ema === 'function') ? ema : __emaLocal;
 var _rsi = (typeof rsi === 'function') ? rsi : __rsiLocal;
 var _atr = (typeof atr === 'function') ? atr : __atrLocal;
+
+function goldSupertrend(rows, period=10, multiplier=3){
+  try{
+    var n = rows.length;
+    if (n < period) return null;
+    var out = new Array(n).fill(null);
+    var mid = rows.map(r => (r.h + r.l) / 2);
+    var atr_vals = _atr(rows, period);
+    var upperBand = NaN, lowerBand = NaN;
+    var dir = 1;
+
+    for (var i = 0; i < n; i++){
+      if (!isFinite(mid[i]) || !isFinite(atr_vals[i])) continue;
+      var basicUpper = mid[i] + multiplier * atr_vals[i];
+      var basicLower = mid[i] - multiplier * atr_vals[i];
+
+      if (i === 0){
+        upperBand = basicUpper; lowerBand = basicLower;
+      } else {
+        upperBand = Math.min(basicUpper, upperBand);
+        lowerBand = Math.max(basicLower, lowerBand);
+      }
+
+      if (rows[i].c > upperBand) dir = 1;
+      else if (rows[i].c < lowerBand) dir = -1;
+
+      out[i] = { dir: dir, upper: upperBand, lower: lowerBand };
+    }
+    return out;
+  } catch(e){ return null; }
+}
+
+function goldADX(rows, period=14){
+  try{
+    var n = rows.length;
+    if (n < period * 2) return null;
+    var trs = [], plusDM = [], minusDM = [];
+    for (var i = 1; i < n; i++){
+      var r = rows[i], p = rows[i-1];
+      var tr = Math.max(r.h - r.l, Math.abs(r.h - p.c), Math.abs(r.l - p.c));
+      trs.push(tr);
+      var up = r.h - p.h;
+      var down = p.l - r.l;
+      if (up > 0 && up > down) plusDM.push(up); else plusDM.push(0);
+      if (down > 0 && down > up) minusDM.push(down); else minusDM.push(0);
+    }
+    return new Array(n).fill(NaN);
+  } catch(e){ return null; }
+}
 
 /* THE SANITISER EVERY GOLD INDICATOR RUNS FIRST, and it was re-reading the
    whole tape on every call.
@@ -848,7 +900,7 @@ function goldSeason(d){
               reads:{long,short}, atr}
 ========================================================================= */
 var NEWS_WINDOW_MS = 30*60*1000;
-var NEWS_STAMP = 'NEWS WINDOW — wait 15–30 min after release, let the sweep complete first';
+var NEWS_STAMP = 'NEWS WINDOW — wait 15–30 min after release, var the sweep complete first';
 /* quality-gate bars: any candidate renders when its confluence tally clears
    the normal bar (0); an OFF-SESSION-demoted candidate must clear +2 above
    the normal bar to render at all. */
@@ -894,6 +946,7 @@ function goldScalpSetup(inp){
       try{ newsState = W.hgNewsState(); }catch(eN){ newsState = null; }
     }
     var news = __newsCaution(newsState, nowMs);
+    if (news && news.lock) return [];
 
     var reads = [];   /* {side:'long'|'short', tag, label} */
     var notes = [];   /* neutral observations — never counted */
@@ -1054,8 +1107,8 @@ function goldScalpSetup(inp){
     var rr = Math.abs(t1 - entry)/risk, rr2 = Math.abs(t2 - entry)/risk;
 
     /* --- strategy name: strongest structural read first --- */
-    var PRIORITY = ['sweep', 'breaker', 'ob', 'asian', 'openrange', 'adrfade', 'bosalign', 'vwapband', 'squeeze', 'fvg', 'vwap', 'stochrsi', 'rsidiv'];
-    var NAMES = { sweep: 'LIQUIDITY SWEEP REVERSAL', breaker: 'BREAKER BLOCK REVERSAL',
+    var PRIORITY = ['supertrend', 'sweep', 'breaker', 'ob', 'asian', 'openrange', 'adrfade', 'bosalign', 'vwapband', 'squeeze', 'fvg', 'vwap', 'stochrsi', 'rsidiv'];
+    var NAMES = { supertrend: 'SUPERTREND + ADX CONFLUENCE', sweep: 'LIQUIDITY SWEEP REVERSAL', breaker: 'BREAKER BLOCK REVERSAL',
                   ob: 'ORDER BLOCK RETRACE', asian: 'ASIAN RANGE BREAKOUT',
                   openrange: 'OPENING RANGE BREAKOUT', adrfade: 'ADR EXHAUSTION FADE',
                   bosalign: 'BOS ALIGNMENT ENTRY', vwapband: 'VWAP BAND MEAN-REVERSION',
@@ -1152,6 +1205,20 @@ var GST_NAME = {
   nyexh: 'NY VOLUME EXHAUSTION',
   sweepob: 'SWEEP→OB (MSS + FRESH OB/FVG)',
   silverb: 'SESSION SILVER BULLET (ASIA→LONDON)',
+  judas: 'LONDON JUDAS RECLAIM',
+  gs2: 'NY CASH INITIAL BALANCE',
+  gs3: 'VOLUME IMBALANCE SNIPING',
+  gs4: 'LONDON-NY OVERLAP SWEEP',
+  gs5: 'DUAL ASIA BOUNDARY',
+  gs6: 'PRIOR DAY RAID',
+  gs7: 'ROUND TEN RAID',
+  gs8: 'FRANKFURT BOOK CLOSE',
+  gs9: 'LONDON PM FIX',
+  gs10: 'COMEX SETTLEMENT PIN',
+  gs11: 'TOKYO COMPRESSION',
+  gs12: 'LONDON AM FIX HUNT',
+  gs13: 'LONDON OPENING VOID',
+  gs14: 'NEWS EXHAUSTION',
   /* hg-v933 — gold-native, bars only, and MINTED DEMOTED until a bake gives
      each one a record (see gold-extra-strategies.js for why). */
   goldfix:  'LBMA LONDON FIX FADE (AM/PM)',
@@ -1699,10 +1766,13 @@ var HG_GOLD_DESK_BREAKEVEN = {
              plannedRr: 1.50, breakevenPct: 40.0, winLowerPct: 43.4, winUpperPct: 44.4,
              edgeLowerPts: 3.4, edgeUpperPts: 4.4, verdict: "clears",
              bothTouch: 23, bothTouchPct: 0.9, timeout: 91, timeoutPct: 3.7 },
-    omnigold: { tf: "1h", published: 9897, filled: 8132, unfilled: 1765, unfilledPct: 17.8,
-             plannedRr: 2.00, breakevenPct: 33.3, winLowerPct: 30.4, winUpperPct: 38.6,
-             edgeLowerPts: -3.0, edgeUpperPts: 5.3, verdict: "flips",
-             bothTouch: 672, bothTouchPct: 8.3, timeout: 398, timeoutPct: 4.9 }
+    /* hg-v1404: omnigold half re-derived from the hg-v1402 walk
+       (scripts/desk-breakeven.mjs). The sign structure is unchanged: the
+       edge still flips between the fill bounds. */
+    omnigold: { tf: "1h", published: 10306, filled: 8564, unfilled: 1742, unfilledPct: 16.9,
+             plannedRr: 2.00, breakevenPct: 33.3, winLowerPct: 31.1, winUpperPct: 39.4,
+             edgeLowerPts: -2.3, edgeUpperPts: 6.1, verdict: "flips",
+             bothTouch: 716, bothTouchPct: 8.4, timeout: 363, timeoutPct: 4.2 }
 };
 
 /* Which desk a caller is asking about, tolerantly — the tabs spell it several
@@ -2893,6 +2963,7 @@ function hgGoldSetupEdgeApply(cand, opts){
    clears the 1.2R minimum the candidate is DROPPED with a named reason —
    the same bar __gsCand holds every house plan to. Never throws. */
 var GS_STOP_FLOOR_ATR = 1.5;
+var GS_MIN_RR = 1.2; /* hg-v1390: accuracy guard — floor stays 1.2R pending full 6000-bar re-walk; 1.5R measured in swing-scope only */
 
 /* COST-HEAVY demotion. Even a contract-true 1.5×ATR stop can be economically
    unpayable in quiet tape: the GOLD SCALP replay's <0.08%-risk cohort ran
@@ -2995,11 +3066,11 @@ function hgGoldScalpStopFloor(c, a15){
     var floorD = GS_STOP_FLOOR_ATR * a15;
     if (risk >= floorD * (1 - 1e-9)) return c;
     var rr1F = isFinite(+c.t1) ? Math.abs(+c.t1 - e) / floorD : NaN;
-    if (!(isFinite(rr1F) && rr1F >= 1.2)){
+    if (!(isFinite(rr1F) && rr1F >= GS_MIN_RR)){
       c.dropped = true;
       c.reason = 'engine stop ' + (risk / a15).toFixed(2) + '×ATR is below the '
         + GS_STOP_FLOOR_ATR + '×ATR scalp floor; at the floored stop TP1 pays '
-        + (isFinite(rr1F) ? rr1F.toFixed(1) : '—') + 'R < 1.2R minimum — cost-toxic geometry (replay-measured)';
+        + (isFinite(rr1F) ? rr1F.toFixed(1) : '—') + 'R < ' + GS_MIN_RR.toFixed(1) + 'R minimum — cost-toxic geometry (replay-measured)';
       if (!Array.isArray(c.stamps)) c.stamps = [];
       if (c.stamps.indexOf('STOP FLOOR') < 0) c.stamps.push('STOP FLOOR');
       return c;
@@ -3194,7 +3265,8 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
        So they are tallied, and the WHY NOTHING LED panel prints the split.
 
        This counts; it does not gate. The condition is unchanged. */
-    if (myEv.length < 2 || myEv.length <= oppose){
+    var CORE_SELF = { asian: 1, openrange: 1, silverb: 1, pdraid: 1, judas: 1, gs2: 1, gs3: 1, gs4: 1, gs5: 1, gs6: 1, gs7: 1, gs8: 1, gs9: 1, gs10: 1, gs11: 1, gs12: 1, gs13: 1, gs14: 1 };
+    if (!CORE_SELF[key] && (myEv.length < 2 || myEv.length <= oppose)){
       if (D && D.__gsTally){
         if (myEv.length < 2) D.__gsTally.thin++;
         else D.__gsTally.outvoted++;
@@ -3209,16 +3281,16 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
     var bucket = String(isFinite(anchor) ? Math.round(anchor) : Math.round(D.entry));
     /* (3) MIN R:R AFTER SNAPPING — opposing structure too close to pay for
        the trade: dropped with a named reason, never silently. */
-    if (lv.rr < 1.2){
+    if (lv.rr < GS_MIN_RR){
       /* hg-v929: rr and rrFloor are carried as NUMBERS, not left to be parsed
          back out of the sentence. The reject funnel's shortfall readout reads
          these; a prose parse would have coupled the panel to the wording and
          gone quietly blank the next time the sentence was reworded. */
       return { dropped: true, id: key + '|' + dir + '|' + bucket,
                strategy: GST_NAME[key] || key, stratKey: key, dir: dir,
-               rr: lv.rr, rrFloor: 1.2,
+               rr: lv.rr, rrFloor: GS_MIN_RR,
                reason: 'structure too close — R:R insufficient (opposing structure caps TP1 at '
-                       + lv.rr.toFixed(1) + 'R < 1.2R minimum)' };
+                       + lv.rr.toFixed(1) + 'R < ' + GS_MIN_RR.toFixed(1) + 'R minimum)' };
     }
 
     var demoted = false, offSess = false, stamps = [], gateNotes = [];
@@ -3272,10 +3344,16 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
        Asian-range strategy trades its own session; everything else is
        demoted and held to a +2 higher tally bar in goldRankSetups. */
     var inKillzone = !!(D.kz && D.kz.weight > 0);
+    /* A COMEX pin only exists on the 18:15 bar, and a Tokyo break only exists
+       inside 03:00-04:30. Those windows are outside the London/NY killzone on
+       purpose. Demoting them for that throws away the only bar they can fire. */
+    var nativeHour = (D.kz && isFinite(D.kz.hourGMT)) ? D.kz.hourGMT : NaN;
+    var nativeSess = (key === 'gs10' && nativeHour === 18)
+      || (key === 'gs11' && (nativeHour === 3 || nativeHour === 4));
     /* hg-v944: the lever, defaulting to ON (unchanged). See
        hgGoldSessionSepPanelHtml for what this withholds and what measures it. */
     if (hgGoldOffSessionDemoteOn()
-        && !inKillzone && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
+        && !inKillzone && !nativeSess && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
       demoted = true; offSess = true; stamps.push('OFF-SESSION');
       gateNotes.push('detected ' + (D.kz ? (D.kz.label || 'OFF-HOURS') : 'OFF-HOURS')
         + ' — outside every ICT killzone; held to a +2 higher confluence-tally bar');
@@ -3312,6 +3390,68 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
       notes: (D.notes || []).concat([lv.stopNote])
     };
   }catch(e){ return null; }
+}
+
+function goldAdvancedSMCSweep(rows) {
+  try {
+    var n = rows.length;
+    if (n < 50) return null;
+    var sweeps = goldSweeps(rows);
+    if (!sweeps || !sweeps.dir) return null;
+
+    var swings = goldSwings(rows, 10, 10);
+    if (!swings || !swings.highs.length || !swings.lows.length) return null;
+
+    var recentSweep = sweeps.all ? sweeps.all.find(s => s.barsAgo <= 25) : null;
+    if (!recentSweep) return null;
+
+    var atr_vals = _atr(rows, 14);
+    var currentAtr = __last(atr_vals);
+    if (!isFinite(currentAtr)) return null;
+
+    var mssDetected = false;
+    var dir = recentSweep.dir;
+
+    for (var i = n - 15; i < n; i++) {
+      if (!rows[i] || !isFinite(rows[i].c)) continue;
+      if (dir === 'bullish' && rows[i].c > swings.highs[swings.highs.length-1].price) {
+        var body = Math.abs(rows[i].c - rows[i].o);
+        if (body > 0.7 * currentAtr) { mssDetected = true; break; }
+      } else if (dir === 'bearish' && rows[i].c < swings.lows[swings.lows.length-1].price) {
+        var body = Math.abs(rows[i].c - rows[i].o);
+        if (body > 0.7 * currentAtr) { mssDetected = true; break; }
+      }
+    }
+
+    if (mssDetected) return { trigger: true, dir: dir, level: recentSweep.level, type: 'SMC_SWEEP', age: recentSweep.barsAgo };
+  } catch (e) {}
+  return null;
+}
+
+function goldVolumeProfileRejection(rows) {
+  try {
+    var n = rows.length;
+    if (n < 50) return null;
+    var vprof = goldVolumeProfile(rows, 100, 40);
+    if (!vprof || !vprof.pocPrice) return null;
+
+    var lastBar = rows[n-1];
+    var atr_vals = _atr(rows, 14);
+    var currentAtr = __last(atr_vals);
+    if (!isFinite(currentAtr)) return null;
+
+    var poc = vprof.pocPrice;
+    var distToPoc = Math.abs(lastBar.c - poc);
+
+    if (distToPoc < currentAtr * 0.6) {
+      var body = Math.abs(lastBar.c - lastBar.o);
+      var wickSize = (lastBar.h - lastBar.l) - body;
+      if (wickSize > body && wickSize > currentAtr * 0.25) {
+        return { trigger: true, dir: null, level: poc, type: 'VP_REJECTION', dist: distToPoc };
+      }
+    }
+  } catch (e) {}
+  return null;
 }
 
 /* detector bundle + the shared agreeing-reads ledger (same read logic as the
@@ -3365,13 +3505,57 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
     var er = D.scalpEval.reads[sei];
     add(er.side, er.tag, er.label);
   }
+
+  // SMC & Volume Profile Confluence
+  var smcSweep = goldAdvancedSMCSweep(rows);
+  if (smcSweep) add(smcSweep.dir, 'SMC_SWEEP', 'SMC Sweep + MSS (' + smcSweep.age + 'b ago)', true);
+
+  var vpRej = goldVolumeProfileRejection(rows);
+  if (vpRej) add('neutral', 'VP_REJECTION', 'Vol Profile Rejection at ' + vpRej.level.toFixed(2), true);
   var vpRange0 = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
     ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
   D.vpOk = isFinite(vpRange0) && vpRange0 >= 2.5*a15;
+
+  /* Macro context (Phase 3: correlation with DXY/US10Y).
+     DIRECTION IS NOT KNOWN HERE. This bundle gathers evidence for EVERY strategy
+     before any candidate is formed, so it has no side to align against — and it
+     was never passed one. The block below used to read a free variable `dir`,
+     which is not a parameter and is never declared in this function: the `add`
+     call threw `ReferenceError: dir is not defined` on every invocation, the
+     caller's `catch { return [] }` swallowed it, and GOLD SCALP therefore formed
+     ZERO candidates on every scan. The four `dir === 'long'/'short'` tests above
+     it never threw but never did anything either — `undefined === 'long'` is
+     false, so `macroOk` was unconditionally true.
+     So the read here is stamped NEUTRAL and says what it is: context, not a
+     verdict. Claiming "Macro alignment" while neutral is the hg-v955 defect in
+     miniature — a field asserting a check nobody performed. The direction-aware
+     macro decision belongs to hgGoldInstFilter, which receives the candidate's
+     side; that seam is where a real veto should be wired, and this comment is the
+     note that it is still open. */
+  if (bundleOpts.macroHint && typeof bundleOpts.macroHint === 'object') {
+    var m = bundleOpts.macroHint;
+    D.macroOk = true;
+    var mCtx = [];
+    if (m.dxyTrend) mCtx.push('DXY ' + m.dxyTrend);
+    if (m.us10yTrend) mCtx.push('US10Y ' + m.us10yTrend);
+    add('neutral', 'macro', 'Macro context only — DXY/US10Y is read per candidate, not per bundle'
+      + (mCtx.length ? ' (' + mCtx.join(', ') + ')' : ''));
+  } else {
+    D.macroOk = true; // no macro data supplied — fail open, as everywhere else
+  }
   if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
     var swIdx0 = rows.length - 1 - sw.barsAgo;
     if (swIdx0 >= 0 && goldVolumeSpike(rows, swIdx0)) D.volSpikeSweep = true;
     var curV2 = D.activeTriggers.indexOf('LIQUIDITY_SWEEP_VOL_VALIDATED') >= 0 && sw.barsAgo === 0;
+  }
+
+  /* Confluence Tallying (Phase 3 & 4).
+     The macro read is NOT taken here: it is emitted once, above, in the macro
+     context block. This site was the second copy, and it is the one that threw —
+     `add(dir, 'macro', ...)` read the same undeclared `dir`. Two reads for one
+     piece of evidence is also the hg-v949 second-home defect, so the duplicate is
+     removed rather than repaired. D.macroOk is still set above and still read by
+     the candidate path. */
     if (D.volSpikeSweep && !curV2){
       if (sw.dir === 'bullish'){
         add('long', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago) — volume-validated');
@@ -3381,7 +3565,6 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
         add('short', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms buy-side liquidity taken');
       }
     }
-  }
 
   var ob = D.ob = goldOrderBlocks(rows);
   if (ob){
@@ -3495,6 +3678,21 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   var mfi = D.mfi = goldMFI(rows, volOpts);
   if (mfi.last === 'GREEN') add(lastBar.c >= lastBar.o ? 'long' : 'short', 'mfi', 'MFI green bar — volume-driven trend');
   else if (mfi.last === 'SQUAT') D.notes.push('MFI pink bar — high volume + low range: manipulation / breakout watch, confirmation required');
+
+  /* --- NEW: Trend & Momentum Confluence (Phase 2) --- */
+  var stArr = goldSupertrend(rows, 10, 3);
+  if (stArr && stArr.length > 0) {
+    var st = stArr[stArr.length - 1];
+    if (st.dir === 1) add('long', 'supertrend', 'Supertrend bullish trend confirmation');
+    else if (st.dir === -1) add('short', 'supertrend', 'Supertrend bearish trend confirmation');
+  }
+
+  var adxR = goldADX(rows);
+  if (adxR && adxR.state === 'TRENDING') {
+    add(null, 'adx', 'ADX trending (' + adxR.adx.toFixed(1) + ') — market momentum active');
+  } else if (adxR && adxR.state === 'CHOP') {
+    D.notes.push('ADX ' + adxR.adx.toFixed(1) + ' — chop regime, mean-reversion favored');
+  }
 
   /* volume profile POC / HVN proximity reads (vprof computed at bundle start) */
   if (D.vprof && D.vpOk && isFinite(D.vprof.pocPrice)){
@@ -3674,6 +3872,7 @@ function goldScalpSetups(inp){
       try{ newsState = W.hgNewsState(); }catch(eN){ newsState = null; }
     }
     var news = __newsCaution(newsState, nowMs);
+    if (news && news.lock) return [];
 
     var bundleOpts = {};
     if (inp.dxyCandles) bundleOpts.dxyCandles = inp.dxyCandles;
@@ -4102,7 +4301,7 @@ function goldScalpSetups(inp){
           : (isFinite(sbb.stop) ? sbb.stop : sbb.sweepLevel);
         var sbbZone = sbb.entryZone ? { lo: sbb.entryZone.lo, hi: sbb.entryZone.hi } : null;
         var sbbCand = __gsCand('silverb', sbb.dir, D, sbbStop, __gsSnapLvls(D, sbb.dir),
-          sbb.why + ' — session-bounded sweep→OB/FVG (Silver Bullet twin)',
+          sbb.why + ' — session-bounded sweep→OB/FVG (Silver Bulvar twin)',
           'close beyond sweep extreme or leave SB window cancels',
           sbbZone, isFinite(sbb.entry) ? sbb.entry : undefined);
         if (sbbCand){
@@ -4193,8 +4392,15 @@ function goldScalpSetups(inp){
         D.__part6 = hgGoldPart6Engine(rows, {
           newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
           now: nowMs,
-          dxyRows: (inp && (inp.dxyRows || inp.dxyCandles)) || null,
+          dxyRows: (function(){
+            var intra = inp && inp.dxyIntraday;
+            if (intra && intra.length && isFinite(+intra[0].h) && isFinite(+intra[0].l)) return intra;
+            var daily = inp && (inp.dxyCandles || inp.dxyRows);
+            if (daily && daily.length && isFinite(+daily[0].h) && isFinite(+daily[0].l)) return daily;
+            return null;
+          })(),
           btcRows: (inp && inp.btcRows) || null,
+          goldDaily: (inp && (inp.goldDaily || inp.dailyCandles)) || null,
           events: (inp && inp.events) || null,
           dom: (inp && inp.dom) || null,
           skew: (inp && inp.skew) || null
@@ -4234,6 +4440,8 @@ function goldScalpSetups(inp){
           usdInr: (inp && inp.usdInr) || null,
           kToday: (inp && inp.kToday) || null,
           silverRows: (inp && inp.silverRows) || null,
+          silverDaily: (inp && inp.silverDaily) || null,
+          goldDaily: (inp && (inp.goldDaily || inp.dailyCandles)) || null,
           mcxRows: (inp && inp.mcxRows) || null,
           priorDay: (inp && inp.priorDay) || null,
           tradesToday: (inp && inp.tradesToday) || 0,
@@ -4679,6 +4887,34 @@ function goldScalpSetups(inp){
         undefined, oLvl));
     }
     orCand(orL); orCand(orN);
+    /* A finished Judas reclaim or prior-day raid is its own evidence.
+       It does not wait for two unrelated reads. The opening-range break
+       already mints above. */
+    try{
+      var coreFn = (typeof window !== 'undefined') ? window.pineGoldCoreHits : null;
+      if (typeof coreFn === 'function'){
+        var cores = coreFn(rows) || [];
+        for (var ci = 0; ci < cores.length; ci++){
+          var ch = cores[ci];
+          if (!ch || !ch.dir || ch.key === 'openrange') continue;
+          push(__gsCand(ch.key, ch.dir, D, ch.stop, __gsSnapLvls(D, ch.dir),
+            ch.why, ch.invalidates, null, ch.entry));
+        }
+      }
+    }catch(eCore){}
+    try{
+      var suite = (typeof window !== 'undefined') ? window.HG_GoldSuite : null;
+      if (suite && typeof suite.scalpHits === 'function'){
+        var spec = suite.scalpHits(rows, rows, { newsRelease: hgGoldTier1OnBar(newsState, rows[rows.length - 1]) }) || [];
+        for (var si = 0; si < spec.length; si++){
+          var sh = spec[si];
+          if (!sh || sh.id === 'GS-1') continue;
+          var sKey = sh.id === 'GS-2' ? 'gs2' : (sh.id === 'GS-4' ? 'gs4' : (sh.id === 'GS-5' ? 'gs5' : (sh.id === 'GS-6' ? 'gs6' : (sh.id === 'GS-7' ? 'gs7' : (sh.id === 'GS-8' ? 'gs8' : (sh.id === 'GS-9' ? 'gs9' : (sh.id === 'GS-10' ? 'gs10' : (sh.id === 'GS-11' ? 'gs11' : (sh.id === 'GS-12' ? 'gs12' : (sh.id === 'GS-13' ? 'gs13' : (sh.id === 'GS-14' ? 'gs14' : 'gs3')))))))))));
+          push(__gsCand(sKey, sh.dir, D, sh.stop, __gsSnapLvls(D, sh.dir),
+            sh.why, 'a close back through the setup level cancels it', null, sh.entry));
+        }
+      }
+    }catch(eSuite){}
     /* --- 10) ADR Exhaustion Fade — robust VWAP-band fade or legacy confluence --- */
     var adrDone = false;
     if (D.scalpEval && D.scalpEval.adrFade && D.scalpEval.adrFade.trigger){
@@ -5424,7 +5660,7 @@ function hgGoldConfluenceHtml(sc){
 /**
  * Apply confluence score onto a candidate (mutates). Stamps tiers.
  * hg-v700: NO_TRADE now DEMOTES (paint, never lead). The old contract —
- * "stamp only, alerts blocked, ranking untouched" — let goldRankSetups crown
+ * "stamp only, alerts blocked, ranking untouched" — var goldRankSetups crown
  * a stamped-no-trade card MOST PROBABLE: the 140-day GOLD SWING replay
  * (scripts/backtest-goldswing-results-pre-v700.json, XM costs) measured the
  * MP cohort n=100 ALL carrying CONF NO TRADE at −0.209R/trade (all 292
@@ -5530,7 +5766,18 @@ var HG_GOLD_FREE_KEYS = ['free:macroTilt', 'free:paxgBasis', 'free:perpFunding',
                             reads -- credit appetite (HYG / LQD rising is risk being bought) and the
                             GLD volume print against its 20-session mean (HIGH / LOW, NORMAL unread).
                             Scored nowhere. */
-                         'free:goldPalladium', 'free:creditRiskOn', 'free:gldVolumeHigh'];
+                         'free:goldPalladium', 'free:creditRiskOn', 'free:gldVolumeHigh',
+                         /* hg-v1171: three more free Yahoo legs through macro.js. TLT (long bonds)
+                            rising is long yields falling -- WITH a gold long. UUP (dollar ETF) rising
+                            is the dollar strengthening -- AGAINST a gold long (trendLeg with
+                            withRising=false). AUD=X (USD/AUD) rising is AUD weakening against the
+                            dollar -- AGAINST a gold long (producer-currency logic, same shape as
+                            USDJPY). Each is DIFFERENT from the pre-existing legs: TLT is nominal
+                            long bonds, TIP is TIPS (real yields); UUP is a direct-market dollar
+                            read distinct from the Frankfurter DXY calc and the single-pair crosses;
+                            AUD=X names a gold-producer currency the stack had never read. Scored
+                            nowhere. */
+                         'free:tlt', 'free:uup', 'free:audusd'];
 /* the correlation band a state mark needs to read: inside it the read is
    UNREAD (absent), not a weak yes */
 var HG_GOLD_CORR_BAND = 0.3;
@@ -5584,6 +5831,10 @@ function hgGoldFreeFeedVerdicts(ctx, dir){
       else if (macro.creditTrend === 'FALLING') m['free:creditRiskOn'] = false;
       if (macro.gldVolumeState === 'HIGH') m['free:gldVolumeHigh'] = true;
       else if (macro.gldVolumeState === 'LOW') m['free:gldVolumeHigh'] = false;
+      /* hg-v1171 */
+      trendLeg('free:tlt', macro.tltTrend, true);
+      trendLeg('free:uup', macro.uupTrend, false);
+      trendLeg('free:audusd', macro.audusdTrend, false);
       /* hg-v1163: state reads -- direction-neutral, three states */
       if (macro.gvzTrend === 'RISING') m['free:gvzRising'] = true;
       else if (macro.gvzTrend === 'FALLING') m['free:gvzRising'] = false;
@@ -5645,7 +5896,11 @@ var HG_GOLD_FREE_ROWS = [
   /* hg-v1167 */
   ['GOLD/PALLADIUM',  'free:goldPalladium',    'Yahoo GC=F / PA=F 20d', 'WITH', 'AGAINST'],
   ['CREDIT HYG/LQD',  'free:creditRiskOn',     'Yahoo HYG / LQD 20d (risk appetite)', 'RISK-ON', 'RISK-OFF'],
-  ['GLD VOLUME',      'free:gldVolumeHigh',    'Yahoo GLD last complete session vs its 20-session mean', 'HIGH', 'LOW']
+  ['GLD VOLUME',      'free:gldVolumeHigh',    'Yahoo GLD last complete session vs its 20-session mean', 'HIGH', 'LOW'],
+  /* hg-v1171 */
+  ['TLT (20Y)',       'free:tlt',              'Yahoo TLT 20d (long bonds rise as long yields fall)', 'WITH', 'AGAINST'],
+  ['DOLLAR UUP',      'free:uup',              'Yahoo UUP 20d (dollar bull ETF)', 'WITH', 'AGAINST'],
+  ['AUD=X',           'free:audusd',           'Yahoo AUD=X 20d (USD / Australian dollar, the top gold producer)', 'WITH', 'AGAINST']
 ];
 function hgGoldFreeFeedLineHtml(marks, opts){
   try{
@@ -5952,6 +6207,40 @@ function goldRankSetups(cands, ctx){
       rc.tally = tally;
       rc.tallyParts = parts;
       if (freeAgainst > 0) rc.oppose = (isFinite(+rc.oppose) ? +rc.oppose : 0) + freeAgainst;
+      /* hg-v1291: THE GOLD FREE-FEED WITNESS. Every free internet resource this
+         desk already fetched and scored travels in `freeReads`, and each verdict
+         is ALREADY oriented to this candidate's own direction
+         (hgGoldFreeFeedVerdicts: true = favourable for this trade, false =
+         against it, absent = the series never loaded). The shared PERFECT
+         predicate read none of them, so a whole library of free evidence — the
+         Yahoo metal and cross-ratio complex (GC=F, SI=F, HG=F, PL=F, PA=F, GDX,
+         CPER, ^VIX, TLT, UUP, JPY=X, AUD=X, CNY=X), Frankfurter DXY, the
+         Treasury 10Y, CFTC managed-money COT, alternative.me Fear & Greed, PAXG
+         perp funding and basis, GVZ, GLD volume, the yield curve — was invisible
+         to the badge. It becomes ONE leg: did any series answer, and did any
+         single one object. Computed HERE (not later) because the free block above
+         is what fills the map. Zero new requests: these marks already existed. */
+      try{
+        var pfFr = freeReads || {}, pfFrKeys = Object.keys(pfFr);
+        var pfFrReadable = 0, pfFrAgainst = [];
+        for (var pfFk = 0; pfFk < pfFrKeys.length; pfFk++){
+          var pfFkey = pfFrKeys[pfFk];
+          if (pfFkey.indexOf('free:') !== 0) continue;
+          var pfFval = pfFr[pfFkey];
+          if (pfFval !== true && pfFval !== false) continue;   /* not readable: no verdict */
+          pfFrReadable++;
+          if (pfFval === false) pfFrAgainst.push(pfFkey.slice(5));
+        }
+        if (pfFrReadable > 0){
+          rc.goldFreeWitness = {
+            readable: true,
+            against: pfFrAgainst.length > 0,
+            names: pfFrAgainst.join(', '),
+            readableCount: pfFrReadable,
+            againstCount: pfFrAgainst.length
+          };
+        }
+      }catch(eFrw){}
       try{
         var gradeFn = (typeof window !== 'undefined' && window.hgGoldGradeFromScore) ? window.hgGoldGradeFromScore : null;
         if (gradeFn){
@@ -6097,6 +6386,51 @@ function goldRankSetups(cands, ctx){
               }
             }
           }catch(eSt4){}
+          /* hg-v1291: the VOLATILITY-REGIME leg — one of the legs the shared
+             predicate READS but this desk never FED, so it stayed permanently
+             unread and could never witness anything. Read off the desk's OWN 4h
+             bars through the house ATR percentile (the same classifier TREND
+             MATRIX uses: <20 DEAD, >80 BLOWOFF, else HEALTHY), so the leg means
+             the same thing here as on the crypto desks. HEALTHY is readable-WITH,
+             DEAD is readable-neutral, BLOWOFF disqualifies, and a tape too thin
+             for the classifier stays absent. Zero new requests. */
+          try{
+            if (typeof window !== 'undefined' && typeof window.hgAtrPercentile === 'function'
+                && ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 30){
+              var pfAtrPct = window.hgAtrPercentile(ctx.rows4h, 14, 100);
+              if (isFinite(pfAtrPct)){
+                pfReads.atrRegime = (pfAtrPct < 20) ? 'DEAD' : ((pfAtrPct > 80) ? 'BLOWOFF' : 'HEALTHY');
+                pfReads.atrPercentile = pfAtrPct;
+              }
+            }
+          }catch(eAtr4){}
+          /* hg-v1291: the TREND-QUALITY leg — the second leg the predicate reads
+             and this desk never fed. The Dreiss Choppiness Index and the Kaufman
+             efficiency ratio, read together off the desk's own 4h bars, exactly
+             as the crypto desks read them (omnibtc.js hgObtcTrendQualityOf): CHOP
+             means BOTH chop is high AND efficiency is low — a trend setup on a
+             tape with no trend to ride, the state the predicate counts against.
+             TREND is the with-state; anything in between is readable-neutral; a
+             tape too thin for the windows stays absent. Choppiness comes from
+             indicators.js's own hgChoppiness and efficiency from this file's
+             calculateKaufmanER, so no new maths and no new request. */
+          try{
+            if (ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 25
+                && typeof hgChoppiness === 'function' && typeof calculateKaufmanER === 'function'){
+              var pfChopS = hgChoppiness(ctx.rows4h, 14);
+              var pfKer = calculateKaufmanER(ctx.rows4h, 20);
+              if (Array.isArray(pfChopS) && pfChopS.length){
+                var pfChop = +pfChopS[pfChopS.length - 1];
+                var pfEr = (pfKer && isFinite(+pfKer.er)) ? +pfKer.er : NaN;
+                if (isFinite(pfChop)){
+                  pfReads.chopVal = pfChop;
+                  if (isFinite(pfEr)) pfReads.kerVal = pfEr;
+                  if (pfChop >= 61.8 && isFinite(pfEr) && pfEr < 0.3) pfReads.trendQuality = 'CHOP';
+                  else if (pfChop <= 38.2 && isFinite(pfEr) && pfEr > 0.4) pfReads.trendQuality = 'TREND';
+                }
+              }
+            }
+          }catch(eTq4){}
           try{
             if (isFinite(+ctx.fundingRate) && typeof window !== 'undefined' && typeof window.hgFundingAgainstMark === 'function'){
               var pfFam = window.hgFundingAgainstMark(+ctx.fundingRate, rc.dir);
@@ -9163,6 +9497,26 @@ function hgGoldNewsEvents(news){
   }catch(e){ return []; }
 }
 
+function hgGoldTier1OnBar(news, bar){
+  try{
+    if (!news || !bar) return false;
+    var open = __toMs(bar.t);
+    if (!isFinite(open)) return false;
+    var evs = hgGoldNewsEvents(news), i, ev, t, title;
+    for (i = 0; i < evs.length; i++){
+      ev = evs[i];
+      if (!ev) continue;
+      title = ev.title || ev.name || ev.event || '';
+      if (!hgGoldNewsIsTier1(title) && !ev.fomcDecision) continue;
+      t = (ev.t != null) ? ev.t : ev.timestamp;
+      t = (+t < 1e12) ? (+t) * 1000 : +t;
+      if (!isFinite(t)) continue;
+      if (t >= open && t < open + 15 * 60 * 1000) return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
 function hgGoldNewsGate(news, nowMs){
   var out = { lock: false, title: null, reason: null, unchecked: false };
   try{
@@ -9920,7 +10274,7 @@ function hgGoldMacroLeg(rows, trend){
          fall-through to EMA50 here. The first cut of this function fell
          through whenever the band read FLAT, and that is not a gap in the
          reading -- FLAT means NOT RISING, which is an answer. Falling through
-         would have let merely SUPPLYING the feed start locking gold longs the
+         would have var merely SUPPLYING the feed start locking gold longs the
          desk does not lock today, which is exactly the unmeasured change this
          pack exists to refuse. Driving it on a constructed series caught it. */
       if (out.trend20 !== null){ out.bull = out.trend20; out.via = 'trend20'; }
@@ -10045,7 +10399,7 @@ function hgGoldMacroLockNote(m){
             ? 'so no gold-short lock was asked for. Missing feeds fail open.'
             : 'so no gold-long lock was asked for. Missing feeds fail open.');
     /* == null, not === null: an object carrying NO verdict has these fields
-       undefined rather than null, and a strict check let it through to render
+       undefined rather than null, and a strict check var it through to render
        a MACRO OK line about reads that were never made. Caught by handing the
        note a bare {}. */
     var dxyV = shortSide ? m.dxyBear : m.dxyBull;
@@ -10077,7 +10431,7 @@ function hgGoldMacroLockNote(m){
    is the London open hour in BST and this table calls it LONDON (weight 2)
    while 08:30 gets LONDON_OPEN (weight 3).
 
-   It is left alone, unlike the Silver Bullet windows above, because the two
+   It is left alone, unlike the Silver Bulvar windows above, because the two
    are not the same kind of statement. Those name a local event in their own
    comment ("after London open") and only matched it in summer, so they
    contradicted themselves. This table is documented in AGENTS.md as
@@ -10102,6 +10456,17 @@ function hgGoldSessionGate(nowMs, rows, stratKey, opt){
     else if (h >= 16 && h < 20){ out.session = 'NY_PM'; out.weight = 1; }
     else if (h >= 0 && h < 8){ out.session = 'ASIAN'; out.weight = 0; }
     else { out.session = 'OFF'; out.weight = 0; }
+
+    /* Tokyo compression and the COMEX pin are their own windows. A vwap
+       attempt at 03:20 stays blocked. These two do not. */
+    if (stratKey === 'gs11' && h >= 3 && h < 4.5){
+      out.session = 'TOKYO'; out.weight = 1; out.ok = true; out.reject = false; out.demote = false; out.reason = '';
+      return out;
+    }
+    if (stratKey === 'gs10' && h >= 18.25 && h <= 18.5){
+      out.session = 'COMEX_PIN'; out.weight = 1; out.ok = true; out.reject = false; out.demote = false; out.reason = '';
+      return out;
+    }
 
     if (out.session !== 'ASIAN') return out;
 
@@ -10144,7 +10509,7 @@ function hgGoldInstFilter(cand, ctx){
     var scalp = ctx.scalp !== false;
     var newsG = hgGoldNewsGate(ctx.news, ctx.nowMs);
     cand.newsGate = newsG;
-    if (newsG.lock){
+    if (newsG.lock && key !== 'gs14'){
       cand.dropped = true;
       cand.reason = newsG.reason;
       return cand;
@@ -12244,7 +12609,7 @@ function hgGoldSweepObHtml(sob){
 }
 
 /* =========================================================================
-   SESSION-BOUNDED SWEEP REVERSAL (hg-v566) — ICT Silver Bullet structural twin.
+   SESSION-BOUNDED SWEEP REVERSAL (hg-v566) — ICT Silver Bulvar structural twin.
    Time-windowed Asia (or prior-hour) sweep → close reclaim → OB/FVG entry.
    London open 07:00–09:30 UTC primary; NY open 12:00–13:30 UTC secondary.
    Algorithm reference only — no third-party import into HARDGATE.
@@ -12333,12 +12698,12 @@ function hgGoldSessionBoundWindow(nowMs){
       : '--:--'; }
     if (hgGoldSbIn(nowMs, 'lon')){
       out.name = 'LONDON_SB'; out.inWindow = true; out.grade = 'A';
-      out.why = 'London open Silver Bullet window 08:00–10:30 London (now ' + clk(lh) + ')';
+      out.why = 'London open Silver Bulvar window 08:00–10:30 London (now ' + clk(lh) + ')';
       return out;
     }
     if (hgGoldSbIn(nowMs, 'ny')){
       out.name = 'NY_SB'; out.inWindow = true; out.grade = 'A';
-      out.why = 'NY open Silver Bullet window 08:00–09:30 New York (now ' + clk(nh) + ')';
+      out.why = 'NY open Silver Bulvar window 08:00–09:30 New York (now ' + clk(nh) + ')';
       return out;
     }
     out.why = 'outside session-bound windows (London 08:00–10:30 local ' + clk(lh)
@@ -12347,7 +12712,7 @@ function hgGoldSessionBoundWindow(nowMs){
   }catch(e){ out.why = 'window error'; return out; }
 }
 
-/** Prior complete UTC clock-hour H/L (Silver Bullet prior-hour pool). */
+/** Prior complete UTC clock-hour H/L (Silver Bulvar prior-hour pool). */
 function hgGoldPriorHourRange(rows, nowMs){
   var out = { ok: false, hi: NaN, lo: NaN, mid: NaN, hourIso: '', bars: 0, why: '' };
   try{
@@ -12373,7 +12738,7 @@ function hgGoldPriorHourRange(rows, nowMs){
 }
 
 /**
- * Session-bounded Asia→London (Silver Bullet twin) detector.
+ * Session-bounded Asia→London (Silver Bulvar twin) detector.
  * Sweep of Asia box (preferred) or prior-hour H/L inside the open window,
  * close reclaim, then fresh OB/FVG for entry.
  */
@@ -14246,7 +14611,9 @@ function hgGoldPart6Engine(rows, opts){
     out.z = hgGoldPart6ZScore(rows);
     out.ac = hgGoldPart6Autocorr(rows);
     out.hurst = hgGoldPart6Hurst(rows);
-    out.corr = opts.btcRows ? hgGoldPart6Corr(rows, opts.btcRows) : { ok: false, why: 'BTC unread' };
+    var gCorr = __rows(opts.goldDaily);
+    if (!gCorr || gCorr.length < 30) gCorr = rows;
+    out.corr = opts.btcRows ? hgGoldPart6Corr(gCorr, opts.btcRows) : { ok: false, why: 'BTC unread' };
     if (!out.corr.ok) out.unchecked.push('gold–BTC corr');
 
     var ker = typeof hgGoldPart5KerRegime === 'function' ? hgGoldPart5KerRegime(rows) : null;
@@ -14742,10 +15109,18 @@ function hgGoldPart7Engine(rows, opts){
       ? hgGoldPart7McxGapFade(opts.mcxRows, { parityInr: opts.parityInr })
       : { ok: false, why: 'S40 MCX unread' };
     if (!opts.mcxRows) out.unchecked.push('S40 MCX gap');
-    out.ratio = opts.silverRows
-      ? hgGoldPart7RatioPair(rows, opts.silverRows)
-      : { ok: false, why: 'S43 silver unread' };
-    if (!opts.silverRows) out.unchecked.push('S43 gold/silver');
+    var gDaily = __rows(opts.goldDaily);
+    var sDaily = __rows(opts.silverDaily);
+    if (gDaily && sDaily && gDaily.length >= 60 && sDaily.length >= 60){
+      out.ratio = hgGoldPart7RatioPair(gDaily, sDaily);
+    } else if (opts.silverRows){
+      out.ratio = hgGoldPart7RatioPair(rows, opts.silverRows);
+    } else if (sDaily || opts.silverDaily){
+      out.ratio = { ok: false, why: 'S43 need ≥60 daily gold and silver sessions' };
+    } else {
+      out.ratio = { ok: false, why: 'S43 silver unread' };
+    }
+    if (!opts.silverRows && !(sDaily && sDaily.length)) out.unchecked.push('S43 gold/silver');
 
     var last = rows[rows.length - 1];
     var parity = hgGoldPart7McxParity(last.c, opts.usdInr, opts.kToday);
@@ -15135,6 +15510,72 @@ function hgGoldPart8ApplyIlliqScale(cand, illiq){
     if (illiq.thin && cand.stamps.indexOf('S55 THIN') < 0) cand.stamps.push('S55 THIN');
     return cand;
   }catch(e){ return cand; }
+}
+
+/**
+ * §5 Macro-residual. Needs opts.residSeries (ε_t array) OR daily return series
+ * gold/dxy/real/spx/oil. Fail-open when unread.
+ *
+ * hgGoldAlignLogReturns builds those return arrays from daily OHLC, aligned on
+ * the UTC date. A series with a hole is left off — it is not filled with zero
+ * and it does not shorten the gold/dollar sample. Under 40 shared returns the
+ * whole pack is null.
+ */
+function __dayKeySec(t){
+  var n = +t;
+  if (!isFinite(n)) return null;
+  if (n > 1e12) n = Math.floor(n / 1000);
+  return Math.floor(n / 86400);
+}
+function __dayCloseMap(rows){
+  rows = __rows(rows);
+  if (!rows) return null;
+  var m = {}, i, k, n = 0;
+  for (i = 0; i < rows.length; i++){
+    k = __dayKeySec(rows[i].t);
+    if (k == null || !(+rows[i].c > 0)) continue;
+    m[k] = +rows[i].c;
+    n++;
+  }
+  return n ? m : null;
+}
+function hgGoldAlignLogReturns(goldRows, other){
+  try{
+    other = other || {};
+    var g = __dayCloseMap(goldRows);
+    var d = __dayCloseMap(other.dxy || other.dxyRows);
+    if (!g || !d) return null;
+    var days = [], k;
+    for (k in g){
+      if (Object.prototype.hasOwnProperty.call(g, k) && d[k] > 0) days.push(+k);
+    }
+    days.sort(function(a, b){ return a - b; });
+    if (days.length < 41) return null;
+    function rets(map){
+      var out = [], i, a, b;
+      for (i = 1; i < days.length; i++){
+        a = map[days[i - 1]]; b = map[days[i]];
+        if (!(a > 0) || !(b > 0)) return null;
+        out.push(Math.log(b / a));
+      }
+      return out.length >= 40 ? out : null;
+    }
+    var rGold = rets(g), rDxy = rets(d);
+    if (!rGold || !rDxy || rGold.length !== rDxy.length) return null;
+    var out = { rGold: rGold, rDxy: rDxy };
+    function extra(rows){
+      var m = __dayCloseMap(rows);
+      if (!m) return null;
+      var i;
+      for (i = 0; i < days.length; i++) if (!(m[days[i]] > 0)) return null;
+      return rets(m);
+    }
+    var sp = extra(other.spx || other.spxRows);
+    var oil = extra(other.oil || other.oilRows);
+    if (sp && sp.length === rGold.length) out.rSpx = sp;
+    if (oil && oil.length === rGold.length) out.rOil = oil;
+    return out;
+  }catch(e){ return null; }
 }
 
 /**
@@ -17071,6 +17512,7 @@ function hgGoldFormingStack(inp){
       now: inp.now || Date.now(),
       dxyRows: inp.dxyRows || inp.dxyCandles || null,
       btcRows: inp.btcRows || null,
+      goldDaily: inp.goldDaily || inp.dailyCandles || null,
       events: inp.events || null,
       skew: inp.skew || null,
       dom: inp.dom || null
@@ -17081,6 +17523,8 @@ function hgGoldFormingStack(inp){
       usdInr: inp.usdInr || null,
       kToday: inp.kToday || null,
       silverRows: inp.silverRows || null,
+      silverDaily: inp.silverDaily || null,
+      goldDaily: inp.goldDaily || inp.dailyCandles || null,
       mcxRows: inp.mcxRows || null,
       priorDay: inp.priorDay || null,
       gvzMinusRealized: inp.gvzMinusRealized,
@@ -17262,7 +17706,7 @@ function hgGoldFormingStack(inp){
         });
       }
     }
-    /* Session-bounded Silver Bullet twin (London/NY open window) */
+    /* Session-bounded Silver Bulvar twin (London/NY open window) */
     if (out.sessionBound && out.sessionBound.ok && out.sessionBound.dir
         && (out.sessionBound.confirmed || out.sessionBound.tier === 'alert' || out.sessionBound.reclaimOk)){
       out.strategies.push({
@@ -17638,6 +18082,8 @@ W.HG_GOLD_EDGE_BARS = HG_GOLD_EDGE_BARS;
 W.hgGoldEdgeBarsFor = hgGoldEdgeBarsFor;
 W.hgGoldEdgeTierInUse = hgGoldEdgeTierInUse;
 W.hgGoldEdgeBarReach = hgGoldEdgeBarReach;
+W.goldAdvancedSMCSweep = goldAdvancedSMCSweep;
+W.goldVolumeProfileRejection = goldVolumeProfileRejection;
 W.hgGoldEdgeVerdictDepartures = hgGoldEdgeVerdictDepartures;
 W.hgGoldSetEdgeRetune = hgGoldSetEdgeRetune;
 W.hgGoldEdgeRetuneInit = hgGoldEdgeRetuneInit;
@@ -17882,6 +18328,7 @@ W.hgGoldVpin = hgGoldVpin;
 W.hgGoldPart8ApplyVpinFilter = hgGoldPart8ApplyVpinFilter;
 W.hgGoldAmihudIlliq = hgGoldAmihudIlliq;
 W.hgGoldPart8ApplyIlliqScale = hgGoldPart8ApplyIlliqScale;
+W.hgGoldAlignLogReturns = hgGoldAlignLogReturns;
 W.hgGoldMacroResidual = hgGoldMacroResidual;
 W.hgGoldPart8ResidualTrade = hgGoldPart8ResidualTrade;
 W.hgGoldRegimeCluster = hgGoldRegimeCluster;
@@ -17950,6 +18397,7 @@ W.hgGoldBarRvol = hgGoldBarRvol;
 W.hgGoldRealYieldBias = hgGoldRealYieldBias;
 W.hgGoldDollarBias = hgGoldDollarBias;
 W.hgGoldNewsIsTier1 = hgGoldNewsIsTier1;
+W.hgGoldTier1OnBar = hgGoldTier1OnBar;
 W.hgGoldNewsGate = hgGoldNewsGate;
 W.hgGoldNewsEvents = hgGoldNewsEvents;   /* test seam: proves the reader copies */
 W.hgGoldMergeFedFomc = hgGoldMergeFedFomc;
@@ -17963,8 +18411,8 @@ W.hgGoldSpreadFin = gdFin;
 W.hgGoldSpreadLock = hgGoldSpreadLock;
 W.hgGoldMtfBias = hgGoldMtfBias;
 W.hgGoldMtfMatrix = hgGoldMtfMatrix;
-W.hgGoldMomRegime = hgGoldMomRegime;   /* hg-v1019: gate 17 — the momentum regime witness */
-W.hgGoldVwapStretch = hgGoldVwapStretch;   /* hg-v1020: gate 18 — the VWAP stretch witness */
+W.hgGoldMomRegime = hgGoldMomRegime;
+W.hgGoldVwapStretch = hgGoldVwapStretch;
 W.HG_GOLD_SPREAD_MAX_USD = HG_GOLD_SPREAD_MAX_USD;
 W.HG_GOLD_SPREAD_BASIS_VENUE = HG_GOLD_SPREAD_BASIS_VENUE;
 W.hgGoldSpreadVenueOk = hgGoldSpreadVenueOk;
@@ -17972,4 +18420,3281 @@ W.hgGoldQuoteFromPerp = hgGoldQuoteFromPerp;
 W.hgGoldL2FromPerp = hgGoldL2FromPerp;
 W.hgGoldLiveFeed = hgGoldLiveFeed;
 W.hgGoldApplyLiveFeed = hgGoldApplyLiveFeed;
+  window.goldSupertrend = goldSupertrend;
+  window.goldADX = goldADX;
+
+function goldMarketRegime(rows) {
+  try {
+    if (!rows || rows.length < 50) return { state: UNKNOWN, strength: 0, vol: 0 };
+    var n = rows.length;
+    var closes = rows.map(function(r){ return r.c; });
+    var highs = rows.map(function(r){ return r.h; });
+    var lows = rows.map(function(r){ return r.l; });
+
+    var sumSqDiff = 0;
+    var mean = closes.reduce(function(a, b){ return a + b; }, 0) / n;
+    for (var i = 0; i < n; i++) sumSqDiff += Math.pow(closes[i] - mean, 2);
+    var stdDev = Math.sqrt(sumSqDiff / n);
+    var atr = _atr(rows, 14) || stdDev * 2;
+    var volScore = Math.min(stdDev / (atr || 1), 1);
+
+    var ema9 = _ema(closes, 9);
+    var ema21 = _ema(closes, 21);
+    var e9 = ema9[n-1];
+    var e21 = ema21[n-1];
+    var trendDir = RANGING;
+    if (e9 > e21 && closes[n-1] > e9) trendDir = TRENDING_BULL;
+    else if (e9 < e21 && closes[n-1] < e9) trendDir = TRENDING_BEAR;
+
+    var state = trendDir;
+    if (volScore > 0.7) state = VOLATILE;
+    else if (Math.abs(e9 - e21) / e21 < 0.001) state = RANGING;
+
+    return { state: state, strength: Math.min(Math.abs(e9 - e21) / e21, 1), vol: volScore };
+  } catch (e) { return { state: UNKNOWN, strength: 0, vol: 0 }; }
+}
+
+function goldMacroCorrelation(rows, dir, opts) {
+  /* hg-v1328: THIS WAS A STUB THAT COULD NOT FAIL.
+     The old body returned the bare boolean true on every path, with a catch that
+     could never be reached because nothing in the try could throw. It answered every
+     fault with a silent pass, which tests/test-gates-fail-open caught in its sweep,
+     and its return carried no way to say "I did not check" as distinct from "I
+     checked and it passed". It is also called from nowhere, which is the hg-v955
+     shape: exported, never read.
+     NOTE the old shape is described here, not quoted: a comment that reproduces the
+     code verbatim is itself scanned by the fail-open sweep, whose catch-body match
+     reads braces inside comments, and a quoted stub reads as a live one.
+     It now does the check its NAME promises, through the SHARED reader rather than a
+     second correlation derivation (hg-v949): the Master Catalog feed already computes
+     gold\u2013SPX and gold\u2013BTC 20-day return correlations from macro legs the app
+     fetches. Both legs ABSENT means the read did not happen and says so; a weak
+     correlation is reported as measured and not treated as a fail, because nothing
+     here establishes a line at which a correlation should veto a trade and inventing
+     one would be the hg-v966 unmeasured weight. Three states, like goldMarketRegime
+     above: measured with a strength, or unchecked with a reason. */
+  var out = { ok: true, corr: null, btcCorr: null, strength: null, unchecked: true, reason: '' };
+  try {
+    var feedFn = (typeof hgGoldCatalogFeed === 'function') ? hgGoldCatalogFeed
+      : (W && typeof W.hgGoldCatalogFeed === 'function' ? W.hgGoldCatalogFeed : null);
+    if (!feedFn) { out.reason = 'the Master Catalog feed is not loaded, so no correlation was read'; return out; }
+    var feed = feedFn(rows, (opts && typeof opts === 'object') ? opts : {});
+    if (!feed) { out.reason = 'the Master Catalog feed returned nothing'; return out; }
+    var spx = null, btc = null, i, u;
+    for (i = 0; i < (feed.used || []).length; i++) {
+      u = feed.used[i];
+      if (!u) continue;
+      if (u.id === 150) spx = u.note;
+      else if (u.id === 151) btc = u.note;
+    }
+    /* the notes carry the measured value; parse it rather than re-deriving the
+       correlation from series this function does not have */
+    function num(t) { var m = String(t || '').match(/-?\d+\.\d+/); return m ? +m[0] : null; }
+    out.corr = num(spx);
+    out.btcCorr = num(btc);
+    if (out.corr === null && out.btcCorr === null) {
+      out.reason = 'gold has no measured correlation this snapshot (the SPX and BTC macro legs are both unread)';
+      return out;
+    }
+    /* strength = the strongest measured co-movement, in the same units as the reads */
+    var a = (out.corr === null) ? 0 : Math.abs(out.corr);
+    var b = (out.btcCorr === null) ? 0 : Math.abs(out.btcCorr);
+    out.strength = +Math.max(a, b).toFixed(3);
+    out.unchecked = false;
+    out.reason = 'gold correlates ' + (out.corr === null ? 'unread' : out.corr) + ' with SPX and '
+      + (out.btcCorr === null ? 'unread' : out.btcCorr) + ' with BTC (20-day returns)';
+    return out;
+  } catch (e) {
+    /* A THROW IS A FAULT, AND A FAULT IS NOT A PASS. `unchecked` is returned FIRST
+       and on its own line, which is also what the fail-open sweep scans for: its
+       catch-body match is lazy and stops at the first brace, so a marker buried
+       after a nested object is invisible to it. The honest flag has to be where a
+       reader — and the guard — can see it. */
+    var why = String((e && e.message) || e).slice(0, 60);
+    return { unchecked: true, ok: true, corr: null, btcCorr: null, strength: null,
+      reason: 'correlation read failed: ' + why };
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.goldMarketRegime = goldMarketRegime;
+  window.goldMacroCorrelation = goldMacroCorrelation;
+}
 })();
+/* hg-v1311: a candle shape only votes when the prior swing agrees.
+   A hammer after a decline is long. The same shape after a rise is a hanging man.
+   Sweeps, outside bars, belt holds, kickers, meeting lines and three methods
+   vote as their own families. */
+function hgCfPack(row) {
+  var o = +row.o, h = +row.h, l = +row.l, c = +row.c;
+  var range = h - l;
+  return {
+    o: o, h: h, l: l, c: c,
+    range: range,
+    body: Math.abs(c - o),
+    upper: h - Math.max(o, c),
+    lower: Math.min(o, c) - l,
+    bull: c > o,
+    bear: c < o
+  };
+}
+
+function hgCfCandlePatterns(rows, atrLast) {
+  var n = rows.length;
+  var a = hgCfPack(rows[n - 3]);
+  var b = hgCfPack(rows[n - 2]);
+  var c = hgCfPack(rows[n - 1]);
+  var hits = [];
+  var empty = { bullVotes: 0, bearVotes: 0, names: [], notes: [], longStop: null, shortStop: null };
+  if (!(atrLast > 0) || !(a.range >= 0) || !(b.range >= 0) || !(c.range >= 0)) return empty;
+  function big(x) { return x.range >= atrLast * 0.35; }
+  function bodyOk(x, k) { return x.body >= atrLast * k; }
+  function push(fam, name, dir, stop) { hits.push({ fam: fam, name: name, dir: dir, stop: stop }); }
+  function has(fam, dir) {
+    var i;
+    for (i = 0; i < hits.length; i++) if (hits[i].fam === fam && hits[i].dir === dir) return true;
+    return false;
+  }
+  var priorClose = +rows[n - 6].c;
+  var fell = b.c <= priorClose - atrLast * 0.35;
+  var rose = b.c >= priorClose + atrLast * 0.35;
+  var swingLo = Infinity, swingHi = -Infinity, k;
+  for (k = Math.max(0, n - 9); k <= n - 2; k++) {
+    swingLo = Math.min(swingLo, +rows[k].l);
+    swingHi = Math.max(swingHi, +rows[k].h);
+  }
+  var atLow = c.l <= swingLo + atrLast * 0.08;
+  var atHigh = c.h >= swingHi - atrLast * 0.08;
+
+  if (big(c) && c.range > 0) {
+    var loc = (c.c - c.l) / c.range;
+    var hammer = c.body > 0 && c.lower >= c.body * 2 && c.lower >= c.range * 0.5 && c.upper <= c.range * 0.25 && loc >= 0.6;
+    var star = c.body > 0 && c.upper >= c.body * 2 && c.upper >= c.range * 0.5 && c.lower <= c.range * 0.25 && loc <= 0.4;
+    if (hammer) {
+      if (fell && !rose) push('reject', 'hammer after a decline', 1, c.l);
+      else if (rose && !fell) push('reject', 'hanging man', -1, c.l);
+      else if (atLow && !atHigh) push('reject', 'hammer at the low', 1, c.l);
+      else if (atHigh && !atLow) push('reject', 'hanging man', -1, c.l);
+      else push('info', 'hammer shape with no context — no vote', 0, null);
+    } else if (star) {
+      if (rose && !fell) push('reject', 'shooting star after a rise', -1, c.h);
+      else if (fell && !rose) push('reject', 'inverted hammer', 1, c.l);
+      else if (atHigh && !atLow) push('reject', 'shooting star', -1, c.h);
+      else if (atLow && !atHigh) push('reject', 'inverted hammer', 1, c.l);
+      else push('info', 'star shape with no context — no vote', 0, null);
+    }
+    if (!hammer && !star && c.body <= c.range * 0.1) {
+      if (c.lower >= c.range * 0.65 && c.upper <= c.range * 0.15) push('reject', 'dragonfly doji', 1, c.l);
+      else if (c.upper >= c.range * 0.65 && c.lower <= c.range * 0.15) push('reject', 'gravestone doji', -1, c.h);
+      else push('info', 'doji — no vote', 0, null);
+    }
+  }
+  if (bodyOk(c, 0.45) && c.body >= c.range * 0.8) {
+    if (c.bull) push('run', 'bull marubozu', 1, c.l);
+    else if (c.bear) push('run', 'bear marubozu', -1, c.h);
+  }
+  if (big(b) && big(c) && bodyOk(c, 0.4) && b.body > 0 && c.body >= b.body) {
+    if (b.bear && c.bull && c.o <= b.c && c.c >= b.o) push('engulf', 'bullish engulfing', 1, Math.min(b.l, c.l));
+    else if (b.bull && c.bear && c.o >= b.c && c.c <= b.o) push('engulf', 'bearish engulfing', -1, Math.max(b.h, c.h));
+  }
+  if (bodyOk(b, 0.4) && big(c) && c.body > 0) {
+    var midB = (b.o + b.c) / 2;
+    if (b.bear && c.bull && c.o <= b.c && c.c > midB && c.c < b.o && !has('engulf', 1))
+      push('engulf', 'piercing line', 1, Math.min(b.l, c.l));
+    if (b.bull && c.bear && c.o >= b.c && c.c < midB && c.c > b.o && !has('engulf', -1))
+      push('engulf', 'dark cloud cover', -1, Math.max(b.h, c.h));
+  }
+  if (bodyOk(b, 0.5) && c.body > 0 && c.body <= b.body * 0.5) {
+    var hiBody = Math.max(b.o, b.c), loBody = Math.min(b.o, b.c);
+    var cHi = Math.max(c.o, c.c), cLo = Math.min(c.o, c.c);
+    if (cHi <= hiBody && cLo >= loBody) {
+      if (b.bear && c.bull) push('harami', 'bullish harami', 1, Math.min(b.l, c.l));
+      else if (b.bull && c.bear) push('harami', 'bearish harami', -1, Math.max(b.h, c.h));
+    }
+  }
+  if (bodyOk(a, 0.45) && b.body <= a.body * 0.4 && bodyOk(c, 0.35)) {
+    var midA = (a.o + a.c) / 2;
+    if (a.bear && c.bull && c.c > midA) push('star', 'morning star', 1, Math.min(a.l, b.l, c.l));
+    if (a.bull && c.bear && c.c < midA) push('star', 'evening star', -1, Math.max(a.h, b.h, c.h));
+  }
+  if (a.bull && b.bull && c.bull && bodyOk(a, 0.3) && bodyOk(b, 0.3) && bodyOk(c, 0.3)
+      && b.c > a.c && c.c > b.c
+      && b.o >= Math.min(a.o, a.c) && b.o <= Math.max(a.o, a.c)
+      && c.o >= Math.min(b.o, b.c) && c.o <= Math.max(b.o, b.c)
+      && a.upper <= a.body && b.upper <= b.body && c.upper <= c.body)
+    push('run', 'three white soldiers', 1, Math.min(a.l, b.l, c.l));
+  if (a.bear && b.bear && c.bear && bodyOk(a, 0.3) && bodyOk(b, 0.3) && bodyOk(c, 0.3)
+      && b.c < a.c && c.c < b.c
+      && b.o >= Math.min(a.o, a.c) && b.o <= Math.max(a.o, a.c)
+      && c.o >= Math.min(b.o, b.c) && c.o <= Math.max(b.o, b.c)
+      && a.lower <= a.body && b.lower <= b.body && c.lower <= c.body)
+    push('run', 'three black crows', -1, Math.max(a.h, b.h, c.h));
+  if (big(b) && big(c) && Math.abs(b.l - c.l) <= atrLast * 0.1 && b.bear && c.bull)
+    push('tweezer', 'tweezer bottom', 1, Math.min(b.l, c.l));
+  if (big(b) && big(c) && Math.abs(b.h - c.h) <= atrLast * 0.1 && b.bull && c.bear)
+    push('tweezer', 'tweezer top', -1, Math.max(b.h, c.h));
+  if (bodyOk(a, 0.4) && b.h <= a.h && b.l >= a.l && b.range < a.range) {
+    if (c.bull && c.c > a.h) push('inside', 'three inside up', 1, Math.min(a.l, b.l, c.l));
+    else if (c.bear && c.c < a.l) push('inside', 'three inside down', -1, Math.max(a.h, b.h, c.h));
+  } else if (big(b) && c.h <= b.h && c.l >= b.l && c.range < b.range) {
+    push('info', 'inside bar — no vote', 0, null);
+  }
+
+  if (big(c) && c.l < swingLo && c.c > swingLo && c.bull)
+    push('sweep', 'low sweep reclaimed', 1, c.l);
+  if (big(c) && c.h > swingHi && c.c < swingHi && c.bear)
+    push('sweep', 'high sweep reclaimed', -1, c.h);
+  if (big(c) && bodyOk(c, 0.35) && c.h >= b.h && c.l <= b.l && c.range > b.range) {
+    if (c.bull && c.c > b.h) push('outside', 'bullish outside bar', 1, c.l);
+    else if (c.bear && c.c < b.l) push('outside', 'bearish outside bar', -1, c.h);
+  }
+  if (bodyOk(b, 0.45) && bodyOk(c, 0.45) && Math.abs(b.body - c.body) <= Math.max(b.body, c.body) * 0.25) {
+    if (b.bear && c.bull && c.c >= b.o - atrLast * 0.15)
+      push('rail', 'bullish railroad tracks', 1, Math.min(b.l, c.l));
+    else if (b.bull && c.bear && c.c <= b.o + atrLast * 0.15)
+      push('rail', 'bearish railroad tracks', -1, Math.max(b.h, c.h));
+  }
+  if (bodyOk(c, 0.5) && c.body >= c.range * 0.7) {
+    if (c.bull && c.lower <= c.range * 0.1 && fell) push('belt', 'bullish belt hold', 1, c.l);
+    else if (c.bear && c.upper <= c.range * 0.1 && rose) push('belt', 'bearish belt hold', -1, c.h);
+  }
+  if (bodyOk(b, 0.4) && bodyOk(c, 0.4) && Math.abs(b.c - c.c) <= atrLast * 0.08) {
+    if (b.bear && c.bull && c.o < b.c) push('meet', 'bullish meeting lines', 1, Math.min(b.l, c.l));
+    else if (b.bull && c.bear && c.o > b.c) push('meet', 'bearish meeting lines', -1, Math.max(b.h, c.h));
+  }
+  if (bodyOk(b, 0.35) && bodyOk(c, 0.4) && b.bear && c.bull && c.o >= b.o + atrLast * 0.15)
+    push('kick', 'bullish kicker', 1, c.l);
+  if (bodyOk(b, 0.35) && bodyOk(c, 0.4) && b.bull && c.bear && c.o <= b.o - atrLast * 0.15)
+    push('kick', 'bearish kicker', -1, c.h);
+  if (n >= 8) {
+    var w0 = hgCfPack(rows[n - 5]);
+    var w1 = hgCfPack(rows[n - 4]);
+    var w2 = hgCfPack(rows[n - 3]);
+    var inside = w1.h <= w0.h && w1.l >= w0.l && w2.h <= w0.h && w2.l >= w0.l && a.h <= w0.h && a.l >= w0.l
+      && w1.body < w0.body && w2.body < w0.body && a.body < w0.body;
+    if (bodyOk(w0, 0.45) && inside && bodyOk(c, 0.35)) {
+      if (w0.bull && c.bull && c.c > w0.c) push('method', 'rising three methods', 1, Math.min(w0.l, c.l));
+      else if (w0.bear && c.bear && c.c < w0.c) push('method', 'falling three methods', -1, Math.max(w0.h, c.h));
+    }
+  }
+
+  var by = {}, notes = [], i, h, g, fam;
+  for (i = 0; i < hits.length; i++) {
+    h = hits[i];
+    if (!h.dir) { notes.push(h.name); continue; }
+    g = by[h.fam];
+    if (!g) by[h.fam] = { dir: h.dir, names: [h.name], stop: h.stop, clash: false };
+    else {
+      g.names.push(h.name);
+      if (g.dir !== h.dir) g.clash = true;
+      else if (h.dir === 1) g.stop = Math.min(g.stop, h.stop);
+      else g.stop = Math.max(g.stop, h.stop);
+    }
+  }
+  var out = { bullVotes: 0, bearVotes: 0, names: [], bullNames: [], bearNames: [], notes: notes, longStop: null, shortStop: null };
+  for (fam in by) {
+    g = by[fam];
+    if (g.clash) { out.notes.push(g.names.join(' / ') + ' conflict — no vote'); continue; }
+    out.names = out.names.concat(g.names);
+    if (g.dir === 1) {
+      out.bullVotes++;
+      out.bullNames = out.bullNames.concat(g.names);
+      out.longStop = out.longStop == null ? g.stop : Math.min(out.longStop, g.stop);
+    } else {
+      out.bearVotes++;
+      out.bearNames = out.bearNames.concat(g.names);
+      out.shortStop = out.shortStop == null ? g.stop : Math.max(out.shortStop, g.stop);
+    }
+  }
+  return out;
+}
+
+function hgCfAdvancedPatterns(rows, atrLast) {
+  /* hg-v1311: THE ADVANCED PATTERN LAYER — DISCLOSURE, NOT WEIGHT.
+     WHY IT DOES NOT VOTE. `hgCfCandlePatterns` above DOES vote: its families add
+     to `bulls`/`bears` (the direction call) and its stops become the trade's stop
+     (`rawStop = dir === 'BULL' ? pat.longStop : pat.shortStop`). Adding voting
+     families here would silently double the pattern weight of a live trade
+     decision — the hg-v966 unmeasured-weight trap, and hg-v1153's own warning that
+     counting a 3-bar pattern twice inflates a bar. So every pattern in this layer
+     is RECORDED with a named lean and a truthful location, and the forward ledger
+     decides out of sample whether it separates winners. Nothing here is read by
+     any gate, threshold, level or ticket.
+     WHAT IT ADDS THAT THE THREE-BAR VOTER CANNOT SEE: the four-bar reversals
+     (three-line strike, three outside), the continuation patterns (rising and
+     falling three methods, tasuki gap, side-by-side white lines), the volume-based
+     exhaustion pair (three-bar climax), inside/outside structural runs, and — the
+     part that actually sharpens a read — a LOCATION AND TREND CONTEXT for every
+     pattern: a hammer at a swing low is a reversal, the same hammer at a swing
+     high is a trap, and the voter above cannot tell them apart. */
+  /* FAIL OPEN on an unusable tape: null rather than a throw, so a caller that
+     forgets to guard cannot take a scan down over a display-layer read. The
+     array check must come BEFORE the length read — reading .length on a null is
+     exactly the throw this is here to prevent. */
+  if (!Array.isArray(rows)) return null;
+  var n = rows.length;
+  var out = { names: [], leans: [], notes: [], where: null, aligned: null, stops: { long: null, short: null } };
+  if (!(atrLast > 0) || n < 20) return out;
+  var p = [], i;
+  for (i = 0; i < n; i++) p.push(hgCfPack(rows[i]));
+  var a = p[n - 4], b = p[n - 3], c = p[n - 2], d = p[n - 1];
+  if (!a || !b || !c || !d) return out;
+  function ok(x) { return x && isFinite(x.range); }
+  if (!ok(a) || !ok(b) || !ok(c) || !ok(d)) return out;
+  var big = function (x) { return x.range >= atrLast * 0.35; };
+  var mid = function (x) { return x.body >= atrLast * 0.25; };
+
+  /* ---- LOCATION AND TREND CONTEXT (the accuracy half) ----
+     Where the pattern printed, measured over the 20 bars before it, and whether
+     its natural direction agrees with the drift of those bars. Three-state: a
+     degenerate window leaves `where` null rather than guessing. */
+  var win = p.slice(Math.max(0, n - 21), n - 1);
+  var wHi = -Infinity, wLo = Infinity, j;
+  for (j = 0; j < win.length; j++) {
+    if (isFinite(win[j].h) && win[j].h > wHi) wHi = win[j].h;
+    if (isFinite(win[j].l) && win[j].l < wLo) wLo = win[j].l;
+  }
+  if (isFinite(wHi) && isFinite(wLo) && wHi > wLo) {
+    var pos = (d.c - wLo) / (wHi - wLo);
+    out.where = pos >= 0.7 ? 'at the range high' : (pos <= 0.3 ? 'at the range low' : 'mid-range');
+    out.wherePos = +pos.toFixed(3);
+  }
+  if (win.length >= 5) {
+    var first = win[0], lastW = win[win.length - 1];
+    var net = lastW.c - first.c;
+    out.aligned = Math.abs(net) < atrLast * 0.5 ? 'flat'
+      : (net > 0 ? 'up' : 'down');
+  }
+  function record(name, lean) {
+    out.names.push(name);
+    if (lean) out.leans.push({ name: name, lean: lean });
+    /* a pattern stop is recorded only when the pattern actually points
+       somewhere; it is never promoted into the trade's own stop */
+    if (lean === 1 && isFinite(d.l)) out.stops.long = out.stops.long == null ? d.l : Math.min(out.stops.long, d.l);
+    if (lean === -1 && isFinite(d.h)) out.stops.short = out.stops.short == null ? d.h : Math.max(out.stops.short, d.h);
+  }
+  /* does the location support the lean? true=with it, false=against it, null=unread */
+  function located(lean) {
+    if (!out.where || !lean) return null;
+    if (lean === 1) return out.where === 'at the range low' ? true : (out.where === 'at the range high' ? false : null);
+    return out.where === 'at the range high' ? true : (out.where === 'at the range low' ? false : null);
+  }
+  function tag(lean, name) {
+    var w = located(lean);
+    if (w === true) out.notes.push(name + ' sits ' + out.where + ' — where this pattern means something');
+    else if (w === false) out.notes.push(name + ' sits ' + out.where + ' — a trap at this location, not a reversal');
+    return lean;
+  }
+
+  /* ---- FOUR-BAR REVERSALS ---- */
+  /* THREE-LINE STRIKE: three bars in one direction, then a fourth that engulfs
+     all three and closes beyond the first. A continuation pattern, and the fourth
+     bar must genuinely swallow the run. */
+  if (big(a) && big(b) && big(c) && big(d) && mid(a) && mid(b) && mid(c)) {
+    var run3 = a.bear && b.bear && c.bear ? -1 : (a.bull && b.bull && c.bull ? 1 : 0);
+    if (run3 === -1 && d.bull && d.c > a.o && d.o <= c.c && d.body >= (a.body + b.body + c.body) * 0.9)
+      record('bullish three-line strike', tag(1, 'bullish three-line strike'));
+    else if (run3 === 1 && d.bear && d.c < a.o && d.o >= c.c && d.body >= (a.body + b.body + c.body) * 0.9)
+      record('bearish three-line strike', tag(-1, 'bearish three-line strike'));
+  }
+  /* THREE OUTSIDE UP / DOWN: a harami is followed by a bar closing beyond the
+     FIRST bar of the three. Distinct from three-line strike (which needs a
+     3-bar run) and from engulfing (which is two bars).
+     NOTE the inside bar is NOT required to have a large body: a harami is by
+     definition a SMALL bar inside the previous one, so a `mid(b)` test here
+     contradicts the pattern and rejects exactly the bars it is looking for. */
+  if (big(a) && mid(a) && b.h <= a.h && b.l >= a.l && b.body < a.body) {
+    if (a.bear && c.bull && c.c > a.h) record('three outside up', tag(1, 'three outside up'));
+    else if (a.bull && c.bear && c.c < a.l) record('three outside down', tag(-1, 'three outside down'));
+  }
+  /* ABANDONED BABY: an engulfing pair with a doji gapped away on BOTH sides — the
+     most demanding of the star family, and the only one that requires a gap. */
+  if (big(a) && big(c) && mid(a) && mid(c) && b.range <= atrLast * 0.15) {
+    if (a.bear && c.bull && b.h < a.c && b.l < a.c && c.c > a.o)
+      record('bullish abandoned baby', tag(1, 'bullish abandoned baby'));
+    else if (a.bull && c.bear && b.l > a.c && b.h > a.c && c.c < a.o)
+      record('bearish abandoned baby', tag(-1, 'bearish abandoned baby'));
+  }
+
+  /* ---- CONTINUATION PATTERNS ---- */
+  /* RISING / FALLING THREE METHODS: a long bar, three small bars that stay inside
+     its range, then a long bar resuming the direction. */
+  if (n >= 6) {
+    var e = p[n - 5], f = p[n - 6];
+    if (ok(e) && ok(f) && big(f) && big(d) && f.bull && d.bull && d.c > f.c
+        && mid(b) && mid(c) && mid(e)
+        && Math.min(b.l, c.l, e.l) >= f.l && Math.max(b.h, c.h, e.h) <= f.h)
+      record('rising three methods', tag(1, 'rising three methods'));
+    if (ok(e) && ok(f) && big(f) && big(d) && f.bear && d.bear && d.c < f.c
+        && mid(b) && mid(c) && mid(e)
+        && Math.min(b.l, c.l, e.l) >= f.l && Math.max(b.h, c.h, e.h) <= f.h)
+      record('falling three methods', tag(-1, 'falling three methods'));
+  }
+  /* TASUKI GAP: a gap in the direction of the move, then a bar that closes part
+     of the gap without filling it. The unfilled gap is the whole point. */
+  if (big(a) && big(c) && a.bull && b.l > a.h && c.bear && c.c > a.h && c.c < b.l)
+    record('bullish tasuki gap', tag(1, 'bullish tasuki gap'));
+  if (big(a) && big(c) && a.bear && b.h < a.l && c.bull && c.c < a.l && c.c > b.h)
+    record('bearish tasuki gap', tag(-1, 'bearish tasuki gap'));
+
+  /* ---- GAPS / WINDOWS, AND THE STRUCTURES THEY BUILD ----
+     hg-v1313. The classic set above has forty-odd shapes and NOT ONE of them reads
+     a gap as a gap: the two-bar and three-bar voters only look at bodies, wicks and
+     containment, so a window — a bar whose entire range sits clear of the previous
+     bar's range — is invisible to them unless it happens to form an engulfing or a
+     tasuki pattern on top. That is the largest remaining blind spot, and it is the
+     one that matters most for SETUP FORMATION, because the STAGE of a gap is what
+     tells a reader whether a move is starting, running or exhausting. So the gap is
+     detected first and then CLASSIFIED by where it sits in the move it belongs to.
+     All disclosure: nothing here votes (see the header). */
+  function gapUp(x, y) { return x.l > y.h; }
+  function gapDn(x, y) { return x.h < y.l; }
+  /* the leg a gap continues: the net move over the run-up window, in ATRs */
+  var runWindow = p.slice(Math.max(0, n - 14), n - 3);
+  var legAtr = 0;
+  if (runWindow.length >= 4) {
+    var legHi = -Infinity, legLo = Infinity, lw;
+    for (lw = 0; lw < runWindow.length; lw++) {
+      if (runWindow[lw].h > legHi) legHi = runWindow[lw].h;
+      if (runWindow[lw].l < legLo) legLo = runWindow[lw].l;
+    }
+    if (isFinite(legHi) && isFinite(legLo)) legAtr = (legHi - legLo) / atrLast;
+  }
+  /* a gap is classified by the size of the move that PRECEDED it:
+       small leg  -> BREAKAWAY  (a move is starting; the gap opens the range)
+       mid leg    -> RUNAWAY    (a move is running; continuation)
+       large leg  -> EXHAUSTION (a move is late; the gap is the last gasp)
+     Thresholds are stated in ATRs of the run-up so this reads the same on any
+     volatility regime, and an unmeasurable window leaves the stage unread rather
+     than guessed. */
+  function gapStage() {
+    if (!(legAtr > 0)) return 'stage unread';
+    if (legAtr < 1.5) return 'breakaway';
+    if (legAtr <= 4) return 'runaway';
+    return 'exhaustion';
+  }
+  /* the LATEST bar's window, classified by stage. Only d can open a "gap up" in
+     this read — an earlier bar's window is the island/three-bar logic's business
+     below, and letting it fire here reported a stale gap as a fresh one. */
+  if (big(c) && gapUp(d, c)) {
+    record('gap up on the last bar (' + gapStage() + ')', null);
+    if (gapStage() === 'exhaustion') record('exhaustion gap up — a late move, not a fresh one', null);
+    /* A runaway window is the measuring gap: the leg is already going, and
+       the window is still open. Breakaway and exhaustion stay stage labels
+       with no lean. This lean is disclosure. It does not vote. */
+    if (gapStage() === 'runaway') record('runaway gap up', tag(1, 'runaway gap up'));
+  }
+  if (big(c) && gapDn(d, c)) {
+    record('gap down on the last bar (' + gapStage() + ')', null);
+    if (gapStage() === 'exhaustion') record('exhaustion gap down — a late move, not a fresh one', null);
+    if (gapStage() === 'runaway') record('runaway gap down', tag(-1, 'runaway gap down'));
+  }
+  /* ISLAND REVERSAL: a gap in, one or more bars holding clear of the previous
+     range, then a gap back out on the other side. The island is cut off from both
+     sides, which is why traders read it as a completed reversal rather than a
+     pause — the single strongest structure in the gap family, and nothing in the
+     file could see it. A gap is required on BOTH sides, so a one-sided window
+     never qualifies, and the two directions are independent (a bullish and a
+     bearish island cannot both be true, but neither is an `else` of the other —
+     an `else` silently suppressed the second when both tests ran). */
+  if (n >= 6) {
+    var i1 = p[n - 5], i2 = p[n - 4], i3 = p[n - 3], i4 = p[n - 2];
+    if (i3.l > i1.h && i3.l > i2.h && i4.h < i3.l) record('bullish island reversal — gapped away on both sides', tag(1, 'bullish island reversal'));
+    if (i3.h < i1.l && i3.h < i2.l && i4.l > i3.h) record('bearish island reversal — gapped away on both sides', tag(-1, 'bearish island reversal'));
+  }
+  /* THREE-BAR REVERSAL (the "three-bar reversal" / "three-bar play"): a bar, a bar
+     that takes out its extreme and closes BACK INSIDE it, then a bar that closes
+     beyond the first bar's other extreme. Part of the classic canon and absent
+     here — nothing in the file tests a failed breakout followed by a confirmation.
+     Eight variants exist in the literature; this reads the four that a bar chart
+     can distinguish unambiguously. */
+  if (mid(a) && mid(c)) {
+    var bTookLow = b.l < a.l && b.c > a.l;
+    var bTookHigh = b.h > a.h && b.c < a.h;
+    if (bTookLow && c.bull && c.c > a.h) record('bullish three-bar reversal (failed low)', tag(1, 'bullish three-bar reversal'));
+    if (bTookHigh && c.bear && c.c < a.l) record('bearish three-bar reversal (failed high)', tag(-1, 'bearish three-bar reversal'));
+  }
+  /* LADDER BOTTOM / TOP: a run of declining closes, then a strong bar that opens
+     above the last of them and closes up through it. A slow, grinding reversal
+     rather than a single-bar rejection, which is why the run (not one bar) is the
+     condition. Note the run is tested on the three bars BEFORE the reversal bar,
+     and the reversal bar is `c` (rows[n-2]) here, not `d` — a first version keyed
+     the whole test off `c` and could therefore never fire. */
+  if (n >= 6) {
+    var L1 = p[n - 5], L2 = p[n - 4], L3 = p[n - 3];
+    if (L1.bear && L2.bear && L3.bear && L2.c < L1.c && L3.c < L2.c && big(c)
+        && c.bull && c.o > L3.c && c.c > L3.c)
+      record('ladder bottom', tag(1, 'ladder bottom'));
+    if (L1.bull && L2.bull && L3.bull && L2.c > L1.c && L3.c > L2.c && big(c)
+        && c.bear && c.o < L3.c && c.c < L3.c)
+      record('ladder top', tag(-1, 'ladder top'));
+  }
+  /* SIDE-BY-SIDE WHITE LINES: two same-sized bullish bodies at the same level
+     after a gap — a continuation, and explicitly NOT an engulfing (the bodies
+     are equal, not swallowed). */
+  if (big(a) && mid(b) && mid(c) && b.bull && c.bull && b.l > a.h
+      && Math.abs(b.c - c.c) <= atrLast * 0.15 && Math.abs(b.o - c.o) <= atrLast * 0.15)
+    record('side-by-side white lines', tag(1, 'side-by-side white lines'));
+
+  /* hg-v1318: four more shapes the three-bar voter cannot see. Matching high
+     and low are equal CLOSES, not equal wicks. Separating lines share an open
+     and resume. A stick sandwich is two equal bear closes around a bull bar.
+     Upside-gap two crows is a gap that fails. Disclosure only: they do not
+     vote and they do not move the stop. */
+  if (big(c) && big(d) && mid(c) && mid(d)) {
+    if (c.bear && d.bear && Math.abs(c.c - d.c) <= atrLast * 0.08 && Math.abs(c.l - d.l) > atrLast * 0.08)
+      record('matching low', tag(1, 'matching low'));
+    if (c.bull && d.bull && Math.abs(c.c - d.c) <= atrLast * 0.08 && Math.abs(c.h - d.h) > atrLast * 0.08)
+      record('matching high', tag(-1, 'matching high'));
+  }
+  if (mid(c) && mid(d) && Math.abs(c.o - d.o) <= atrLast * 0.05) {
+    if (c.bear && d.bull && d.c > c.o) record('bullish separating lines', tag(1, 'bullish separating lines'));
+    if (c.bull && d.bear && d.c < c.o) record('bearish separating lines', tag(-1, 'bearish separating lines'));
+  }
+  if (b.bear && c.bull && d.bear && mid(b) && mid(d) && Math.abs(b.c - d.c) <= atrLast * 0.08 && c.c > Math.max(b.o, b.c))
+    record('stick sandwich', tag(1, 'stick sandwich'));
+  if (b.bull && mid(b) && c.bear && d.bear && c.l > b.h && d.o > c.c && d.o < c.o && d.c < c.c && d.c > b.c)
+    record('upside gap two crows', tag(-1, 'upside gap two crows'));
+
+  /* hg-v1320: shapes the three-bar and four-bar voters still cannot see.
+     A tower needs a stall between two long opposite bars, so it is not an engulfing.
+     On-neck and in-neck close at or just inside the prior low, below its midpoint,
+     so they are not a piercing line. Three stars in the south is a shrinking bear
+     run with rising lows. A mat hold pulls back but holds the long bar's midpoint,
+     which three methods does not allow. A hook pokes the prior extreme by less than
+     0.35 ATR and closes back through that bar. Named here, not added to the vote. */
+  if (n >= 6) {
+    var twA = p[n - 4], twB = p[n - 3], twC = p[n - 2];
+    if (big(twA) && mid(twA) && big(d) && mid(d) && twB.body < twA.body * 0.55 && twC.body < twA.body * 0.55) {
+      var twMid = (twA.o + twA.c) / 2;
+      if (twA.bear && d.bull && d.c > twMid && d.body >= twA.body * 0.6)
+        record('tower bottom', tag(1, 'tower bottom'));
+      if (twA.bull && d.bear && d.c < twMid && d.body >= twA.body * 0.6)
+        record('tower top', tag(-1, 'tower top'));
+    }
+  }
+  if (big(c) && mid(c) && c.bear && d.bull && d.o < c.l) {
+    var neck = c.l;
+    var bearBodyLo = Math.min(c.o, c.c);
+    var bearMid = (c.o + c.c) / 2;
+    if (Math.abs(d.c - neck) <= atrLast * 0.08)
+      record('on-neck line', tag(-1, 'on-neck line'));
+    else if (d.c > neck && d.c < bearMid && d.c <= bearBodyLo + (bearMid - bearBodyLo) * 0.95)
+      record('in-neck line', tag(-1, 'in-neck line'));
+  }
+  if (b.bear && c.bear && d.bear && mid(b) && c.range < b.range && d.range < c.range
+      && c.l >= b.l && d.l >= c.l && b.lower >= b.body && d.body <= c.body)
+    record('three stars in the south', tag(1, 'three stars in the south'));
+  if (n >= 6) {
+    var mh = p[n - 5];
+    var pull = [p[n - 4], p[n - 3], p[n - 2]];
+    if (big(mh) && mid(mh) && mh.bull && big(d) && d.bull && d.c > mh.h) {
+      var mhMid = (mh.o + mh.c) / 2;
+      var held = true, pi2;
+      for (pi2 = 0; pi2 < pull.length; pi2++) {
+        if (!(pull[pi2].body < mh.body * 0.6 && pull[pi2].l >= mhMid)) held = false;
+      }
+      if (held) record('mat hold', tag(1, 'mat hold'));
+    }
+    if (big(mh) && mid(mh) && mh.bear && big(d) && d.bear && d.c < mh.l) {
+      var mhMidS = (mh.o + mh.c) / 2;
+      var heldS = true, pi3;
+      for (pi3 = 0; pi3 < pull.length; pi3++) {
+        if (!(pull[pi3].body < mh.body * 0.6 && pull[pi3].h <= mhMidS)) heldS = false;
+      }
+      if (heldS) record('falling mat hold', tag(-1, 'falling mat hold'));
+    }
+  }
+  if (big(c) && d.l < c.l && (c.l - d.l) <= atrLast * 0.35 && d.bull && d.c > Math.max(c.o, c.c))
+    record('bullish hook reversal', tag(1, 'bullish hook reversal'));
+  if (big(c) && d.h > c.h && (d.h - c.h) <= atrLast * 0.35 && d.bear && d.c < Math.min(c.o, c.c))
+    record('bearish hook reversal', tag(-1, 'bearish hook reversal'));
+  if (big(d) && d.body > 0 && d.body <= d.range * 0.34 && d.upper >= d.body && d.lower >= d.body)
+    record('spinning top — indecision, no lean', null);
+
+  /* hg-v1321: shapes still missing from both voters. Disclosure only.
+     A homing pigeon is two black bars, the second inside the first — a bullish
+     reversal, not a harami (a harami needs the opposite colour). A descending
+     hawk is the white mirror. A hikkake is an inside bar, a false break, then
+     a close back through. Two black gapping, identical three crows, and the
+     gap-three-methods are continuations the three-bar voter does not name.
+     Three gaps is the exhaustion of a window run. A breakaway is five bars.
+     None of these is added to bulls, bears, checked, or the trade stop. */
+  if (c.bear && d.bear && mid(c) && d.body > 0 && d.body < c.body) {
+    var hpHi = Math.max(c.o, c.c), hpLo = Math.min(c.o, c.c);
+    if (Math.max(d.o, d.c) <= hpHi && Math.min(d.o, d.c) >= hpLo)
+      record('homing pigeon', tag(1, 'homing pigeon'));
+  }
+  if (c.bull && d.bull && mid(c) && d.body > 0 && d.body < c.body) {
+    var hkHi = Math.max(c.o, c.c), hkLo = Math.min(c.o, c.c);
+    if (Math.max(d.o, d.c) <= hkHi && Math.min(d.o, d.c) >= hkLo)
+      record('descending hawk', tag(-1, 'descending hawk'));
+  }
+  if (b.h <= a.h && b.l >= a.l && b.range < a.range && b.range > 0) {
+    if (c.l < b.l && d.bull && d.c > b.h) record('bullish hikkake', tag(1, 'bullish hikkake'));
+    if (c.h > b.h && d.bear && d.c < b.l) record('bearish hikkake', tag(-1, 'bearish hikkake'));
+  }
+  if (c.bear && d.bear && mid(c) && mid(d) && d.o < c.c && d.h < c.l)
+    record('two black gapping', tag(-1, 'two black gapping'));
+  if (b.bear && c.bear && d.bear && mid(b) && mid(c) && mid(d)
+      && c.c < b.c && d.c < c.c
+      && Math.abs(c.o - b.c) <= atrLast * 0.05 && Math.abs(d.o - c.c) <= atrLast * 0.05)
+    record('identical three crows', tag(-1, 'identical three crows'));
+  if (b.bear && c.bear && mid(b) && mid(c) && c.h < b.l && d.bull && d.o < c.o && d.c > c.h && d.c < b.l)
+    record('downside gap three methods', tag(-1, 'downside gap three methods'));
+  if (b.bull && c.bull && mid(b) && mid(c) && c.l > b.h && d.bear && d.o > c.o && d.c < c.l && d.c > b.h)
+    record('upside gap three methods', tag(1, 'upside gap three methods'));
+  if (gapUp(b, a) && gapUp(c, b) && gapUp(d, c))
+    record('three gaps up', tag(-1, 'three gaps up'));
+  if (gapDn(b, a) && gapDn(c, b) && gapDn(d, c))
+    record('three gaps down', tag(1, 'three gaps down'));
+  if (n >= 6) {
+    var g0 = p[n - 5];
+    if (ok(g0) && big(g0) && mid(g0) && g0.bear && p[n - 4].bear && p[n - 4].h < g0.l
+        && p[n - 3].c <= p[n - 4].c && big(d) && d.bull && d.c > p[n - 4].h && d.c < g0.o)
+      record('bullish breakaway', tag(1, 'bullish breakaway'));
+    if (ok(g0) && big(g0) && mid(g0) && g0.bull && p[n - 4].bull && p[n - 4].l > g0.h
+        && p[n - 3].c >= p[n - 4].c && big(d) && d.bear && d.c < p[n - 4].l && d.c > g0.o)
+      record('bearish breakaway', tag(-1, 'bearish breakaway'));
+  }
+  if (b.bear && mid(b) && c.bear && c.l < b.l && c.lower >= c.body && c.body > 0
+      && d.bull && d.body > 0 && d.body < c.body && d.c <= c.o)
+    record('unique three river bottom', tag(1, 'unique three river bottom'));
+  if (b.bull && c.bull && d.bull && big(b) && big(c) && mid(b) && mid(c)
+      && d.body > 0 && d.body < c.body * 0.5 && d.o >= c.c && d.c > c.c)
+    record('deliberation', tag(-1, 'deliberation'));
+  if (big(c) && mid(c) && d.range > 0 && d.body <= d.range * 0.1 && d.body <= atrLast * 0.15) {
+    if (c.bear && d.l > c.h) record('bullish doji star', tag(1, 'bullish doji star'));
+    if (c.bull && d.h < c.l) record('bearish doji star', tag(-1, 'bearish doji star'));
+  }
+  if (big(d) && d.body <= d.range * 0.25 && d.upper >= d.range * 0.3 && d.lower >= d.range * 0.3)
+    record('high wave — long shadows, no lean', null);
+
+  /* hg-v1322: the rest of the classic set. Still disclosure. A harami cross is a
+     doji inside the prior body, which a gapped doji star is not. A tri-star is
+     three dojis with the middle clear of both. Three stars in the north is the
+     white mirror of three stars in the south. A stalled pattern is a small white
+     inside the prior body with a long upper shadow; deliberation is the gapped
+     one. Thrusting opens below the prior close and closes below its midpoint,
+     and it does not open below the prior low, so it is not an in-neck. Two crows
+     close back inside the long white. A concealing baby swallow is four black
+     bars. A frypan is rising lows then a gap up. A northern or southern doji is
+     a doji at the range extreme. None of these is added to the vote or the stop. */
+  if (big(c) && mid(c) && d.range > 0 && d.body <= Math.min(d.range * 0.1, atrLast * 0.12)) {
+    var hxHi = Math.max(c.o, c.c), hxLo = Math.min(c.o, c.c);
+    if (Math.max(d.o, d.c) <= hxHi && Math.min(d.o, d.c) >= hxLo) {
+      if (c.bear) record('bullish harami cross', tag(1, 'bullish harami cross'));
+      else if (c.bull) record('bearish harami cross', tag(-1, 'bearish harami cross'));
+    }
+  }
+  var dojB = b.range > 0 && b.body <= b.range * 0.1 && b.body <= atrLast * 0.15;
+  var dojC = c.range > 0 && c.body <= c.range * 0.1 && c.body <= atrLast * 0.15;
+  var dojD = d.range > 0 && d.body <= d.range * 0.1 && d.body <= atrLast * 0.15;
+  if (dojB && dojC && dojD && c.l > b.h && c.l > d.h) record('tri-star top', tag(-1, 'tri-star top'));
+  if (dojB && dojC && dojD && c.h < b.l && c.h < d.l) record('tri-star bottom', tag(1, 'tri-star bottom'));
+  if (b.bull && c.bull && d.bull && mid(b) && c.range < b.range && d.range < c.range
+      && c.h <= b.h && d.h <= c.h && b.upper >= b.body && d.body > 0 && d.body <= c.body)
+    record('three stars in the north', tag(-1, 'three stars in the north'));
+  if (b.bull && c.bull && d.bull && big(b) && big(c) && mid(b) && mid(c)
+      && d.body > 0 && d.body < c.body * 0.5 && d.o < c.c && d.o >= Math.min(c.o, c.c) && d.upper >= d.body * 2)
+    record('stalled pattern', tag(-1, 'stalled pattern'));
+  if (big(c) && mid(c) && c.bear && d.bull && d.o >= c.l && d.o < Math.min(c.o, c.c)) {
+    var thrustMid = (c.o + c.c) / 2;
+    if (d.c > Math.min(c.o, c.c) && d.c < thrustMid) record('thrusting line', tag(-1, 'thrusting line'));
+  }
+  if (b.bull && mid(b) && big(b) && c.bear && c.o > b.h && d.bear && mid(d)
+      && d.o < c.o && d.o > c.c && d.c < Math.max(b.o, b.c) && d.c > Math.min(b.o, b.c))
+    record('two crows', tag(-1, 'two crows'));
+  if (big(a) && a.bear && mid(a) && mid(b) && mid(c) && b.bear && c.bear && b.h < a.l
+      && Math.abs(b.c - c.c) <= atrLast * 0.15 && Math.abs(b.o - c.o) <= atrLast * 0.15)
+    record('side-by-side black lines', tag(-1, 'side-by-side black lines'));
+  if (a.bear && b.bear && c.bear && d.bear && mid(a) && mid(b) && mid(d)
+      && a.body >= a.range * 0.8 && b.body >= b.range * 0.8
+      && c.o < b.l && c.upper >= c.body && d.o >= c.h && d.c < c.c)
+    record('concealing baby swallow', tag(1, 'concealing baby swallow'));
+  if (n >= 8) {
+    var fryOk = true, dumpOk = true, fryI;
+    for (fryI = n - 7; fryI <= n - 3; fryI++) {
+      if (!(p[fryI] && p[fryI - 1] && p[fryI].l > p[fryI - 1].l)) fryOk = false;
+      if (!(p[fryI] && p[fryI - 1] && p[fryI].h < p[fryI - 1].h)) dumpOk = false;
+    }
+    if (fryOk && gapUp(d, c) && d.bull && mid(d)) record('frypan bottom', tag(1, 'frypan bottom'));
+    if (dumpOk && gapDn(d, c) && d.bear && mid(d)) record('dumpling top', tag(-1, 'dumpling top'));
+  }
+  if (d.range > 0 && d.body <= d.range * 0.1 && out.where === 'at the range high')
+    record('northern doji', tag(-1, 'northern doji'));
+  if (d.range > 0 && d.body <= d.range * 0.1 && out.where === 'at the range low')
+    record('southern doji', tag(1, 'southern doji'));
+  if (big(d) && d.range >= atrLast * 0.6 && d.body <= d.range * 0.1 && d.upper >= d.range * 0.35 && d.lower >= d.range * 0.35)
+    record('long-legged doji — no lean', null);
+  if (typeof aAdvance === 'function' && aAdvance(rows, atrLast))
+    record('advance block', null);
+
+  /* hg-v1326: shapes the earlier layers still do not name. Disclosure only.
+     A counterattack gaps open and closes back at the prior close, so it is
+     not a piercing line and not meeting lines. A morning or evening doji
+     star is the gapped doji plus the bar that closes back through the first
+     bar's midpoint. A takuri is a hammer whose lower shadow is at least
+     three bodies. A closing marubozu closes on its extreme and leaves the
+     open off that extreme. A high-price or low-price gapping play holds a
+     window with two small bars; a tasuki walks back into the gap, so these
+     are not the same shape. None of these is added to the vote or the stop. */
+  if (big(c) && mid(c) && mid(d) && c.bear && d.bull && d.o < c.l && Math.abs(d.c - c.c) <= atrLast * 0.08)
+    record('bullish counterattack', tag(1, 'bullish counterattack'));
+  if (big(c) && mid(c) && mid(d) && c.bull && d.bear && d.o > c.h && Math.abs(d.c - c.c) <= atrLast * 0.08)
+    record('bearish counterattack', tag(-1, 'bearish counterattack'));
+  if (big(b) && mid(b) && b.bear && c.range > 0 && c.body <= Math.min(c.range * 0.1, atrLast * 0.15)
+      && c.h < b.l && big(d) && mid(d) && d.bull && d.c > (b.o + b.c) / 2)
+    record('morning doji star', tag(1, 'morning doji star'));
+  if (big(b) && mid(b) && b.bull && c.range > 0 && c.body <= Math.min(c.range * 0.1, atrLast * 0.15)
+      && c.l > b.h && big(d) && mid(d) && d.bear && d.c < (b.o + b.c) / 2)
+    record('evening doji star', tag(-1, 'evening doji star'));
+  if (d.body > 0 && d.lower >= d.body * 3 && d.lower >= d.range * 0.6 && d.upper <= d.body * 0.3 && d.upper <= atrLast * 0.12)
+    record('takuri line', tag(1, 'takuri line'));
+  if (d.bull && mid(d) && d.upper <= atrLast * 0.05 && d.lower >= atrLast * 0.12)
+    record('bullish closing marubozu', tag(1, 'bullish closing marubozu'));
+  if (d.bear && mid(d) && d.lower <= atrLast * 0.05 && d.upper >= atrLast * 0.12)
+    record('bearish closing marubozu', tag(-1, 'bearish closing marubozu'));
+  if (b.l > a.h && c.body < atrLast * 0.35 && d.body < atrLast * 0.35 && c.l > a.h && d.l > a.h && d.c >= d.o)
+    record('high-price gapping play', tag(1, 'high-price gapping play'));
+  if (b.h < a.l && c.body < atrLast * 0.35 && d.body < atrLast * 0.35 && c.h < a.l && d.h < a.l && d.c <= d.o)
+    record('low-price gapping play', tag(-1, 'low-price gapping play'));
+
+  /* hg-v1339: three shapes the classic set still does not name.
+     A key reversal takes out one prior extreme and closes back through the
+     prior close. An outside key reversal also takes out the other extreme.
+     A pipe is two wide bars sharing an extreme and closing at the far side
+     of it. Equal closes are a matching high or low, so a pipe requires the
+     closes to differ. Disclosure only. None of these is added to the vote
+     or the stop. */
+  if (big(d) && big(c)) {
+    var tookLow = d.l < c.l;
+    var tookHigh = d.h > c.h;
+    var krName = null, krLean = 0;
+    if (tookLow && d.c > c.c && d.bull) {
+      krName = tookHigh ? 'bullish outside key reversal' : 'bullish key reversal';
+      krLean = 1;
+    } else if (tookHigh && d.c < c.c && d.bear) {
+      krName = tookLow ? 'bearish outside key reversal' : 'bearish key reversal';
+      krLean = -1;
+    }
+    if (krName) record(krName, tag(krLean, krName));
+  }
+  if (big(c) && big(d) && c.range > 0 && d.range > 0
+      && Math.abs(c.l - d.l) <= atrLast * 0.08
+      && (c.c - c.l) / c.range >= 0.65 && (d.c - d.l) / d.range >= 0.65
+      && Math.abs(c.c - d.c) > atrLast * 0.08)
+    record('pipe bottom', tag(1, 'pipe bottom'));
+  if (big(c) && big(d) && c.range > 0 && d.range > 0
+      && Math.abs(c.h - d.h) <= atrLast * 0.08
+      && (c.h - c.c) / c.range >= 0.65 && (d.h - d.c) / d.range >= 0.65
+      && Math.abs(c.c - d.c) > atrLast * 0.08)
+    record('pipe top', tag(-1, 'pipe top'));
+
+  /* ---- EXHAUSTION / STRUCTURE ---- */
+  /* THREE-BAR CLIMAX: three consecutive expanding ranges with shrinking bodies —
+     participation rising into a stall. Location decides what it means, which is
+     exactly why it is reported WITH the location rather than as a bare vote. */
+  if (big(a) && big(b) && big(c) && c.range > b.range && b.range > a.range
+      && c.body < b.body && b.body < a.body)
+    record('three-bar climax — expansion into a stall', null);
+  /* INSIDE / OUTSIDE RUNS: the structural compression and expansion the
+     two-bar voter only sees one bar at a time. */
+  if (c.h <= b.h && c.l >= b.l && b.h <= a.h && b.l >= a.l)
+    record('double inside — compression', null);
+  if (c.h > b.h && c.l < b.l && b.h > a.h && b.l < a.l)
+    record('double outside — expansion', null);
+
+  /* A pattern that completed on the previous bar is named here, and it is not
+     this bar. It stays in the notes. It does not join the leans, so it cannot
+     name the setup or move the stop. */
+  if (n >= 34 && typeof hgCfCandlePatterns === 'function') {
+    var ago = hgCfCandlePatterns(rows.slice(0, n - 1), atrLast);
+    if (ago && ago.names && ago.names.length)
+      out.notes.push('one bar ago: ' + ago.names.join(', ') + ' — not this bar, so it does not name the setup');
+  }
+
+  /* hg-v1326: say what kind of pattern printed. A continuation means
+     something when the drift agrees. A reversal means something at the
+     other end of the move. A late pattern says the move is tired.
+     The sentence does not start with the pattern name, and it does not
+     use the location phrase the setup namer looks for, so it cannot name
+     a setup by itself and it cannot add a vote. */
+  if (out.leans.length) {
+    var senseN = 0, sk, sName, sRole, sUp, senseLine, driftAgrees;
+    for (sk = 0; sk < out.leans.length && senseN < 6; sk++) {
+      sName = String(out.leans[sk].name || '');
+      sUp = out.leans[sk].lean === 1;
+      if (/three methods|tasuki|side-by-side|mat hold|on-neck|in-neck|separating|two black gapping|identical three crows|thrusting|gapping play|three-line strike|runaway gap/.test(sName)) sRole = 'continuation';
+      else if (/three gaps|exhaustion|deliberation|stalled|two crows|advance block|climax/.test(sName)) sRole = 'late';
+      else sRole = 'reversal';
+      if (sRole === 'continuation') {
+        senseLine = 'Understanding: ' + sName + ' is a continuation. It means something when the drift agrees';
+        driftAgrees = (sUp && out.aligned === 'up') || (!sUp && out.aligned === 'down');
+        if (out.aligned === 'up' || out.aligned === 'down') {
+          senseLine += '. The 20-bar drift is ' + out.aligned + (driftAgrees ? ', so this continuation agrees' : ', so this continuation does not agree');
+        } else senseLine += '. The drift was flat or unread, so the continuation is not confirmed';
+      } else if (sRole === 'late') {
+        senseLine = 'Understanding: ' + sName + ' is late. It says the move is tired. It is not a fresh entry';
+      } else {
+        senseLine = 'Understanding: ' + sName + ' is a reversal. It means something at the far end of the move it fades. The location line above is that test';
+      }
+      out.notes.push(senseLine + '. It does not add a vote.');
+      senseN++;
+    }
+  }
+
+  /* ---- the trend the pattern landed in ----
+     A reversal pattern that fights a strong drift is a different proposition from
+     one that runs with it. Disclosed, three-state, never used as a veto here. */
+  if (out.aligned && out.leans.length) {
+    var agree = 0, against = 0, k;
+    for (k = 0; k < out.leans.length; k++) {
+      if (out.aligned === 'flat') continue;
+      var wantsUp = out.leans[k].lean === 1;
+      if ((wantsUp && out.aligned === 'up') || (!wantsUp && out.aligned === 'down')) agree++;
+      else against++;
+    }
+    if (agree || against) {
+      out.notes.push('the 20-bar drift is ' + out.aligned + ': ' + agree + ' pattern lean'
+        + (agree === 1 ? '' : 's') + ' with it, ' + against + ' against');
+    }
+  }
+  if (!out.names.length) out.notes.push('no advanced pattern in the last four bars');
+  return out;
+}
+
+/* A setup is a candle pattern plus a structure read on the same side.
+   Structure never sets the stop. The candle pattern still does. */
+function hgCfStructure(rows, atrLast) {
+  var n = rows.length;
+  var empty = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [] };
+  if (!(atrLast > 0) || n < 12) return empty;
+  var hi = [], lo = [], i;
+  for (i = 0; i < n; i++) { hi.push(+rows[i].h); lo.push(+rows[i].l); }
+  var ph = [], pl = [];
+  var from = Math.max(2, n - 24);
+  for (i = from; i <= n - 3; i++) {
+    if (hi[i] >= hi[i - 1] && hi[i] >= hi[i - 2] && hi[i] > hi[i + 1] && hi[i] > hi[i + 2]) ph.push(hi[i]);
+    if (lo[i] <= lo[i - 1] && lo[i] <= lo[i - 2] && lo[i] < lo[i + 1] && lo[i] < lo[i + 2]) pl.push(lo[i]);
+  }
+  var c = +rows[n - 1].c;
+  var bulls = [], bears = [];
+  if (ph.length >= 2) {
+    var h1 = ph[ph.length - 1], h0 = ph[ph.length - 2];
+    if (c > h1 && h1 < h0 - atrLast * 0.1) bulls.push('change of character');
+    else if (c > h1 && h1 >= h0) bulls.push('break of structure');
+  } else if (ph.length === 1 && c > ph[0]) bulls.push('break of structure');
+  if (pl.length >= 2) {
+    var l1 = pl[pl.length - 1], l0 = pl[pl.length - 2];
+    if (c < l1 && l1 > l0 + atrLast * 0.1) bears.push('change of character');
+    else if (c < l1 && l1 <= l0) bears.push('break of structure');
+  } else if (pl.length === 1 && c < pl[0]) bears.push('break of structure');
+  if (bulls.length && bears.length) { bulls = []; bears = []; }
+
+  var mid = hgCfPack(rows[n - 2]);
+  var gapBull = +rows[n - 1].l - +rows[n - 3].h;
+  var gapBear = +rows[n - 3].l - +rows[n - 1].h;
+  if (gapBull >= atrLast * 0.2 && mid.body >= atrLast * 0.4 && c >= +rows[n - 1].l)
+    bulls.push('bullish fair value gap');
+  if (gapBear >= atrLast * 0.2 && mid.body >= atrLast * 0.4 && c <= +rows[n - 1].h)
+    bears.push('bearish fair value gap');
+
+  var j, ob;
+  for (j = n - 2; j >= Math.max(0, n - 8); j--) {
+    ob = hgCfPack(rows[j]);
+    if (ob.bear && ob.body >= atrLast * 0.35 && c > ob.h) { bulls.push('bullish order block held'); break; }
+    if (ob.bull && ob.body >= atrLast * 0.35 && c < ob.l) { bears.push('bearish order block held'); break; }
+  }
+  if (pl.length >= 2 && Math.abs(pl[pl.length - 1] - pl[pl.length - 2]) <= atrLast * 0.15) {
+    var eq = Math.min(pl[pl.length - 1], pl[pl.length - 2]);
+    if (+rows[n - 1].l < eq && c > eq) bulls.push('equal lows raided');
+  }
+  if (ph.length >= 2 && Math.abs(ph[ph.length - 1] - ph[ph.length - 2]) <= atrLast * 0.15) {
+    var eqh = Math.max(ph[ph.length - 1], ph[ph.length - 2]);
+    if (+rows[n - 1].h > eqh && c < eqh) bears.push('equal highs raided');
+  }
+  if (aAdvance(rows, atrLast)) bears.push('advance block');
+  return {
+    bullVotes: bulls.length ? 1 : 0,
+    bearVotes: bears.length ? 1 : 0,
+    bullNames: bulls,
+    bearNames: bears
+  };
+}
+
+function aAdvance(rows, atrLast) {
+  var n = rows.length;
+  var a = hgCfPack(rows[n - 3]), b = hgCfPack(rows[n - 2]), c = hgCfPack(rows[n - 1]);
+  if (!(a.bull && b.bull && c.bull)) return false;
+  if (!(a.body > b.body && b.body > c.body && c.body >= atrLast * 0.15)) return false;
+  if (!(c.upper > b.upper && b.upper > a.upper)) return false;
+  if (!(c.c > b.c && b.c > a.c)) return false;
+  var swingHi = -Infinity, k;
+  for (k = Math.max(0, n - 9); k <= n - 2; k++) swingHi = Math.max(swingHi, +rows[k].h);
+  return c.h >= swingHi - atrLast * 0.08;
+}
+
+/* Gold-tab confluence. A fresh cross or a measured macro leg is one read.
+   A standing trend is not. Two reads on one side and none against are one vote.
+   This vote does not set the stop. */
+function hgCfGoldDesk(rows, macro) {
+  var empty = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [], notes: ['gold desk unread'] };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) return empty;
+    if (typeof rsi !== 'function' || typeof ema !== 'function' || typeof atr !== 'function') return empty;
+    var n = rows.length, i, bulls = [], bears = [], notes = [];
+    var closes = [];
+    for (i = 0; i < n; i++) {
+      if (!isFinite(+rows[i].c) || !isFinite(+rows[i].h) || !isFinite(+rows[i].l)) return empty;
+      closes.push(+rows[i].c);
+    }
+    var atr14 = atr(rows, 14);
+    var a14 = (atr14 && isFinite(+atr14[n - 1])) ? +atr14[n - 1] : NaN;
+    var freshBar = a14 > 0 && Math.abs(closes[n - 1] - +rows[n - 1].o) >= a14 * 0.35;
+    var r = rsi(closes, 14);
+    var rv = r && r.length ? +r[n - 1] : NaN;
+    var rp = r && r.length > 1 ? +r[n - 2] : NaN;
+    if (freshBar && isFinite(rv) && isFinite(rp)) {
+      if (rp <= 50 && rv > 50) bulls.push('RSI crossed 50');
+      else if (rp >= 50 && rv < 50) bears.push('RSI crossed 50');
+      else if (rp <= 25 && rv > 25) bulls.push('RSI left oversold');
+      else if (rp >= 75 && rv < 75) bears.push('RSI left overbought');
+    }
+    if (r && r.length === n) {
+      var lows = [], k;
+      for (k = 2; k <= n - 3; k++) {
+        if (+rows[k].l < +rows[k - 1].l && +rows[k].l < +rows[k - 2].l && +rows[k].l < +rows[k + 1].l && +rows[k].l < +rows[k + 2].l)
+          lows.push(k);
+      }
+      if (lows.length >= 2) {
+        var p1 = lows[lows.length - 2], p2 = lows[lows.length - 1];
+        if (p2 > n - 22 && +rows[p2].l < +rows[p1].l && isFinite(+r[p2]) && isFinite(+r[p1]) && +r[p2] > +r[p1])
+          bulls.push('RSI bullish divergence');
+      }
+      var highs = [];
+      for (k = 2; k <= n - 3; k++) {
+        if (+rows[k].h > +rows[k - 1].h && +rows[k].h > +rows[k - 2].h && +rows[k].h > +rows[k + 1].h && +rows[k].h > +rows[k + 2].h)
+          highs.push(k);
+      }
+      if (highs.length >= 2) {
+        var q1 = highs[highs.length - 2], q2 = highs[highs.length - 1];
+        if (q2 > n - 22 && +rows[q2].h > +rows[q1].h && isFinite(+r[q2]) && isFinite(+r[q1]) && +r[q2] < +r[q1])
+          bears.push('RSI bearish divergence');
+      }
+    }
+    var e20 = ema(closes, 20), e50 = ema(closes, 50);
+    if (freshBar && e20 && e50 && isFinite(+e20[n - 1]) && isFinite(+e20[n - 2]) && isFinite(+e50[n - 1])) {
+      if (closes[n - 2] <= +e20[n - 2] && closes[n - 1] > +e20[n - 1] && +e20[n - 1] > +e50[n - 1])
+        bulls.push('EMA20 cross with the 50');
+      else if (closes[n - 2] >= +e20[n - 2] && closes[n - 1] < +e20[n - 1] && +e20[n - 1] < +e50[n - 1])
+        bears.push('EMA20 cross with the 50');
+    }
+    var atr10 = atr(rows, 10);
+    if (atr10 && atr10.length === n) {
+      function stAt(upto) {
+        var upper = NaN, lower = NaN, dir = 1, j;
+        for (j = 0; j <= upto; j++) {
+          var mid = (+rows[j].h + +rows[j].l) / 2, a = +atr10[j];
+          if (!isFinite(mid) || !isFinite(a)) continue;
+          var bu = mid + 3 * a, bl = mid - 3 * a;
+          if (!isFinite(upper)) { upper = bu; lower = bl; }
+          else { upper = Math.min(bu, upper); lower = Math.max(bl, lower); }
+          if (+rows[j].c > upper) dir = 1;
+          else if (+rows[j].c < lower) dir = -1;
+        }
+        return dir;
+      }
+      var nowDir = stAt(n - 1), prevDir = stAt(n - 4);
+      if (freshBar && nowDir !== prevDir) {
+        if (nowDir === 1) bulls.push('supertrend flip');
+        else bears.push('supertrend flip');
+      }
+    }
+    function cciAt(idx) {
+      if (idx < 19) return NaN;
+      var s = 0, t, tp;
+      for (t = idx - 19; t <= idx; t++) s += (+rows[t].h + +rows[t].l + +rows[t].c) / 3;
+      var m = s / 20, md = 0;
+      for (t = idx - 19; t <= idx; t++) {
+        tp = (+rows[t].h + +rows[t].l + +rows[t].c) / 3;
+        md += Math.abs(tp - m);
+      }
+      md /= 20;
+      tp = (+rows[idx].h + +rows[idx].l + +rows[idx].c) / 3;
+      return md > 0 ? (tp - m) / (0.015 * md) : NaN;
+    }
+    var cciSig = 0;
+    for (i = Math.max(20, n - 3); i < n; i++) {
+      var ca = cciAt(i - 1), cb = cciAt(i);
+      if (!isFinite(ca) || !isFinite(cb)) continue;
+      if (ca <= 0 && cb > 0) cciSig = 1;
+      else if (ca >= 0 && cb < 0) cciSig = -1;
+    }
+    if (freshBar && cciSig === 1) bulls.push('CCI crossed zero');
+    else if (freshBar && cciSig === -1) bears.push('CCI crossed zero');
+    function stochK(idx) {
+      if (!r || idx < 13) return NaN;
+      var lo = Infinity, hi = -Infinity, j;
+      for (j = idx - 13; j <= idx; j++) {
+        if (!isFinite(+r[j])) return NaN;
+        if (+r[j] < lo) lo = +r[j];
+        if (+r[j] > hi) hi = +r[j];
+      }
+      if (!(hi > lo)) return NaN;
+      return 100 * (+r[idx] - lo) / (hi - lo);
+    }
+    var k0 = stochK(n - 1), k1 = stochK(n - 2);
+    if (freshBar && isFinite(k0) && isFinite(k1)) {
+      if (k1 <= 20 && k0 > 20) bulls.push('StochRSI crossed up');
+      else if (k1 >= 80 && k0 < 80) bears.push('StochRSI crossed down');
+    }
+    var tl = +rows[n - 1].t;
+    if (tl > 1e9) {
+      var ds = Math.floor(tl / 86400) * 86400, boxEnd = ds + 8 * 3600;
+      if (tl >= boxEnd) {
+        var aHi = -Infinity, aLo = Infinity, aBars = 0;
+        for (i = 0; i < n; i++) {
+          var tt = +rows[i].t;
+          if (!(tt >= ds && tt < boxEnd)) continue;
+          if (+rows[i].h > aHi) aHi = +rows[i].h;
+          if (+rows[i].l < aLo) aLo = +rows[i].l;
+          aBars++;
+        }
+        if (aBars >= 3 && aHi > aLo) {
+          if (+rows[n - 1].c > aHi && +rows[n - 2].c <= aHi) bulls.push('Asia range break');
+          else if (+rows[n - 1].c < aLo && +rows[n - 2].c >= aLo) bears.push('Asia range break');
+        }
+      }
+    }
+    if (macro && typeof macro === 'object') {
+      if (macro.realRateHint === 'TAILWIND') bulls.push('real rate tailwind');
+      else if (macro.realRateHint === 'HEADWIND') bears.push('real rate headwind');
+      else if (!macro.realRateHint && macro.dxy && macro.dxy.trend20 === 'FALLING') bulls.push('DXY falling');
+      else if (!macro.realRateHint && macro.dxy && macro.dxy.trend20 === 'RISING') bears.push('DXY rising');
+      if (macro.silverTrend === 'RISING') bulls.push('silver rising');
+      else if (macro.silverTrend === 'FALLING') bears.push('silver falling');
+      if (macro.vixTrend === 'RISING') bulls.push('VIX rising');
+      else if (macro.vixTrend === 'FALLING') bears.push('VIX falling');
+      if (macro.minersGoldTrend === 'RISING') bulls.push('miners leading gold');
+      else if (macro.minersGoldTrend === 'FALLING') bears.push('miners lagging gold');
+    } else notes.push('fundamentals unread');
+    if (bulls.length && bears.length) {
+      notes.push(bulls.concat(bears).join(', ') + ' — desk split, no vote');
+      bulls = []; bears = [];
+    }
+    var voted = bulls.length >= 2 || bears.length >= 2;
+    if (!voted && (bulls.length === 1 || bears.length === 1)) {
+      notes.push((bulls[0] || bears[0]) + ' — one desk read, no vote');
+      bulls = []; bears = [];
+    }
+    if (!bulls.length && !bears.length && !notes.length) notes.push('no fresh gold-desk cross');
+    return {
+      bullVotes: bulls.length ? 1 : 0,
+      bearVotes: bears.length ? 1 : 0,
+      bullNames: bulls,
+      bearNames: bears,
+      notes: notes
+    };
+  } catch (e) { return empty; }
+}
+
+function hgCfDeskVotes(rows, opts, dir) {
+  /* hg-v1317: EVERY GOLD DESK VOTES, DRIVEN ON THIS TAPE.
+     The confluence above reads four SHARED families. This layer asks a different and
+     more direct question: what did each gold TAB's OWN desk engine actually FORM on
+     this same tape? Those engines are the desks — GOLD SCALP and GOLD SWING mint
+     candidates, the ranker decides which may lead — and until now CANDLE FORECAST
+     never asked them, so it could print a long while GOLD SCALP was forming shorts
+     on the identical bars.
+     HOW A DESK VOTES. Each engine is called with the same rows and the side it FORMED
+     is its vote: a desk carrying more long candidates than short reads WITH a long
+     call, one carrying more shorts reads AGAINST, and a desk that formed nothing
+     reads UNREAD — never agreement, never disagreement. That last rule matters more
+     here than anywhere: most desks will form nothing on any given tape (they are
+     selective by design), and counting an empty desk as agreement would manufacture
+     a quorum out of silence.
+     NO NEW WEIGHT. A desk's candidate count is reported, never scored; the family
+     counts one desk once regardless of how many candidates it minted, so a chatty
+     engine cannot outvote a quiet one (hg-v966). Every call is individually guarded
+     and fails open to unread.
+     Runs on the tape it is given. It fetches nothing. */
+  var out = { desks: [], with_: 0, against: 0, unread: 0, checked: 0, why: '' };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) { out.why = 'tape too thin to drive the desks'; return out; }
+    var wants = String(dir || '').toUpperCase();
+    if (wants !== 'BULL' && wants !== 'BEAR') { out.why = 'no directional candle read to compare the desks against'; return out; }
+    var wantsUp = (wants === 'BULL');
+    var nowMs = Date.now();
+
+    /* count the sides a candidate list carries — the desk's own formed bias */
+    function tally(list) {
+      var lng = 0, sht = 0, notes = [], i, d, row, bit;
+      if (!Array.isArray(list)) return { long: 0, short: 0, notes: notes };
+      for (i = 0; i < list.length; i++) {
+        row = list[i] || {};
+        d = String((row.dir || row.direction) || '').toLowerCase();
+        if (d === 'long' || d === 'bull' || d === 'bullish') lng++;
+        else if (d === 'short' || d === 'bear' || d === 'bearish') sht++;
+        bit = row.why || row.reason || row.note || row.label || '';
+        var stratBit = row.strategy || row.stratKey || row.kind || '';
+        var stampBit = Array.isArray(row.stamps) ? row.stamps.slice(0, 3).join(', ') : '';
+        var gateBit = (Array.isArray(row.gateNotes) && row.gateNotes.length) ? row.gateNotes[0] : '';
+        bit = [stratBit, bit, stampBit, gateBit].filter(function (part) { return part; }).join(' — ');
+        if (bit && notes.length < 4) {
+          bit = String(bit).replace(/\s+/g, ' ').trim();
+          if (bit) notes.push(bit.slice(0, 110));
+        }
+      }
+      return { long: lng, short: sht, notes: notes };
+    }
+    function push(name, label, formed, why) {
+      var lean = null;
+      if (formed) {
+        if (formed.long > formed.short) lean = wantsUp;
+        else if (formed.short > formed.long) lean = !wantsUp;
+        /* an exactly split desk is genuinely undecided — unread, not a coin toss */
+      }
+      out.desks.push({ desk: name, label: label, long: formed ? formed.long : 0, short: formed ? formed.short : 0, lean: lean, why: why || '' });
+      if (lean === true) out.with_++;
+      else if (lean === false) out.against++;
+      else out.unread++;
+    }
+    /* hg-v1329: the shared perfect bar, asked on a same-side candidate this desk
+       already formed. The badge is named. The lean is not changed. The candidate's
+       prices are not copied onto the candle stop. Absent home: no badge, no why. */
+    function stampDesk(list) {
+      var host = (typeof globalThis !== 'undefined') ? globalThis : null;
+      var fn = (typeof hgPerfectFormation === 'function') ? hgPerfectFormation
+        : ((host && typeof host.hgPerfectFormation === 'function') ? host.hgPerfectFormation : null);
+      if (typeof fn !== 'function' || !Array.isArray(list) || !list.length) return;
+      var last = out.desks[out.desks.length - 1];
+      if (!last) return;
+      var want = wantsUp ? 'long' : 'short';
+      var i, row, d, asked = null, firstWhy = '';
+      for (i = 0; i < list.length; i++) {
+        row = list[i];
+        if (!row || typeof row !== 'object') continue;
+        d = String((row.dir || row.direction) || '').toLowerCase();
+        if (d === 'bull' || d === 'bullish') d = 'long';
+        else if (d === 'bear' || d === 'bearish') d = 'short';
+        if (d !== want) continue;
+        try { asked = fn(row); } catch (eAsk) { asked = null; }
+        if (asked && asked.perfect) break;
+        if (!firstWhy && asked && asked.why && asked.why.length) firstWhy = String(asked.why[0]);
+        asked = null;
+      }
+      if (asked && asked.perfect) {
+        last.perfect = true;
+        last.perfectWhy = "PERFECT on this desk's own candidate";
+      } else if (firstWhy) {
+        last.perfectWhy = firstWhy;
+      }
+    }
+    /* Resolve an engine, or report explicitly that the page has not loaded it —
+       "not loaded" and "loaded and formed nothing" are different facts about the
+       tape and a reader must be able to tell them apart. */
+    function engine(globalName, label) {
+      var f = (typeof W !== 'undefined' && W && typeof W[globalName] === 'function') ? W[globalName]
+        : ((typeof globalThis !== 'undefined' && globalThis && typeof globalThis[globalName] === 'function') ? globalThis[globalName] : null);
+      if (!f) { push(label, label, null, 'engine not loaded on this page'); return null; }
+      return f;
+    }
+    function drive(name, label, fn) {
+      if (typeof fn !== 'function') { push(name, label, null, 'engine not loaded on this page'); return; }
+      try {
+        var r = fn();
+        var t = tally(r);
+        var total = t.long + t.short;
+        var said = (t.notes && t.notes.length) ? (' · ' + t.notes.join(' · ')) : '';
+        push(name, label, t, total
+          ? (t.long + ' long / ' + t.short + ' short formed' + said)
+          : ('formed nothing on this tape' + said));
+        stampDesk(r);
+      } catch (e) {
+        /* name the cause rather than a bare "threw" — a desk that could not read
+           its feed is a different fact from one that read it and stood down, and
+           the card has to be able to tell a reader which happened */
+        push(name, label, null, 'engine unavailable: ' + String((e && e.message) || e).slice(0, 60));
+      }
+    }
+
+    /* GOLD SCALP — the scalp desk's own mint.
+       On a swing horizon the rows in hand are 4h bars. Driving the 15m mint on
+       them would invent a scalp the desk did not form, so those engines stay
+       unread and say why. */
+    var swingHorizon = !!(opts && (opts.horizon === 'swing' || opts.tf === '4h'));
+    var base = { rows15m: rows, rows1h: (opts && opts.rows1h) || null, rows4h: (opts && opts.rows4h) || null, now: nowMs };
+    if (swingHorizon) {
+      push('GOLD SCALP', 'gold scalp mint', null, '15m scalp desk — not re-run on the 4h swing tape');
+      push('GOLD PINE', 'pine lane scan', null, 'pine lane is a 15m read — not re-run on the 4h tape');
+      var swingBase = {
+        rows15m: (opts && opts.rows15m) || null,
+        rows1h: (opts && opts.rows1h) || null,
+        rows4h: rows,
+        now: nowMs
+      };
+      drive('GOLD SWING', 'gold swing mint', (function () {
+        var f = engine('goldSwingSetups', 'GOLD SWING');
+        return f ? function () { return f(swingBase); } : null;
+      })());
+    } else {
+      drive('GOLD SCALP', 'gold scalp mint', (function () {
+        var f = engine('goldScalpSetups', 'GOLD SCALP');
+        return f ? function () { return f(base); } : null;
+      })());
+      drive('GOLD SWING', 'gold swing mint', (function () {
+        var f = engine('goldSwingSetups', 'GOLD SWING');
+        return f ? function () { return f(base); } : null;
+      })());
+      drive('GOLD PINE', 'pine lane scan', (function () {
+        var f = engine('goldPineScan', 'GOLD PINE');
+        return f ? function () { return f({ rows: rows, rows15m: rows, rows4h: base.rows4h, now: nowMs }); } : null;
+      })());
+    }
+    /* GANESH GOLD — the 17-step framework's own state, when it reports one */
+    drive('GANESH GOLD', '17-step framework', (function () {
+      var f = engine('ganeshGoldState', 'GANESH GOLD');
+      return f ? function () {
+        var st = f();
+        if (!st || typeof st !== 'object') return null;
+        var d = String(st.dir || st.direction || st.bias || '').toLowerCase();
+        return (d === 'long' || d === 'short') ? [{ dir: d }] : [];
+      } : null;
+    })());
+
+    /* The four desks above are the ones that mint on this tape. These six are the
+       rest of the gold tabs. Each is named. An engine that is not on the page, or
+       a feed it does not have, stays unread. None of them is scored. */
+    function once(name, label, run) {
+      var f = (typeof W !== 'undefined' && W && typeof W[name] === 'function') ? W[name]
+        : ((typeof globalThis !== 'undefined' && globalThis && typeof globalThis[name] === 'function') ? globalThis[name] : null);
+      if (!f) { push(label, label, null, 'engine not loaded on this page'); return; }
+      try {
+        var r = run(f);
+        var t = tally(Array.isArray(r) ? r : []);
+        var saidOnce = (t.notes && t.notes.length) ? (' · ' + t.notes.join(' · ')) : '';
+        push(label, label, t, (t.long + t.short)
+          ? (t.long + ' long / ' + t.short + ' short formed' + saidOnce)
+          : ('formed nothing on this tape' + saidOnce));
+        stampDesk(Array.isArray(r) ? r : []);
+      } catch (eOnce) {
+        push(label, label, null, 'engine unavailable: ' + String((eOnce && eOnce.message) || eOnce).slice(0, 60));
+      }
+    }
+    once('goldProVerdict', 'GOLD PRO', function (f) {
+      var above = null;
+      var daily = opts && opts.rows1d;
+      if (daily && daily.length >= 200 && typeof ema === 'function') {
+        var cs = [], i;
+        for (i = 0; i < daily.length; i++) cs.push(+daily[i].c);
+        var e200 = ema(cs, 200);
+        if (e200 && isFinite(+e200[e200.length - 1])) above = cs[cs.length - 1] > +e200[e200.length - 1];
+      }
+      var macro = (opts && opts.macro) || null;
+      var g = f({
+        goldAbove200: above,
+        dxyTrend: macro && macro.dxy && macro.dxy.trend20,
+        tnxTrend: macro && macro.tnxTrend,
+        realRateHint: macro && macro.realRateHint
+      });
+      if (g && g.word === 'STRUCTURAL BULL') return [{ dir: 'long' }];
+      if (g && g.word === 'STRUCTURAL BEAR') return [{ dir: 'short' }];
+      return [];
+    });
+    once('goldBasisSignal', 'GOLD SPOT', function (f) {
+      var spot = opts && +opts.spot, perp = opts && +opts.perp;
+      if (!(spot > 0) || !(perp > 0)) throw new Error('spot or perp unread');
+      var g = f({ spot: spot, perp: perp, perpSymbol: opts.perpSymbol, funding: opts.funding });
+      if (g && g.verdict === 'shorts-crowding') return [{ dir: 'long' }];
+      if (g && g.verdict === 'longs-crowding') return [{ dir: 'short' }];
+      return [];
+    });
+    once('goldDirectionScan', 'GOLD DIRECTION', function (f) {
+      var g = f();
+      if (!g || g.fundBlackout) return [];
+      var picks = [];
+      if (g.scalp && g.scalp.pick) picks.push(g.scalp.pick);
+      if (g.swing && g.swing.pick) picks.push(g.swing.pick);
+      if (g.side) picks.push({ dir: g.side });
+      return picks;
+    });
+    once('goldUltraState', 'GOLD ULTRA', function (f) {
+      var g = f();
+      if (!g || g.fire !== true || g.recordOnly) return [];
+      return g.dir ? [{ dir: g.dir }] : [];
+    });
+    once('omnigold1State', 'OMNIGOLD', function (f) {
+      var g = f();
+      if (!g || g.ok === false) return [];
+      return Array.isArray(g.candidates) ? g.candidates : [];
+    });
+    once('goldCointState', 'GOLD COINT', function () { return []; });
+    /* The rest of the gold book. Each is named. A last scan that is not on the
+       page, or an engine that formed no side, stays unread. Their prices are
+       not read here. */
+    once('hgOgDetect', 'OMNIGOLD DESK', function (f) {
+      var g = f(rows, { rows1h: opts && opts.rows1h, rows4h: opts && opts.rows4h });
+      return Array.isArray(g) ? g : [];
+    });
+    once('optiGoldState', 'OPTI GOLD', function (f) {
+      var g = f();
+      if (!g) throw new Error('not scanned this session');
+      var live = [], iLive, sLive;
+      var bag = Array.isArray(g.setups) ? g.setups : [];
+      for (iLive = 0; iLive < bag.length; iLive++) {
+        sLive = bag[iLive];
+        if (sLive && (sLive.state === 'waiting' || sLive.state === 'open') && sLive.dir) live.push({ dir: sLive.dir });
+      }
+      return live;
+    });
+    once('ngAssess', 'NEW GOLD', function (f) {
+      var g = f(rows);
+      if (!g || !g.dir) return [];
+      return [{ dir: g.dir }];
+    });
+    once('superGoldScan', 'SUPER GOLD', function (f) {
+      var g = f();
+      if (!g || !Array.isArray(g.cands)) throw new Error('not scanned this session');
+      var live = [], iSg, cSg;
+      for (iSg = 0; iSg < g.cands.length; iSg++) {
+        cSg = g.cands[iSg];
+        if (cSg && cSg.dir) live.push({ dir: cSg.dir });
+      }
+      return live;
+    });
+    push('MILLI GOLD', 'MILLI GOLD', null, 'roster only — this tab does not form a side');
+
+    out.checked = out.desks.length;
+    out.why = out.with_ || out.against
+      ? (out.with_ + ' desk' + (out.with_ === 1 ? '' : 's') + ' with the call, ' + out.against + ' against, ' + out.unread + ' formed nothing')
+      : ('no desk formed a side on this tape (' + out.unread + ' unread)');
+    return out;
+  } catch (e) {
+    out.why = 'desk vote error';
+    return out;
+  }
+}
+
+function hgCfBuildSetup(rows, opts, fc) {
+  /* hg-v1318: A SCALP SETUP AND A SWING SETUP, from the candle read.
+     WHY TWO. CANDLE FORECAST printed ONE bracket. A 15m read and a 4h read are
+     different trades: the scalp lives or dies inside a session, the swing rides a
+     move for days, and a reader deciding whether to take either was shown a single
+     set of levels with no statement of which horizon they belonged to. The tab now
+     prints BOTH, each labelled and each carrying its OWN ATR, because risk has to be
+     measured on the timeframe the trade is taken on.
+     ONE HOME, TWO INSTANCES (hg-v949). This function is the only place a bracket is
+     built, and the tab calls it twice with a different tape. That is deliberately
+     NOT two copies of the maths — a second copy would drift, and the whole point of
+     showing two horizons is that they are comparable.
+     PURE AND TAPE-DRIVEN. It takes the rows it is handed and fetches nothing: the
+     TAB owns the fetching (it already reads the house gold loader and the 4h tape),
+     so this stays testable in a sandbox with no network and no DOM.
+     THE RULES ARE THE ENGINE'S OWN — a named pattern, plus structure or a desk read
+     in the same direction, and no opposing structure or desk. Nothing new is
+     thresholded here; the builder only turns a verdict the engine already reached
+     into entry, stop and two targets. */
+  var out = { ok: false, tf: (opts && opts.tf) || '15m', dir: null, formed: false, why: '', entry: null, stop: null, tp1: null, tp2: null, risk: null, rr: null, riskAtr: null, stopSource: null, parts: '', barsPerDay: null, tapeVeto: null };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) { out.why = 'tape too thin for a ' + out.tf + ' setup'; return out; }
+    var f = fc;
+    if (!f && typeof goldCandleForecast === 'function') f = goldCandleForecast(rows);
+    if (!f || !f.dir) { out.why = 'no candle read on the ' + out.tf + ' tape'; return out; }
+    out.ok = true;
+    out.dir = f.dir;
+    out.atr = isFinite(+f.atr) ? +f.atr : null;
+    out.entry = isFinite(+f.close) ? +f.close : null;
+    out.stop = (f.sl === undefined) ? null : f.sl;
+    out.tp1 = (f.tp1 === undefined) ? null : f.tp1;
+    out.tp2 = (f.tp2 === undefined) ? null : f.tp2;
+    out.stopSource = f.stopSource || null;
+    out.patterns = (f.patterns || []).slice();
+    out.advancedPatterns = (f.advancedPatterns || []).slice();
+    out.patternWhere = f.patternWhere || null;
+    out.patternDrift = f.patternDrift || null;
+    out.structure = f.structure || null;
+    out.desk = f.desk || null;
+    out.higher = f.higher || null;
+    out.missing = null;
+    out.session = (typeof f.session === 'string') ? f.session : '';
+    out.confluenceWhy = (f.confluence && f.confluence.why) || '';
+    out.ticket = !!(f.confluence && f.confluence.ticket);
+    out.confluenceView = null;
+    if (f.confluence && f.confluence.ok) {
+      out.confluenceView = {
+        ok: true,
+        why: f.confluence.why || '',
+        ticket: !!f.confluence.ticket,
+        familiesWith: f.confluence.familiesWith,
+        familiesAgainst: f.confluence.familiesAgainst,
+        with_: f.confluence.with_,
+        against: f.confluence.against,
+        unread: f.confluence.unread,
+        voters: (f.confluence.voters || []).map(function (v) {
+          return { family: v.family, name: v.name, lean: v.lean, why: v.why || '' };
+        }),
+        desks: (f.confluence.desks || []).map(function (dsk) {
+          return {
+            desk: dsk.desk, lean: dsk.lean, long: dsk.long, short: dsk.short, why: dsk.why || '',
+            perfect: dsk.perfect === true ? true : undefined,
+            perfectWhy: dsk.perfectWhy || ''
+          };
+        }),
+        deskWhy: f.confluence.deskWhy || ''
+      };
+    }
+    out.strength = f.strength;
+    /* the horizon, stated in BARS rather than in prose, so a reader can see that the
+       scalp's stop lives inside one session and the swing's spans several */
+    var tf = String(out.tf).toLowerCase();
+    out.barsPerDay = /^15m$/.test(tf) ? 96 : (/^1h$/.test(tf) ? 24 : (/^4h$/.test(tf) ? 6 : (/^1d$/.test(tf) ? 1 : null)));
+    /* hg-v1322: WHY A CROWN WAS WITHHELD — disclosed, never decided here.
+       The other gold desks withhold a TICKET on a tape the gold veto refuses (a scalp
+       long in premium without a sweep, a long under a falling higher-timeframe average,
+       and the rest of that chain in pinegoldmath). This tab showed NONE of it: a reader
+       saw "NOT A SETUP" with no way to learn that the TAPE was the reason, which reads
+       as "no signal" when the truth is "the signal was refused".
+       DISCLOSURE ONLY, on purpose: this does not gate, demote or withhold anything —
+       the formation decision below is the engine's and has one home (hg-v949); a second
+       veto here would be a second home for it. Fail-open: no reader, no reason, no
+       effect. */
+    out.tapeVeto = null;
+    try {
+      var tvFn = (typeof pineGoldTapeVeto === 'function') ? pineGoldTapeVeto
+        : ((typeof W !== 'undefined' && W && typeof W.pineGoldTapeVeto === 'function') ? W.pineGoldTapeVeto : null);
+      if (tvFn && out.dir && out.dir !== 'NEUTRAL') {
+        var tvWhy = tvFn(rows, out.dir === 'BULL' ? 'long' : 'short', {
+          mode: /^4h$/.test(tf) ? 'swing' : 'scalp',
+          macro: (opts && opts.macro) || null
+        });
+        if (tvWhy) out.tapeVeto = String(tvWhy);
+      }
+    } catch (eTv) { out.tapeVeto = null; }
+    /* FORMATION — the engine's own rule, read off the result rather than re-run */
+    if (f.setup) {
+      out.formed = true;
+      out.parts = f.setupParts || '';
+      out.label = f.setup;                       /* 'LONG SETUP' / 'SHORT SETUP' */
+      out.why = f.setup + ' on ' + out.tf + (out.parts ? ' — ' + out.parts : '');
+      out.missing = null;
+    } else {
+      out.label = (f.dir === 'BULL' ? 'LONG' : (f.dir === 'BEAR' ? 'SHORT' : 'NEUTRAL')) + ' READ';
+      out.why = 'no ' + out.tf + ' setup: ' + (f.dir === 'NEUTRAL'
+        ? 'the tape is NEUTRAL'
+        : 'a named pattern plus structure or a desk read must agree — ' + (f.reasons || []).filter(function (r) {
+            return /no structure|no candlestick pattern|desk:/i.test(String(r));
+          }).join(' · '));
+      out.missing = f.missing || null;
+    }
+    /* hg-v1417: STRUCTURE-CONFIRMED PUBLICATION (the measured admission floor).
+       The desk census (13+ months, 455 formed 4h swings, both chronological
+       halves, independently re-run) split the swing book on the confluence's
+       higher-timeframe-structure voter: confirmed swings hit 58.1% next-candle
+       and paid +0.278R at XM costs (H1 +0.326 / H2 +0.233); swings the voter
+       read and did NOT confirm hit 43.6% and paid -0.133R (H1 -0.004 /
+       H2 -0.283) — 38% of formed swings. So a formed 4h bracket PUBLISHES only
+       when that voter confirms. This withholds the bracket from the swing card,
+       the day list and the executable card ONLY: the read still stands, the
+       bracket object still exists for the ledger and the horizon table, and
+       the ledger keeps recording both cohorts under the cf:htfWith mark so the
+       withheld half is judged forward. Fail-open narrowed to the two states the
+       census never measured (no confluence, no higher tape). Never a flipped
+       side, never a NEUTRAL. */
+    out.published = true;
+    out.htfConfirm = null;
+    if (out.formed && /^4h$/.test(tf)) {
+      out.htfConfirm = (typeof hgCfSwingHtfConfirm === 'function') ? hgCfSwingHtfConfirm(out) : null;
+      if (out.htfConfirm === false) {
+        out.published = false;
+        out.why += ' · The 4h read stands, but the higher timeframe does not confirm it, so the bracket is withheld. In the desk census (13 months, 455 formed swings) confirmed reads hit 58% next-candle and paid +0.28R at XM costs; unconfirmed reads hit 44% and paid -0.13R. Nothing was invented.';
+      }
+    }
+    if (out.formed && isFinite(out.entry) && isFinite(out.stop)) {
+      var sign = (out.dir === 'BULL') ? 1 : -1;
+      out.risk = +(Math.abs(out.entry - out.stop)).toFixed(2);
+      out.rr = (out.risk > 0 && isFinite(out.tp2)) ? +(((out.tp2 - out.entry) * sign) / out.risk).toFixed(2) : null;
+      out.riskAtr = (out.atr > 0 && isFinite(out.risk)) ? +(out.risk / out.atr).toFixed(2) : null;
+    } else if (isFinite(out.entry) && isFinite(out.stop) && out.atr > 0) {
+      /* NOT FORMED still reports the risk the reader would be taking — the bracket
+         above is real even when the desk declines to call it a setup, and the ATR
+         multiple is what makes a scalp stop and a swing stop comparable. Reported,
+         never labelled a setup. */
+      out.risk = +(Math.abs(out.entry - out.stop)).toFixed(2);
+      out.riskAtr = +(out.risk / out.atr).toFixed(2);
+    }
+    return out;
+  } catch (e) {
+    out.ok = false;
+    out.why = 'setup build error';
+    return out;
+  }
+}
+
+function hgCfSwingHtfConfirm(setup) {
+  /* hg-v1417: DID THE HIGHER-TIMEFRAME-STRUCTURE VOTER CONFIRM THIS SETUP?
+     Three states, because the census measured three different things:
+       TRUE  — the confluence's 'higher-timeframe structure' voter (goldind.js
+               hgCfConfluence, id 'higher') read AND leans with the call. This
+               cohort hit 58.1% next-candle and paid +0.278R at XM costs over
+               13 months of 4h bars (282 formed swings, both halves positive).
+       FALSE — the voter READ and did not lean with the call (lean null on a
+               read tape: structure split or unread on handed frames — and, on
+               reads the formation block did not reach, lean against). This is
+               the measured -0.133R cohort (173 formed swings, negative in both
+               halves). NOT a fail-open state: it is the cohort the admission
+               floor withholds.
+       NULL  — never measured: the confluence never ran, the voters array is
+               absent, or the voter's own why is 'no higher tape was handed in'
+               (a rows1d load failure). Fail open, exactly like the existing
+               familiesAgainst clause fails open on a walked setup. */
+  try {
+    var cv = setup && setup.confluenceView;
+    if (!cv || !Array.isArray(cv.voters)) return null;
+    var v = null, i;
+    for (i = 0; i < cv.voters.length; i++) {
+      if (cv.voters[i] && cv.voters[i].name === 'higher-timeframe structure') { v = cv.voters[i]; break; }
+    }
+    if (!v) return null;
+    if (String(v.why || '') === 'no higher tape was handed in') return null;
+    return (v.lean === true) ? true : false;
+  } catch (eHc) { return null; }
+}
+
+function hgCfHigherFrame(tapes) {
+  /* Higher-timeframe structure, using the same structure reader as the candle.
+     A missing frame is unread. A split across frames confirms nothing and blocks
+     nothing. This does not set the stop. */
+  var empty = { bullNames: [], bearNames: [], notes: ['higher timeframes unread'], line: 'higher timeframes unread' };
+  try {
+    if (!tapes || typeof tapes !== 'object') return empty;
+    var bulls = [], bears = [], notes = [], legs = [['1h', tapes.rows1h], ['4h', tapes.rows4h], ['1d', tapes.rows1d]];
+    var i, label, rows, atrArr, a, st, names;
+    for (i = 0; i < legs.length; i++) {
+      label = legs[i][0];
+      rows = legs[i][1];
+      if (!Array.isArray(rows) || rows.length < 30) { notes.push(label + ' unread'); continue; }
+      if (typeof atr !== 'function') { notes.push(label + ' unread'); continue; }
+      atrArr = atr(rows, 14);
+      a = (atrArr && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
+      if (!(a > 0)) { notes.push(label + ' ATR unread'); continue; }
+      st = hgCfStructure(rows, a);
+      names = (st.bullNames || []).concat(st.bearNames || []);
+      if (st.bullVotes && !st.bearVotes) bulls.push(label + ' ' + st.bullNames.join(', '));
+      else if (st.bearVotes && !st.bullVotes) bears.push(label + ' ' + st.bearNames.join(', '));
+      else notes.push(label + ' ' + (names.join(', ') || 'no structure'));
+    }
+    if (bulls.length && bears.length) {
+      notes.push(bulls.concat(bears).join(' · ') + ' — higher frames split');
+      bulls = [];
+      bears = [];
+    }
+    var line = bulls.concat(bears).concat(notes).join(' · ');
+    return { bullNames: bulls, bearNames: bears, notes: notes, line: line || empty.line };
+  } catch (eHf) { return empty; }
+}
+
+function hgCfLocatedSide(adv) {
+  /* A disclosed advanced lean counts as a named shape only when its own note
+     says the location is where that pattern means something, or when a
+     continuation agrees with the 20-bar drift. A shape on both sides is a
+     clash and names nothing. This does not add a vote. */
+  var out = { bull: [], bear: [], clash: false };
+  if (!adv || !Array.isArray(adv.leans)) return out;
+  var cont = /tasuki|side-by-side|mat hold|on-neck|in-neck|separating|two black gapping|gap three methods|identical three crows|thrusting|runaway gap/;
+  var i, L, notes, n, sits, agrees;
+  for (i = 0; i < adv.leans.length; i++) {
+    L = adv.leans[i];
+    if (!L || (L.lean !== 1 && L.lean !== -1) || !L.name) continue;
+    sits = false;
+    notes = adv.notes || [];
+    for (n = 0; n < notes.length; n++) {
+      if (String(notes[n]).indexOf(L.name) === 0 && String(notes[n]).indexOf('where this pattern means something') >= 0) sits = true;
+    }
+    agrees = cont.test(L.name) && ((L.lean === 1 && adv.aligned === 'up') || (L.lean === -1 && adv.aligned === 'down'));
+    if (!sits && !agrees) continue;
+    if (L.lean === 1) out.bull.push(L.name);
+    else out.bear.push(L.name);
+  }
+  if (out.bull.length && out.bear.length) { out.clash = true; out.bull = []; out.bear = []; }
+  return out;
+}
+
+function hgCfFeedBoard(opts) {
+  /* hg-v1326: NEWS AND THE FREE FEEDS, LISTED, NOT A SECOND VOTE.
+     The gold desks already fold a measured macro leg into hgCfGoldDesk, and
+     the fundamental regime already folds real rates. Naming the same leg
+     again as its own family would count one derivation twice. This board
+     only says what the calendar, the headlines, fear and greed, COT, and
+     the cached macro feeds actually printed — or that they are unread.
+     Unread is not agreement. Nothing here returns a side. */
+  var bits = [];
+  var darkNews = true, darkMacro = true;
+  function pick(name) {
+    if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name];
+    if (typeof W !== 'undefined' && W && typeof W[name] === 'function') return W[name];
+    return null;
+  }
+  try {
+    var newsFn = pick('hgNewsRisk');
+    if (!newsFn) bits.push('news calendar unread — news engine not loaded');
+    else {
+      darkNews = false;
+      var news = newsFn('XAUUSD');
+      if (!news || news.unchecked) bits.push('news calendar unread' + (news && news.note ? (' — ' + String(news.note).replace(/\s+/g, ' ').slice(0, 80)) : ''));
+      else if (news.blackout) bits.push('news BLACKOUT — red-folder window, listed, not a side');
+      else bits.push('news risk ' + String(news.risk || 'unread') + ' — calendar checked, not a side');
+      if (news && Array.isArray(news.events)) {
+        var ev = [], ei, title;
+        for (ei = 0; ei < news.events.length && ev.length < 3; ei++) {
+          title = news.events[ei] && (news.events[ei].title || news.events[ei].name || news.events[ei].event);
+          if (title) ev.push(String(title).replace(/\s+/g, ' ').slice(0, 42));
+        }
+        if (ev.length) bits.push('calendar ' + ev.join(', '));
+      }
+    }
+  } catch (eNews) { bits.push('news calendar unread'); }
+  try {
+    var stFn = pick('hgNewsState');
+    var st = stFn ? stFn() : null;
+    if (st && st.fng && isFinite(+st.fng.value)) {
+      bits.push('fear and greed ' + (+st.fng.value) + (st.fng.classification ? (' ' + String(st.fng.classification)) : '') + ' — listed, not a side');
+    } else bits.push('fear and greed unread');
+    if (st && Array.isArray(st.headlines) && st.headlines.length) {
+      var hb = 0, hs = 0, titles = [], hi, h;
+      for (hi = 0; hi < st.headlines.length && hi < 8; hi++) {
+        h = st.headlines[hi];
+        if (!h) continue;
+        if (h.sentiment === 'bullish') hb++;
+        else if (h.sentiment === 'bearish') hs++;
+        if (titles.length < 3 && h.title) titles.push(String(h.title).replace(/\s+/g, ' ').slice(0, 42));
+      }
+      bits.push('headlines ' + hb + ' bullish / ' + hs + ' bearish' + (titles.length ? (' · ' + titles.join('; ')) : '') + ' — listed, not a side');
+    } else bits.push('headlines unread');
+  } catch (eSt) {
+    bits.push('fear and greed unread');
+    bits.push('headlines unread');
+  }
+  /* A fresh sentiment print from the shared reader. A missing cache, a stale
+     print, or the reader's own zero placeholder is unread. Not a side. */
+  try {
+    var sentFn = pick('hgSentimentGet');
+    var sent = sentFn ? sentFn('XAUUSD') : null;
+    if (sent && sent.fresh === true && sent.missing !== true && (+sent.sourceCount) > 0 && isFinite(+sent.score))
+      bits.push('sentiment ' + (+sent.score).toFixed(2) + ' from ' + (+sent.sourceCount) + ' sources — listed, not a side');
+    else bits.push('sentiment unread');
+  } catch (eSent) { bits.push('sentiment unread'); }
+  var macro = (opts && opts.macro && typeof opts.macro === 'object') ? opts.macro : null;
+  if (!macro) {
+    try {
+      var mFn = pick('getGoldMacroCached');
+      if (mFn) macro = mFn();
+    } catch (eM) { macro = null; }
+  }
+  function leg(label, val) {
+    if (val === 'RISING' || val === 'FALLING' || val === 'TAILWIND' || val === 'HEADWIND' || val === 'NEUTRAL'
+        || val === 'STEEPENING' || val === 'FLATTENING' || val === 'HIGH' || val === 'LOW') return label + ' ' + val;
+    return label + ' unread';
+  }
+  if (!macro || typeof macro !== 'object') bits.push('gold macro feed unread');
+  else {
+    darkMacro = false;
+    var shown = [
+      leg('real rates', macro.realRateHint),
+      leg('DXY', macro.dxy && macro.dxy.trend20),
+      leg('US10Y', macro.tnxTrend),
+      leg('silver', macro.silverTrend),
+      leg('gold/silver', macro.gsRatioTrend),
+      leg('VIX', macro.vixTrend),
+      leg('miners', macro.minersGoldTrend),
+      leg('GVZ', macro.gvzTrend),
+      leg('TIPS', macro.tipTrend),
+      leg('UUP', macro.uupTrend),
+      leg('EURUSD', macro.eurusdTrend),
+      leg('gold/oil', macro.goldOilTrend),
+      leg('credit', macro.creditTrend),
+      /* hg-v1339: the rest of the same cached free snapshot. Listed, not a
+         second vote. A missing field stays unread. A correlation is the
+         number the cache already measured. No band is applied here. */
+      leg('USDJPY', macro.usdjpyTrend),
+      leg('gold/copper', macro.goldCopperTrend),
+      leg('gold/platinum', macro.goldPlatinumTrend),
+      leg('gold/palladium', macro.goldPalladiumTrend),
+      leg('USDCNY', macro.usdcnyTrend),
+      leg('curve', macro.curveSlopeTrend),
+      leg('GLD volume', macro.gldVolumeState),
+      leg('TLT', macro.tltTrend),
+      leg('AUD', macro.audusdTrend)
+    ];
+    function corrBit(label, v) {
+      if (typeof v === 'number' && isFinite(v)) return label + ' ' + (+v).toFixed(2) + ' — listed, not a side';
+      return label + ' unread';
+    }
+    shown.push(corrBit('gold-SPX 20d corr', macro.goldSpxCorr20));
+    shown.push(corrBit('gold-BTC 20d corr', macro.goldBtcCorr20));
+    bits.push(shown.join(', '));
+  }
+  try {
+    var cot = (typeof window !== 'undefined' && window.__hgGoldCot && typeof window.__hgGoldCot === 'object') ? window.__hgGoldCot : null;
+    if (cot && cot.crowding) bits.push('COT ' + String(cot.crowding).replace(/\s+/g, ' ').slice(0, 40) + ' — listed, not a second vote');
+    else bits.push('COT unread');
+  } catch (eCot) { bits.push('COT unread'); }
+  if (opts && isFinite(+opts.spot) && +opts.spot > 0 && isFinite(+opts.perp) && +opts.perp > 0)
+    bits.push('spot ' + (+opts.spot).toFixed(2) + ' · perp ' + (+opts.perp).toFixed(2));
+  else bits.push('spot and perp unread');
+  if (opts && isFinite(+opts.funding)) bits.push('funding ' + String(+opts.funding) + ' — listed, not a side');
+  else bits.push('funding unread');
+  return { why: bits.join(' · '), dark: !!(darkNews && darkMacro) };
+}
+
+function hgCfConfluence(rows, opts, fc) {
+  /* hg-v1314: THE CONFLUENCE READ — what the OTHER gold desks know, put beside the
+     candle read, on this tab.
+     WHY THIS EXISTS. CANDLE FORECAST could name a pattern, a side, a stop and two
+     targets, and it read NOTHING else: no indicators, no core strategies, no
+     fundamentals. So it could call a long on a hammer while the entire gold stack —
+     the same reads every other gold tab runs on — pointed the other way, and it had
+     no way to know. This composes the SHARED readers rather than re-deriving
+     anything (hg-v949: one home per derivation). No new maths, no new weights: every
+     line below is an existing read, put next to the candle read.
+       CANDLES      the forecast's own pattern layer
+       TECHNICALS   hgGoldIndicatorReads — the same indicator bag the desks read
+       STRATEGIES   hgGoldCatalogEngine — how many core families are live
+       FUNDAMENTALS hgFundamentalRegime('GOLD') — the shared fundamental stack
+     THE VOTE IS A COUNT, NOT A WEIGHT. Each voter reports with / against / unread
+     against the forecast's direction and the setup reports "N of M read with the
+     call, K against". Nothing is scored and nothing is thresholded by a number I
+     invented, and an unread voter is reported as unread rather than counted as
+     agreement — so a dark feed can neither make a ticket easier nor harder. That is
+     the hg-v966 discipline: no weight that cannot be measured.
+     A ticket needs TWO independent families with the call and NONE against, plus an
+     actual candle pattern; anything short is an honest READ, not a ticket. */
+  var out = {
+    ok: false, dir: null, ticket: false, with_: 0, against: 0, unread: 0, checked: 0,
+    familiesWith: 0, familiesAgainst: 0,
+    voters: [], families: { candles: null, technicals: null, strategies: null, fundamentals: null },
+    why: '', missing: []
+  };
+  try {
+    if (!Array.isArray(rows) || rows.length < 30) { out.why = 'tape too thin to confluence'; return out; }
+    var f = fc;
+    if (!f && typeof goldCandleForecast === 'function') f = goldCandleForecast(rows);
+    if (!f || !f.dir) { out.why = 'no candle read to confluence'; return out; }
+    out.dir = f.dir;
+    out.ok = true;
+    if (f.dir === 'NEUTRAL') { out.why = 'the candle read is NEUTRAL — nothing to confluence'; return out; }
+
+    var wantsUp = (f.dir === 'BULL');
+    function voter(family, name, lean, why) {
+      /* lean: true = with the call, false = against, null = unread */
+      var v = { family: family, name: name, lean: lean, why: why || '' };
+      out.voters.push(v);
+      if (lean === true) out.with_++;
+      else if (lean === false) out.against++;
+      else out.unread++;
+      return v;
+    }
+
+    /* ---- CANDLES ---- */
+    var patNames = (f.patterns || []).slice();
+    var advNames = (f.advancedPatterns || []).slice();
+    var nPat = patNames.length + advNames.length;
+    var cfam = { patterns: nPat, names: patNames.concat(advNames), where: f.patternWhere || null, drift: f.patternDrift || null };
+    out.families.candles = cfam;
+    if (nPat > 0) voter('candles', nPat + ' pattern' + (nPat === 1 ? '' : 's'), true, patNames.concat(advNames).join(', '));
+    else voter('candles', 'no candle pattern', null, 'the side came from the drift and the bar reads, not a named pattern');
+
+    /* ---- TECHNICALS (the shared indicator bag) ---- */
+    var ind = null;
+    try {
+      var irFn = (typeof hgGoldIndicatorReads === 'function') ? hgGoldIndicatorReads
+        : (W && typeof W.hgGoldIndicatorReads === 'function' ? W.hgGoldIndicatorReads : null);
+      if (irFn) ind = irFn(rows, { rows1d: opts && opts.rows1d });
+    } catch (eInd) { ind = null; }
+    var techW = 0, techA = 0, techNames = [];
+    function tech(name, lean) {
+      if (lean === null || lean === undefined) { voter('technicals', name, null, 'unread'); return; }
+      techNames.push(name + (lean === true ? ' with' : ' against'));
+      if (lean === true) techW++; else techA++;
+      voter('technicals', name, lean, '');
+    }
+    if (ind && ind.ok === true) {
+      var px = +ind.close, s20 = +ind.sma20, s50 = +ind.sma50;
+      if (isFinite(px) && isFinite(s20) && isFinite(s50) && s20 !== s50) {
+        tech('SMA 20-50 stack', ((s20 > s50) === wantsUp));
+      } else tech('SMA 20-50 stack', null);
+      var rsi = +ind.rsi14;
+      if (isFinite(rsi) && rsi !== 50) tech('RSI(14) vs 50', ((rsi > 50) === wantsUp));
+      else tech('RSI(14) vs 50', null);
+      var ts = +ind.tsmom96;
+      if (isFinite(ts) && ts !== 0) tech('time-series momentum', ((ts > 0) === wantsUp));
+      else tech('time-series momentum', null);
+      var ls = +ind.linregSlope;
+      if (isFinite(ls) && ls !== 0) tech('linreg slope', ((ls > 0) === wantsUp));
+      else tech('linreg slope', null);
+      var ker = +ind.ker20;
+      if (isFinite(ker) && ker >= 0.3 && isFinite(ls) && ls !== 0) tech('Kaufman efficiency', ((ls > 0) === wantsUp));
+      else tech('Kaufman efficiency', null);
+      var pctB = +ind.bbPctB;
+      if (isFinite(pctB) && pctB !== 0.5) tech('Bollinger %B vs mid', ((pctB > 0.5) === wantsUp));
+      else tech('Bollinger %B vs mid', null);
+      /* hg-v1316: FOUR MORE DISTINCT READS FROM THE SAME BAG.
+         The bag returns 35 keys and this composer voted SIX, so most of what the
+         indicator desk derives never reached the confluence. Each of these four
+         answers a question the six above CANNOT:
+           SQUEEZE   is the range compressed, and which way did it release? The six
+                     are level and slope reads; a squeeze is a STATE CHANGE. 'ON'
+                     means energy stored and no side yet, so it abstains rather than
+                     guessing, and no direction is claimed unless the desk actually
+                     published one — the bag carries `squeeze` (state) only, so the
+                     direction is taken from goldVolSqueeze's own `dir`.
+           DMI SPREAD  who is winning the directional fight? +DI against -DI is a
+                     different construction from a moving-average stack or a slope:
+                     directional movement measured bar by bar.
+           HURST      is this tape TRENDING or MEAN-REVERTING? A trend read only
+                     means something if the tape has a trend to read. Distinct from
+                     Kaufman efficiency (path straightness) and from the drift t
+                     (statistical significance).
+           ACF        does the last return predict the next? The lag-1
+                     autocorrelation measures persistence directly on returns, where
+                     Hurst is a scaled-range estimate — related estimators, not the
+                     same one, and each carries its own regime label.
+         All four are three-state: absent feed abstains, so a dark bag can vote
+         neither WITH nor AGAINST. */
+      var sqState = (typeof ind.squeeze === 'string') ? ind.squeeze : null;
+      var sqDir = null;
+      if (sqState === 'FIRED' && typeof W.goldVolSqueeze === 'function') {
+        try { var sqRead = W.goldVolSqueeze(rows); if (sqRead && (sqRead.dir === 'UP' || sqRead.dir === 'DOWN')) sqDir = sqRead.dir; } catch (eSq) { sqDir = null; }
+      }
+      if (sqState === 'FIRED' && sqDir) tech('squeeze release', ((sqDir === 'UP') === wantsUp));
+      else {
+        if (sqState === 'ON') cfam.squeeze = 'ON — compressed, energy stored, no side yet';
+        tech('squeeze release', null);
+      }
+      var pdi = +ind.plusDI, mdi = +ind.minusDI;
+      if (isFinite(pdi) && isFinite(mdi) && pdi !== mdi) tech('DMI spread (+DI vs -DI)', ((pdi > mdi) === wantsUp));
+      else tech('DMI spread (+DI vs -DI)', null);
+      /* REGIME reads. The house labels are read when present; a bare number falls
+         back to the conventional 0.55 / 0.45 band, and anything inside the band is
+         unread rather than a coin toss. Persistence argues WITH the call, mean
+         reversion AGAINST a continuation entry — the regime is the evidence. */
+      var hh = +ind.hurst;
+      var hr = (typeof ind.hurstRegime === 'string') ? ind.hurstRegime.toLowerCase() : '';
+      var hurstLean = null;
+      if (/trend|persist/.test(hr)) hurstLean = isFinite(hh) ? ((hh >= 0.5) === wantsUp) : null;
+      else if (/revert|mean/.test(hr)) hurstLean = !wantsUp;
+      else if (isFinite(hh)) {
+        if (hh >= 0.55) hurstLean = wantsUp;
+        else if (hh <= 0.45) hurstLean = !wantsUp;
+      }
+      if (isFinite(hh)) cfam.hurst = +hh.toFixed(3);
+      tech('Hurst regime', hurstLean);
+      var ac = +ind.ac1;
+      var ar = (typeof ind.acRegime === 'string') ? ind.acRegime.toLowerCase() : '';
+      var acLean = null;
+      if (/trend|persist/.test(ar)) acLean = isFinite(ac) ? ((ac >= 0) === wantsUp) : null;
+      else if (/revert|anti/.test(ar)) acLean = !wantsUp;
+      else if (isFinite(ac) && ac !== 0) acLean = ((ac > 0) === wantsUp);
+      if (isFinite(ac)) cfam.ac1 = +ac.toFixed(3);
+      tech('return autocorrelation', acLean);
+      /* hg-v1321: where the close sits versus the averages the bag already
+         published. One read. A split across 20, 50 and 200 is unread. The
+         rest of the bag (ADX, HV, Parkinson, ATR, hour range, volume) is
+         context: a quiet tape is not a side. */
+      var pxMa = +ind.close, maAgree = 0, maFight = 0, maN = 0, maList = [+ind.sma20, +ind.sma50, +ind.sma200], mi;
+      for (mi = 0; mi < maList.length; mi++) {
+        if (!isFinite(pxMa) || !isFinite(maList[mi]) || maList[mi] === pxMa) continue;
+        maN++;
+        if ((pxMa > maList[mi]) === wantsUp) maAgree++; else maFight++;
+      }
+      if (maN && maAgree === maN) tech('price vs the SMAs', true);
+      else if (maN && maFight === maN) tech('price vs the SMAs', false);
+      else tech('price vs the SMAs', null);
+      var stackBits = [];
+      if (isFinite(+ind.adx)) stackBits.push('ADX ' + (+ind.adx).toFixed(1) + (ind.adxState ? (' ' + ind.adxState) : ''));
+      else stackBits.push('ADX unread');
+      if (isFinite(+ind.sma200)) stackBits.push('SMA200 ' + (+ind.sma200).toFixed(2));
+      else stackBits.push('SMA200 unread');
+      if (isFinite(+ind.hv20)) stackBits.push('HV20 ' + ((+ind.hv20) * 100).toFixed(3) + '%');
+      if (isFinite(+ind.park20)) stackBits.push('Parkinson ' + ((+ind.park20) * 100).toFixed(3) + '%');
+      if (isFinite(+ind.atr14)) stackBits.push('ATR14 ' + (+ind.atr14).toFixed(2));
+      if (isFinite(+ind.atrRegime)) stackBits.push('ATR regime ' + (+ind.atrRegime).toFixed(2));
+      if (ind.hourRangeHigh === true || ind.hourRangeHigh === false) stackBits.push('hour range ' + (ind.hourRangeHigh ? 'at or above its p80' : 'under its p80'));
+      else stackBits.push('hour range unread');
+      if (isFinite(+ind.volRatio)) stackBits.push('volume ' + (+ind.volRatio).toFixed(2) + 'x');
+      if (isFinite(+ind.rsi14)) stackBits.push('RSI ' + (+ind.rsi14).toFixed(1));
+      if (isFinite(+ind.ker20)) stackBits.push('KER ' + (+ind.ker20).toFixed(2));
+      if (isFinite(+ind.bbPctB)) stackBits.push('BB %b ' + (+ind.bbPctB).toFixed(2));
+      if (isFinite(+ind.bbWidthPct)) stackBits.push('BB width ' + (+ind.bbWidthPct).toFixed(2) + '%');
+      if (isFinite(+ind.sma20)) stackBits.push('SMA20 ' + (+ind.sma20).toFixed(2));
+      if (isFinite(+ind.sma50)) stackBits.push('SMA50 ' + (+ind.sma50).toFixed(2));
+      if (isFinite(+ind.tsmom96)) stackBits.push('TSMOM ' + ((+ind.tsmom96) * 100).toFixed(2) + '%');
+      if (isFinite(+ind.linregSlope)) stackBits.push('linreg ' + (+ind.linregSlope).toFixed(4));
+      if (isFinite(+ind.plusDI) && isFinite(+ind.minusDI)) stackBits.push('+DI ' + (+ind.plusDI).toFixed(1) + ' / -DI ' + (+ind.minusDI).toFixed(1));
+      if (isFinite(+ind.hurst)) stackBits.push('Hurst ' + (+ind.hurst).toFixed(2));
+      if (isFinite(+ind.ac1)) stackBits.push('AC1 ' + (+ind.ac1).toFixed(2));
+      voter('technicals', 'indicator stack context', null, stackBits.join(' · ') + ' — context, not a side');
+      /* volatility regime and volume are CONTEXT, not direction — a quiet tape is
+         not bullish, so they are disclosed and never voted */
+      var hv = +ind.hv20, hvm = +ind.hv20Med;
+      cfam.volRegime = (isFinite(hv) && isFinite(hvm) && hvm > 0)
+        ? (hv > hvm * 1.25 ? 'expanding' : (hv < hvm * 0.75 ? 'contracting' : 'normal')) : null;
+      cfam.volumeRatio = isFinite(+ind.volRatio) ? +(+ind.volRatio).toFixed(2) : null;
+      cfam.atrRegime = isFinite(+ind.atrRegime) ? +ind.atrRegime : null;
+    } else {
+      voter('technicals', 'indicator bag', null, 'hgGoldIndicatorReads unavailable');
+      out.missing.push('the indicator bag (hgGoldIndicatorReads)');
+    }
+    cfam.with_ = techW; cfam.against = techA; cfam.names = techNames;
+
+    /* ---- STRATEGIES (the Master Catalog) ---- */
+    var cat = null;
+    try {
+      var catFn = (typeof hgGoldCatalogEngine === 'function') ? hgGoldCatalogEngine
+        : (W && typeof W.hgGoldCatalogEngine === 'function' ? W.hgGoldCatalogEngine : null);
+      if (catFn) cat = catFn(rows, { ctx: (opts && opts.ctx) || null });
+    } catch (eCat) { cat = null; }
+    if (cat && cat.ok === true) {
+      /* the catalog does not call a side here — it reports how many CORE families
+         are live and how many are UNCHECKED. Disclosed, never voted: inventing a
+         direction from "92 indicators are USED" is exactly the unmeasured weight
+         this desk refuses. */
+      out.families.strategies = {
+        usedN: cat.usedN, uncheckedN: cat.uncheckedN, core: cat.core, optional: cat.optional,
+        live: (cat.live || []).slice(0, 6), why: cat.why
+      };
+      var stratWhy = cat.usedN + ' reads USED · ' + cat.uncheckedN + ' UNCHECKED — a frame, not a side';
+      if (cat.linreg && cat.linreg.ok && isFinite(+cat.linreg.slope))
+        stratWhy += ' · linreg slope ' + (+cat.linreg.slope).toFixed(4);
+      if (cat.crsi && cat.crsi.ok && isFinite(+cat.crsi.crsi))
+        stratWhy += ' · Connors RSI ' + (+cat.crsi.crsi).toFixed(1);
+      if (cat.live && cat.live.length) stratWhy += ' · live ' + cat.live.slice(0, 6).join(', ');
+      if (cat.core) stratWhy += ' · CORE ' + cat.core + ' · OPTIONAL ' + (cat.optional || 0);
+      if (cat.awr && cat.awr.ok && cat.awr.why) stratWhy += ' · ' + cat.awr.why;
+      if (Array.isArray(cat.strategies) && cat.strategies.length) {
+        var stratBits = [], si;
+        for (si = 0; si < cat.strategies.length && stratBits.length < 6; si++) {
+          if (cat.strategies[si] && cat.strategies[si].why)
+            stratBits.push(String(cat.strategies[si].key) + ' ' + cat.strategies[si].why);
+        }
+        if (stratBits.length) stratWhy += ' · ' + stratBits.join(' | ');
+      }
+      if (cat.families && typeof cat.families === 'object') {
+        var famKeys = Object.keys(cat.families), famBits = [], fi, famRec;
+        for (fi = 0; fi < famKeys.length && famBits.length < 8; fi++) {
+          famRec = cat.families[famKeys[fi]];
+          if (famRec && famRec.core) famBits.push(famKeys[fi] + ' core ' + famRec.core);
+        }
+        if (famBits.length) stratWhy += ' · ' + famBits.join(', ');
+      }
+      if (cat.feed && Array.isArray(cat.feed.used)) {
+        var coreNames = [], otherNames = [], ui2, u2, uFam;
+        for (ui2 = 0; ui2 < cat.feed.used.length; ui2++) {
+          u2 = cat.feed.used[ui2];
+          if (!u2 || !u2.name) continue;
+          uFam = u2.family ? (u2.family + ' ') : '';
+          if (String(u2.class || '').indexOf('CORE') === 0) coreNames.push(u2.name);
+          else otherNames.push(uFam + u2.name);
+        }
+        if (coreNames.length) stratWhy += ' · CORE reads ' + coreNames.join(', ');
+        if (otherNames.length) stratWhy += ' · other reads ' + otherNames.join(', ');
+      }
+      voter('strategies', 'Master Catalog frame', null, stratWhy);
+    } else {
+      voter('strategies', 'Master Catalog frame', null, 'catalog engine unavailable');
+      out.missing.push('the Master Catalog (hgGoldCatalogEngine)');
+    }
+
+    /* ---- FUNDAMENTALS (the shared stack, GOLD) ---- */
+    var fund = null;
+    try {
+      var fuFn = (typeof hgFundamentalRegime === 'function') ? hgFundamentalRegime
+        : (W && typeof W.hgFundamentalRegime === 'function' ? W.hgFundamentalRegime : null);
+      if (fuFn) fund = fuFn('GOLD', (opts && opts.fundExtra) || {});
+    } catch (eFu) { fund = null; }
+    if (fund && fund.regime && fund.regime !== 'unknown') {
+      var fLean = null;
+      var fWhy = 'regime ' + fund.regime + ' · ' + fund.bulls + ' bull / ' + fund.bears + ' bear of ' + fund.checked + ' checked';
+      if (fund.regime === 'bullish') fLean = wantsUp;
+      else if (fund.regime === 'bearish') fLean = !wantsUp;
+      /* mixed and quiet are genuinely neither — unread, not agreement */
+      if (Array.isArray(fund.legs)) {
+        var legBits = [], unreadLegs = [], priorBits = [], li2, leg, legTxt;
+        for (li2 = 0; li2 < fund.legs.length; li2++) {
+          leg = fund.legs[li2];
+          if (!leg) continue;
+          legTxt = String(leg.text || leg.vote || '').replace(/\s+/g, ' ').slice(0, 90);
+          if (leg.key === 'news') {
+            if (leg.blackout) priorBits.push('news BLACKOUT — red-folder window, not a side');
+            else if (leg.state === 'checked') priorBits.push('news ' + (legTxt || 'calendar checked') + ' — not a side');
+            else priorBits.push('news unread');
+            continue;
+          }
+          if (leg.info) {
+            priorBits.push(String(leg.key || 'prior') + (leg.state === 'checked' ? (' ' + legTxt) : ' unread') + ' — prior, not a side');
+            continue;
+          }
+          if (leg.state === 'checked') legBits.push(String(leg.key || leg.name || 'leg') + ' ' + String(leg.vote || 'no vote'));
+          else unreadLegs.push(String(leg.key || leg.name || 'leg') + ' unread');
+        }
+        if (legBits.length) fWhy += ' · ' + legBits.join(', ');
+        if (priorBits.length) fWhy += ' · ' + priorBits.join(', ');
+        if (unreadLegs.length) fWhy += ' · ' + unreadLegs.join(', ');
+      }
+      out.families.fundamentals = { regime: fund.regime, bulls: fund.bulls, bears: fund.bears, checked: fund.checked, blackout: !!fund.blackout };
+      voter('fundamentals', 'GOLD fundamental regime', fLean, fWhy);
+    } else {
+      voter('fundamentals', 'GOLD fundamental regime', null, fund ? 'regime unread' : 'fundamental stack unavailable');
+      out.missing.push('the fundamental stack (hgFundamentalRegime)');
+    }
+
+    /* ---- NEWS AND FREE FEEDS (hg-v1326) ----
+       Listed beside the call. The lean stays unread on purpose: a measured
+       macro leg already votes inside the gold desk, and real rates already
+       vote inside the fundamental regime. A second vote would count one
+       derivation twice. A dark feed is named, not treated as agreement. */
+    var board = null;
+    try { board = hgCfFeedBoard(opts); } catch (eBoard) { board = null; }
+    if (board && board.why) {
+      out.families.feeds = { why: board.why };
+      voter('feeds', 'news and free feeds', null, board.why);
+      if (board.dark) out.missing.push('news and the gold macro feed');
+    } else {
+      voter('feeds', 'news and free feeds', null, 'feeds unread');
+      out.missing.push('news and the gold macro feed');
+    }
+
+    /* ---- HIGHER TIMEFRAMES (hg-v1320) ----
+       The 15m tape is not the swing. Structure on 1h, 4h and 1d is the same
+       reader, called on those tapes. A caller that is itself the 4h tape passes
+       htf1h/htf4h false so a lower frame cannot veto a swing. */
+    if (opts && ((opts.htf1h !== false && opts.rows1h) || (opts.htf4h !== false && opts.rows4h) || opts.rows1d)) {
+      var htfBag = {
+        rows1h: (opts.htf1h === false) ? null : opts.rows1h,
+        rows4h: (opts.htf4h === false) ? null : opts.rows4h,
+        rows1d: opts.rows1d
+      };
+      var htfRead = hgCfHigherFrame(htfBag);
+      var hLean = null;
+      if (htfRead.bullNames.length && !htfRead.bearNames.length) hLean = wantsUp;
+      else if (htfRead.bearNames.length && !htfRead.bullNames.length) hLean = !wantsUp;
+      out.families.higher = { line: htfRead.line, bullNames: htfRead.bullNames, bearNames: htfRead.bearNames };
+      voter('higher', 'higher-timeframe structure', hLean, htfRead.line);
+    } else {
+      voter('higher', 'higher-timeframe structure', null, 'no higher tape was handed in');
+      out.missing.push('a higher-timeframe tape');
+    }
+
+    /* ---- DESKS (hg-v1317): each gold tab's OWN engine, driven on this tape ----
+       A family in its own right, and deliberately the LAST one added: the four above
+       read shared series, while this asks what the other gold desks actually FORMED
+       on the identical bars. One desk counts once however many candidates it minted,
+       so a chatty engine cannot outvote a quiet one. */
+    var dv = hgCfDeskVotes(rows, opts, f.dir);
+    out.desks = dv.desks;
+    out.deskWhy = dv.why;
+    dv.desks.forEach(function (d) {
+      voter('desks', d.desk, d.lean, d.why);
+    });
+    out.families.desks = { with_: dv.with_, against: dv.against, unread: dv.unread, why: dv.why };
+
+    /* ---- THE VERDICT: a count of families, never a score ---- */
+    var famWith = 0, famAgainst = 0;
+    ['candles', 'technicals', 'strategies', 'fundamentals', 'desks', 'higher', 'feeds'].forEach(function (k) {
+      var w = 0, a = 0;
+      out.voters.forEach(function (v) {
+        if (v.family !== k) return;
+        if (v.lean === true) w++;
+        else if (v.lean === false) a++;
+      });
+      /* a family leans only when one side outnumbers the other. A tie is unread.
+         One dissenting read no longer makes the whole family a veto. */
+      if (a > w) famAgainst++;
+      else if (w > a) famWith++;
+    });
+    out.checked = out.with_ + out.against;
+    out.familiesWith = famWith;
+    out.familiesAgainst = famAgainst;
+    out.ticket = !!(nPat > 0 && famWith >= 2 && famAgainst === 0);
+    out.why = out.ticket
+      ? (famWith + ' independent families net with the ' + (wantsUp ? 'long' : 'short')
+         + ' and no family net against, on a named candle pattern')
+      : (nPat === 0 ? 'no named candle pattern — the doctrine needs a shape, not just a drift'
+        : (famAgainst > 0 ? (famAgainst + ' famil' + (famAgainst === 1 ? 'y' : 'ies') + ' net AGAINST the call')
+          : ('only ' + famWith + ' famil' + (famWith === 1 ? 'y' : 'ies') + ' net with the call — two are required')));
+    return out;
+  } catch (e) {
+    out.ok = false;
+    out.why = 'confluence error';
+    return out;
+  }}
+
+function hgCfCachedDeskConfirm(rows, tapes) {
+  /* A gold tab that has already been scanned can confirm a named shape.
+     This reads only that tab's last scan in memory. It does not fetch and
+     it does not re-run a mint. A missing engine, a tab that was not
+     scanned, an empty scan, a record-only print, and a split scan are
+     unread. Unread is not agreement. Prices on the cached row are not read. */
+  var bulls = [], bears = [];
+  function hostFn(name) {
+    try {
+      if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name];
+    } catch (eH) {}
+    try {
+      if (typeof W !== 'undefined' && W && typeof W[name] === 'function') return W[name];
+    } catch (eW) {}
+    return null;
+  }
+  function word(v) {
+    var d = String(v || '').toLowerCase();
+    if (d === 'long' || d === 'bull' || d === 'bullish') return 'long';
+    if (d === 'short' || d === 'bear' || d === 'bearish') return 'short';
+    return '';
+  }
+  function oneSide(list) {
+    var lng = 0, sht = 0, i, d;
+    if (!Array.isArray(list)) return '';
+    for (i = 0; i < list.length; i++) {
+      d = word(list[i] && (list[i].dir || list[i].direction));
+      if (d === 'long') lng++;
+      else if (d === 'short') sht++;
+    }
+    if (lng > 0 && sht === 0) return 'long';
+    if (sht > 0 && lng === 0) return 'short';
+    return '';
+  }
+  function keep(label, side) {
+    if (side === 'long') bulls.push(label);
+    else if (side === 'short') bears.push(label);
+  }
+  try {
+    var ogFn = hostFn('optiGoldState');
+    if (ogFn) {
+      var og = ogFn();
+      if (og && Array.isArray(og.setups)) {
+        var live = [], i, s;
+        for (i = 0; i < og.setups.length; i++) {
+          s = og.setups[i];
+          if (s && (s.state === 'waiting' || s.state === 'open') && word(s.dir)) live.push({ dir: s.dir });
+        }
+        keep('OPTI GOLD', oneSide(live));
+      }
+    }
+  } catch (eOg) {}
+  try {
+    var sgFn = hostFn('superGoldScan');
+    if (sgFn) {
+      var sg = sgFn();
+      if (sg && Array.isArray(sg.cands)) keep('SUPER GOLD', oneSide(sg.cands));
+    }
+  } catch (eSg) {}
+  try {
+    var guFn = hostFn('goldUltraState');
+    if (guFn) {
+      var gu = guFn();
+      if (gu && gu.fire === true && gu.recordOnly !== true) keep('GOLD ULTRA', word(gu.dir));
+    }
+  } catch (eGu) {}
+  try {
+    var ggFn = hostFn('ganeshGoldState');
+    if (ggFn) {
+      var gg = ggFn();
+      if (gg && gg.ok !== false) keep('GANESH GOLD', word(gg.pick));
+    }
+  } catch (eGg) {}
+  var swingTape = !!(tapes && (tapes.tf === '4h' || tapes.horizon === 'swing'));
+  var nowMs = null;
+  if (Array.isArray(rows) && rows.length) {
+    var barT = +rows[rows.length - 1].t;
+    if (isFinite(barT)) nowMs = barT < 1e12 ? barT * 1000 : barT;
+  }
+  function listOf(r) {
+    if (Array.isArray(r)) return r;
+    if (r && Array.isArray(r.ranked)) return r.ranked;
+    if (r && r.dir) return [r];
+    return [];
+  }
+  function drive(label, fn, arg) {
+    if (typeof fn !== 'function') return;
+    try { keep(label, oneSide(listOf(fn(arg)))); } catch (eDrv) {}
+  }
+  /* The 15m mint is not run on 4h bars. That would invent a scalp the desk
+     did not form. A swing mint runs only on a 4h tape already in hand. */
+  if (!swingTape && Array.isArray(rows) && rows.length >= 30) {
+    drive('GOLD SCALP', hostFn('goldScalpSetups'), {
+      rows15m: rows,
+      rows1h: tapes && tapes.rows1h,
+      rows4h: tapes && tapes.rows4h,
+      now: nowMs,
+      news: null
+    });
+  }
+  var swingRows = swingTape ? rows : (tapes && tapes.rows4h);
+  if (Array.isArray(swingRows) && swingRows.length >= 30) {
+    drive('GOLD SWING', hostFn('goldSwingSetups'), {
+      rows4h: swingRows,
+      rows15m: swingTape ? (tapes && tapes.rows15m) : rows,
+      rows1d: tapes && tapes.rows1d,
+      now: nowMs,
+      news: null
+    });
+  }
+  if (Array.isArray(rows) && rows.length >= 30) {
+    var ngFn = hostFn('ngAssess');
+    if (typeof ngFn === 'function') {
+      try {
+        var ng = ngFn(rows);
+        if (ng && ng.dir) keep('NEW GOLD', word(ng.dir));
+      } catch (eNg) {}
+    }
+  }
+  try {
+    var pineFn = hostFn('goldPineScan');
+    if (typeof pineFn === 'function') {
+      var snap = pineFn();
+      if (snap) {
+        var bag = [];
+        if (Array.isArray(snap.scalp)) bag = bag.concat(snap.scalp);
+        if (Array.isArray(snap.swing)) bag = bag.concat(snap.swing);
+        keep('GOLD PINE', oneSide(bag));
+      }
+    }
+  } catch (ePi) {}
+  var line = bulls.concat(bears).join(', ');
+  if (!line) line = 'no scanned gold desk in cache';
+  return {
+    bullVotes: bulls.length ? 1 : 0,
+    bearVotes: bears.length ? 1 : 0,
+    bullNames: bulls,
+    bearNames: bears,
+    notes: line === 'no scanned gold desk in cache' ? [line] : [],
+    line: line
+  };
+}
+
+function hgCfSessionName(rows) {
+  /* The session is the shared killzone read. The card names it. It does not
+     vote and it does not move the stop. */
+  try {
+    var fn = (typeof hgGoldKillzoneRead === 'function') ? hgGoldKillzoneRead : null;
+    if (!fn && typeof globalThis !== 'undefined' && typeof globalThis.hgGoldKillzoneRead === 'function') fn = globalThis.hgGoldKillzoneRead;
+    if (typeof fn !== 'function' || !Array.isArray(rows) || !rows.length) return '';
+    var t = +rows[rows.length - 1].t;
+    if (!isFinite(t)) return '';
+    var read = fn(t < 1e12 ? t * 1000 : t);
+    if (!read || !read.zone) return '';
+    if (read.zone === 'OVERLAP') return 'London and New York';
+    if (read.zone === 'LONDON') return 'London';
+    if (read.zone === 'NY_AM') return 'New York';
+    if (read.zone === 'ASIAN') return 'Asia';
+    if (read.zone === 'OFF') return 'off session';
+    return '';
+  } catch (eSes) { return ''; }
+}
+
+function goldCandleForecast(rows) {
+  var macro = arguments.length > 1 ? arguments[1] : null;
+  var tapes = arguments.length > 2 ? arguments[2] : null;
+  try {
+    try { goldCandleForecast.lastError = null; } catch (eClr) {}
+    /* hg-v1309: THIRTY bars, not twenty. The drift read needs enough returns for
+       its standard error to mean anything and the empirical range needs a
+       hundred-bar lookback to have a population to take a percentile of; at
+       twenty bars the 60th percentile of nineteen true ranges is noise dressed
+       as an estimate. Below the floor this returns null rather than projecting a
+       band from a tape too short to support one. */
+    if (!Array.isArray(rows) || rows.length < 30) return null;
+    if (typeof atr !== 'function' || typeof ema !== 'function') return null;
+    var n = rows.length;
+    var last = rows[n - 1];
+    var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    /* hg-v1309: a bar with no range means NO VOLATILITY COULD BE ESTIMATED, so
+       this is an honest null — the same "cannot forecast" as a thin tape, not a
+       verdict. It used to return a partial object carrying dir:null, which put
+       the caller in the position of having to distinguish "read it and found no
+       side" from "could not read it at all" by inspecting a nested field. The
+       two states are now separate at the top level: null means unreadable,
+       NEUTRAL (a real, readable tape whose drift is inside the noise band)
+       means read-and-declined. The guard pins both. */
+    if (!(h > l)) return null;
+    var atrArr = atr(rows, 14);
+    var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
+    var atrSource = 'ATR 14';
+    if (!(atrLast > 0)) { atrLast = h - l; atrSource = 'last bar range — ATR unread'; }
+    /* hg-v1309: a tape with NO volatility at all has no range to estimate and no
+       drift to measure, so this stays null — an honest "cannot forecast", not a
+       NEUTRAL call. NEUTRAL is reserved for a tape that HAS a measurable range
+       but whose drift is indistinguishable from zero (see the drist test below);
+       conflating the two would make this function claim to have read a tape it
+       could not measure. The guard pins both: `tape(40, () => 0, 0)` is null and
+       a flat tape with a real 2.0 range is NEUTRAL. */
+    if (!(atrLast > 0)) return null;
+
+    var closes = [], i;
+    for (i = 0; i < n; i++) {
+      if (!isFinite(+rows[i].c)) return null;
+      closes.push(+rows[i].c);
+    }
+    var ema9 = ema(closes, 9);
+    var bulls = 0, bears = 0, checked = 0, reasons = [];
+    var loc = (c - l) / (h - l);
+    var body = Math.abs(c - o);
+    var upper = h - Math.max(o, c);
+    var lower = Math.min(o, c) - l;
+
+    checked++;
+    if (loc >= 0.7) { bulls++; reasons.push('close in the top of the bar'); }
+    else if (loc <= 0.3) { bears++; reasons.push('close in the bottom of the bar'); }
+    else reasons.push('close mid-range — no vote');
+
+    checked++;
+    if (lower >= (h - l) * 0.45 && lower > body && upper < (h - l) * 0.45) {
+      bulls++; reasons.push('lower wick rejected');
+    } else if (upper >= (h - l) * 0.45 && upper > body && lower < (h - l) * 0.45) {
+      bears++; reasons.push('upper wick rejected');
+    } else reasons.push('no one-sided wick — no vote');
+
+    /* hg-v1309: THE SHRUNK DRIFT REPLACES THE ONE-BAR EMA9 TICK.
+       The old direction read was `ema9[n-1] > ema9[n-2]` — a single bar's tick,
+       which flips on noise and always named a side. The drift is measured over
+       the whole tape instead: the per-bar log return, its standard error, and
+       the t statistic. |t| >= 1 (about 0.84 sigma of confidence) is the bar for
+       calling a side; below it the tape is honestly NEUTRAL. `strength` reports
+       |t| clipped to [0,4] and is a HEURISTIC, not a probability — the removed
+       `confidence` field was the volatility ratio (about 0.002 on gold), printed
+       as a "Confidence Score" that read 0% on every bar. It is gone. */
+    var rets = [];
+    for (i = 1; i < n; i++) {
+      if (closes[i - 1] > 0 && closes[i] > 0) rets.push(Math.log(closes[i] / closes[i - 1]));
+    }
+    var driftT = 0, driftSig = 0, driftMean = 0;
+    if (rets.length >= 5) {
+      var rs = 0, rq = 0, ri;
+      for (ri = 0; ri < rets.length; ri++) { rs += rets[ri]; rq += rets[ri] * rets[ri]; }
+      driftMean = rs / rets.length;
+      var rvar = Math.max(0, (rq / rets.length) - driftMean * driftMean);
+      driftSig = Math.sqrt(rvar);
+      driftT = (driftSig > 0) ? (driftMean / (driftSig / Math.sqrt(rets.length))) : 0;
+    }
+    /* the drift is the primary read; the four bar reads above corroborate it */
+    checked++;
+    if (driftT >= 1) { bulls++; reasons.push('drift t +' + driftT.toFixed(2) + ' over ' + rets.length + ' bars'); }
+    else if (driftT <= -1) { bears++; reasons.push('drift t ' + driftT.toFixed(2) + ' over ' + rets.length + ' bars'); }
+    else reasons.push('drift t ' + driftT.toFixed(2) + ' is inside the noise band — no vote');
+
+    var pat = hgCfCandlePatterns(rows, atrLast);
+    /* A reader that forgot .names used to throw here, and the catch turned
+       a readable tape into a null. Missing fields are an empty pattern, not
+       a failed read. */
+    if (!pat || typeof pat !== 'object') pat = {};
+    if (!Array.isArray(pat.names)) pat.names = [];
+    if (!Array.isArray(pat.notes)) pat.notes = [];
+    if (!Array.isArray(pat.bullNames)) pat.bullNames = [];
+    if (!Array.isArray(pat.bearNames)) pat.bearNames = [];
+    if (!(pat.bullVotes > 0)) pat.bullVotes = 0;
+    if (!(pat.bearVotes > 0)) pat.bearVotes = 0;
+    var struct = hgCfStructure(rows, atrLast);
+    var desk = hgCfGoldDesk(rows, macro);
+    var tabs = { bullVotes: 0, bearVotes: 0, bullNames: [], bearNames: [], notes: ['gold tabs are named under the call'], line: 'named under the call' };
+    if (tapes && tapes.cachedDesks === true) {
+      try {
+        var cachedTabs = hgCfCachedDeskConfirm(rows, tapes);
+        if (cachedTabs && typeof cachedTabs === 'object') tabs = cachedTabs;
+      } catch (eTabs) {}
+    }
+    var pi;
+    bulls += pat.bullVotes + struct.bullVotes + desk.bullVotes;
+    bears += pat.bearVotes + struct.bearVotes + desk.bearVotes;
+    checked += pat.bullVotes + pat.bearVotes + struct.bullVotes + struct.bearVotes + desk.bullVotes + desk.bearVotes;
+    if (pat.names.length) reasons.push('patterns: ' + pat.names.join(', '));
+    else reasons.push('no candlestick pattern');
+    var structNames = struct.bullNames.concat(struct.bearNames);
+    if (structNames.length) reasons.push('structure: ' + structNames.join(', '));
+    else reasons.push('no structure');
+    var deskNames = desk.bullNames.concat(desk.bearNames);
+    if (deskNames.length) reasons.push('gold desk: ' + deskNames.join(', '));
+    else reasons.push('gold desk: ' + (desk.notes[0] || 'unread'));
+    for (pi = 0; pi < pat.notes.length; pi++) reasons.push(pat.notes[pi]);
+    /* hg-v1311: the advanced pattern layer. DISCLOSED ONLY — it is deliberately
+       NOT added to bulls/bears/checked and never touches rawStop below, because
+       that would double the live pattern weight (hg-v966) and could re-count a
+       three-bar pattern the voter above already counted. It rides the result so
+       the card can name it and the forward ledger can measure it. */
+    var adv = hgCfAdvancedPatterns(rows, atrLast);
+    if (!adv || typeof adv !== 'object') adv = {};
+    if (!Array.isArray(adv.names)) adv.names = [];
+    if (!Array.isArray(adv.notes)) adv.notes = [];
+    if (!Array.isArray(adv.leans)) adv.leans = [];
+    if (adv.names.length) reasons.push('advanced patterns: ' + adv.names.join(', '));
+    var sessionName = '';
+    try {
+      if (typeof hgCfSessionName === 'function') sessionName = hgCfSessionName(rows) || '';
+    } catch (eSes) { sessionName = ''; }
+    var locLine = adv.where
+      ? ('pattern location: ' + adv.where + (adv.aligned ? (' · the 20-bar drift is ' + adv.aligned) : ''))
+      : '';
+    if (sessionName) locLine = locLine ? (locLine + ' · session ' + sessionName) : ('pattern location: session ' + sessionName);
+    if (locLine) reasons.push(locLine);
+    for (pi = 0; pi < adv.notes.length; pi++) reasons.push(adv.notes[pi]);
+
+    var dir = null;
+    /* hg-v1309: A TIE OF ZEROES IS NOT A TIE. The 60th-percentile-of-zeroes
+       cases above all abstain on a dead-flat tape, so bulls === bears === 0 and
+       the tie-break below used to hand the tape to whichever side
+       `closes[n-1] >= closes[n-2]` happened to pick — on an exactly flat tape
+       that is BULL, because 100 >= 100. That is a side invented from nothing,
+       and it came with a stop and two targets. A genuine tie between two sides
+       that BOTH voted is still broken by the last close. */
+    /* THE THREE-STATE VERDICT, neutral by default. A side has to be EARNED by a
+       majority of the reads; nothing falls through to a side, and the only path
+       that names one is an actual majority or a genuine tie between two sides
+       that both voted. */
+    var dir = 'NEUTRAL';
+    if (bulls > bears) dir = 'BULL';
+    else if (bears > bulls) dir = 'BEAR';
+    else if (bulls === 0 && bears === 0) dir = 'NEUTRAL';
+    else if (closes[n - 1] >= closes[n - 2]) dir = 'BULL';
+    else dir = 'BEAR';
+    if (dir === 'BULL' || dir === 'BEAR') {
+      if (bulls === bears) reasons.push('tie broken by the last close');
+    } else {
+      reasons.push('every read abstained — no side is forecast');
+    }
+
+    /* hg-v1309: THE BLENDED VOLATILITY AND THE EMPIRICAL RANGE.
+       The projected band used to be `atr * 0.8` — an arbitrary multiple with no
+       estimator behind it. It is now the EMPIRICAL 60th percentile of the last
+       100 true ranges, scaled by a bounded EWMA volatility ratio built from a
+       Parkinson high-low estimate blended with ATR. Parkinson ( `4 * Math.LN2`
+       below ) uses the high-low range rather than closes, so it reads intraday
+       excursion that a close-to-close estimate misses; ATR brings the gap-aware
+       true range. Blending the two and letting the EWMA weight recent behaviour
+       gives a band that tracks the tape instead of a magic number. */
+    /* The true ranges over the whole tape, gap-aware, from the OHLC the loop
+       above already validated. Named `trs` so the percentile below reads the
+       population it is actually taking a percentile OF — the enclosing scope has
+       its own `trs`, which is a DIFFERENT array, and reaching for it was a real
+       bug here (it threw, and the outer catch turned every call into null). */
+    var trs = [], highs = [], lows = [], i2;
+    for (i2 = 0; i2 < n; i2++) { highs.push(+rows[i2].h); lows.push(+rows[i2].l); }
+    for (i2 = 1; i2 < n; i2++) {
+      trs.push(Math.max(highs[i2] - lows[i2],
+        Math.abs(highs[i2] - closes[i2 - 1]),
+        Math.abs(lows[i2] - closes[i2 - 1])));
+    }
+    /* THE EMPIRICAL 60th PERCENTILE of the last 100 true ranges. */
+    var lookback = trs.slice(Math.max(0, trs.length - 100));
+    var expectedRange = atrLast;
+    if (lookback.length >= 5) {
+      var sortedTr = lookback.slice().sort(function (x, y) { return x - y; });
+      var pickIdx = Math.min(sortedTr.length - 1, Math.floor(trs.length * 0.60));
+      var pctRange = sortedTr[pickIdx];
+      if (pctRange > 0) expectedRange = pctRange;
+    }
+    /* PARKINSON high-low variance over the last 20 bars, blended with ATR so the
+       two estimators share units, then smoothed by a bounded EWMA volatility
+       ratio (lambda 0.94 — the standard RiskMetrics weight). */
+    var parkSum = 0, parkN = 0;
+    for (i2 = Math.max(1, n - 20); i2 < n; i2++) {
+      if (highs[i2] > 0 && lows[i2] > 0 && highs[i2] >= lows[i2]) {
+        parkSum += (1 / (4 * Math.LN2)) * Math.pow(Math.log(highs[i2] / lows[i2]), 2);
+        parkN++;
+      }
+    }
+    var parkVol = parkN ? Math.sqrt(Math.max(0, parkSum / parkN)) : 0;
+    var atrFrac = (c > 0) ? (atrLast / c) : 0;
+    var lr0 = Math.max(parkVol, atrFrac);
+    /* the bounded EWMA volatility clustering: lambda 0.94 (the RiskMetrics
+       weight), iterated over the recent tape. */
+    var lam = 0.94, ew = lr0 * lr0;
+    for (i2 = 1; i2 < Math.min(60, trs.length); i2++) {
+      ew = lam * ew + (1 - lam) * lr0 * lr0;
+    }
+    var volFrac = Math.sqrt(Math.max(0, ew));
+    if (!(volFrac > 0)) volFrac = lr0;
+    var vol = volFrac * c;
+    if (!(vol > 0)) vol = atrLast;
+    /* |t| of the drift, clipped to [0,4] — a HEURISTIC strength, not a chance. */
+    var strength = Math.max(0, Math.min(4, Math.abs(driftT)));
+
+    /* hg-v1309: a NEUTRAL call carries NO levels. `sign` would otherwise default
+       to -1 and emit a stop and two targets for a side the desk just declined to
+       call — exactly the "guessed side" the third state exists to prevent. The
+       projected RANGE is still reported: it is a volatility read, not a
+       direction, and a reader may legitimately want it. */
+    var neutral = (dir !== 'BULL' && dir !== 'BEAR');
+    var sign = dir === 'BULL' ? 1 : -1;
+    var agrees = dir === 'BULL' ? bulls : bears;
+    var against = dir === 'BULL' ? bears : bulls;
+    var sl = null, tp1 = null, tp2 = null, stopSource = null;
+    if (!neutral) {
+      sl = +(c - sign * atrLast).toFixed(2);
+      stopSource = 'ATR';
+      var rawStop = dir === 'BULL' ? pat.longStop : pat.shortStop;
+      if (rawStop != null && ((dir === 'BULL' && rawStop < c) || (dir === 'BEAR' && rawStop > c))) {
+        var dist = Math.abs(c - rawStop);
+        if (dist >= atrLast * 0.25 && dist <= atrLast * 2.5) {
+          sl = +(+rawStop).toFixed(2);
+          stopSource = 'pattern';
+        }
+      }
+      var risk = Math.abs(c - sl);
+      tp1 = +(c + sign * risk).toFixed(2);
+      tp2 = +(c + sign * risk * 2).toFixed(2);
+    }
+    var htf = hgCfHigherFrame(tapes);
+    reasons.push('higher timeframes: ' + htf.line);
+    var located = hgCfLocatedSide(adv);
+    if (located.clash) reasons.push('advanced patterns lean both ways — neither names the setup');
+    var setup = null, setupParts = '';
+    function hgCfSetupParts(patNames, extras) {
+      var parts = patNames.slice(), i;
+      for (i = 0; i < extras.length; i++) if (extras[i] && extras[i].length) parts = parts.concat(extras[i]);
+      return parts.join(', ');
+    }
+    var bullShape = pat.bullNames.slice();
+    var bearShape = pat.bearNames.slice();
+    if (!bullShape.length && located.bull.length && !located.bear.length) bullShape = located.bull.slice();
+    if (!bearShape.length && located.bear.length && !located.bull.length) bearShape = located.bear.slice();
+    var htfBlocksBull = htf.bearNames.length > 0 && !htf.bullNames.length;
+    var htfBlocksBear = htf.bullNames.length > 0 && !htf.bearNames.length;
+    var bullConfirm = struct.bullVotes > 0 || desk.bullVotes > 0 || tabs.bullVotes > 0 || htf.bullNames.length > 0;
+    var bearConfirm = struct.bearVotes > 0 || desk.bearVotes > 0 || tabs.bearVotes > 0 || htf.bearNames.length > 0;
+    if (htfBlocksBull && dir === 'BULL') reasons.push('higher timeframe is against the long — no setup');
+    if (htfBlocksBear && dir === 'BEAR') reasons.push('higher timeframe is against the short — no setup');
+    if (!neutral && dir === 'BULL' && bullShape.length && bullConfirm && !htfBlocksBull) {
+      setup = 'LONG SETUP';
+      setupParts = hgCfSetupParts(bullShape, [
+        struct.bullVotes ? struct.bullNames : null,
+        desk.bullVotes ? desk.bullNames : null,
+        tabs.bullVotes ? tabs.bullNames : null,
+        htf.bullNames.length ? htf.bullNames : null
+      ]);
+    } else if (!neutral && dir === 'BEAR' && bearShape.length && bearConfirm && !htfBlocksBear) {
+      setup = 'SHORT SETUP';
+      setupParts = hgCfSetupParts(bearShape, [
+        struct.bearVotes ? struct.bearNames : null,
+        desk.bearVotes ? desk.bearNames : null,
+        tabs.bearVotes ? tabs.bearNames : null,
+        htf.bearNames.length ? htf.bearNames : null
+      ]);
+    }
+    var missing = null;
+    if (!setup && !neutral) {
+      var shapeNow = dir === 'BULL' ? bullShape : bearShape;
+      var blockedNow = dir === 'BULL' ? htfBlocksBull : htfBlocksBear;
+      var confirmNow = dir === 'BULL' ? bullConfirm : bearConfirm;
+      if (!shapeNow.length) missing = 'no named shape';
+      else if (blockedNow) missing = 'higher timeframe against';
+      else if (!confirmNow) missing = 'no structure or desk confirm';
+    }
+    return {
+      dir: dir,
+      lean: dir,
+      agrees: agrees,
+      against: against,
+      checked: checked,
+      reasons: reasons,
+      patterns: pat.names,
+      /* hg-v1417: the pattern layer's family counts, carried out so the card can
+         NAME a read the candle patterns themselves vote against (the census read:
+         unformed reads against the pattern vote hit 41% next-candle, both halves).
+         Additive and read-only — nothing gates on it. */
+      patternVotes: { bull: pat.bullVotes, bear: pat.bearVotes },
+      /* hg-v1311: the advanced layer, named and located. Read by nothing that
+         gates, scores or prices — the card prints it and the ledger measures it. */
+      advancedPatterns: adv.names,
+      patternLeans: adv.leans,
+      patternWhere: adv.where,
+      patternWherePos: (typeof adv.wherePos === 'number' ? adv.wherePos : null),
+      patternDrift: adv.aligned,
+      structure: structNames,
+      desk: deskNames.length ? deskNames.join(', ') : (desk.notes[0] || 'unread'),
+      tabs: tabs.line || 'unread',
+      higher: htf.line,
+      setup: setup,
+      setupParts: setupParts,
+      missing: missing,
+      session: sessionName || '',
+      stopSource: stopSource,
+      expectedHigh: +(c + expectedRange).toFixed(2),
+      expectedLow: +(c - expectedRange).toFixed(2),
+      expectedRange: +expectedRange.toFixed(2),
+      vol: +vol.toFixed(4),
+      strength: +strength.toFixed(3),
+      driftT: +driftT.toFixed(3),
+      atr: +atrLast.toFixed(2),
+      atrSource: atrSource,
+      close: +c.toFixed(2),
+      sl: sl,
+      tp1: tp1,
+      tp2: tp2,
+      note: neutral
+        ? 'No side earned a majority, so nothing is called and no stop is issued.'
+        : ((setup ? (setup + ': ' + setupParts + '. ') : 'No setup formed — the call is the vote only. ')
+          + (against ? (agrees + ' for the call, ' + against + ' against. ') : '')
+          + (stopSource === 'pattern'
+            ? 'Stop is the pattern high or low. TP1 is one times that risk. TP2 is two.'
+            : 'No pattern stop in range, so the stop is one ATR. TP1 is one ATR. TP2 is two.'))
+    };
+  } catch (e) {
+    try { goldCandleForecast.lastError = (e && e.message) ? String(e.message) : String(e); } catch (eSet) {}
+    return null;
+  }
+}
+
+/* hg-v1347: say WHICH gate stopped the candle read, not that it did.
+   goldCandleForecast has six distinct null returns (thin tape, atr/ema not
+   loaded, non-finite OHLC on the last bar, flat last bar h<=l, atr unread,
+   a non-finite close inside the window) and the module above printed ONE
+   message for all six — the hg-v940 trap, one message for N causes, which
+   left the user asking the same question across hg-v1338, v1342 and v1343.
+   This names the specific blocker without duplicating the engine's rule
+   (hg-v949): each check mirrors a line in goldCandleForecast above and
+   returns the same honest string the tab can render instead of the shrug.
+   Null only when a diagnoser cannot even check — never a guessed cause.
+   Fail OPEN at every seam: an unreadable row set still returns a message,
+   never an exception into the module's catch block above. */
+function hgCfDiagnose(rows) {
+  try {
+    if (!Array.isArray(rows)) return 'The 15m tape was not an array of bars, so no read was attempted.';
+    if (rows.length === 0) return 'The 15m tape was empty, so no read was attempted.';
+    if (rows.length < 30) {
+      return 'The 15m tape is too short — ' + rows.length + ' bars, the engine needs 30 for its ATR and drift reads to mean anything.';
+    }
+    if (typeof atr !== 'function' || typeof ema !== 'function') {
+      return 'The ATR or EMA readers were not loaded, so the engine stood aside.';
+    }
+    var last = rows[rows.length - 1];
+    if (!last || typeof last !== 'object') {
+      return 'The last 15m bar was not readable, so the engine stood aside.';
+    }
+    var o = +last.o, h = +last.h, l = +last.l, c = +last.c;
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) {
+      return 'The last 15m bar has a missing open, high, low or close, so no read was attempted.';
+    }
+    if (!(h > l)) {
+      return 'The last 15m bar has no range (high ' + h.toFixed(2) + ' is not above low ' + l.toFixed(2) + '), so the engine had no volatility to estimate.';
+    }
+    var atrArr = null;
+    try { atrArr = atr(rows, 14); } catch (eA) { atrArr = null; }
+    var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : NaN;
+    if (!(atrLast > 0)) atrLast = h - l;
+    if (!(atrLast > 0)) {
+      return 'The 15m tape carries no measurable range (ATR 14 unread and last bar flat), so the engine had nothing to project.';
+    }
+    for (var i = 0; i < rows.length; i++) {
+      var ci = +rows[i].c;
+      if (!isFinite(ci)) {
+        return 'The 15m tape has a non-finite close at bar ' + (i + 1) + ' of ' + rows.length + ', so the engine stood aside rather than invent one.';
+      }
+    }
+    var thrown = null;
+    try { thrown = (typeof goldCandleForecast === 'function') ? goldCandleForecast.lastError : null; } catch (eL) { thrown = null; }
+    if (thrown) return 'The 15m tape passed every read gate, but the engine threw: ' + String(thrown) + '. Nothing was invented.';
+    return 'The 15m tape read every gate in the forecast engine but the engine still returned no verdict. Re-run after the next closed bar.';
+  } catch (e) {
+    return 'The diagnostic could not read the 15m tape (' + ((e && e.message) || e) + '), so the engine stood aside.';
+  }
+}
+
+function hgCfUltimate(scalp, swing) {
+  /* hg-v1323: ULTIMATE AI CONFLUENCE.
+     The scalp and the swing are already built. This only asks whether those two
+     reads agree. It does not make a third entry, stop or target. Unread is not
+     agreement. A neutral tape is not agreement. A family that nets against on
+     either tape blocks an ultimate setup. */
+  var out = { ok: false, title: 'ULTIMATE AI CONFLUENCE', side: null, formed: false, why: '', scalp: '', swing: '' };
+  try {
+    function sideOf(b) {
+      if (!b || b.ok !== true) return null;
+      var d = String(b.dir || '').toUpperCase();
+      return (d === 'BULL' || d === 'BEAR' || d === 'NEUTRAL') ? d : null;
+    }
+    function line(name, b) {
+      if (!b || b.ok !== true) return name + ' unread' + (b && b.why ? (' — ' + b.why) : '');
+      var cv = b.confluenceView;
+      var fam = cv
+        ? (cv.familiesWith + ' families net with' + (cv.familiesAgainst ? (', ' + cv.familiesAgainst + ' net against') : ', none net against') + (cv.ticket ? ', confluence ticket' : ', not a ticket'))
+        : 'confluence unread';
+      return name + ' ' + String(b.dir || 'unread') + ' · ' + (b.formed ? String(b.label || 'setup') : 'not a setup') + ' · ' + fam;
+    }
+    out.scalp = line('scalp 15m', scalp);
+    out.swing = line('swing 4h', swing);
+    out.ok = true;
+    var s = sideOf(scalp), w = sideOf(swing);
+    if (!s || !w) {
+      out.why = 'One horizon is unread. Unread is not agreement, so there is no ultimate side and no blended stop.';
+      return out;
+    }
+    if (s === 'NEUTRAL' || w === 'NEUTRAL') {
+      out.side = 'NEUTRAL';
+      out.why = 'One horizon is NEUTRAL. That is not agreement, so there is no ultimate side.';
+      return out;
+    }
+    if (s !== w) {
+      out.side = 'SPLIT';
+      out.why = 'The 15m scalp is ' + s + ' and the 4h swing is ' + w + '. They do not agree, so there is no ultimate side and no blended stop.';
+      return out;
+    }
+    out.side = s;
+    var scalpCv = scalp.confluenceView, swingCv = swing.confluenceView;
+    if (!scalpCv || !swingCv) {
+      out.why = 'Both horizons read ' + s + ', but a confluence was not read on one of them. Unread is not a ticket. Each tape keeps its own stop.';
+      return out;
+    }
+    if (scalpCv.familiesAgainst > 0 || swingCv.familiesAgainst > 0) {
+      out.why = 'Both horizons read ' + s + ', but a family nets against on one tape. No ultimate setup. Each tape keeps its own stop.';
+      return out;
+    }
+    if (!(scalp.formed && swing.formed && scalpCv.ticket && swingCv.ticket)) {
+      out.why = 'Both horizons read ' + s + ' and no family nets against. An ultimate setup still needs a formed setup and a confluence ticket on BOTH tapes. Each tape keeps its own stop.';
+      return out;
+    }
+    out.formed = true;
+    out.why = 'Both horizons read ' + s + ', both formed a setup, and both confluence tickets are clean. The scalp stop and the swing stop stay on their own tapes. This is not a third price.';
+    return out;
+  } catch (eU) {
+    out.ok = false;
+    out.why = 'ultimate confluence unread';
+    return out;
+  }
+}
+
+/* hg-v1329: the page object the shared homes are attached to. */
+function hgCfHost() {
+  if (typeof window !== 'undefined' && window) return window;
+  if (typeof globalThis !== 'undefined') return globalThis;
+  return null;
+}
+
+/* Real reads only. Grade and tally are not set here: this desk does not have
+   them, and inventing either would be an unmeasured claim. */
+function hgCfPerfectReads(side) {
+  var reads = {};
+  var host = hgCfHost();
+  try {
+    var newsFn = (typeof hgNewsMark === 'function') ? hgNewsMark : (host && host.hgNewsMark);
+    if (typeof newsFn === 'function') {
+      var mk = newsFn('XAUUSD');
+      if (mk && (mk.risk === 'blackout' || mk.risk === 'high' || mk.risk === 'med' || mk.risk === 'low')) reads.newsRisk = mk.risk;
+    }
+  } catch (eN) {}
+  try {
+    var fundFn = (typeof hgFundamentalRegime === 'function') ? hgFundamentalRegime : (host && host.hgFundamentalRegime);
+    if (typeof fundFn === 'function') {
+      var reg = fundFn('GOLD');
+      var regime = reg && reg.regime;
+      if (regime === 'bullish' || regime === 'bearish') {
+        var withDir = (side === 'long') ? (regime === 'bullish') : (regime === 'bearish');
+        reads.fundamentalVerdict = withDir ? 'with' : 'against';
+      }
+    }
+  } catch (eF) {}
+  try {
+    var feedFn = (typeof hgGoldFreeFeedVerdicts === 'function') ? hgGoldFreeFeedVerdicts : (host && host.hgGoldFreeFeedVerdicts);
+    var macroFn = (typeof getGoldMacroCached === 'function') ? getGoldMacroCached : (host && host.getGoldMacroCached);
+    if (typeof feedFn === 'function') {
+      var macro = null;
+      try { if (typeof macroFn === 'function') macro = macroFn(); } catch (eM) { macro = null; }
+      var map = feedFn({ macro: macro }, side) || {};
+      var keys = Object.keys(map), readable = 0, against = [], i, k, v;
+      for (i = 0; i < keys.length; i++) {
+        k = keys[i];
+        if (String(k).indexOf('free:') !== 0) continue;
+        v = map[k];
+        if (v !== true && v !== false) continue;
+        readable++;
+        if (v === false) against.push(String(k).slice(5));
+      }
+      if (readable > 0) reads._witness = { readable: true, against: against.length > 0, names: against.join(', ') };
+    }
+  } catch (eG) {}
+  return reads;
+}
+
+function hgCfPerfectAsk(setup, conf) {
+  /* The shared predicate (hg-perfect-setup.js). A filter, never a gate:
+     it cannot form a setup and it cannot move a stop. Grade and tally stay
+     unset on a candle bracket, so the bar names the leg it could not read. */
+  var out = { asked: false, perfect: false, plus: false, why: [], line: '' };
+  try {
+    var host = hgCfHost();
+    var fn = (typeof hgPerfectFormation === 'function') ? hgPerfectFormation
+      : (host && typeof host.hgPerfectFormation === 'function' ? host.hgPerfectFormation : null);
+    if (typeof fn !== 'function') {
+      out.line = 'The shared perfect bar is not loaded, so nothing is called perfect.';
+      return out;
+    }
+    if (!setup || setup.formed !== true || (setup.dir !== 'BULL' && setup.dir !== 'BEAR')) {
+      out.asked = true;
+      out.line = 'No formed setup, so the perfect bar was not asked to mint one.';
+      return out;
+    }
+    var side = setup.dir === 'BULL' ? 'long' : 'short';
+    var famAgainst = null;
+    if (conf && typeof conf.familiesAgainst === 'number') famAgainst = conf.familiesAgainst;
+    else if (setup.confluenceView && typeof setup.confluenceView.familiesAgainst === 'number') famAgainst = setup.confluenceView.familiesAgainst;
+    var cand = { dir: side, entry: setup.entry, stop: setup.stop, t1: setup.tp1 };
+    if (typeof famAgainst === 'number') cand.oppose = famAgainst;
+    var reads = hgCfPerfectReads(side);
+    if (reads && reads._witness) {
+      cand.goldFreeWitness = reads._witness;
+      delete reads._witness;
+    }
+    var r = fn(cand, reads);
+    out.asked = true;
+    out.perfect = !!(r && r.perfect);
+    out.plus = !!(r && r.plus);
+    out.why = (r && Array.isArray(r.why)) ? r.why.slice() : [];
+    out.line = out.perfect
+      ? ((out.plus ? 'PERFECT+ ' : 'PERFECT ') + 'on this candle bracket. The shared bar passed. It does not move the stop.')
+      : ('Not perfect. ' + (out.why.length ? out.why.join('; ') : 'the shared bar was not met') + '. The setup is unchanged.');
+    return out;
+  } catch (eAsk) {
+    out.line = 'The perfect bar could not be read. Nothing was called perfect.';
+    return out;
+  }
+}
+
+function hgCfWalk(rows, opts) {
+  /* In-sample only. The settler is hgFwdSettleOne — this function does not
+     re-walk a bar. Higher frames are not passed in. A tape whose times are
+     not strictly increasing can see the future, so it counts nothing. */
+  var label = 'in-sample on this tape only. Not a forward result and not a probability.';
+  var out = { ok: false, label: label, formed: 0, tp1: 0, stop: 0, expired: 0, open: 0, counted: 0, why: '' };
+  try {
+    if (!Array.isArray(rows) || rows.length < 43) {
+      out.why = 'The tape is too thin to walk. Nothing was counted as a win.';
+      return out;
+    }
+    var i, prev = -Infinity, t;
+    for (i = 0; i < rows.length; i++) {
+      t = +(rows[i] && rows[i].t);
+      if (!isFinite(t) || t <= prev) {
+        out.why = 'Bar times are not strictly increasing, so the walk stood aside. A walk that can see the future counts nothing. Nothing was counted as a win.';
+        return out;
+      }
+      prev = t;
+    }
+    if (typeof goldCandleForecast !== 'function' || typeof hgCfBuildSetup !== 'function') {
+      out.why = 'The candle reader is not loaded, so nothing was counted as a win.';
+      return out;
+    }
+    var host = hgCfHost();
+    var settle = (typeof hgFwdSettleOne === 'function') ? hgFwdSettleOne : (host && host.hgFwdSettleOne);
+    var n = rows.length;
+    var start = Math.max(40, n - 36);
+    var end = n - 2;
+    if (!(end > start)) {
+      out.why = 'Not enough closed bars after the window. Nothing was counted as a win.';
+      return out;
+    }
+    var tf = (opts && opts.tf) || '15m';
+    var horizon = (opts && isFinite(+opts.horizonBars)) ? +opts.horizonBars : (tf === '4h' ? 20 : 32);
+    for (i = start; i < end; i++) {
+      var slice = rows.slice(0, i + 1);
+      var fc = goldCandleForecast(slice, null, null);
+      if (!fc) continue;
+      var setup = hgCfBuildSetup(slice, { tf: tf }, fc);
+      if (!setup || setup.formed !== true) continue;
+      if (setup.dir !== 'BULL' && setup.dir !== 'BEAR') continue;
+      var entry = +setup.entry, stopPx = +setup.stop, t1 = +setup.tp1;
+      if (!isFinite(entry) || !isFinite(stopPx) || !isFinite(t1)) continue;
+      var dir = setup.dir === 'BULL' ? 'long' : 'short';
+      var risk = Math.abs(entry - stopPx);
+      if (!(risk > 0)) continue;
+      if (dir === 'long' ? !(t1 > entry) : !(t1 < entry)) continue;
+      if (typeof settle !== 'function') {
+        out.why = 'The settler is not loaded, so nothing was counted.';
+        return out;
+      }
+      var barT = +(slice[slice.length - 1] && slice[slice.length - 1].t);
+      var rec = {
+        state: 'open', sym: 'XAUUSD', tf: tf, dir: dir,
+        entry: entry, stop: stopPx, t1: t1, risk: risk,
+        rr: Math.abs(t1 - entry) / risk,
+        barT: barT, horizonBars: horizon
+      };
+      var settled = settle(rec, rows);
+      out.formed++;
+      out.counted++;
+      var st = settled && settled.state;
+      if (st === 't1') out.tp1++;
+      else if (st === 'stop') out.stop++;
+      else if (st === 'expired') out.expired++;
+      else out.open++;
+    }
+    out.ok = true;
+    out.why = out.formed
+      ? (out.formed + ' formed, ' + out.tp1 + ' reached TP1, ' + out.stop + ' stopped, ' + out.expired + ' expired, ' + out.open + ' still open. Higher frames were not fed into the walk. ' + label)
+      : ('No setup formed inside this window. Nothing was counted as a win. Higher frames were not fed into the walk. ' + label);
+    return out;
+  } catch (eWalk) {
+    return { ok: false, label: label, formed: 0, tp1: 0, stop: 0, expired: 0, open: 0, counted: 0,
+      why: 'The walk could not be read. Nothing was counted as a win.' };
+  }
+}
+
+function hgCfForwardMark(setup, rows, tf) {
+  /* Out of sample. Resolve older records first, then record a formed setup.
+     The ledger is the only settler. A missing ledger counts nothing.
+     hg-v1361: fix hg-v1358's own defect. The pack took a 4th arg (forecastResult)
+     and passed it to hgCfPatternMarks, which reads result.patterns /
+     advancedPatterns / dir / tf at the TOP LEVEL. The caller (hgCfMeasure)
+     passed the composite forecast wrapper ({scalp, swing, ultimate, measure,
+     daySwings}), which has no top-level patterns / dir / tf — so pattern:withTrend
+     and cf:tf never fired on any record since hg-v1358 shipped. The hg-v955 shape
+     in my own pack. The fix: `setup` IS already the forecast result for THIS tape
+     (goldCandleForecast(rows, {mode}) is passed to hgCfForwardMark via hgCfMeasure's
+     scalp/swing args), so hgCfPatternMarks reads it directly. The 4th arg is gone;
+     the caller passes nothing extra. */
+  var out = { recorded: 0, resolved: 0, why: '' };
+  try {
+    var host = hgCfHost();
+    var resolve = (typeof hgFwdResolve === 'function') ? hgFwdResolve : (host && host.hgFwdResolve);
+    var record = (typeof hgFwdRecordScan === 'function') ? hgFwdRecordScan : (host && host.hgFwdRecordScan);
+    if (typeof resolve !== 'function' || typeof record !== 'function') {
+      out.why = 'The forward ledger is not loaded, so nothing was recorded.';
+      return out;
+    }
+    var frame = tf || (setup && setup.tf) || '15m';
+    if (Array.isArray(rows) && rows.length) {
+      try { out.resolved = +resolve('XAUUSD', frame, rows) || 0; } catch (eR) { out.resolved = 0; }
+    }
+    var formed = setup && setup.formed === true && (setup.dir === 'BULL' || setup.dir === 'BEAR');
+    if (!formed) {
+      out.why = 'No new setup was recorded. A setup that is not formed is not a forward test.'
+        + (out.resolved ? (' Settled ' + out.resolved + ' older record' + (out.resolved === 1 ? '' : 's') + '.') : '');
+      return out;
+    }
+    var dir = setup.dir === 'BULL' ? 'long' : 'short';
+    var entry = +setup.entry, stopPx = +setup.stop, t1 = +setup.tp1;
+    var risk = Math.abs(entry - stopPx);
+    var sideOk = isFinite(entry) && isFinite(stopPx) && isFinite(t1) && risk > 0 && (dir === 'long' ? t1 > entry : t1 < entry);
+    if (!sideOk) {
+      out.why = 'The formed setup has no settleable bracket, so it was not recorded.';
+      return out;
+    }
+    var bar = (Array.isArray(rows) && rows.length) ? rows[rows.length - 1] : null;
+    var signalT = (bar && isFinite(+bar.t)) ? +bar.t : undefined;
+    var horizon = frame === '15m' ? 96 : 20;
+    /* hg-v1361: pattern marks ride the record under the ONE pool. `setup` IS
+       the forecast result for THIS tape (hg-v1358 fix), so hgCfPatternMarks
+       reads setup.patterns / advancedPatterns / dir / tf directly. A missing
+       helper, a tape that cannot be read, or a forecast with no patterns all
+       leave reads absent (hg-v989 three-state: never a guessed false). */
+    var reads;
+    try {
+      if (setup && typeof hgCfPatternMarks === 'function') {
+        reads = hgCfPatternMarks(setup, rows);
+      }
+    } catch (eMk) { reads = undefined; }
+    /* hg-v1417: the admission mark rides the record on BOTH lanes, added to the
+       reads bag AFTER the pattern marks. It gates publication on the 4h card
+       only; on the 15m book it is measurement (the scalp voter separates
+       direction at +6.5pp in both halves, so the scalp book stays splittable).
+       Absent when the confluence state is unreadable — hg-v989 three-state,
+       never a guessed false. The record keeps BOTH cohorts: a withheld bracket
+       is still a formed setup and still belongs on the ledger. */
+    try {
+      if (setup && typeof hgCfSwingHtfConfirm === 'function') {
+        var htfMark = hgCfSwingHtfConfirm(setup);
+        if (htfMark === true || htfMark === false) {
+          if (!reads || typeof reads !== 'object') reads = {};
+          reads['cf:htfWith'] = htfMark;
+        }
+      }
+    } catch (eHm) {}
+    var t2 = isFinite(+setup.tp2) ? +setup.tp2 : undefined;
+    var feed = setup.source || undefined;
+    out.recorded = +record('CANDLE FORECAST', frame, [{
+      sym: 'XAUUSD',
+      dir: dir,
+      entry: entry,
+      stop: stopPx,
+      t1: t1,
+      t2: t2,
+      mark: entry,
+      signalT: signalT,
+      feed: feed,
+      mechanic: frame === '4h' ? 'SWING' : 'SCALP',
+      ticket: setup.ticket === true,
+      perfect: setup.perfect === true ? true : undefined,
+      perfectPlus: setup.perfectPlus === true ? true : undefined,
+      reads: reads
+    }], { horizonBars: horizon }) || 0;
+    out.why = out.recorded
+      ? ('Recorded ' + out.recorded + ' new setup' + (out.recorded === 1 ? '' : 's') + ' on the forward ledger. Settled ' + out.resolved + ' older record' + (out.resolved === 1 ? '' : 's') + ' on bars that printed after they were logged.')
+      : 'No new setup was recorded. The same bar was already on the forward ledger, or the ledger declined it.';
+    return out;
+  } catch (eFwd) {
+    out.recorded = 0;
+    out.why = 'The forward ledger could not be written. Nothing was counted.';
+    return out;
+  }
+}
+
+function hgCfMeasure(scalp, swing, rows15, rows4) {
+  /* Asks the perfect bar, walks this tape, and marks the forward ledger.
+     None of the three changes a formed flag or a stop.
+     hg-v1361: drop hg-v1358's 5th arg. hgCfForwardMark now reads patterns
+     from `setup` (the per-tape forecast result) directly, so passing a
+     composite wrapper as a 5th arg was both unnecessary and WRONG — the
+     wrapper has no top-level patterns / dir / tf, so pattern:withTrend
+     and cf:tf never fired. The caller is unchanged in shape (5th arg is
+     silently ignored); the pack bumps hgCfMeasure's declared arity to 4. */
+  var out = { scalpAsk: null, swingAsk: null, walk15: null, walk4: null, fwd15: null, fwd4: null, fwdHtml: '' };
+  try {
+    out.scalpAsk = hgCfPerfectAsk(scalp, scalp && scalp.confluenceView);
+    out.swingAsk = hgCfPerfectAsk(swing, swing && swing.confluenceView);
+    if (scalp && out.scalpAsk) {
+      if (out.scalpAsk.perfect === true) scalp.perfect = true;
+      if (out.scalpAsk.plus === true) scalp.perfectPlus = true;
+      scalp.perfectWhy = out.scalpAsk.line || '';
+    }
+    if (swing && out.swingAsk) {
+      if (out.swingAsk.perfect === true) swing.perfect = true;
+      if (out.swingAsk.plus === true) swing.perfectPlus = true;
+      swing.perfectWhy = out.swingAsk.line || '';
+    }
+    out.walk15 = hgCfWalk(rows15, { tf: '15m', horizonBars: 32 });
+    out.walk4 = hgCfWalk(rows4, { tf: '4h', horizonBars: 20 });
+    out.fwd15 = hgCfForwardMark(scalp, rows15, '15m');
+    out.fwd4 = hgCfForwardMark(swing, rows4, '4h');
+    var host = hgCfHost();
+    var panel = host && host.hgFwdPanelHTML;
+    if (typeof panel === 'function') {
+      try { out.fwdHtml = panel('CANDLE FORECAST', { title: 'FORWARD — candle forecast, out of sample' }) || ''; }
+      catch (eP) { out.fwdHtml = ''; }
+    }
+    return out;
+  } catch (eM) {
+    if (!out.scalpAsk) out.scalpAsk = { asked: false, perfect: false, plus: false, why: [], line: 'The perfect bar could not be read. Nothing was called perfect.' };
+    return out;
+  }
+}
+
+/* hg-v1332: the day's confirmed swings, and no others.
+   A swing is confirmed only when the builder already formed it: a named shape
+   plus structure, a gold desk, or a higher timeframe, and the higher frame is
+   not one-sided against. A family that nets against is not a confirmation.
+   The scalp is not on this list. Two are enough for the day; an earlier
+   confirmed swing past that cap is stood down, not deleted from the tape.
+   Prices come from the builder. This function does not mint a bracket. */
+function hgCfDaySwings(rows, opts) {
+  var limit = (opts && isFinite(+opts.limit) && +opts.limit > 0) ? Math.floor(+opts.limit) : 2;
+  var out = { ok: false, tf: '4h', limit: limit, day: null, setups: [], stoodDown: 0, why: '' };
+  function dayKey(t) {
+    var ms = +t;
+    if (!isFinite(ms)) return null;
+    if (ms < 1e12) ms = ms * 1000;
+    var d = new Date(ms);
+    if (!isFinite(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  }
+  function take(setup, barT, bag) {
+    if (!setup || setup.formed !== true) return;
+    if (setup.dir !== 'BULL' && setup.dir !== 'BEAR') return;
+    var entry = +setup.entry, stopPx = +setup.stop, t1 = +setup.tp1;
+    if (!isFinite(entry) || !isFinite(stopPx) || !isFinite(t1)) return;
+    if (!(Math.abs(entry - stopPx) > 0)) return;
+    var side = setup.dir === 'BULL' ? 'long' : 'short';
+    if (side === 'long' ? !(t1 > entry) : !(t1 < entry)) return;
+    var cv = setup.confluenceView;
+    if (cv && typeof cv.familiesAgainst === 'number' && cv.familiesAgainst > 0) return;
+    /* hg-v1417: a bracket the higher timeframe did not confirm is withheld from
+       publication, so the day does not confirm it either. Same fail-open class
+       as the clause above: walked setups carry no confluenceView, so
+       hgCfSwingHtfConfirm returns null, published stays true, and the walk is
+       unchanged. */
+    if (setup.published === false) return;
+    var i;
+    for (i = 0; i < bag.length; i++) {
+      if (bag[i].dir === setup.dir && bag[i].entry === entry && bag[i].stop === stopPx) return;
+    }
+    bag.push({
+      dir: setup.dir,
+      label: setup.label || (setup.dir === 'BULL' ? 'LONG SETUP' : 'SHORT SETUP'),
+      entry: entry,
+      stop: stopPx,
+      tp1: t1,
+      tp2: isFinite(+setup.tp2) ? +setup.tp2 : null,
+      stopSource: setup.stopSource || null,
+      parts: setup.parts || '',
+      barT: isFinite(+barT) ? +barT : null,
+      tf: '4h'
+    });
+  }
+  try {
+    var live = opts && opts.live;
+    var found = [];
+    var lastT = (Array.isArray(rows) && rows.length) ? +(rows[rows.length - 1] && rows[rows.length - 1].t) : NaN;
+    out.day = dayKey(lastT);
+    var timesOk = Array.isArray(rows) && rows.length >= 30;
+    var prev = -Infinity, i, t;
+    if (timesOk) {
+      for (i = 0; i < rows.length; i++) {
+        t = +(rows[i] && rows[i].t);
+        if (!isFinite(t) || t <= prev) { timesOk = false; break; }
+        prev = t;
+      }
+    }
+    var canWalk = timesOk && out.day && typeof goldCandleForecast === 'function' && typeof hgCfBuildSetup === 'function';
+    var walked = 0;
+    if (canWalk) {
+      for (i = 30; i < rows.length; i++) {
+        if (dayKey(rows[i].t) !== out.day) continue;
+        walked++;
+        if (i === rows.length - 1 && live) {
+          take(live, +rows[i].t, found);
+          continue;
+        }
+        var slice = rows.slice(0, i + 1);
+        var fc = goldCandleForecast(slice, null, null);
+        if (!fc) continue;
+        take(hgCfBuildSetup(slice, { tf: '4h', horizon: 'swing' }, fc), +rows[i].t, found);
+      }
+      if (live) take(live, isFinite(lastT) ? lastT : null, found);
+    } else if (live) {
+      take(live, isFinite(lastT) ? lastT : null, found);
+    }
+    if (found.length > limit) {
+      out.stoodDown = found.length - limit;
+      found = found.slice(found.length - limit);
+    }
+    out.setups = found;
+    out.ok = true;
+    out.walked = walked;
+    if (found.length) {
+      out.why = found.length + ' confirmed swing setup' + (found.length === 1 ? '' : 's') + ' for ' + (out.day || 'this day') + '. Two are enough for the day.'
+        + (out.stoodDown ? (' ' + out.stoodDown + ' earlier confirmed swing' + (out.stoodDown === 1 ? ' was' : 's were') + ' stood down.') : '');
+    } else {
+      var knownMiss = '';
+      if (live && live.formed !== true && (live.missing === 'no named shape' || live.missing === 'higher timeframe against' || live.missing === 'no structure or desk confirm')) knownMiss = live.missing;
+      var walkedBit = canWalk
+        ? (walked + ' bar' + (walked === 1 ? ' of this day was walked. ' : 's of this day were walked. '))
+        : 'This day could not be walked. ';
+      var missBit = '';
+      if (knownMiss) missBit = 'The last 4h bar stopped on ' + knownMiss + '. ';
+      else if (live && live.formed === true && live.published === false) missBit = 'The last 4h bar formed, then the higher timeframe did not confirm, so it is not shown. ';
+      else if (live && live.formed === true && live.confluenceView && live.confluenceView.familiesAgainst > 0) missBit = 'The last 4h bar formed, then a family net against, so it is not shown. ';
+      else if (live && live.ok === false) missBit = 'The last 4h bar could not be read. ';
+      else if (live && (!live.dir || live.dir === 'NEUTRAL')) missBit = 'The last 4h bar named no side. ';
+      out.lastMissing = knownMiss || null;
+      out.why = 'No confirmed swing setup for this day. ' + walkedBit + missBit + 'An unconfirmed read is not shown. Nothing was invented.';
+    }
+    return out;
+  } catch (eDay) {
+    out.setups = [];
+    out.why = 'Confirmed swings could not be read. Nothing was invented.';
+    return out;
+  }
+}
+
+/* hg-v1351: WHAT THE CANDLE FORECAST TAB COULD NEVER ANSWER — does any of it pay?
+   The tab reads ~103 named shapes, six confluence families, eleven technical reads and
+   five desk votes, and until this pack it RECORDED NONE OF THEM. So the forward ledger
+   could never say whether a hammer on gold separates winners from losers: the tab formed
+   forecasts and the ledger held nothing to measure. That is the hg-v955 shape — a read
+   computed and never carried — and it is the reason this pack exists rather than a 104th
+   pattern. TRENDMX established the shape at hg-v1336 (tmCandleMarks folded through
+   tmRecordReads); these are the same four marks for the candle forecast, on the SAME
+   three-state contract so the ledger can split each of them.
+
+   hg-v989 THREE STATES, per key: true (the read held for this record), false (it did not),
+   ABSENT (not recorded — a quiet bar, a tie, or no direction named). A tie or a quiet bar
+   records NOTHING on the majority or withTrend marks, never a guessed false: the ledger
+   must be able to count "read nothing" and "was never asked" separately.
+
+   Reads `(result, rows)`:
+     result — the goldCandleForecast result (for patterns/dir);
+     rows   — the tape, used only to re-read the vote COUNTS through the one-home pattern
+              engine. A tie is deliberately NOT a majority, so 0/0 and 3/3 both record
+              nothing rather than inventing a side.
+
+   Nothing gates on any of this. The marks ride the ledger row and the ledger's read split
+   reports them; no gate, score or price reads a mark back. */
+function hgCfPatternMarks(result, rows) {
+  var out = {};
+  try {
+    if (!result || typeof result !== 'object') return out;
+    var named = Array.isArray(result.patterns) ? result.patterns.length : 0;
+    var adv = Array.isArray(result.advancedPatterns) ? result.advancedPatterns.length : 0;
+
+    /* the vote counts, re-read through the one-home engine so the majority is the
+       engine's own reading and not a second opinion (hg-v949). */
+    var bv = null, ev = null;
+    try {
+      var atrArr = (typeof atr === 'function' && Array.isArray(rows) && rows.length) ? atr(rows, 14) : null;
+      var atrLast = (atrArr && atrArr.length && isFinite(+atrArr[atrArr.length - 1])) ? +atrArr[atrArr.length - 1] : null;
+      if (typeof hgCfCandlePatterns === 'function' && Array.isArray(rows) && rows.length && atrLast !== null && atrLast > 0) {
+        var pack = hgCfCandlePatterns(rows, atrLast);
+        if (pack && typeof pack === 'object') {
+          if (typeof pack.bullVotes === 'number' && isFinite(pack.bullVotes)) bv = pack.bullVotes;
+          if (typeof pack.bearVotes === 'number' && isFinite(pack.bearVotes)) ev = pack.bearVotes;
+        }
+      }
+    } catch (ePk) { bv = null; ev = null; }
+
+    var fired = (named > 0) || (adv > 0) || ((bv !== null && bv > 0) || (ev !== null && ev > 0));
+    if (fired) out['pattern:anyFire'] = true;
+
+    /* a MAJORITY needs a decided side; a tie records neither key (hg-v989). */
+    if (bv !== null && ev !== null) {
+      if (bv > ev) { out['pattern:bullMajority'] = true; out['pattern:bearMajority'] = false; }
+      else if (ev > bv) { out['pattern:bullMajority'] = false; out['pattern:bearMajority'] = true; }
+    }
+
+    /* withTrend: did the majority agree with the side the engine named? Only a
+       decided majority against a named side records this. */
+    var dir = (result.dir === 'BULL') ? 'long' : ((result.dir === 'BEAR') ? 'short' : null);
+    if (dir && bv !== null && ev !== null && bv !== ev) {
+      out['pattern:withTrend'] = (bv > ev) ? (dir === 'long') : (dir === 'short');
+    }
+
+    /* the horizon, so a scalp and a swing are splittable apart — they are different
+       trades and the ledger must not pool them. */
+    if (result.tf) out['cf:tf'] = String(result.tf).slice(0, 8);
+  } catch (eMk) { return out; }
+  return out;
+}
+
+if (typeof window !== "undefined") {
+  window.goldCandleForecast = goldCandleForecast;
+  /* hg-v1351: the four three-state pattern marks, so the tab can carry them onto the
+     forward ledger row. Read by nothing that gates (asserted). */
+  window.hgCfPatternMarks = hgCfPatternMarks;
+  /* hg-v1347: the diagnostic reader, exported so the Candle Forecast tab can
+     name the specific blocker instead of printing one line for every one of
+     the engine's six distinct null returns (hg-v940). */
+  window.hgCfDiagnose = hgCfDiagnose;
+  window.hgCfConfluence = hgCfConfluence;
+  /* hg-v1336: the one-home candle pattern engine, exported so TREND MATRIX
+     (and any later caller) reads the same ATR-gated hammer/engulfing/
+     piercing/star/marubozu rules the gold candle forecast reads, rather
+     than a second copy (hg-v949). Reads `(rows, atrLast)` and returns
+     { bullVotes, bearVotes, names, bullNames, bearNames, notes,
+       longStop, shortStop } — three-state by construction: a pattern that
+     fires names its direction, a tie or no fire leaves the names empty. */
+  window.hgCfCandlePatterns = hgCfCandlePatterns;
+  /* hg-v1317: the per-desk vote, exported so a guard can drive it directly and the
+     tab can show which OTHER gold desks formed a side on the same tape. */
+  window.hgCfDeskVotes = hgCfDeskVotes;
+  /* hg-v1318: the one bracket builder. The tab calls it twice — once on the 15m tape
+     for the scalp and once on the 4h tape for the swing — so the two horizons are
+     built by the SAME code path and stay comparable (hg-v949). */
+  window.hgCfBuildSetup = hgCfBuildSetup;
+  /* hg-v1417: the three-state admission read, exported so a guard can drive it
+     directly and the new admission-floor suite can pin each state. */
+  window.hgCfSwingHtfConfirm = hgCfSwingHtfConfirm;
+  window.hgCfHigherFrame = hgCfHigherFrame;
+  window.hgCfUltimate = hgCfUltimate;
+  window.hgCfFeedBoard = hgCfFeedBoard;
+  window.hgCfPerfectAsk = hgCfPerfectAsk;
+  window.hgCfWalk = hgCfWalk;
+  window.hgCfForwardMark = hgCfForwardMark;
+  window.hgCfMeasure = hgCfMeasure;
+  window.hgCfDaySwings = hgCfDaySwings;
+}

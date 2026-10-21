@@ -596,6 +596,156 @@ function cfPickLeader(hits){
   return clean[0] || near[0] || stale[0] || hits[0] || null;
 }
 
+/* =========================================================================
+   hg-v1304: THE CANDLE CONTEXT READ.
+
+   WHY THIS EXISTS. This desk's own header said it "never invents levels or
+   fetches market data of its own" — it composed other desks' published
+   snapshots and nothing else. So a CONFIRMED setup here meant "several desks
+   agree", and NOTHING on this tab had ever looked at the tape those desks
+   were reading. A group could crown while price sat mid-range after a
+   volatility blow-off, and this tab could not tell.
+
+   WHAT IT READS. The repo's ONE candle reader — `W.getCandles(sym, res, n)`,
+   the same seam book.js and brain.js already use — so there is no second
+   fetch path and no second cache (hg-v949). Every field is derived from those
+   closed bars and every one is three-state: a real reading, an explicit
+   `against`, or absent when the tape is too thin or the read fails.
+
+   WHAT IT IS NOT. A READOUT. It adds no weight, moves no threshold, and
+   cannot promote, demote or block a group: the tier logic above is untouched.
+   That is deliberate — this desk's job is to CONFIRM agreement between desks,
+   and letting a tape read veto that would be a different desk's decision. It
+   fails open on every path: an unreadable tape stamps `read:false` and the
+   card simply says so. */
+var CF_CANDLE_RES = '4h';
+var CF_CANDLE_N = 120;
+/* the tape read must never hold the scan open: this desk's own cycle budget is
+   seconds, and a cold candle fetch for a symbol no other tab has warmed can be
+   slow. A timeout returns null, which the card reports as "tape unread" — an
+   honest absence, never a fabricated reading. */
+var CF_TAPE_MS = 6000;
+
+/* local timeout, because brain.js's withTimeout is module-private (hg-v967: a
+   second module does not reach into another's IIFE, and this is not worth
+   exporting). Races the promise against a timer and never rejects on timeout. */
+function cfWithTimeout(p, ms){
+  return new Promise(function(resolve){
+    var done = false;
+    var t = setTimeout(function(){ if (!done){ done = true; resolve(null); } }, ms);
+    Promise.resolve(p).then(function(v){ if (!done){ done = true; clearTimeout(t); resolve(v); } },
+                            function(){ if (!done){ done = true; clearTimeout(t); resolve(null); } });
+  });
+}
+
+function cfCandleContext(rows, dir){
+  if (!Array.isArray(rows) || rows.length < 30) return null;
+  var i, n = rows.length;
+  var closes = [], highs = [], lows = [], vols = [];
+  for (i = 0; i < n; i++){
+    var b = rows[i];
+    if (!b) return null;
+    closes.push(+b.c); highs.push(+b.h); lows.push(+b.l);
+    vols.push(isFinite(+b.v) ? +b.v : null);
+  }
+  var px = closes[n - 1];
+  if (!isFinite(px)) return null;
+  /* true range + ATR(14) */
+  var trs = [];
+  for (i = 1; i < n; i++){
+    trs.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
+  }
+  if (trs.length < 20) return null;
+  var atr = 0, k;
+  for (k = trs.length - 14; k < trs.length; k++) atr += trs[k];
+  atr = atr / 14;
+  /* where price sits in the 120-bar range: 0 = at the low, 1 = at the high */
+  var hi = Math.max.apply(null, highs), lo = Math.min.apply(null, lows);
+  var rangePos = (hi > lo) ? (px - lo) / (hi - lo) : null;
+  /* ATR expansion: the last 5 bars' ATR vs the prior 20 */
+  var atrRecent = 0, atrPrior = 0, m;
+  for (m = trs.length - 5; m < trs.length; m++) atrRecent += trs[m];
+  atrRecent = atrRecent / 5;
+  for (m = trs.length - 25; m < trs.length - 5; m++) atrPrior += trs[m];
+  atrPrior = atrPrior / 20;
+  var atrExpand = (atrPrior > 0) ? atrRecent / atrPrior : null;
+  /* volume on the last CLOSED bar vs the prior 20-bar mean */
+  var vLast = vols[n - 1], vSum = 0, vCount = 0;
+  for (m = n - 21; m < n - 1; m++){ if (isFinite(vols[m])){ vSum += vols[m]; vCount++; } }
+  var vMean = vCount ? vSum / vCount : null;
+  var volRatio = (isFinite(vLast) && isFinite(vMean) && vMean > 0) ? vLast / vMean : null;
+  /* higher-timeframe lean from the same tape: EMA21 vs EMA50 on closes */
+  var ema = function(len){
+    if (n < len + 2) return null;
+    var kk = 2 / (len + 1), e = null, j;
+    for (j = 0; j < n; j++) e = (e === null) ? closes[j] : (closes[j] * kk + e * (1 - kk));
+    return isFinite(e) ? e : null;
+  };
+  var e21 = ema(21), e50 = ema(50);
+  var lean = (isFinite(e21) && isFinite(e50)) ? (e21 > e50 ? 'up' : (e21 < e50 ? 'down' : 'flat')) : null;
+  var wants = String(dir || '').toLowerCase();
+  /* three-state: a FLAT tape leans neither way, so it is NOT "against" — it is
+     unreckoned. Only a real up/down lean can be with or against a direction. */
+  var leanWith = (lean && lean !== 'flat' && (wants === 'long' || wants === 'short'))
+    ? ((wants === 'long' && lean === 'up') || (wants === 'short' && lean === 'down'))
+    : null;
+  /* the structural reads, each three-state */
+  var rangeState = (rangePos === null) ? null
+    : (rangePos >= 0.8 ? 'at the range high' : (rangePos <= 0.2 ? 'at the range low' : 'mid-range'));
+  /* a long into the range high (or a short into the low) is the extension this
+     read exists to disclose; it is DISCLOSED, never blocked. A degenerate tape
+     (hi === lo) has no range, so this is unread rather than false. */
+  var extended = (rangePos === null || (wants !== 'long' && wants !== 'short')) ? null
+    : (wants === 'long' ? rangePos >= 0.8 : rangePos <= 0.2);
+  /* Did the last closed bar finish with the direction? THREE-STATE: without a
+     usable direction this is UNREAD, not a false claim of disagreement —
+     `String(null || '')` is '', and '' === 'long' is false, which would have
+     silently reported "finished against" for a row that has no direction. */
+  var lastBarWith = (n >= 2 && isFinite(closes[n - 2]) && (wants === 'long' || wants === 'short'))
+    ? ((wants === 'long' && closes[n - 1] > closes[n - 2]) || (wants === 'short' && closes[n - 1] < closes[n - 2]))
+    : null;
+  return {
+    read: true,
+    bars: n, res: CF_CANDLE_RES, px: px, atr: atr,
+    rangePos: rangePos, rangeState: rangeState,
+    hi: hi, lo: lo,
+    atrExpand: atrExpand,
+    volRatio: volRatio,
+    lean: lean, leanWith: leanWith,
+    extended: extended,
+    lastBarWith: lastBarWith,
+    /* the disclosed lines, in the order a reader wants them */
+    lines: (function(){
+      var out = [];
+      out.push(n + ' closed ' + CF_CANDLE_RES + ' bars · price ' + (rangeState || 'range unread')
+        + (rangePos !== null ? (' (' + Math.round(rangePos * 100) + '% of the ' + n + '-bar range)') : ''));
+      if (lean) out.push('tape lean ' + lean + (leanWith === true ? ' — WITH this direction' : (leanWith === false ? ' — AGAINST this direction' : '')));
+      if (atrExpand !== null) out.push('ATR ' + atrExpand.toFixed(2) + 'x its 20-bar norm'
+        + (atrExpand >= 1.5 ? ' — volatility expanding' : (atrExpand <= 0.7 ? ' — volatility contracting' : '')));
+      if (volRatio !== null) out.push('last-bar volume ' + volRatio.toFixed(2) + 'x the 20-bar mean'
+        + (volRatio >= 1.5 ? ' — participation' : (volRatio <= 0.6 ? ' — thin' : '')));
+      if (extended === true) out.push('EXTENDED — this direction is entering at the wrong end of the range');
+      if (lastBarWith === true) out.push('the last closed bar finished with this direction');
+      else if (lastBarWith === false) out.push('the last closed bar finished against this direction');
+      return out;
+    })()
+  };
+}
+
+/* Read the tape for a group's leader. Never throws; null on any failure so the
+   caller can say "unread" rather than inventing a reading. */
+async function cfReadTape(g){
+  try{
+    var lead = g && (g.leader || (g.hits && g.hits[0]));
+    if (!lead || !lead.sym) return null;
+    var get = gfn('getCandles');
+    if (!get) return null;
+    var rows = await cfWithTimeout(get(lead.sym, CF_CANDLE_RES, CF_CANDLE_N), CF_TAPE_MS);
+    var ctx = cfCandleContext(rows, lead.dir || g.dir);
+    return ctx;
+  }catch(e){ return null; }
+}
+
 function cfAggregate(bag){
   var map = {}, i, row, key, g;
   for (i = 0; i < bag.length; i++){
@@ -727,6 +877,19 @@ function cfCardHtml(g){
       + 'plus ' + MIN_CONFIRM_SOURCES + ' desks, ' + MIN_CONFIRM_CLEAN + ' CLEAN, score ≥ '
       + MIN_CONFIRM_SCORE + ' required before handoff.</div>';
   }
+  /* hg-v1304: THE CANDLE CONTEXT. What the desks above were actually reading.
+     Readout only — it is painted, never consulted by cfAssignTier or any
+     blocker, so a tape note can never promote or veto a group here. */
+  if (g.tape && g.tape.read){
+    h += '<div class="note" data-cf-tape="1" style="margin-top:6px"><b>TAPE CONTEXT</b>'
+      + ' <span class="dim">' + esc(g.tape.res) + ' · closed bars only</span><div class="dim" style="margin-top:2px">'
+      + g.tape.lines.map(function(x){ return esc(x); }).join('<br>')
+      + '</div></div>';
+  } else {
+    h += '<div class="note dim" data-cf-tape="unread" style="margin-top:6px">'
+      + '<b>TAPE CONTEXT</b> — unread (no candle history returned for this symbol; '
+      + 'the desks above are the only evidence here)</div>';
+  }
   h += '</div>';
   return h;
 }
@@ -758,6 +921,23 @@ async function cfRunScan(ui, opts){
     }
     var bag = cfHarvestAll();
     var groups = cfAggregate(bag);
+    /* hg-v1304: read the actual TAPE behind the groups that can trade. This is
+       the one thing this tab never did — it composed desk agreement and never
+       looked at the candles those desks read. Bounded to the tradeable head
+       (PRIME / CONFIRMED, then BUILDING if there is room) so a wide board does
+       not fan out into dozens of cold fetches; each read is individually
+       timeout-guarded and returns null, which renders as an honest "unread". */
+    var tapeable = groups.filter(function(g){ return g.tier === 'PRIME' || g.tier === 'CONFIRMED'; });
+    if (tapeable.length < 6){
+      tapeable = tapeable.concat(groups.filter(function(g){ return g.tier === 'BUILDING'; }));
+    }
+    tapeable = tapeable.slice(0, 8);
+    if (tapeable.length){
+      if (ui && ui.stat) ui.stat.textContent = 'reading ' + tapeable.length + ' tape(s)…';
+      var reads = await Promise.all(tapeable.map(function(g){ return cfReadTape(g); }));
+      for (var ti = 0; ti < tapeable.length; ti++) tapeable[ti].tape = reads[ti] || null;
+    }
+    var tapeRead = tapeable.filter(function(g){ return g.tape && g.tape.read; }).length;
     var prime = groups.filter(function(g){ return g.tier === 'PRIME'; });
     var confirmed = groups.filter(function(g){ return g.tier === 'CONFIRMED'; });
     var building = groups.filter(function(g){ return g.tier === 'BUILDING'; });
@@ -768,6 +948,7 @@ async function cfRunScan(ui, opts){
       prime: prime.length,
       confirmed: confirmed.length,
       building: building.length,
+      tapeRead: tapeRead,
       globalBlockers: globalBlock
     };
     __cf.ran = true;
@@ -787,7 +968,8 @@ async function cfRunScan(ui, opts){
     }
     if (ui && ui.stat){
       ui.stat.textContent = prime.length + ' PRIME · ' + confirmed.length + ' CONFIRMED · ' + building.length
-        + ' BUILDING · ' + groups.length + ' groups from ' + bag.length + ' desk rows';
+        + ' BUILDING · ' + groups.length + ' groups from ' + bag.length + ' desk rows'
+        + ' · tape read on ' + tapeRead + ' of ' + tapeable.length;
     }
     var tradeable = prime.length ? prime : confirmed;
     if (gfn('hgPinMostProbablePanel') && tradeable.length && tradeable[0].leader){

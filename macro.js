@@ -422,9 +422,15 @@ async function __goldApiPrice(symbol){ // 'XAU' | 'XAG' -> {price, updatedAt} | 
   }catch(e){ return null; }
 }
 
-const GOLD_RES_BINANCE = { '15m': '15m', '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1d' };
-const GOLD_RES_TD      = { '15m': '15min', '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1day' };
+/* hg-v1357: '5m' joins every leg of the chain. Candle Forecast's
+   five-timeframe matrix reads a 5m TRIGGER row; before this the request fell
+   through every provider to an empty pack and the row read UNREAD on a tape
+   the feeds always had. Binance and Twelve Data carry 5m natively; Yahoo's
+   native 5m is range-limited, so the entry stays honest about its window. */
+const GOLD_RES_BINANCE = { '5m': '5m', '15m': '15m', '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1d' };
+const GOLD_RES_TD      = { '5m': '5min', '15m': '15min', '1h': '1h', '2h': '2h', '4h': '4h', '1d': '1day' };
 const GOLD_RES_YAHOO   = {
+  '5m':  { i: '5m',  r: '5d',  agg: 0 },
   '15m': { i: '15m', r: '1mo', agg: 0 },
   '1h':  { i: '1h',  r: '3mo', agg: 0 },
   '2h':  { i: '1h',  r: '3mo', agg: 7200 },
@@ -451,7 +457,7 @@ async function __goldIuxApply(pack){
 /* Gold candles, ordered fallback:
      Binance XAUUSDT TradFi perp -> Binance PAXGUSDT -> Twelve Data XAU/USD
      -> Yahoo GC=F via /api/proxy.
-   res in {'15m','1h','2h','4h','1d'}; returns {rows, source} (source null when all fail). */
+   res in {'5m','15m','1h','2h','4h','1d'}; returns {rows, source} (source null when all fail). */
 async function getGoldCandles(res, count){
   try{
     res = res || '1h';
@@ -592,6 +598,23 @@ async function getUST10YCandles(count){
       return { t: r.t, o: r.y10, h: r.y10, l: r.y10, c: r.y10, v: 0 };
     });
     return __macroCachePut(key, rows);
+  }catch(e){ return null; }
+}
+
+async function getFreeOHLC(symbol, res){
+  try{
+    res = res || '15m';
+    const ymap = GOLD_RES_YAHOO[res];
+    if (!symbol || !ymap) return null;
+    const key = 'freeohlc|' + symbol + '|' + res;
+    const hit = __macroCacheGet(key); if (hit !== undefined) return hit;
+    const range = res === '15m' ? '5d' : ymap.r;
+    const yurl = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol)
+      + '?interval=' + ymap.i + '&range=' + range;
+    let rows = __parseYahooChart(await __yahooViaProxy(yurl));
+    if (rows.length && ymap.agg) rows = resampleRows(rows, ymap.agg);
+    if (!rows.length) return null;
+    return __macroCachePut(key, { rows: rows.slice(-240), source: 'yahoo:' + symbol });
   }catch(e){ return null; }
 }
 
@@ -883,6 +906,18 @@ async function getGoldMacro(){
        its prior 20 sessions. Volume is participation, not tonnage; the
        catalog's ETF-flows row stays unchecked and says so. */
     let creditTrend = null, goldPalladiumTrend = null, gldVolumeRel = null, gldVolumeState = null;
+    /* hg-v1171: three more free Yahoo legs beside the hg-v1167 set. TLT
+       is the iShares 20+Y Treasury ETF -- its price rises when long yields
+       fall, which lifts gold (WITH a long when RISING); DIFFERENT from the
+       hg-v1166 TIP, which is TIPS (real yields), so no duplicated port
+       (hg-v949). UUP is the dollar bull ETF -- rising dollar is AGAINST a
+       gold long (WITH when FALLING), a direct-market read of the dollar
+       distinct from the Frankfurter DXY calculation above and from the
+       USDJPY / USDCNY crosses (which are single pairs, not the index).
+       AUD=X is USD/AUD -- Australia is the world's largest gold producer,
+       so AUD strength (USD/AUD FALLING) is a producer-currency bid WITH a
+       gold long. */
+    let tltTrend = null, uupTrend = null, audusdTrend = null;
     try{
       const free = await Promise.all([
         __yahooLastClose('SI=F', '1mo'),
@@ -905,7 +940,11 @@ async function getGoldMacro(){
         __yahooLastClose('HYG', '1mo'),
         __yahooLastClose('LQD', '1mo'),
         __yahooLastClose('PA=F', '1mo'),
-        __yahooLastClose('GLD', '3mo')
+        __yahooLastClose('GLD', '3mo'),
+        /* hg-v1171: TLT (long bonds), UUP (dollar ETF), AUD=X (producer currency) */
+        __yahooLastClose('TLT', '1mo'),
+        __yahooLastClose('UUP', '1mo'),
+        __yahooLastClose('AUD=X', '1mo')
       ]);
       function chgOf(rows){
         if (!rows || rows.length < 5) return null;
@@ -966,6 +1005,15 @@ async function getGoldMacro(){
         gldVolumeRel = gv;
         gldVolumeState = gv >= 1.5 ? 'HIGH' : (gv <= 0.5 ? 'LOW' : 'NORMAL');
       }
+      /* hg-v1171: TLT, UUP, AUD=X -- each a 20-day trend through the one
+         chgOf band (+/-1% / FLAT inside), null when the leg is dark or the
+         first close is not positive */
+      const tl = chgOf(free[21]);
+      if (tl) tltTrend = tl.trend;
+      const uu = chgOf(free[22]);
+      if (uu) uupTrend = uu.trend;
+      const ad = chgOf(free[23]);
+      if (ad) audusdTrend = ad.trend;
       if (si && gc && si.first > 0 && si.last > 0){
         const thenR = gc.first / si.first, nowR = gc.last / si.last;
         const rchg = (nowR - thenR) / thenR;
@@ -1043,7 +1091,11 @@ async function getGoldMacro(){
       creditTrend: creditTrend,
       goldPalladiumTrend: goldPalladiumTrend,
       gldVolumeRel: gldVolumeRel,
-      gldVolumeState: gldVolumeState
+      gldVolumeState: gldVolumeState,
+      /* hg-v1171 */
+      tltTrend: tltTrend,
+      uupTrend: uupTrend,
+      audusdTrend: audusdTrend
     });
   }catch(e){
     return { dxy: null, dxyRows: null, tnxRows: null,
@@ -1081,5 +1133,6 @@ if (typeof window !== 'undefined'){
   window.getGoldMacroCached = getGoldMacroCached;
   window.hgCorrDailyReturns = __corrDailyReturns;   /* hg-v1163: pure, exported for the guard */
   window.getSilverCandles = getSilverCandles;
+  window.getFreeOHLC = getFreeOHLC;
   window.getUST10YCandles = getUST10YCandles;
 }

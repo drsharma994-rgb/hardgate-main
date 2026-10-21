@@ -209,7 +209,7 @@ function setupFromNative(c, mode, source, forming){
     score: tally,
     maxScore: PINE_GOLD_MAX,
     factors: [{ cat: forming ? 'Forming' : 'Native', ok: true, pts: tally, note: note }],
-    price: fin(+c.entry) ? +c.entry : null,
+    price: (fin(+c.entry) && +c.entry > 0) ? +c.entry : null,
     entry: c.entry,
     stop: c.stop,
     t1: c.t1,
@@ -486,7 +486,9 @@ function hgGpRecord(list, mode, bars){
     var cands = [];
     for (var i = 0; i < list.length; i++){
       var s = list[i];
-      if (!s || !s.dir || !fin(+s.entry) || !fin(+s.stop)) continue;
+      /* hg-v1288: +null===0 passes fin() — add the >0 belt so a null entry/stop
+         doesn't record entry:0/stop:0 into the forward ledger (hg-v948 trap). */
+      if (!s || !s.dir || !fin(+s.entry) || !fin(+s.stop) || +s.entry <= 0 || +s.stop <= 0) continue;
       cands.push({
         mechanic: hgGpKind(s),
         sym: 'XAUUSD',
@@ -503,6 +505,11 @@ function hgGpRecord(list, mode, bars){
            print, for the ledger's read split and funding split */
         reads: (s.freeReads && typeof s.freeReads === 'object') ? s.freeReads : undefined,
         fundingPct: (typeof s.fundingPct === 'number' && isFinite(s.fundingPct)) ? s.fundingPct : undefined,
+        /* hg-v1288: the hg-v955 seam goldscalp/goldswing closed and goldpine
+           missed — the gold-weekend calendar verdict must reach the ledger so
+           weekend-formed rows can be separated out of sample. Three-state:
+           true shut, false open, undefined unknown (hg-v989). */
+        goldShut: (s.goldShut === true || s.goldShut === false) ? s.goldShut : undefined,
         sol: (s.solidity && fin(+s.solidity.score)) ? +s.solidity.score : undefined,
         solTier: (s.solidity && s.solidity.grade) ? s.solidity.grade : undefined
       });
@@ -579,6 +586,46 @@ function collectNativeScalp(bars, ctx, source){
     var rf = setupFromNative(rejected[r], 'scalp', source, true);
     if (rf && fin(+rf.entry) && fin(+rf.stop)) out.push(rf);
   }
+  try{
+    var coreFn = gfn('pineGoldCoreHits');
+    var hits = (coreFn && bars.rows15m) ? (coreFn(bars.rows15m) || []) : [];
+    for (var k = 0; k < hits.length && out.length < 8; k++){
+      var ch = hits[k];
+      if (!ch || !ch.dir || !fin(+ch.entry) || !fin(+ch.stop)) continue;
+      var name = ch.key === 'judas' ? 'London Judas reclaim' : (ch.key === 'pdraid' ? 'Prior-day raid' : 'London opening range');
+      var seen = false;
+      for (var d = 0; d < out.length; d++){
+        if (out[d] && out[d].dir === ch.dir && out[d].nativeStrategy === name) seen = true;
+      }
+      if (seen) continue;
+      var risk = Math.abs(+ch.entry - +ch.stop);
+      if (!(risk > 0)) continue;
+      var built = setupFromNative({
+        dir: ch.dir, entry: +ch.entry, stop: +ch.stop,
+        t1: ch.dir === 'long' ? +ch.entry + risk * 2 : +ch.entry - risk * 2,
+        strategy: name, why: ch.why, tally: 3
+      }, 'scalp', source, false);
+      if (built) out.push(built);
+    }
+  }catch(eCore){}
+  try{
+    var suite = (typeof W !== 'undefined') ? W.HG_GoldSuite : null;
+    var pineHits = (suite && bars.rows15m) ? (suite.pineHits(bars.rows15m) || []) : [];
+    for (var p = 0; p < pineHits.length && out.length < 8; p++){
+      var ph = pineHits[p];
+      if (!ph || !ph.dir || !fin(+ph.entry) || !fin(+ph.stop)) continue;
+      var seenP = false;
+      for (var dp = 0; dp < out.length; dp++){
+        if (out[dp] && out[dp].dir === ph.dir && out[dp].nativeStrategy === ph.name) seenP = true;
+      }
+      if (seenP) continue;
+      var builtP = setupFromNative({
+        dir: ph.dir, entry: +ph.entry, stop: +ph.stop, t1: +ph.target,
+        strategy: ph.name, why: ph.why, tally: 3
+      }, 'scalp', source, false);
+      if (builtP) out.push(builtP);
+    }
+  }catch(ePine){}
   return out;
 }
 
@@ -695,8 +742,20 @@ function gpRecordLayerSetups(rows, mode, source){
   }catch(e){}
   return out;
 }
-/** The rows the MOST PROBABLE pin may choose from: never a record-only one. */
-function gpMayLead(s){ return !!(s && !s.recordOnly); }
+/** The rows the MOST PROBABLE pin may choose from: never a record-only one.
+   hg-v1400: the pin honors BOTH floors the card honors. Before this pack the
+   filter consulted only recordOnly/pineBlock, so a row whose own card
+   withholds the handoff for R:R (gpHandoffBlock) or whose scalp stop is
+   under the measured admission floor (gpAdmissionFloor) could still be
+   crowned MOST PROBABLE — the desk census (PAXG 4h 2025-10..2026-10 and 15m
+   2026-09..2026-10, the desk's own runGoldPineScan walked bar by bar) caught
+   the pin doing exactly that on 206 of 295 swing boards (70%) and 62 of 325
+   scalp boards (19%). Both helpers fail open on absent levels (hg-v989), so
+   a row nothing can measure still leads. Function declarations hoist; the
+   forward references are legal. */
+function gpMayLead(s){
+  return !!(s && !s.recordOnly && !s.pineBlock && !gpHandoffBlock(s) && gpAdmissionFloor(s).ok !== false);
+}
 function gpSgnR(v){ return (isFinite(v) ? ((v >= 0 ? '+' : '\u2212') + Math.abs(v).toFixed(3)) : '?') + 'R'; }
 function gpRecordTwinLine(s){
   if (!s || !s.recordTwin) return '';
@@ -776,7 +835,12 @@ function runGoldPineScan(bars, ctx){
 
   var swing = [];
   var scalp = [];
-  var scanOpts = { macro: macro, spot: spot, levels: levels };
+  /* hg-v1400: `now` rides the scan options into the Pine lanes so the
+     killzone timing points and the London fix lock read the SIGNAL BAR the
+     caller is judging (hg-v952 / hg-v963), not whatever wall clock a re-run
+     happens to have. Absent stays absent: pinegoldmath falls back to
+     Date.now() exactly as before. */
+  var scanOpts = { macro: macro, spot: spot, levels: levels, now: ctx.now };
 
   swing = swing.concat(collectPineUniverse(bars, 'swing', scanOpts, source));
   scalp = scalp.concat(collectPineUniverse(bars, 'scalp', scanOpts, source));
@@ -807,12 +871,37 @@ function runGoldPineScan(bars, ctx){
   /* hg-v1162: every row carries the marks before it is recorded */
   gpMarkReads(swing, 'swing', bars, scanCtx);
   gpMarkReads(scalp, 'scalp', bars, scanCtx);
+  /* hg-v1420: the r2 measured reads (gp:er20ok / gp:d1with) join the reads
+     bag through the SAME marking seam, additively, once per scan per lane —
+     record-only marks, never gates (hg-v966 refused by construction). The
+     bag line in hgGpRecord stays byte-untouched (test-gold-pine-80pct-feeds
+     §6 rides it verbatim); a row the ranker already marked keeps its marks
+     and gains only the new keys (no key collides). */
+  gpR2MarkReads(swing, 'swing', bars);
+  gpR2MarkReads(scalp, 'scalp', bars);
 
   /* v694: stamp solidity, record fires, then reorder so proven-winning
      kinds lead and proven-losing kinds are vetoed/killed. The reordered
      arrays carry a non-enumerable .killedCount for the UI's killed note. */
   hgGpStampSolidity(swing, 'swing', scanCtx);
   hgGpStampSolidity(scalp, 'scalp', scanCtx);
+
+  /* hg-v950: did the bar these setups were read on print while GOLD WAS
+     SHUT? PER MODE, from that mode's own last closed bar — swing evaluates
+     on 4h and scalp on 15m, so one instant for both would mislabel one of
+     them. These setups carry no timestamp of their own, which is why the
+     instant comes from the series rather than from the setup. Null when the
+     calendar or the bars cannot be read, and then nothing changes.
+
+     hg-v1288: moved ABOVE hgGpRecord so the field is populated on the setup
+     object before the record builder reads s.goldShut (hg-v955 seam closed
+     at last — goldscalp/goldswing had this, goldpine was writing undefined). */
+  var gpShutSwing = gpWeekendVerdict(bars.rows4h);
+  var gpShutScalp = gpWeekendVerdict(bars.rows15m);
+  var gpI;
+  for (gpI = 0; gpI < swing.length; gpI++) if (swing[gpI]) swing[gpI].goldShut = gpShutSwing;
+  for (gpI = 0; gpI < scalp.length; gpI++) if (scalp[gpI]) scalp[gpI].goldShut = gpShutScalp;
+
   hgGpRecord(swing, 'swing', bars);
   hgGpRecord(scalp, 'scalp', bars);
   swing = hgGpReorder(swing);
@@ -842,18 +931,6 @@ function runGoldPineScan(bars, ctx){
   var tapeScalp = gpTapeOf(bars && bars.rows15m);
   gpTapeStamp(swing, tapeSwing);
   gpTapeStamp(scalp, tapeScalp);
-
-  /* hg-v950: did the bar these setups were read on print while GOLD WAS
-     SHUT? PER MODE, from that mode's own last closed bar — swing evaluates
-     on 4h and scalp on 15m, so one instant for both would mislabel one of
-     them. These setups carry no timestamp of their own, which is why the
-     instant comes from the series rather than from the setup. Null when the
-     calendar or the bars cannot be read, and then nothing changes. */
-  var gpShutSwing = gpWeekendVerdict(bars.rows4h);
-  var gpShutScalp = gpWeekendVerdict(bars.rows15m);
-  var gpI;
-  for (gpI = 0; gpI < swing.length; gpI++) if (swing[gpI]) swing[gpI].goldShut = gpShutSwing;
-  for (gpI = 0; gpI < scalp.length; gpI++) if (scalp[gpI]) scalp[gpI].goldShut = gpShutScalp;
 
   /* hg-v1005: THE FUNDAMENTAL STACK, at the scan seam every other gold desk
      runs it at. A red-folder blackout refuses fresh formations outright —
@@ -887,6 +964,37 @@ function runGoldPineScan(bars, ctx){
       scalp = sortSetups(scalp);
     }
   }catch(eFS){}
+  try{
+    var blk = gfn('pineGoldBlocksLead'), formHold = gfn('pineGoldFormHold'), htfHold = gfn('pineGoldHtfHold'), stFn = gfn('pineGoldLayerStates'), tape = gfn('pineGoldTapeVeto');
+    function holdPine(list, rows, mode, otherRows){
+      if (!list || !rows || !rows.length) return;
+      var ps = stFn ? stFn(rows) : null;
+      var other = (stFn && otherRows && otherRows.length >= 60) ? stFn(otherRows) : null;
+      for (var z = 0; z < list.length; z++){
+        if (!list[z] || list[z].recordOnly || list[z].demoted) continue;
+        var why = (blk && ps && ps.ok === true) ? blk(ps, list[z].dir) : null;
+        if (!why && formHold && ps && ps.ok === true) why = formHold(ps, list[z].dir);
+        if (!why && htfHold && other && other.ok === true) why = htfHold(other, list[z].dir, mode);
+        if (!why && tape){
+          try{
+            why = tape(rows, list[z].dir, { mode: mode, now: Date.now(), macro: macro, silverRows: W.__hgSilverRows || null });
+          }catch(eT){ why = null; }
+        }
+        if (!why) continue;
+        list[z].pineBlock = why;
+        list[z].demoted = true;
+        list[z].demotedWhy = why;
+      }
+    }
+    holdPine(swing, bars && bars.rows4h, 'swing', bars && bars.rows15m);
+    holdPine(scalp, bars && bars.rows15m, 'scalp', bars && bars.rows4h);
+    if (typeof W.hgGoldInstApply === 'function'){
+      W.hgGoldInstApply(scalp, bars && bars.rows15m, macro, { desk: 'goldpine', horizon: 'scalp' });
+      W.hgGoldInstApply(swing, bars && bars.rows15m, macro, { desk: 'goldpine', horizon: 'swing' });
+    }
+    swing = sortSetups(swing);
+    scalp = sortSetups(scalp);
+  }catch(ePB){}
   return { swing: swing, scalp: scalp, levels: levels, source: source,
            goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
            tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now(),
@@ -1042,6 +1150,159 @@ function gpTapeAligned(list){
   return out;
 }
 
+/* THE HANDOFF FLOOR, WHICH THIS TAB DID NOT HAVE.
+
+   Every other gold desk refuses to hand a setup over below a minimum reward
+   for the risk: GOLD SCALP floors at HG_GOLD_SCALP_MIN_RR, GOLD SWING at
+   HG_GOLD_SWING_MIN_RR, and the shared plan layer states the rule outright —
+   a structural target below the floor REJECTS rather than pushing T1 out to
+   meet it. GOLD PINE emitted SEND TO TRADE PLAN and ADD TO BOOK on every card
+   it drew, with no reward test anywhere in the path.
+
+   What that looks like in practice, caught by reading what this tab actually
+   renders: a PRIMARY pick, stamped SOLIDITY GOOD, carrying both buttons, at
+
+     ENTRY 4050.62 · SL 4069.90 · T1 4045.59     R:R 0.26
+
+   — 19.28 points of risk for 5.03 of reward. SOLIDITY did not miss it; its
+   R:R gate is one of seven and a card can fail it and still score GOOD. A
+   score out of seven is a summary, not a floor, and this tab had no floor.
+
+   So: below the floor the card STAYS — the levels are worth reading and the
+   sibling desks keep demoted cards visible too — but the two action buttons
+   are replaced by a line naming the number, the floor and the shortfall. A
+   setup whose reward cannot be measured at all is left exactly as it was:
+   unmeasured is not a failing grade anywhere else in this desk and it is not
+   one here.
+
+   The floors are read from the globals at call time so this tab tracks the
+   house rather than carrying its own copy of a number that can drift. */
+function gpHandoffFloor(mode){
+  var scalp = fin(+W.HG_GOLD_SCALP_MIN_RR) ? +W.HG_GOLD_SCALP_MIN_RR : 1.2;
+  var swing = fin(+W.HG_GOLD_SWING_MIN_RR) ? +W.HG_GOLD_SWING_MIN_RR : 1.5;
+  return (String(mode) === 'scalp') ? scalp : swing;
+}
+function gpHandoffBlock(s){
+  /* hg-v1288: fin(+null)===true (coerces to 0 and passes isFinite),
+     so a null R:R was reading as 0 and vetoing the handoff — the
+     opposite of 'unmeasured is not a veto'. Require typeof number to
+     let null/undefined fall through to the NaN branch. */
+  var rr = (s && typeof s.rr === 'number' && isFinite(s.rr)) ? s.rr : NaN;
+  if (!isFinite(rr)) return null;            /* unmeasured is not a veto */
+  var floor = gpHandoffFloor(s.mode);
+  if (rr >= floor) return null;
+  return { rr: rr, floor: floor };
+}
+
+/* hg-v1400: THE ADMISSION FLOOR — the first gate on this desk with a
+   measurement behind it, the hg-v1399 TRENDMX pattern ported at this desk's
+   geometry (TRENDMX floors at 2% of entry; this desk's plans are 1.5×ATR
+   gold stops, so the number is this desk's own, measured, not inherited).
+
+   The desk census walked the desk's own runGoldPineScan over PAXGUSDT spot
+   bars (4h 2025-10-15..2026-10-17, 15m 2026-09-01..2026-10-18) and settled
+   every admitted primary at the desk's own horizons (6×4h / 12×15m,
+   stop-first, both-touch=loss). The scalp cohort whose stop is under 0.3%
+   of entry (n=45) resolved −3.994R / −3.809R at 0.20% round trip and
+   −0.529R / −0.440R at 0.02% round trip in the Sep / Oct halves — negative
+   in BOTH halves at BOTH cost models (at a 0.094% median stop the round
+   trip alone is a multiple of the risk), while the kept cohort improved in
+   both halves at XM costs (−0.500→−0.178, −0.350→+0.010; kept n=6 — thin,
+   and this chip says so). The same floor on SWING was measured and REFUSED:
+   the sub-0.6% swing cohort split +0.490R / −0.496R by half — mixed halves
+   fail the hg-v1399 admissibility rule, so swing is never floored here.
+
+   One clause, fail-open on the hg-v989 third state: no mode, no levels or a
+   zero-width plan abstains; a floored row keeps its card, loses the pin
+   (gpMayLead) and the buttons (the actions fork below), prints the why, and
+   is recorded exactly as before — the desk shows its vetoes, and the
+   forward ledger decides out of sample whether the kept cohort pays. */
+function gpAdmissionFloor(s){
+  if (!s || String(s.mode) !== 'scalp') return { ok: true };
+  var e = +s.entry, st = +s.stop;
+  if (!fin(e) || !fin(st) || e <= 0 || e === st) return { ok: true };
+  if (Math.abs(e - st) / e * 100 < 0.3){
+    /* hg-v1420: the pinned prefix is verbatim (the r2 venue audit is appended,
+       never reworded — test-goldpine-admission-floor §1 is a prefix match). */
+    return { ok: false, why: 'stop under 0.3% of entry — the round trip is a multiple of the risk'
+      + '; at XM costs the floor is 15x the round trip, at PAXG taker only 1.15x, and even the kept cohort settled negative at taker (census r2) — the venue, not the floor, is the remaining lever' };
+  }
+  return { ok: true };
+}
+
+/* hg-v1420: THE R2 MEASURED READS — record-only three-state marks, NOT gates.
+   Accuracy round 2 (impl-brief-r2.md, census r2 @ hg-v1417 reproducing the
+   v1401 walk 119/119) measured two candidate vetoes and REFUSED both under
+   the hg-v966 both-halves rule: an ER(20)>=0.30 entry veto (swing: the veto's
+   dropped cohort resolved +0.560R/-0.055R @XM by half — mixed, and the
+   ER-passing cohort was the WORST first-half cohort on the desk; scalp: kept
+   cohort n=1 in the second half) and a 1d close-vs-EMA(150) counter-regime
+   veto (dropped cohort +0.246R/-0.242R @XM by half — mixed). The house shape
+   for a measured-but-refused read is a record-only mark the forward ledger
+   judges out of sample (hg-v1164, the hg-v1417 cf:htfWith precedent), so both
+   reads ride every record in the reads bag and the REPLAY READ SPLIT decides.
+   Nothing anywhere gates on these marks; the suite sweeps the gate seams.
+
+   Third state throughout (hg-v989): a read that never landed is ABSENT, not
+   false. er20ok rides both lanes on the signal timeframe (4h swing / 15m
+   scalp) through the desk's own pineGoldEfficiency with the measured len 20;
+   d1with rides swing rows only (candidate 5 was measured swing-only) and
+   needs the desk's own ema plus 160 closed daily bars. */
+function gpR2Marks(s, bars){
+  var out = {};
+  try{
+    var mode = s && s.mode;
+    var sig = (String(mode) === 'swing') ? (bars && bars.rows4h) : (bars && bars.rows15m);
+    var efFn = gfn('pineGoldEfficiency');
+    if (efFn && sig && sig.length >= 27){
+      var ef = efFn(sig, { len: 20 });
+      if (ef && isFinite(+ef.er)) out['gp:er20ok'] = (+ef.er >= 0.30);
+    }
+  }catch(eGpEr){}
+  try{
+    if (s && String(s.mode) === 'swing' && (s.dir === 'long' || s.dir === 'short')){
+      var d = bars && bars.rows1d, emaFn = gfn('ema');
+      if (emaFn && d && d.length >= 160){
+        var closes = [];
+        for (var i = 0; i < d.length; i++) closes.push(+d[i].c);
+        var e150 = emaFn(closes, 150);
+        var last = (e150 && e150.length) ? +e150[e150.length - 1] : NaN;
+        var cl = +d[d.length - 1].c;
+        if (isFinite(last) && isFinite(cl) && cl > 0){
+          var above = cl > last;
+          out['gp:d1with'] = (s.dir === 'long') ? above : !above;
+        }
+      }
+    }
+  }catch(eGpD1){}
+  return out;
+}
+
+/* hg-v1420: the r2 marking seam — stamps the gp:er20ok / gp:d1with marks
+   into each row's reads bag, beside gpMarkReads (one home for read marks,
+   hg-v949), additively (the hg-v1288 goldShut precedent: a new key, never a
+   rewritten line). A row without a bag gets one only when a mark landed;
+   a row the ranker already marked keeps every mark it has. Marks only:
+   score, tier, sort order, the leader and every gate are untouched. */
+function gpR2MarkReads(list, mode, bars){
+  try{
+    if (!Array.isArray(list) || !list.length) return 0;
+    var marked = 0;
+    for (var i = 0; i < list.length; i++){
+      var s = list[i];
+      if (!s || (s.dir !== 'long' && s.dir !== 'short')) continue;
+      var r2 = gpR2Marks(s, bars), keys = Object.keys(r2);
+      if (!keys.length) continue;
+      var bag = (s.freeReads && typeof s.freeReads === 'object') ? s.freeReads : {};
+      for (var k = 0; k < keys.length; k++) bag[keys[k]] = r2[keys[k]];
+      s.freeReads = bag;
+      marked++;
+    }
+    return marked;
+  }catch(eGpR2){ return 0; }
+}
+
+
 function cardHTML(s, rank){
   var tier = (s.tier === 'forming' || s.isRecent) ? 'forming'
     : ((s.tier === 'aligned' || s.isContext) ? 'near' : 'clean');
@@ -1094,51 +1355,15 @@ function cardHTML(s, rank){
   var solChip = (s.solidity && typeof W.hgSolidityChipHtml === 'function')
     ? W.hgSolidityChipHtml(s.solidity) : '';
   /* v728: SMC context chip — '' when smc-setups.js is absent or s.smc unset. */
-/* THE HANDOFF FLOOR, WHICH THIS TAB DID NOT HAVE.
-
-   Every other gold desk refuses to hand a setup over below a minimum reward
-   for the risk: GOLD SCALP floors at HG_GOLD_SCALP_MIN_RR, GOLD SWING at
-   HG_GOLD_SWING_MIN_RR, and the shared plan layer states the rule outright —
-   a structural target below the floor REJECTS rather than pushing T1 out to
-   meet it. GOLD PINE emitted SEND TO TRADE PLAN and ADD TO BOOK on every card
-   it drew, with no reward test anywhere in the path.
-
-   What that looks like in practice, caught by reading what this tab actually
-   renders: a PRIMARY pick, stamped SOLIDITY GOOD, carrying both buttons, at
-
-     ENTRY 4050.62 · SL 4069.90 · T1 4045.59     R:R 0.26
-
-   — 19.28 points of risk for 5.03 of reward. SOLIDITY did not miss it; its
-   R:R gate is one of seven and a card can fail it and still score GOOD. A
-   score out of seven is a summary, not a floor, and this tab had no floor.
-
-   So: below the floor the card STAYS — the levels are worth reading and the
-   sibling desks keep demoted cards visible too — but the two action buttons
-   are replaced by a line naming the number, the floor and the shortfall. A
-   setup whose reward cannot be measured at all is left exactly as it was:
-   unmeasured is not a failing grade anywhere else in this desk and it is not
-   one here.
-
-   The floors are read from the globals at call time so this tab tracks the
-   house rather than carrying its own copy of a number that can drift. */
-function gpHandoffFloor(mode){
-  var scalp = fin(+W.HG_GOLD_SCALP_MIN_RR) ? +W.HG_GOLD_SCALP_MIN_RR : 1.2;
-  var swing = fin(+W.HG_GOLD_SWING_MIN_RR) ? +W.HG_GOLD_SWING_MIN_RR : 1.5;
-  return (String(mode) === 'scalp') ? scalp : swing;
-}
-function gpHandoffBlock(s){
-  var rr = fin(+s.rr) ? +s.rr : NaN;
-  if (!isFinite(rr)) return null;            /* unmeasured is not a veto */
-  var floor = gpHandoffFloor(s.mode);
-  if (rr >= floor) return null;
-  return { rr: rr, floor: floor };
-}
-
   var smcChip = '';
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(eSmcC){ smcChip = ''; }
   var block = gpHandoffBlock(s);
+  var adm = gpAdmissionFloor(s);   /* hg-v1400: the measured floor, beside the R:R floor */
   var actions = s.recordOnly
     ? gpRecordNoteHtml(s)   /* hg-v1164: record-only withholds both handoffs */
+    : (adm.ok === false)
+    ? ('<div class="note warn" style="margin-top:8px">NO TRADE HANDOFF — ADMISSION FLOOR: '
+       + esc(adm.why) + '. The levels are shown to be read, not sent.</div>')
     : block
     ? ('<div class="note warn" style="margin-top:8px">NO TRADE HANDOFF — R:R '
        + fmtF(block.rr, 2) + ' is below this desk\u2019s ' + fmtF(block.floor, 2)
@@ -1203,24 +1428,29 @@ var __goldPineTab = { busy: false, hasRun: false, run: null, __timer: null, __mo
 
 /* v693: auto-refresh cadence for GOLD PINE, mirroring the v691 pattern
    already proven on NEW GOLD. Fetches gold candles + re-scores swing +
-   scalp every 5 minutes while the tab is mounted so setups stay live
+   scalp every 2 minutes while the tab is mounted so setups stay live
    without needing a manual RUN GOLD PINE SCAN click. Pattern mirrors
    omnigold's __og.__uniTimer (mount-time only, never module load) so
    Node test processes never hang on a stray interval. */
-var GOLDPINE_AUTO_REFRESH_MS = 5 * 60 * 1000;
+var GOLDPINE_AUTO_REFRESH_MS = 2 * 60 * 1000;
 
 function mount(el){
   el.innerHTML =
-    '<div class="panel">'
+    '<style>.gp-board{display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:14px;align-items:start}'
+    + '.gp-mp-col{position:sticky;top:78px}.gp-eye{font-size:10px;letter-spacing:.22em;font-weight:800;color:#A67C12;margin:0 0 8px}'
+    + '@media(max-width:980px){.gp-board{grid-template-columns:1fr}.gp-mp-col{position:static}}</style>'
+    + '<div class="panel">'
     + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
     + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
     + 'plus native GOLD SWING/SCALP candidates. UI shows the <b>top ' + TOP_SETUPS + ' highest-probability formations</b> per section '
     + '(NEW/RECENT/FORMING weighted). '
     + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
+    + 'A scalp primary does not pass in premium or discount without a sweep, during the London fix (London local time), or when it fades an Asian range that already expanded. '
+    + 'A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. '
     + '<b>ALIGNED</b> = per-layer or watch context. <b>NATIVE</b> = goldind strategies.</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="goldPineRun">RUN GOLD PINE SCAN</button>'
-    + '<span class="note" id="goldPineStat">Fetches XAU/PAXG candles then scores swing + scalp.</span>'
+    + '<span class="note" id="goldPineStat">Fetches XAU/PAXG candles then scores swing + scalp. Refreshes every 2 minutes while this tab is open.</span>'
     + '</div>'
     + '<div class="prog" id="goldPineProg"><i></i></div>'
     + '<div id="goldPineLevels" style="margin-top:8px"></div>'
@@ -1275,8 +1505,17 @@ function mount(el){
         return 'failed';
       }
       if (stat) stat.textContent = 'Scoring Pine + gold confluence…';
+      try{
+        var gsv = gfn('getSilverCandles');
+        if (gsv){
+          var silverPack = await gsv('15m', 120);
+          if (silverPack && silverPack.rows && silverPack.rows.length) W.__hgSilverRows = silverPack.rows;
+        }
+      }catch(eSv){}
+      /* hg-v1400: t0 is the fetch-time clock — the instant this scan's bars
+         were judged at — so the session reads inside score the signal bar. */
       var result = runGoldPineScan(bars, { macro: macro, fng: feeds.fng, fundingRate: feeds.fundingRate,
-                                           perpNative: feeds.perpNative, cot: feeds.cot });
+                                           perpNative: feeds.perpNative, cot: feeds.cot, now: t0 });
       setProg(0.9);
       /* v694: the lists are already reordered by solidity in
          runGoldPineScan, so slice directly instead of re-sorting via
@@ -1340,6 +1579,15 @@ function mount(el){
          ahead of everything drawn from it. */
       /* hg-v913: this desk reads the records it writes. */
       var tapeNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldpine') : '');
+      /* hg-v1420: the ledger's read split for the r2 marks (gp:er20ok /
+         gp:d1with). Display only — the shared renderer paints NOTHING until
+         settled records carry a mark (hg-forward.js:3442), and nothing here
+         or anywhere gates on the split. */
+      try{
+        if (typeof W.hgFwdReadSplitHtml === 'function'){
+          tapeNote += (W.hgFwdReadSplitHtml('GOLDPINE:swing') || '') + (W.hgFwdReadSplitHtml('GOLDPINE:scalp') || '');
+        }
+      }catch(eGpSplit){}
       if (typeof W.hgGoldTapeNotes === 'function'){
         [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
           var rws = bars && bars[L[0]];
@@ -1360,6 +1608,11 @@ function mount(el){
           + 'stack\'s full read.</div>';
       }
       var html = fundNote + gpFundPanelHtml() + tapeNote + heldNote + killedNote + recordNote
+        + '<div class="gp-board"><aside class="gp-mp-col" aria-label="Most probable setup">'
+        + (mpList.length
+          ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1))
+          : ('<div class="gp-eye">NO LEAD</div><div class="note">Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.</div>'))
+        + '</aside><div class="gp-rest">'
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: result.swing.length })
@@ -1367,7 +1620,8 @@ function mount(el){
           'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
           { total: result.scalp.length })
         + recordSection
-        + gpCatalogHtml(result, bars);   /* hg-v1162: one census */
+        + gpCatalogHtml(result, bars)
+        + '</div></div>';
 
       if (out) out.innerHTML = html;
       try { if (typeof W.hgMpPin === 'function') W.hgMpPin('goldpine', mpList, null, out); } catch (eMp) {}
@@ -1395,14 +1649,14 @@ function mount(el){
     if (!__goldPineTab.hasRun && !__goldPineTab.busy) runScan();
   }, 150);
 
-  /* v693: auto-refresh every 5 minutes while the tab is mounted.
+  /* v693: auto-refresh every 2 minutes while the tab is mounted.
      Timer is stored on module state so a subsequent mount (tab close +
      reopen, hot reload) clears the prior timer instead of stacking.
      The interval calls the exact same runScan the button uses, so a
      manual click and an auto-tick are indistinguishable except for
      origin. Also self-heals: if runScan is busy, the tick becomes a
      no-op via __goldPineTab.busy inside runScan; the next tick tries
-     again 5 minutes later. And if the mount element leaves the DOM
+     again 2 minutes later. And if the mount element leaves the DOM
      (user unmounted the tab), the timer clears itself and both fields
      null out. */
   try {
@@ -1469,6 +1723,15 @@ W.goldPineState = function(){
    scan itself needs pinegoldmath, and a guard that cannot reach the rule
    is a guard that proves nothing. */
 W.gpWeekendVerdict = gpWeekendVerdict;
+/* hg-v1400: the floor and the lead predicate, exported so the pin suite can
+   drive them as units — a guard that cannot reach the rule proves nothing. */
+W.gpAdmissionFloor = gpAdmissionFloor;
+W.gpMayLead = gpMayLead;
+/* hg-v1420: the r2 record-mark helper and seam, exported so the pin suite
+   can drive them as units — a guard that cannot reach the rule proves
+   nothing. */
+W.gpR2Marks = gpR2Marks;
+W.gpR2MarkReads = gpR2MarkReads;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh,
                  fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml,

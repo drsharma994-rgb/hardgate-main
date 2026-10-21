@@ -1,13 +1,23 @@
 {
  "meta": {
+<<<<<<< HEAD
   "generated": "2026-10-21T06:13:38.672Z",
+=======
+  "generated": "2026-10-20T01:00:22.482Z",
+>>>>>>> origin/main
   "mode": "full",
   "symbol": "BTCUSDT",
   "bars": {
    "m15": 5999,
+<<<<<<< HEAD
    "h1": 1909
   },
   "span": "2026-08-19 .. 2026-10-21",
+=======
+   "h1": 1908
+  },
+  "span": "2026-08-18 .. 2026-10-20",
+>>>>>>> origin/main
   "window": {
    "m15": 320,
    "h1": 400
@@ -38,7 +48,11 @@
   "unpriced": 0,
   "limitations": [
    "MARKET FILL AT THE SIGNAL CLOSE: the walk fills at the signal close, ignoring the next-bar open gap; BTC 15m gaps are typically small but can be large on liquidation cascades",
+<<<<<<< HEAD
    "SAME-BAR FILL->TARGET OPTIMISM: 0 of 1 OOS wins settle on the fill bar; both-touch bars ARE losses (0)",
+=======
+   "SAME-BAR FILL->TARGET OPTIMISM: 0 of 2 OOS wins settle on the fill bar; both-touch bars ARE losses (0)",
+>>>>>>> origin/main
    "PORTFOLIO STATS NOT ATTAINABLE: one live trade per side, unlimited overlap between sides; read per-trade expectancy only",
    "THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of BTC history — a different quarter can measure differently; the grid rows show how sensitive the choice is",
    "BTCUSDT spot on Binance: 0.10% maker+taker each side = 0.20% round-trip; actual fees depend on VIP tier and BNB holdings",
@@ -49,6 +63,7 @@
   {
    "minPct": 0.55,
    "regimeGate": true,
+<<<<<<< HEAD
    "fired": 4931,
    "merged": 4551,
    "all": {
@@ -80,11 +95,45 @@
     "sumR_net": -17.83,
     "bothTouch": 0,
     "timeouts": 102
+=======
+   "fired": 4939,
+   "merged": 4555,
+   "all": {
+    "n": 382,
+    "unfilled": 0,
+    "winRate": 0.042,
+    "avgR_gross": 0.014,
+    "avgR_net": -0.111,
+    "sumR_net": -42.39,
+    "bothTouch": 0,
+    "timeouts": 328
+   },
+   "ins": {
+    "n": 268,
+    "unfilled": 0,
+    "winRate": 0.052,
+    "avgR_gross": 0.03,
+    "avgR_net": -0.095,
+    "sumR_net": -25.57,
+    "bothTouch": 0,
+    "timeouts": 228
+   },
+   "oos": {
+    "n": 114,
+    "unfilled": 0,
+    "winRate": 0.018,
+    "avgR_gross": -0.023,
+    "avgR_net": -0.148,
+    "sumR_net": -16.82,
+    "bothTouch": 0,
+    "timeouts": 100
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.6,
    "regimeGate": true,
+<<<<<<< HEAD
    "fired": 4540,
    "merged": 4179,
    "all": {
@@ -104,23 +153,54 @@
     "avgR_gross": 0.004,
     "avgR_net": -0.121,
     "sumR_net": -30.83,
+=======
+   "fired": 4546,
+   "merged": 4180,
+   "all": {
+    "n": 364,
+    "unfilled": 0,
+    "winRate": 0.044,
+    "avgR_gross": 0.017,
+    "avgR_net": -0.108,
+    "sumR_net": -39.32,
+    "bothTouch": 0,
+    "timeouts": 313
+   },
+   "ins": {
+    "n": 259,
+    "unfilled": 0,
+    "winRate": 0.054,
+    "avgR_gross": 0.02,
+    "avgR_net": -0.105,
+    "sumR_net": -27.09,
+>>>>>>> origin/main
     "bothTouch": 0,
     "timeouts": 220
    },
    "oos": {
     "n": 105,
     "unfilled": 0,
+<<<<<<< HEAD
     "winRate": 0,
     "avgR_gross": -0.016,
     "avgR_net": -0.141,
     "sumR_net": -14.82,
     "bothTouch": 0,
     "timeouts": 96
+=======
+    "winRate": 0.019,
+    "avgR_gross": 0.008,
+    "avgR_net": -0.117,
+    "sumR_net": -12.23,
+    "bothTouch": 0,
+    "timeouts": 93
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.65,
    "regimeGate": true,
+<<<<<<< HEAD
    "fired": 4103,
    "merged": 3750,
    "all": {
@@ -152,11 +232,45 @@
     "sumR_net": -14.78,
     "bothTouch": 0,
     "timeouts": 94
+=======
+   "fired": 4104,
+   "merged": 3747,
+   "all": {
+    "n": 355,
+    "unfilled": 0,
+    "winRate": 0.051,
+    "avgR_gross": -0.006,
+    "avgR_net": -0.131,
+    "sumR_net": -46.38,
+    "bothTouch": 0,
+    "timeouts": 300
+   },
+   "ins": {
+    "n": 253,
+    "unfilled": 0,
+    "winRate": 0.063,
+    "avgR_gross": -0.008,
+    "avgR_net": -0.133,
+    "sumR_net": -33.63,
+    "bothTouch": 0,
+    "timeouts": 208
+   },
+   "oos": {
+    "n": 102,
+    "unfilled": 0,
+    "winRate": 0.02,
+    "avgR_gross": 0,
+    "avgR_net": -0.125,
+    "sumR_net": -12.75,
+    "bothTouch": 0,
+    "timeouts": 92
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.7,
    "regimeGate": true,
+<<<<<<< HEAD
    "fired": 3546,
    "merged": 3219,
    "all": {
@@ -188,11 +302,45 @@
     "sumR_net": -13.39,
     "bothTouch": 0,
     "timeouts": 82
+=======
+   "fired": 3552,
+   "merged": 3221,
+   "all": {
+    "n": 329,
+    "unfilled": 0,
+    "winRate": 0.055,
+    "avgR_gross": 0.006,
+    "avgR_net": -0.119,
+    "sumR_net": -39.18,
+    "bothTouch": 0,
+    "timeouts": 271
+   },
+   "ins": {
+    "n": 237,
+    "unfilled": 0,
+    "winRate": 0.068,
+    "avgR_gross": 0.008,
+    "avgR_net": -0.117,
+    "sumR_net": -27.62,
+    "bothTouch": 0,
+    "timeouts": 191
+   },
+   "oos": {
+    "n": 92,
+    "unfilled": 0,
+    "winRate": 0.022,
+    "avgR_gross": -0.001,
+    "avgR_net": -0.126,
+    "sumR_net": -11.56,
+    "bothTouch": 0,
+    "timeouts": 80
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.75,
    "regimeGate": true,
+<<<<<<< HEAD
    "fired": 2979,
    "merged": 2667,
    "all": {
@@ -224,11 +372,45 @@
     "sumR_net": -13.58,
     "bothTouch": 0,
     "timeouts": 79
+=======
+   "fired": 2989,
+   "merged": 2673,
+   "all": {
+    "n": 314,
+    "unfilled": 0,
+    "winRate": 0.057,
+    "avgR_gross": 0.003,
+    "avgR_net": -0.122,
+    "sumR_net": -38.18,
+    "bothTouch": 0,
+    "timeouts": 261
+   },
+   "ins": {
+    "n": 224,
+    "unfilled": 0,
+    "winRate": 0.071,
+    "avgR_gross": 0.008,
+    "avgR_net": -0.117,
+    "sumR_net": -26.21,
+    "bothTouch": 0,
+    "timeouts": 184
+   },
+   "oos": {
+    "n": 90,
+    "unfilled": 0,
+    "winRate": 0.022,
+    "avgR_gross": -0.008,
+    "avgR_net": -0.133,
+    "sumR_net": -11.98,
+    "bothTouch": 0,
+    "timeouts": 77
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.8,
    "regimeGate": true,
+<<<<<<< HEAD
    "fired": 2286,
    "merged": 2015,
    "all": {
@@ -250,21 +432,54 @@
     "sumR_net": -21,
     "bothTouch": 0,
     "timeouts": 168
+=======
+   "fired": 2305,
+   "merged": 2031,
+   "all": {
+    "n": 274,
+    "unfilled": 0,
+    "winRate": 0.062,
+    "avgR_gross": 0.038,
+    "avgR_net": -0.087,
+    "sumR_net": -23.89,
+    "bothTouch": 0,
+    "timeouts": 236
+   },
+   "ins": {
+    "n": 197,
+    "unfilled": 0,
+    "winRate": 0.076,
+    "avgR_gross": 0.048,
+    "avgR_net": -0.077,
+    "sumR_net": -15.16,
+    "bothTouch": 0,
+    "timeouts": 167
+>>>>>>> origin/main
    },
    "oos": {
     "n": 77,
     "unfilled": 0,
+<<<<<<< HEAD
     "winRate": 0.013,
     "avgR_gross": 0,
     "avgR_net": -0.125,
     "sumR_net": -9.66,
     "bothTouch": 0,
     "timeouts": 71
+=======
+    "winRate": 0.026,
+    "avgR_gross": 0.012,
+    "avgR_net": -0.113,
+    "sumR_net": -8.73,
+    "bothTouch": 0,
+    "timeouts": 69
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.85,
    "regimeGate": true,
+<<<<<<< HEAD
    "fired": 1535,
    "merged": 1303,
    "all": {
@@ -296,12 +511,46 @@
     "sumR_net": -11.04,
     "bothTouch": 0,
     "timeouts": 64
+=======
+   "fired": 1544,
+   "merged": 1311,
+   "all": {
+    "n": 232,
+    "unfilled": 0,
+    "winRate": 0.056,
+    "avgR_gross": 0.021,
+    "avgR_net": -0.104,
+    "sumR_net": -24.04,
+    "bothTouch": 0,
+    "timeouts": 201
+   },
+   "ins": {
+    "n": 165,
+    "unfilled": 0,
+    "winRate": 0.073,
+    "avgR_gross": 0.037,
+    "avgR_net": -0.088,
+    "sumR_net": -14.55,
+    "bothTouch": 0,
+    "timeouts": 140
+   },
+   "oos": {
+    "n": 67,
+    "unfilled": 0,
+    "winRate": 0.015,
+    "avgR_gross": -0.017,
+    "avgR_net": -0.142,
+    "sumR_net": -9.49,
+    "bothTouch": 0,
+    "timeouts": 61
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.55,
    "regimeGate": false,
    "fired": 5340,
+<<<<<<< HEAD
    "merged": 4951,
    "all": {
     "n": 387,
@@ -332,11 +581,44 @@
     "sumR_net": -19.3,
     "bothTouch": 0,
     "timeouts": 104
+=======
+   "merged": 4948,
+   "all": {
+    "n": 390,
+    "unfilled": 0,
+    "winRate": 0.038,
+    "avgR_gross": 0.005,
+    "avgR_net": -0.12,
+    "sumR_net": -46.72,
+    "bothTouch": 0,
+    "timeouts": 336
+   },
+   "ins": {
+    "n": 275,
+    "unfilled": 0,
+    "winRate": 0.047,
+    "avgR_gross": 0.017,
+    "avgR_net": -0.108,
+    "sumR_net": -29.74,
+    "bothTouch": 0,
+    "timeouts": 234
+   },
+   "oos": {
+    "n": 115,
+    "unfilled": 0,
+    "winRate": 0.017,
+    "avgR_gross": -0.023,
+    "avgR_net": -0.148,
+    "sumR_net": -16.97,
+    "bothTouch": 0,
+    "timeouts": 102
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.6,
    "regimeGate": false,
+<<<<<<< HEAD
    "fired": 4909,
    "merged": 4537,
    "all": {
@@ -356,10 +638,32 @@
     "avgR_gross": -0.004,
     "avgR_net": -0.129,
     "sumR_net": -33.87,
+=======
+   "fired": 4910,
+   "merged": 4535,
+   "all": {
+    "n": 373,
+    "unfilled": 0,
+    "winRate": 0.04,
+    "avgR_gross": 0.007,
+    "avgR_net": -0.118,
+    "sumR_net": -43.92,
+    "bothTouch": 0,
+    "timeouts": 323
+   },
+   "ins": {
+    "n": 266,
+    "unfilled": 0,
+    "winRate": 0.049,
+    "avgR_gross": 0.012,
+    "avgR_net": -0.113,
+    "sumR_net": -30.13,
+>>>>>>> origin/main
     "bothTouch": 0,
     "timeouts": 227
    },
    "oos": {
+<<<<<<< HEAD
     "n": 108,
     "unfilled": 0,
     "winRate": 0,
@@ -368,11 +672,22 @@
     "sumR_net": -17.5,
     "bothTouch": 0,
     "timeouts": 99
+=======
+    "n": 107,
+    "unfilled": 0,
+    "winRate": 0.019,
+    "avgR_gross": -0.004,
+    "avgR_net": -0.129,
+    "sumR_net": -13.79,
+    "bothTouch": 0,
+    "timeouts": 96
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.65,
    "regimeGate": false,
+<<<<<<< HEAD
    "fired": 4416,
    "merged": 4056,
    "all": {
@@ -394,21 +709,54 @@
     "sumR_net": -37.13,
     "bothTouch": 0,
     "timeouts": 214
+=======
+   "fired": 4415,
+   "merged": 4053,
+   "all": {
+    "n": 360,
+    "unfilled": 0,
+    "winRate": 0.05,
+    "avgR_gross": -0.006,
+    "avgR_net": -0.131,
+    "sumR_net": -47.33,
+    "bothTouch": 0,
+    "timeouts": 306
+   },
+   "ins": {
+    "n": 256,
+    "unfilled": 0,
+    "winRate": 0.063,
+    "avgR_gross": -0.007,
+    "avgR_net": -0.132,
+    "sumR_net": -33.75,
+    "bothTouch": 0,
+    "timeouts": 212
+>>>>>>> origin/main
    },
    "oos": {
     "n": 104,
     "unfilled": 0,
+<<<<<<< HEAD
     "winRate": 0,
     "avgR_gross": -0.036,
     "avgR_net": -0.161,
     "sumR_net": -16.78,
     "bothTouch": 0,
     "timeouts": 96
+=======
+    "winRate": 0.019,
+    "avgR_gross": -0.006,
+    "avgR_net": -0.131,
+    "sumR_net": -13.58,
+    "bothTouch": 0,
+    "timeouts": 94
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.7,
    "regimeGate": false,
+<<<<<<< HEAD
    "fired": 3811,
    "merged": 3479,
    "all": {
@@ -430,21 +778,54 @@
     "sumR_net": -31.15,
     "bothTouch": 0,
     "timeouts": 197
+=======
+   "fired": 3814,
+   "merged": 3479,
+   "all": {
+    "n": 333,
+    "unfilled": 0,
+    "winRate": 0.054,
+    "avgR_gross": 0.009,
+    "avgR_net": -0.116,
+    "sumR_net": -38.72,
+    "bothTouch": 0,
+    "timeouts": 277
+   },
+   "ins": {
+    "n": 239,
+    "unfilled": 0,
+    "winRate": 0.067,
+    "avgR_gross": 0.013,
+    "avgR_net": -0.112,
+    "sumR_net": -26.74,
+    "bothTouch": 0,
+    "timeouts": 195
+>>>>>>> origin/main
    },
    "oos": {
     "n": 94,
     "unfilled": 0,
+<<<<<<< HEAD
     "winRate": 0,
     "avgR_gross": -0.035,
     "avgR_net": -0.16,
     "sumR_net": -15.08,
     "bothTouch": 0,
     "timeouts": 84
+=======
+    "winRate": 0.021,
+    "avgR_gross": -0.002,
+    "avgR_net": -0.127,
+    "sumR_net": -11.98,
+    "bothTouch": 0,
+    "timeouts": 82
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.75,
    "regimeGate": false,
+<<<<<<< HEAD
    "fired": 3196,
    "merged": 2878,
    "all": {
@@ -466,21 +847,54 @@
     "sumR_net": -35.8,
     "bothTouch": 0,
     "timeouts": 186
+=======
+   "fired": 3203,
+   "merged": 2883,
+   "all": {
+    "n": 318,
+    "unfilled": 0,
+    "winRate": 0.057,
+    "avgR_gross": -0.005,
+    "avgR_net": -0.13,
+    "sumR_net": -41.33,
+    "bothTouch": 0,
+    "timeouts": 263
+   },
+   "ins": {
+    "n": 227,
+    "unfilled": 0,
+    "winRate": 0.07,
+    "avgR_gross": -0.003,
+    "avgR_net": -0.128,
+    "sumR_net": -29.11,
+    "bothTouch": 0,
+    "timeouts": 185
+>>>>>>> origin/main
    },
    "oos": {
     "n": 91,
     "unfilled": 0,
+<<<<<<< HEAD
     "winRate": 0,
     "avgR_gross": -0.043,
     "avgR_net": -0.168,
     "sumR_net": -15.24,
     "bothTouch": 0,
     "timeouts": 80
+=======
+    "winRate": 0.022,
+    "avgR_gross": -0.009,
+    "avgR_net": -0.134,
+    "sumR_net": -12.21,
+    "bothTouch": 0,
+    "timeouts": 78
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.8,
    "regimeGate": false,
+<<<<<<< HEAD
    "fired": 2433,
    "merged": 2156,
    "all": {
@@ -512,11 +926,45 @@
     "sumR_net": -10.6,
     "bothTouch": 0,
     "timeouts": 71
+=======
+   "fired": 2450,
+   "merged": 2171,
+   "all": {
+    "n": 279,
+    "unfilled": 0,
+    "winRate": 0.061,
+    "avgR_gross": 0.026,
+    "avgR_net": -0.099,
+    "sumR_net": -27.5,
+    "bothTouch": 0,
+    "timeouts": 237
+   },
+   "ins": {
+    "n": 202,
+    "unfilled": 0,
+    "winRate": 0.074,
+    "avgR_gross": 0.031,
+    "avgR_net": -0.094,
+    "sumR_net": -18.96,
+    "bothTouch": 0,
+    "timeouts": 168
+   },
+   "oos": {
+    "n": 77,
+    "unfilled": 0,
+    "winRate": 0.026,
+    "avgR_gross": 0.014,
+    "avgR_net": -0.111,
+    "sumR_net": -8.55,
+    "bothTouch": 0,
+    "timeouts": 69
+>>>>>>> origin/main
    }
   },
   {
    "minPct": 0.85,
    "regimeGate": false,
+<<<<<<< HEAD
    "fired": 1623,
    "merged": 1387,
    "all": {
@@ -548,6 +996,39 @@
     "sumR_net": -10.53,
     "bothTouch": 0,
     "timeouts": 64
+=======
+   "fired": 1630,
+   "merged": 1393,
+   "all": {
+    "n": 236,
+    "unfilled": 0,
+    "winRate": 0.064,
+    "avgR_gross": 0.025,
+    "avgR_net": -0.1,
+    "sumR_net": -23.68,
+    "bothTouch": 0,
+    "timeouts": 201
+   },
+   "ins": {
+    "n": 169,
+    "unfilled": 0,
+    "winRate": 0.083,
+    "avgR_gross": 0.038,
+    "avgR_net": -0.087,
+    "sumR_net": -14.71,
+    "bothTouch": 0,
+    "timeouts": 140
+   },
+   "oos": {
+    "n": 67,
+    "unfilled": 0,
+    "winRate": 0.015,
+    "avgR_gross": -0.009,
+    "avgR_net": -0.134,
+    "sumR_net": -8.97,
+    "bothTouch": 0,
+    "timeouts": 61
+>>>>>>> origin/main
    }
   }
  ],
@@ -559,6 +1040,7 @@
  "oosCohorts": {
   "byDirection": {
    "long": {
+<<<<<<< HEAD
     "n": 39,
     "unfilled": 0,
     "winRate": 0,
@@ -577,6 +1059,26 @@
     "sumR_net": -3.3,
     "bothTouch": 0,
     "timeouts": 35
+=======
+    "n": 40,
+    "unfilled": 0,
+    "winRate": 0.025,
+    "avgR_gross": -0.036,
+    "avgR_net": -0.161,
+    "sumR_net": -6.44,
+    "bothTouch": 0,
+    "timeouts": 35
+   },
+   "short": {
+    "n": 37,
+    "unfilled": 0,
+    "winRate": 0.027,
+    "avgR_gross": 0.063,
+    "avgR_net": -0.062,
+    "sumR_net": -2.29,
+    "bothTouch": 0,
+    "timeouts": 34
+>>>>>>> origin/main
    }
   },
   "bySession": {
@@ -584,9 +1086,15 @@
     "n": 20,
     "unfilled": 0,
     "winRate": 0,
+<<<<<<< HEAD
     "avgR_gross": -0.078,
     "avgR_net": -0.203,
     "sumR_net": -4.05,
+=======
+    "avgR_gross": -0.077,
+    "avgR_net": -0.202,
+    "sumR_net": -4.04,
+>>>>>>> origin/main
     "bothTouch": 0,
     "timeouts": 20
    },
@@ -594,35 +1102,59 @@
     "n": 17,
     "unfilled": 0,
     "winRate": 0.059,
+<<<<<<< HEAD
     "avgR_gross": 0.263,
     "avgR_net": 0.138,
     "sumR_net": 2.35,
     "bothTouch": 0,
     "timeouts": 16
+=======
+    "avgR_gross": 0.199,
+    "avgR_net": 0.074,
+    "sumR_net": 1.26,
+    "bothTouch": 0,
+    "timeouts": 15
+>>>>>>> origin/main
    },
    "NY-LATE(17-24)": {
     "n": 21,
     "unfilled": 0,
+<<<<<<< HEAD
     "winRate": 0,
     "avgR_gross": -0.071,
     "avgR_net": -0.196,
     "sumR_net": -4.12,
     "bothTouch": 0,
     "timeouts": 19
+=======
+    "winRate": 0.048,
+    "avgR_gross": -0.002,
+    "avgR_net": -0.127,
+    "sumR_net": -2.66,
+    "bothTouch": 0,
+    "timeouts": 18
+>>>>>>> origin/main
    },
    "NY-OVERLAP(12-17)": {
     "n": 19,
     "unfilled": 0,
     "winRate": 0,
+<<<<<<< HEAD
     "avgR_gross": -0.077,
     "avgR_net": -0.202,
     "sumR_net": -3.83,
+=======
+    "avgR_gross": -0.049,
+    "avgR_net": -0.174,
+    "sumR_net": -3.3,
+>>>>>>> origin/main
     "bothTouch": 0,
     "timeouts": 16
    }
   },
   "byPctBucket": {
    "75-85%": {
+<<<<<<< HEAD
     "n": 41,
     "unfilled": 0,
     "winRate": 0.024,
@@ -641,10 +1173,31 @@
     "sumR_net": -8,
     "bothTouch": 0,
     "timeouts": 32
+=======
+    "n": 43,
+    "unfilled": 0,
+    "winRate": 0.047,
+    "avgR_gross": 0.113,
+    "avgR_net": -0.012,
+    "sumR_net": -0.5,
+    "bothTouch": 0,
+    "timeouts": 40
+   },
+   ">=85%": {
+    "n": 34,
+    "unfilled": 0,
+    "winRate": 0,
+    "avgR_gross": -0.117,
+    "avgR_net": -0.242,
+    "sumR_net": -8.24,
+    "bothTouch": 0,
+    "timeouts": 29
+>>>>>>> origin/main
    }
   },
   "byRegime": {
    "trend": {
+<<<<<<< HEAD
     "n": 18,
     "unfilled": 0,
     "winRate": 0,
@@ -663,20 +1216,49 @@
     "sumR_net": -8.13,
     "bothTouch": 0,
     "timeouts": 54
+=======
+    "n": 21,
+    "unfilled": 0,
+    "winRate": 0,
+    "avgR_gross": 0.013,
+    "avgR_net": -0.112,
+    "sumR_net": -2.35,
+    "bothTouch": 0,
+    "timeouts": 19
+   },
+   "undecided": {
+    "n": 56,
+    "unfilled": 0,
+    "winRate": 0.036,
+    "avgR_gross": 0.011,
+    "avgR_net": -0.114,
+    "sumR_net": -6.39,
+    "bothTouch": 0,
+    "timeouts": 50
+>>>>>>> origin/main
    }
   },
   "byOutcome": {
    "loss": {
+<<<<<<< HEAD
     "n": 5,
+=======
+    "n": 6,
+>>>>>>> origin/main
     "unfilled": 0,
     "winRate": 0,
     "avgR_gross": -1,
     "avgR_net": -1.125,
+<<<<<<< HEAD
     "sumR_net": -5.63,
+=======
+    "sumR_net": -6.75,
+>>>>>>> origin/main
     "bothTouch": 0,
     "timeouts": 0
    },
    "timeout": {
+<<<<<<< HEAD
     "n": 71,
     "unfilled": 0,
     "winRate": 0,
@@ -688,18 +1270,39 @@
    },
    "win": {
     "n": 1,
+=======
+    "n": 69,
+    "unfilled": 0,
+    "winRate": 0,
+    "avgR_gross": 0.056,
+    "avgR_net": -0.069,
+    "sumR_net": -4.73,
+    "bothTouch": 0,
+    "timeouts": 69
+   },
+   "win": {
+    "n": 2,
+>>>>>>> origin/main
     "unfilled": 0,
     "winRate": 1,
     "avgR_gross": 1.5,
     "avgR_net": 1.375,
+<<<<<<< HEAD
     "sumR_net": 1.37,
+=======
+    "sumR_net": 2.75,
+>>>>>>> origin/main
     "bothTouch": 0,
     "timeouts": 0
    }
   }
  },
  "evidence": {
+<<<<<<< HEAD
   "generated": "2026-10-21T06:13:38.672Z",
+=======
+  "generated": "2026-10-20T01:00:22.482Z",
+>>>>>>> origin/main
   "symbol": "BTCUSDT",
   "bars": 5999,
   "mode": "full",
@@ -716,6 +1319,7 @@
   "chosenBy": "best in-sample avg R net @Binance at n>=80",
   "isShare": "70%",
   "oosShare": "30%",
+<<<<<<< HEAD
   "isSpan": "2026-08-22 .. 2026-10-03",
   "oosSpan": "2026-10-03 .. 2026-10-21",
   "ins": {
@@ -727,10 +1331,24 @@
    "sumR_net": -21,
    "bothTouch": 0,
    "timeouts": 168
+=======
+  "isSpan": "2026-08-20 .. 2026-10-01",
+  "oosSpan": "2026-10-01 .. 2026-10-20",
+  "ins": {
+   "n": 197,
+   "unfilled": 0,
+   "winRate": 0.076,
+   "avgR_gross": 0.048,
+   "avgR_net": -0.077,
+   "sumR_net": -15.16,
+   "bothTouch": 0,
+   "timeouts": 167
+>>>>>>> origin/main
   },
   "oos": {
    "n": 77,
    "unfilled": 0,
+<<<<<<< HEAD
    "winRate": 0.013,
    "avgR_gross": 0,
    "avgR_net": -0.125,
@@ -743,6 +1361,20 @@
   "limitations": [
    "MARKET FILL AT THE SIGNAL CLOSE: the walk fills at the signal close, ignoring the next-bar open gap; BTC 15m gaps are typically small but can be large on liquidation cascades",
    "SAME-BAR FILL->TARGET OPTIMISM: 0 of 1 OOS wins settle on the fill bar; both-touch bars ARE losses (0)",
+=======
+   "winRate": 0.026,
+   "avgR_gross": 0.012,
+   "avgR_net": -0.113,
+   "sumR_net": -8.73,
+   "bothTouch": 0,
+   "timeouts": 69
+  },
+  "tradable": false,
+  "verdict": "Out-of-sample the rule did NOT pay after Binance costs (-0.113R per trade on n=77) — fires print for the record and are NOT tradable tickets.",
+  "limitations": [
+   "MARKET FILL AT THE SIGNAL CLOSE: the walk fills at the signal close, ignoring the next-bar open gap; BTC 15m gaps are typically small but can be large on liquidation cascades",
+   "SAME-BAR FILL->TARGET OPTIMISM: 0 of 2 OOS wins settle on the fill bar; both-touch bars ARE losses (0)",
+>>>>>>> origin/main
    "PORTFOLIO STATS NOT ATTAINABLE: one live trade per side, unlimited overlap between sides; read per-trade expectancy only",
    "THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of BTC history — a different quarter can measure differently; the grid rows show how sensitive the choice is",
    "BTCUSDT spot on Binance: 0.10% maker+taker each side = 0.20% round-trip; actual fees depend on VIP tier and BNB holdings",
@@ -751,6 +1383,7 @@
   "rows": [
    {
     "label": "direction long",
+<<<<<<< HEAD
     "n": 39,
     "unfilled": 0,
     "winRate": 0,
@@ -770,15 +1403,42 @@
     "sumR_net": -3.3,
     "bothTouch": 0,
     "timeouts": 35
+=======
+    "n": 40,
+    "unfilled": 0,
+    "winRate": 0.025,
+    "avgR_gross": -0.036,
+    "avgR_net": -0.161,
+    "sumR_net": -6.44,
+    "bothTouch": 0,
+    "timeouts": 35
+   },
+   {
+    "label": "direction short",
+    "n": 37,
+    "unfilled": 0,
+    "winRate": 0.027,
+    "avgR_gross": 0.063,
+    "avgR_net": -0.062,
+    "sumR_net": -2.29,
+    "bothTouch": 0,
+    "timeouts": 34
+>>>>>>> origin/main
    },
    {
     "label": "session ASIA(00-07)",
     "n": 20,
     "unfilled": 0,
     "winRate": 0,
+<<<<<<< HEAD
     "avgR_gross": -0.078,
     "avgR_net": -0.203,
     "sumR_net": -4.05,
+=======
+    "avgR_gross": -0.077,
+    "avgR_net": -0.202,
+    "sumR_net": -4.04,
+>>>>>>> origin/main
     "bothTouch": 0,
     "timeouts": 20
    },
@@ -787,36 +1447,60 @@
     "n": 17,
     "unfilled": 0,
     "winRate": 0.059,
+<<<<<<< HEAD
     "avgR_gross": 0.263,
     "avgR_net": 0.138,
     "sumR_net": 2.35,
     "bothTouch": 0,
     "timeouts": 16
+=======
+    "avgR_gross": 0.199,
+    "avgR_net": 0.074,
+    "sumR_net": 1.26,
+    "bothTouch": 0,
+    "timeouts": 15
+>>>>>>> origin/main
    },
    {
     "label": "session NY-LATE(17-24)",
     "n": 21,
     "unfilled": 0,
+<<<<<<< HEAD
     "winRate": 0,
     "avgR_gross": -0.071,
     "avgR_net": -0.196,
     "sumR_net": -4.12,
     "bothTouch": 0,
     "timeouts": 19
+=======
+    "winRate": 0.048,
+    "avgR_gross": -0.002,
+    "avgR_net": -0.127,
+    "sumR_net": -2.66,
+    "bothTouch": 0,
+    "timeouts": 18
+>>>>>>> origin/main
    },
    {
     "label": "session NY-OVERLAP(12-17)",
     "n": 19,
     "unfilled": 0,
     "winRate": 0,
+<<<<<<< HEAD
     "avgR_gross": -0.077,
     "avgR_net": -0.202,
     "sumR_net": -3.83,
+=======
+    "avgR_gross": -0.049,
+    "avgR_net": -0.174,
+    "sumR_net": -3.3,
+>>>>>>> origin/main
     "bothTouch": 0,
     "timeouts": 16
    },
    {
     "label": "agreement 75-85%",
+<<<<<<< HEAD
     "n": 41,
     "unfilled": 0,
     "winRate": 0.024,
@@ -858,14 +1542,191 @@
     "sumR_net": -8.13,
     "bothTouch": 0,
     "timeouts": 54
+=======
+    "n": 43,
+    "unfilled": 0,
+    "winRate": 0.047,
+    "avgR_gross": 0.113,
+    "avgR_net": -0.012,
+    "sumR_net": -0.5,
+    "bothTouch": 0,
+    "timeouts": 40
+   },
+   {
+    "label": "agreement >=85%",
+    "n": 34,
+    "unfilled": 0,
+    "winRate": 0,
+    "avgR_gross": -0.117,
+    "avgR_net": -0.242,
+    "sumR_net": -8.24,
+    "bothTouch": 0,
+    "timeouts": 29
+   },
+   {
+    "label": "regime trend",
+    "n": 21,
+    "unfilled": 0,
+    "winRate": 0,
+    "avgR_gross": 0.013,
+    "avgR_net": -0.112,
+    "sumR_net": -2.35,
+    "bothTouch": 0,
+    "timeouts": 19
+   },
+   {
+    "label": "regime undecided",
+    "n": 56,
+    "unfilled": 0,
+    "winRate": 0.036,
+    "avgR_gross": 0.011,
+    "avgR_net": -0.114,
+    "sumR_net": -6.39,
+    "bothTouch": 0,
+    "timeouts": 50
+>>>>>>> origin/main
    }
   ]
  },
  "trades": [
   {
+<<<<<<< HEAD
    "tISO": "2026-08-22T03:45:00.000Z",
    "dir": "long",
    "pct": 0.93,
+=======
+   "tISO": "2026-08-20T22:30:00.000Z",
+   "dir": "long",
+   "pct": 0.837,
+   "decisive": 86,
+   "regime": "undecided",
+   "entry": 72792,
+   "stop": 71627.33,
+   "t1": 74539.01,
+   "stopAtr": 4.59,
+   "outcome": "win",
+   "rGross": 1.5,
+   "netR": 1.375,
+   "oos": false,
+   "utcHour": 22
+  },
+  {
+   "tISO": "2026-08-21T01:15:00.000Z",
+   "dir": "long",
+   "pct": 0.964,
+   "decisive": 110,
+   "regime": "trend",
+   "entry": 73990.5,
+   "stop": 72806.65,
+   "t1": 75766.27,
+   "stopAtr": 3.89,
+   "outcome": "win",
+   "rGross": 1.5,
+   "netR": 1.375,
+   "oos": false,
+   "utcHour": 1
+  },
+  {
+   "tISO": "2026-08-21T01:45:00.000Z",
+   "dir": "long",
+   "pct": 0.964,
+   "decisive": 110,
+   "regime": "trend",
+   "entry": 74744.04,
+   "stop": 73548.14,
+   "t1": 76537.9,
+   "stopAtr": 3.34,
+   "outcome": "win",
+   "rGross": 1.5,
+   "netR": 1.375,
+   "oos": false,
+   "utcHour": 1
+  },
+  {
+   "tISO": "2026-08-21T07:15:00.000Z",
+   "dir": "long",
+   "pct": 0.963,
+   "decisive": 108,
+   "regime": "trend",
+   "entry": 75969.99,
+   "stop": 74754.47,
+   "t1": 77793.27,
+   "stopAtr": 3.42,
+   "outcome": "win",
+   "rGross": 1.5,
+   "netR": 1.375,
+   "oos": false,
+   "utcHour": 7
+  },
+  {
+   "tISO": "2026-08-21T08:30:00.000Z",
+   "dir": "long",
+   "pct": 0.973,
+   "decisive": 110,
+   "regime": "trend",
+   "entry": 77240.33,
+   "stop": 76004.48,
+   "t1": 79094.1,
+   "stopAtr": 2.69,
+   "outcome": "win",
+   "rGross": 1.5,
+   "netR": 1.375,
+   "oos": false,
+   "utcHour": 8
+  },
+  {
+   "tISO": "2026-08-21T08:45:00.000Z",
+   "dir": "long",
+   "pct": 0.973,
+   "decisive": 112,
+   "regime": "trend",
+   "entry": 77647.34,
+   "stop": 76404.98,
+   "t1": 79510.88,
+   "stopAtr": 2.64,
+   "outcome": "loss",
+   "rGross": -1,
+   "netR": -1.125,
+   "oos": false,
+   "utcHour": 8
+  },
+  {
+   "tISO": "2026-08-21T15:15:00.000Z",
+   "dir": "long",
+   "pct": 0.879,
+   "decisive": 99,
+   "regime": "undecided",
+   "entry": 77703.03,
+   "stop": 76459.78,
+   "t1": 79567.9,
+   "stopAtr": 2.26,
+   "outcome": "timeout",
+   "rGross": 0.432,
+   "netR": 0.307,
+   "oos": false,
+   "utcHour": 15
+  },
+  {
+   "tISO": "2026-08-21T21:30:00.000Z",
+   "dir": "long",
+   "pct": 0.951,
+   "decisive": 102,
+   "regime": "undecided",
+   "entry": 78090,
+   "stop": 76840.56,
+   "t1": 79964.16,
+   "stopAtr": 3.26,
+   "outcome": "timeout",
+   "rGross": 0.257,
+   "netR": 0.132,
+   "oos": false,
+   "utcHour": 21
+  },
+  {
+   "tISO": "2026-08-22T03:45:00.000Z",
+   "dir": "long",
+   "pct": 0.94,
+>>>>>>> origin/main
    "decisive": 100,
    "regime": "undecided",
    "entry": 78647.58,
@@ -881,7 +1742,11 @@
   {
    "tISO": "2026-08-22T05:45:00.000Z",
    "dir": "short",
+<<<<<<< HEAD
    "pct": 0.835,
+=======
+   "pct": 0.825,
+>>>>>>> origin/main
    "decisive": 97,
    "regime": "undecided",
    "entry": 77175.88,
@@ -897,7 +1762,11 @@
   {
    "tISO": "2026-08-22T17:00:00.000Z",
    "dir": "long",
+<<<<<<< HEAD
    "pct": 0.822,
+=======
+   "pct": 0.833,
+>>>>>>> origin/main
    "decisive": 90,
    "regime": "undecided",
    "entry": 77288.01,
@@ -3899,7 +4768,11 @@
    "outcome": "win",
    "rGross": 1.5,
    "netR": 1.375,
+<<<<<<< HEAD
    "oos": false,
+=======
+   "oos": true,
+>>>>>>> origin/main
    "utcHour": 23
   },
   {
@@ -3915,7 +4788,11 @@
    "outcome": "timeout",
    "rGross": -0.353,
    "netR": -0.478,
+<<<<<<< HEAD
    "oos": false,
+=======
+   "oos": true,
+>>>>>>> origin/main
    "utcHour": 4
   },
   {
@@ -3931,7 +4808,11 @@
    "outcome": "loss",
    "rGross": -1,
    "netR": -1.125,
+<<<<<<< HEAD
    "oos": false,
+=======
+   "oos": true,
+>>>>>>> origin/main
    "utcHour": 10
   },
   {
@@ -3947,7 +4828,11 @@
    "outcome": "timeout",
    "rGross": 0.914,
    "netR": 0.789,
+<<<<<<< HEAD
    "oos": false,
+=======
+   "oos": true,
+>>>>>>> origin/main
    "utcHour": 15
   },
   {
@@ -3963,7 +4848,11 @@
    "outcome": "timeout",
    "rGross": -0.084,
    "netR": -0.209,
+<<<<<<< HEAD
    "oos": false,
+=======
+   "oos": true,
+>>>>>>> origin/main
    "utcHour": 4
   },
   {
@@ -5117,6 +6006,7 @@
    "netR": -0.226,
    "oos": true,
    "utcHour": 17
+<<<<<<< HEAD
   },
   {
    "tISO": "2026-10-20T00:15:00.000Z",
@@ -5197,6 +6087,8 @@
    "netR": -0.091,
    "oos": true,
    "utcHour": 20
+=======
+>>>>>>> origin/main
   }
  ]
 }

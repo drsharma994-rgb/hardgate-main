@@ -118,6 +118,18 @@ const CONNECT_SRC = [
   'wss://socket.india.delta.exchange',
   'wss://fstream.binance.com',                /* liqs.js — !forceOrder liquidation tape */
   'https://ntfy.sh',                          /* tabalerts.js push */
+  'https://api.telegram.org',                 /* alert-dispatcher.js */
+  'https://discord.com',                      /* alert-dispatcher.js webhook */
+  'https://discordapp.com',
+  'https://nfs.faireconomy.media',            /* macro-calendar.js USD high-impact */
+  'https://api.blockchain.info',               /* omnibtc-engines.js BTC hashrate (hg-v1294) */
+  'https://community-api.coinmetrics.io',      /* omnibtc-engines.js BTC NVT + active addresses (hg-v1294) */
+  'https://api.coinbase.com',                  /* omnibtc-engines.js Coinbase BTC-USD spot cross-check (hg-v1301) */
+  /* news.js free RSS desks (upstream hg-v1302 added these without permitting
+     them, so connect-src blocked all three and the news feed read empty) */
+  'https://cointelegraph.com',
+  'https://cryptobriefing.com',
+  'https://www.coindesk.com',
 ].join(' ');
 
 /* vercel.json parity — security headers on every response */

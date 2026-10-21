@@ -156,11 +156,11 @@ localStorage. Never throws.
      indicator marks would ever have landed — twelve dropped silently on every
      record, the hg-v955 shape inside the cap meant to stop a dumping ground.
      Still bounded; the guard asserts the whole GOLD SCALP set fits with room. */
-  /* hg-v1165: 16 -> 32 (hg-v1158) -> 64: fourteen free: + two PERFECT +
-     eighteen ind: sat exactly at 32, and the four hg-v1165 free legs and the
-     six pine: marks need room -- the next mark moves the cap first, or it is
-     dropped silently in sorted order (the hg-v1158 trap) */
-  var FWD_READS_MAX = 64, FWD_READ_KEY = /^[A-Za-z0-9][A-Za-z0-9:_. -]{0,47}$/;
+  /* hg-v1165: 16 -> 32 (hg-v1158) -> 64. hg-v1173: 64 -> 96.
+     pine: sorts after free: and ind:. Twenty-two gold Pine layers plus the
+     majority mark need room past 64, or the last pine keys (weekly AVWAP
+     among them) are dropped silently in sorted order. */
+  var FWD_READS_MAX = 96, FWD_READ_KEY = /^[A-Za-z0-9][A-Za-z0-9:_. -]{0,47}$/;
   function hgFwdReadsNormalize(reads){
     if (!reads || typeof reads !== 'object' || Array.isArray(reads)) return undefined;
     var out = null, n = 0, k;
@@ -515,6 +515,41 @@ localStorage. Never throws.
          number between fire and settle is the residual error, and a record
          that carries it can be asked. */
       iuxShiftPct: (typeof rec.iuxShiftPct === 'number' && isFinite(rec.iuxShiftPct) && Math.abs(rec.iuxShiftPct) <= 5) ? rec.iuxShiftPct : undefined,
+      /* hg-v1296: THE THIRTEEN PINE STATE READER MARKS ON OMNIBTC RECORDS —
+         the latent hg-v1293 / v1295 defect, closed. hg-v1293 added ten pine*
+         state fields through hgObtcPineStamp on every OMNIBTC record; hg-v1295
+         grew the set to thirteen. BOTH packs stamped the fields on `fwdRow`
+         and shipped tests asserting the stamp call wrote them. NEITHER pack
+         added the fields to this normaliser's whitelist, so hgFwdNormalize
+         built `out` without them and every pine mark was DROPPED at the door
+         on every OMNIBTC record for the entire life of both packs. The
+         forward ledger has NEVER seen a single pine mark on OMNIBTC, and
+         hgFwdReadSplit('OMNIBTC') on any pine key returns empty by
+         construction. The hg-v955 shape (work done and dropped on the way
+         out) in my own two packs, caught by driving the live persistence
+         rather than reading only the stamp call. Three-state enum (same
+         rule as macroTilt / basisMom / cvdContext above): the two strings
+         'long' / 'short' write the field, anything else records NOTHING
+         (undefined — NOT MEASURED, hg-v989). A junk value like `'LONG'`
+         or `1` or `null` or `''` is a caller this log does not understand;
+         the honest record is the third state. The thirteen keys mirror
+         HG_OBTC_PINE_FIELDS at omnibtc.js:163; the OMNIBTC stamp site is
+         the one home for which fields OMNIBTC writes, this is the one home
+         for which it accepts, and the guard asserts the two agree by
+         driving a record carrying all thirteen through to settlement. */
+      pineLorKnn: (rec.pineLorKnn === 'long' || rec.pineLorKnn === 'short') ? rec.pineLorKnn : undefined,
+      pineHalfTrend: (rec.pineHalfTrend === 'long' || rec.pineHalfTrend === 'short') ? rec.pineHalfTrend : undefined,
+      pineSqueeze: (rec.pineSqueeze === 'long' || rec.pineSqueeze === 'short') ? rec.pineSqueeze : undefined,
+      pineSmf: (rec.pineSmf === 'long' || rec.pineSmf === 'short') ? rec.pineSmf : undefined,
+      pineMsb: (rec.pineMsb === 'long' || rec.pineMsb === 'short') ? rec.pineMsb : undefined,
+      pineSmc: (rec.pineSmc === 'long' || rec.pineSmc === 'short') ? rec.pineSmc : undefined,
+      pineCipher: (rec.pineCipher === 'long' || rec.pineCipher === 'short') ? rec.pineCipher : undefined,
+      pineRangeFilter: (rec.pineRangeFilter === 'long' || rec.pineRangeFilter === 'short') ? rec.pineRangeFilter : undefined,
+      pineNwEnvelope: (rec.pineNwEnvelope === 'long' || rec.pineNwEnvelope === 'short') ? rec.pineNwEnvelope : undefined,
+      pineWavwap: (rec.pineWavwap === 'long' || rec.pineWavwap === 'short') ? rec.pineWavwap : undefined,
+      pineSupertrend: (rec.pineSupertrend === 'long' || rec.pineSupertrend === 'short') ? rec.pineSupertrend : undefined,
+      pineMacd: (rec.pineMacd === 'long' || rec.pineMacd === 'short') ? rec.pineMacd : undefined,
+      pineCci: (rec.pineCci === 'long' || rec.pineCci === 'short') ? rec.pineCci : undefined,
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -1361,7 +1396,15 @@ localStorage. Never throws.
        So: recorded, reported, and used for NOTHING. No filter keys off it,
        no weight reads it, no ordering changed. If it is real it will show
        here in a year; if it was in-sample noise, that will show here too. */
-    var byDir = { long:{n:0,w:0}, short:{n:0,w:0} };
+    /* hg-v1305: byDir buckets also carry rrSum so a per-direction expectancy
+       is computable. The hg-v1303 defect (b) ran because hgProvenEdgeVerdict
+       read the pooled verdict for every candidate, and a mechanic positive
+       on longs and negative on shorts shows positive in the pool — so a
+       short was crowned on the long side's record. rrSum rides beside n/w
+       at both ends (live loop below, aggregate seed above, fold at
+       ~1788) so the per-direction split outlives the live cap and the
+       verdict can read a mechanic that paid long, failed short. */
+    var byDir = { long:{n:0,w:0,rrSum:0}, short:{n:0,w:0,rrSum:0} };
     /* Start from any evidence already folded out of the record list. Without
        this, everything pruned would silently vanish from the numbers.
        ticketOnly cannot be answered from the aggregate — it does not keep that
@@ -1378,8 +1421,11 @@ localStorage. Never throws.
                 /* the side split rides the same unfiltered path — it exists
                    to be read over years, so it must not be a live-window
                    view of the last four weeks */
-                if (a.dir_long){ byDir.long.n += (a.dir_long.n || 0); byDir.long.w += (a.dir_long.w || 0); }
-                if (a.dir_short){ byDir.short.n += (a.dir_short.n || 0); byDir.short.w += (a.dir_short.w || 0); } }
+                /* hg-v1305: rrSum rides across the aggregate seed too, or a
+                   per-direction verdict would be answerable only in the
+                   live window — defeating the whole reason this split folds. */
+                if (a.dir_long){ byDir.long.n += (a.dir_long.n || 0); byDir.long.w += (a.dir_long.w || 0); byDir.long.rrSum += (a.dir_long.rrSum || 0); }
+                if (a.dir_short){ byDir.short.n += (a.dir_short.n || 0); byDir.short.w += (a.dir_short.w || 0); byDir.short.rrSum += (a.dir_short.rrSum || 0); } }
       }
     }
     /* The gate-clear split DOES survive pruning now (see hgFwdFold), so a
@@ -1463,7 +1509,10 @@ localStorage. Never throws.
          'long', which would hand one half the other's losses */
       if ((r.state === 't1' || r.state === 'stop') && byDir[r.dir]){
         byDir[r.dir].n++;
-        if (r.state === 't1') byDir[r.dir].w++;
+        /* hg-v1305: rrSum ONLY on t1 so the per-direction avgRr matches the
+           pooled convention (rrSum/wins), and because a stop contributes
+           -1R by construction when the judge computes expectancy. */
+        if (r.state === 't1'){ byDir[r.dir].w++; byDir[r.dir].rrSum += (num(r.rr) || 0); }
       }
     }
     var settled = wins + losses;
@@ -1752,9 +1801,14 @@ localStorage. Never throws.
          rest of the aggregate. */
       if ((r.state === 't1' || r.state === 'stop') && (r.dir === 'long' || r.dir === 'short')){
         var dk = 'dir_' + r.dir;
-        if (!out[key][dk]) out[key][dk] = { n: 0, w: 0 };
+        /* hg-v1305: rrSum folds beside n/w so a per-direction expectancy
+           survives pruning — the mechanic's long record can read PROVEN
+           while its short record reads LOSING, years after the live list
+           has rolled off, which is what hgProvenEdgeVerdict's opts.dir
+           branch (proven-edge.js) consults on every OMNIBTC crown. */
+        if (!out[key][dk]) out[key][dk] = { n: 0, w: 0, rrSum: 0 };
         out[key][dk].n++;
-        if (r.state === 't1') out[key][dk].w++;
+        if (r.state === 't1'){ out[key][dk].w++; out[key][dk].rrSum += (num(r.rr) || 0); }
       }
     }
     return out;
@@ -2518,6 +2572,31 @@ localStorage. Never throws.
                split reads them. */
             perfect: c.perfect,
             perfectPlus: c.perfectPlus,
+            /* hg-v1296: THE OMNIBTC PINE STATE MARKS, PASSED THROUGH.
+               hg-v1293 added ten pine* top-level fields on every OMNIBTC
+               candidate via hgObtcPineStamp, and hg-v1295 grew the set to
+               thirteen. NEITHER pack listed them here, so the explicit
+               object below built its payload without them -- the hg-v1168
+               shape, in my own two packs. Added to hgFwdNormalize's
+               whitelist beside this; the normaliser decides which values
+               survive (strict 'long'/'short' three-state, hg-v989). A
+               caller that marks none hands none, and the record carries
+               none exactly as before -- the OMNIBTC seam is the only one
+               known to stamp pine*, but a future tab can hand them in by
+               the same key and ride the same slots. */
+            pineLorKnn: c.pineLorKnn,
+            pineHalfTrend: c.pineHalfTrend,
+            pineSqueeze: c.pineSqueeze,
+            pineSmf: c.pineSmf,
+            pineMsb: c.pineMsb,
+            pineSmc: c.pineSmc,
+            pineCipher: c.pineCipher,
+            pineRangeFilter: c.pineRangeFilter,
+            pineNwEnvelope: c.pineNwEnvelope,
+            pineWavwap: c.pineWavwap,
+            pineSupertrend: c.pineSupertrend,
+            pineMacd: c.pineMacd,
+            pineCci: c.pineCci,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV

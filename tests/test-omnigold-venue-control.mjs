@@ -120,7 +120,7 @@ console.log('\n== localStorage UNAVAILABLE -> PAXG, the conservative fallback ==
      'an explicit in-page choice still applies for this load, unpersisted');
 }
 
-console.log('\n== per-venue demotion counts: 18 at XM, 33 at PAXG ==');
+console.log('\n== per-venue demotion counts: 22 at XM, 38 at PAXG (hg-v1402 re-bake) ==');
 {
   const W = boot();
   const xm = W.hgOgVenuePresetCost('XM'), paxg = W.hgOgVenuePresetCost('PAXG');
@@ -145,7 +145,10 @@ console.log('\n== per-venue demotion counts: 18 at XM, 33 at PAXG ==');
      from a MEAN gross, which understated the drag on every right-skewed
      kind and so demoted fewer than the record supports. The XM count is
      unmoved because the gross-negative branch decides it there. */
-  ok(W.hgOgDemotedKindCount(paxg) === 37 && demPaxg.length === 37, '37 at PAXG costs');
+  /* hg-v1402: 37 -> 38 on the re-walked evidence (the gate-clear tails
+     moved with the bake; XM's 22 are unmoved — the gross-negative branch
+     decides there, and the gross records did not change hands). */
+  ok(W.hgOgDemotedKindCount(paxg) === 38 && demPaxg.length === 38, '38 at PAXG costs (hg-v1402 re-bake)');
   ok(JSON.stringify(demXm) === JSON.stringify(GROSS_NEGATIVE_XM),
      'the XM 22 are exactly the gross-negative kinds — cheap fees clear no wrong direction');
   ok(demXm.every(k => demPaxg.includes(k)), 'every XM demotion is also a PAXG demotion (fees only add)');
@@ -180,12 +183,12 @@ console.log('\n== desk-stance banner names the ACTIVE venue and both counts ==')
   /* hg-v817: the PAXG count moved 31 -> 37 when the venue re-pricing
      stopped subtracting a MEDIAN fee from a MEAN gross. Under-stating the
      fee under-demoted; the record supports 37. */
-  ok(/venue XM XAUUSD ~0\.020% RT — 22 measured-negative kinds stood aside; at PAXG costs \(0\.260% RT\) it would be 37/.test(atXm),
-     'XM banner line: 22 stood aside, 37 at PAXG costs');
+  ok(/venue XM XAUUSD ~0\.020% RT — 22 measured-negative kinds stood aside; at PAXG costs \(0\.260% RT\) it would be 38/.test(atXm),
+     'XM banner line: 22 stood aside, 38 at PAXG costs (hg-v1402 re-bake)');
   W.hgOgSetVenue('PAXG');
   const atPaxg = W.hgOgDeskStanceBannerHtml();
-  ok(/venue PAXG ~0\.260% RT — 37 measured-negative kinds stood aside; at XM costs \(0\.020% RT\) it would be 22/.test(atPaxg),
-     'PAXG banner line: 37 stood aside, 22 at XM costs');
+  ok(/venue PAXG ~0\.260% RT — 38 measured-negative kinds stood aside; at XM costs \(0\.020% RT\) it would be 22/.test(atPaxg),
+     'PAXG banner line: 38 stood aside, 22 at XM costs (hg-v1402 re-bake)');
 }
 
 console.log('\n== disclosure integrity at the XM default ==');

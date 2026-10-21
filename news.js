@@ -56,6 +56,7 @@ var FF_URL      = '/api/news/calendar';
 var FNG_URL     = 'https://api.alternative.me/fng/?limit=1';
 var RSS_SOURCES = [
   { url: 'https://cointelegraph.com/rss',                          source: 'cointelegraph' },
+    { url: 'https://cryptobriefing.com/feed/',                       source: 'cryptobriefing' },
   { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/',        source: 'coindesk' }
 ];
 var PROXY        = function(u){ return '/api/proxy?url=' + encodeURIComponent(u); };
@@ -211,10 +212,12 @@ var HEADLINE_WEIGHTS = [
   [/\bbinance\b|\bcoinbase\b|\bkraken\b|\bbybit\b|\bftx\b/i,                            2, 'exchange'],
   [/\bhalving\b|\bupgrade\b|\bhard fork\b|\bfork\b/i,                                   2, 'network'],
   [/\bwhale\b|\bselloff\b|\bsell-off\b|\bdump(?:s|ed)?\b|\bcrash(?:es|ed)?\b|\bplunge[sd]?\b/i, 2, 'flows'],
-  [/\btariff/i, 2, 'macro']
+  [/\btariff/i, 2, 'macro'],
+  [/\brecession\b|\bunemployment\b|\bgdp\b|\byields?\b/i,                               1, 'macro'],
+  [/\bcompliance\b|\benforcement\b|\bregulation\b/i,                                    1, 'regulation']
 ];
-var HEADLINE_BULL = [/\bapprov(?:es|ed|al)\b/i, /\binflows?\b/i, /\badoption\b/i, /\brecord high\b|\ball-time high\b|\bath\b/i, /\brally\b|\brallies\b|\bsurge[sd]?\b|\bsoar(?:s|ed)?\b/i, /\bbullish\b/i, /\brate cut\b/i, /\bpartnership\b/i, /\baccumulat/i];
-var HEADLINE_BEAR = [/\bhack(?:ed|s)?\b|\bexploit\b|\bstolen\b|\bbreach/i, /\bban(?:ned|s)?\b|\bcrackdown\b/i, /\blawsuit\b|\bsue[sd]?\b|\bindict|\bfraud\b/i, /\bliquidat/i, /\bcrash(?:es|ed)?\b|\bplunge[sd]?\b|\bselloff\b|\bsell-off\b|\bdump/i, /\bbearish\b/i, /\brate hike\b/i, /\bdelist/i, /\bfears?\b|\bwarning\b/i, /\boutflows?\b/i];
+var HEADLINE_BULL = [/\bapprov(?:es|ed|al)\b/i, /\binflows?\b/i, /\badoption\b/i, /\brecord high\b|\ball-time high\b|\bath\b/i, /\brally\b|\brallies\b|\bsurge[sd]?\b|\bsoar(?:s|ed)?\b/i, /\bbullish\b/i, /\brate cut\b/i, /\bpartnership\b/i, /\baccumulat/i, /\bexpansion\b/i, /\bgrowth\b/i];
+var HEADLINE_BEAR = [/\bhack(?:ed|s)?\b|\bexploit\b|\bstolen\b|\bbreach/i, /\bban(?:ned|s)?\b|\bcrackdown\b/i, /\blawsuit\b|\bsue[sd]?\b|\bindict|\bfraud\b/i, /\bliquidat/i, /\bcrash(?:es|ed)?\b|\bplunge[sd]?\b|\bselloff\b|\bsell-off\b|\bdump/i, /\bbearish\b/i, /\brate hike\b/i, /\bdelist/i, /\bfears?\b|\bwarning\b/i, /\boutflows?\b/i, /\brecession\b/i, /\bunemployment\b/i];
 
 function scoreHeadline(title){
   var score = 0, tags = [], tagSeen = {};

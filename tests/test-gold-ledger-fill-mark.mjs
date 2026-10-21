@@ -270,7 +270,11 @@ console.log('== 3) the other desks ==');
   assert(/if \(typeof sel\.pick\.mark === 'number' && isFinite\(sel\.pick\.mark\) && sel\.pick\.mark > 0\) guRow\.mark = sel\.pick\.mark;/.test(S('goldultra.js')), 'GOLD ULTRA forwards the pick\'s mark (textual, inside the scan closure: the whole guarded statement, after a bare-assignment match let an if (false) survive)');
   assert(/mark: \(lvRows && lvRows\.length && isFinite\(\+lvRows\[lvRows\.length - 1\]\.c\)/.test(S('goldpro.js')), 'GOLD PRO records the last close of the series its plan was composed on (its own note: the bars ARE the mark)');
   assert(/mark: \(r\.setup && typeof r\.setup\.mark === 'number'/.test(S('newgold.js')), 'NEW GOLD forwards the setup\'s mark');
-  assert(/feed: c\.feed,\s*mark: c\.mark \}/.test(S('super-gold.js')), 'SUPER GOLD forwards the source desk\'s mark');
+  /* hg-v1361: the record was extended with the mark set absorbSnap now carries
+     (perfect, perfectPlus, chased, chaseCode, reads, fundingPct); the mark
+     field itself is unchanged. Match the mark assignment regardless of what
+     follows it, instead of pinning the literal's close-brace. */
+  assert(/feed: c\.feed,\s*(?:\/\*[\s\S]*?\*\/\s*)?mark: c\.mark[,}]/.test(S('super-gold.js')), 'SUPER GOLD forwards the source desk\'s mark');
   assert(/feed: c\.feed,\s*mark: c\.mark,/.test(S('goldscalp.js')) && /feed: c\.feed,\s*mark: c\.mark,/.test(S('goldswing.js')), 'the two home desks forward the snapshot mark across the record map');
   assert(/mark: \(function\(\)\{/.test(S('omnigold.js')), 'OMNIGOLD already stamped a mark, and still does');
 }
@@ -308,9 +312,13 @@ console.log('== 4) the census, derived from source ==');
     writers.push(f);
     if (!(w.some(sp => /\bmark\s*:/.test(sp)) || /\.mark = /.test(s) || /\bmark:\s*\(/.test(s) || /\bmark:\s*c\.mark/.test(s))) bare.push(f);
   }
-  /* fourteen since hg-v1154: GANESH GOLD (hg-v1072) records ticket rows */
-  const EXP = ['eightypercent.js', 'ganeshgold.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
-  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP), 'the fourteen gold writers (' + writers.join(', ') + ')');
+  /* fourteen since hg-v1154: GANESH GOLD (hg-v1072) records ticket rows.
+     hg-v1389: FIFTEEN -- gold-confluence.js (CONFLUENCE tab, upstream hg-v1384)
+     records ticket rows under sym 'XAUUSD', so it joins this writer census. The
+     hg-v1389 pack is itself about making that record settleable (barT, mark,
+     goldShut), so this count moves with the pack by construction. */
+  const EXP = ['eightypercent.js', 'ganeshgold.js', 'gold-confluence.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
+  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP), 'the fifteen gold writers (' + writers.join(', ') + ')');
   assert(bare.length === 0, 'every one carries a mark on its record path' + (bare.length ? ' -- BARE: ' + bare.join(', ') : ''));
 }
 

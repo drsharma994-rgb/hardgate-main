@@ -121,7 +121,11 @@ function asiaBox(rows){
   try{
     var lo = Infinity, hi = -Infinity;
     for (var i = rows.length - 1; i >= 0; i--){
-      if (new Date(+rows[i].t).getUTCHours() >= 8) break;
+      /* hg-v1288: route the instant through ggBarMs so seconds-based rows
+         (hg-v1154 trap) don't read in 1970 and break on the first bar. */
+      var ms = ggBarMs(rows[i].t);
+      if (ms === null) continue;
+      if (new Date(ms).getUTCHours() >= 8) break;
       if (+rows[i].h > hi) hi = +rows[i].h;
       if (+rows[i].l < lo) lo = +rows[i].l;
     }
@@ -244,7 +248,13 @@ async function ganeshGoldEval(style){
   try{
     var anchor = 0;
     for (var a2 = ex.length - 1; a2 >= 0; a2--){
-      var dd = new Date(+ex[a2].t);
+      /* hg-v1288: route the instant through ggBarMs so the 00:00-UTC anchor
+         actually lands on the daily session boundary; the earlier code did
+         new Date(+ex[a2].t).getUTCHours() on seconds-based rows and never
+         saw hour 0, so the AVWAP anchor drifted to the oldest bar. */
+      var dms = ggBarMs(ex[a2].t);
+      if (dms === null) continue;
+      var dd = new Date(dms);
       if (dd.getUTCHours() === 0 && a2 < ex.length - 1){ anchor = a2; break; }
     }
     var av = W.hgAVWAP(ex, anchor);
@@ -307,7 +317,7 @@ async function ganeshGoldEval(style){
     sweptSell: sweptSell, sweptBuy: sweptBuy, disp: disp, mssUp: mssUp, mssDown: mssDown,
     fvg: fvg, ob: ob, zone: zone, retest: retest, vw: vw, atrRegime: atrRegime, vp: vp,
     sq: sq, dxT: dxT, tnxT: tnxT, news: news, sess: sess, lastT: lastT, rangeHi: rangeHi, rangeLo: rangeLo,
-    tapeNote: tapeNote };
+    tapeNote: tapeNote, rows: ex };
   return { ok: true, ev: ev };
 }
 
@@ -409,6 +419,70 @@ async function ganeshGoldScan(opts){
     var mL = modelGrade(ev, 'long'), mS = modelGrade(ev, 'short');
     var pL = planFor(ev, mL), pS = planFor(ev, mS);
     ggMarkPlan(pL, ev); ggMarkPlan(pS, ev);   /* hg-v1163 */
+    function ggPineHold(plan){
+      if (!plan || !ev.ps || typeof W.pineGoldBlocksLead !== 'function') return plan;
+      var why = W.pineGoldBlocksLead(ev.ps, plan.dir);
+      if (!why) return plan;
+      plan.pineBlock = why;
+      if (plan.tier === 'TICKET') plan.tier = 'WATCH';
+      return plan;
+    }
+    pL = ggPineHold(pL); pS = ggPineHold(pS);
+    var gsAudit = null;
+    try{
+      if (style === 'scalp' && typeof W.getSilverCandles === 'function'){
+        var sv = await W.getSilverCandles('15m', 120);
+        if (sv && sv.rows && sv.rows.length) W.__hgSilverRows = sv.rows;
+      }
+    }catch(eSv){}
+    try{
+      if (style === 'scalp' && typeof W.HG_GaneshGoldEngine === 'function' && ev.rows){
+        gsAudit = new W.HG_GaneshGoldEngine().auditSevenSteps(ev.rows, [], (ev.feeds && ev.feeds.macro) || null, W.__hgSilverRows);
+      }
+    }catch(eGs){ gsAudit = null; }
+    function ggInstHold(plan){
+      if (!plan) return plan;
+      var why = null;
+      try{
+        if (typeof W.hgGoldInstBlocks === 'function'){
+          why = W.hgGoldInstBlocks(plan.dir, ev.rows || [], (ev.feeds && ev.feeds.macro) || null, { desk: style === 'scalp' ? 'ganesh' : 'ganesh-swing', horizon: style });
+        }
+      }catch(eIb){ why = null; }
+      if (why){ plan.instBlock = why; plan.held = plan.held || why; if (plan.tier === 'TICKET') plan.tier = 'WATCH'; }
+      if (style === 'scalp' && gsAudit && !gsAudit.qualified && plan.tier === 'TICKET'){
+        plan.tier = 'WATCH';
+        plan.held = plan.held || ('GS1-GS7 ' + gsAudit.passedCount + '/' + gsAudit.totalSteps + ' — not a ticket');
+        plan.gsAudit = gsAudit;
+      } else if (gsAudit) plan.gsAudit = gsAudit;
+      return plan;
+    }
+    pL = ggInstHold(pL); pS = ggInstHold(pS);
+    function ggTapeHold(plan){
+      if (!plan || typeof W.pineGoldTapeVeto !== 'function' || !ev.rows) return plan;
+      var why = null;
+      try{
+        why = W.pineGoldTapeVeto(ev.rows, plan.dir, {
+          mode: style === 'swing' ? 'swing' : 'scalp',
+          now: ev.lastT,
+          macro: (ev.feeds && ev.feeds.macro) || null,
+          silverRows: W.__hgSilverRows || null
+        });
+      }catch(eTp){ why = null; }
+      if (!why) return plan;
+      plan.pineBlock = plan.pineBlock || why;
+      plan.held = plan.held || why;
+      if (plan.tier === 'TICKET') plan.tier = 'WATCH';
+      return plan;
+    }
+    pL = ggTapeHold(pL); pS = ggTapeHold(pS);
+    try{
+      if (gsAudit && gsAudit.qualified && typeof W.HG_quantEmit === 'function'){
+        var gsSide = gsAudit.direction === 'BEAR' ? pS : pL;
+        if (gsSide && gsSide.tier === 'TICKET'){
+          W.HG_quantEmit(Object.assign({ status: 'ARMED', timeframe: '15m', targetPrice: gsAudit.takeProfit, gatesPassed: gsAudit.passedCount, totalGates: gsAudit.totalSteps }, gsAudit));
+        }
+      }
+    }catch(eEmit){}
     /* hg-v1154: both calendars on the LAST CLOSED execution bar, never the
        wall clock (hg-v952 / hg-v978) -- a Monday re-run over Friday's bars
        gives Friday's answer. */
@@ -420,7 +494,8 @@ async function ganeshGoldScan(opts){
     else if (pL && (pL.grade === 'A' || pL.grade === 'A+')){ pick = 'long'; plan = pL; alt = pS; }
     else if (pS && (pS.grade === 'A' || pS.grade === 'A+')){ pick = 'short'; plan = pS; alt = pL; }
     __gg.snap = { ok: true, at: Date.now(), style: style, ev: ev, mL: mL, mS: mS,
-      planL: pL, planS: pS, pick: pick, plan: plan, alt: alt, gate: gate };
+      planL: pL, planS: pS, pick: pick, plan: plan, alt: alt, gate: gate,
+      gsHtml: (gsAudit && typeof W.hgGaneshAuditHtml === 'function') ? W.hgGaneshAuditHtml(gsAudit) : '' };
     /* the forward record: one mint per closed bar, TICKET only -- and
        (hg-v1154) a ticket the calendar WITHHELD, written ticket:false with
        the weekend mark, so the weekend population is separable rather than
@@ -546,29 +621,69 @@ function callHtml(snap){
   }catch(e){ return ''; }
 }
 
+function ggCoreHtml(rows){
+  var suite = W.HG_GoldSuite;
+  var fn = suite && suite.ganeshHits;
+  if (typeof fn !== 'function') return '';
+  var hits = [];
+  try{ hits = fn(rows, null) || []; }catch(e){ return ''; }
+  if (!hits.length) return '<div class="note" style="margin-top:8px">GANESH CORE — no seven-step pass, Gann square rejection, time-price square, or 3-hour boundary turn on the last closed bar.</div>';
+  var html = '<div class="panel" style="margin-top:8px"><h3>GANESH CORE</h3>';
+  for (var i = 0; i < hits.length; i++){
+    var h = hits[i];
+    html += '<div class="kv"><span class="k">' + escH(h.id + ' ' + String(h.dir || '').toUpperCase()) + '</span><span class="v">'
+      + escH(h.name || '') + ' · ' + escH(h.why || '')
+      + ' Entry ' + (isFinite(+h.entry) ? (+h.entry).toFixed(2) : 'n/a')
+      + ' · SL ' + (isFinite(+h.stop) ? (+h.stop).toFixed(2) : 'n/a')
+      + ' · TP ' + (isFinite(+h.target) ? (+h.target).toFixed(2) : 'n/a') + '</span></div>';
+  }
+  return html + '</div>';
+}
+
 function paint(el, snap){
   if (!snap.ok){
     el.innerHTML = '<div class="note warn" style="margin-top:10px">' + escH(snap.note || 'scan failed') + '</div>';
     return;
   }
-  var html = (snap.ev && snap.ev.tapeNote ? snap.ev.tapeNote : '')   /* hg-v1154: the tape-sanity note leads */
+  var html = (snap.ev && snap.ev.tapeNote ? snap.ev.tapeNote : '')
+    + (snap.gsHtml || '')
+    + '<div class="gg-board"><aside class="gg-mp-col" aria-label="Most probable setup">'
+    + '<div class="gg-eye">MOST PROBABLE</div>'
     + callHtml(snap)
+    + ggCoreHtml(snap.ev && snap.ev.rows)
+    + '</aside><div class="gg-rest">'
     + pipelineHtml(snap)
     + modelHtml('GOLD LONG MODEL', snap.mL, snap.planL)
     + modelHtml('GOLD SHORT MODEL', snap.mS, snap.planS);
   if (snap.alt){
     html += '<div class="panel" style="margin-top:10px"><h3>ALT SIDE</h3><div class="kv"><span class="k">' + snap.alt.dir.toUpperCase() + '</span><span class="v">grade ' + (snap.alt.grade || 'NONE') + (snap.alt.tier ? ' - ' + snap.alt.tier : '') + '</span></div></div>';
   }
+  html += '</div></div>';
   el.innerHTML = html;
   try{
     var fwd = el.querySelector('[data-r="ggfwd"]');
     if (fwd && typeof W.hgFwdPanelHTML === 'function') fwd.innerHTML = W.hgFwdPanelHTML('GANESHGOLD', { title: 'FORWARD - has the firm\u2019s pipeline paid?' });
   }catch(eF){}
+  /* hg-v1298: PROFITABILITY AUDIT panel on this desk. Says plainly that no
+     committed walk exists for GANESH GOLD so nothing can be filtered as
+     profitable here; names scripts/backtest-ganeshgold.mjs as the walker
+     to run on a machine with network. Appended to the ggfwd slot after the
+     forward panel so a reader sees "has it paid?" first, then "can it be
+     measured?". Returns '' when goldind.js is absent. */
+  try{
+    var fwd2 = el.querySelector('[data-r="ggfwd"]');
+    if (fwd2 && typeof W.hgGoldAuditPanelHtml === 'function'){
+      fwd2.innerHTML = (fwd2.innerHTML || '') + (W.hgGoldAuditPanelHtml('ganeshgold') || '');
+    }
+  }catch(eA){}
 }
 
 function mount(el){
   if (!el) return;
-  el.innerHTML = '<div class="panel">'
+  el.innerHTML = '<style>.gg-board{display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:14px;align-items:start;margin-top:12px}'
+    + '.gg-mp-col{position:sticky;top:78px}.gg-eye{font-size:10px;letter-spacing:.22em;font-weight:800;color:#A67C12;margin-bottom:6px}'
+    + '@media(max-width:980px){.gg-board{grid-template-columns:1fr}.gg-mp-col{position:static}}</style>'
+    + '<div class="panel">'
     + '<h2>GANESH GOLD TRADING FIRM <span>structure + liquidity + levels + confirmation + risk - XAUUSD</span></h2>'
     + '<div class="note" style="margin-bottom:8px">The full 17-step pipeline, both models graded on the live tape: HTF bias, BOS/CHOCH/MSS, buy-side and sell-side liquidity, PDH/PDL/week levels, premium/discount, order blocks and FVGs, displacement, volume, VWAP, ATR, DXY + yields, the news calendar and the sessions. No single indicator makes a setup - agreement makes a setup.</div>'
     + '<div class="row"><button class="btn" id="ggRun">RUN GOLD SCAN</button>'
@@ -625,6 +740,21 @@ W.ganeshGoldScan = ganeshGoldScan;
 W.ganeshGoldEval = ganeshGoldEval;
 W.ganeshGoldWarm = ganeshGoldWarm;
 W.ggWeekendVerdict = ggWeekendVerdict;   /* hg-v1154: the census route */
+
+/* hg-v1298 — HG_GANESH_WALK is the evidence literal, written from
+   scripts/backtest-ganeshgold-results.json by scripts/ganeshgold-evidence-
+   literal.mjs. Measured:false until the first machine with network bakes
+   it; the audit panel on this desk reads it and says NO MEASURED RECORD
+   so a reader knows nothing on GANESH GOLD can be filtered by
+   profitability until the ledger has one. */
+/* --- BEGIN GENERATED HG_GANESH_WALK (hg-v1298) --- */
+W.HG_GANESH_WALK = {
+  measured: false,
+  n: 0,
+  span: null,
+  note: "scripts/backtest-ganeshgold-results.json does not exist: the GANESH GOLD walk has not run on a machine that can fetch bars. The walker is wired at scripts/backtest-ganeshgold.mjs (hg-v1298). Until this bakes, nothing on this desk can be filtered by profitability — hg-v966 forbids a gate on measurement that has not happened."
+};
+/* --- END GENERATED HG_GANESH_WALK --- */
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'ganeshgold', label: 'GANESH GOLD', mount: mount, refresh: ganeshGoldRefresh });
