@@ -116,15 +116,19 @@ console.log('== 1) the real mints through the real bridge ==');
   const X120 = W.hgGoldInlineBridge(inp(120, { candleSource: 'binance-paxg' }));
   /* MEASURED, and the claim corrected. This used to read `X120.scalp.count === 0`
      — "the volume votes are withheld and the board empties". Driven through the
-     bridge on seed 120 it is `2 -> 1`: naming the PAXG feed costs ONE candidate,
-     and the survivor is **kept and demoted**, not deleted (`X120.scalp.best` is
-     `null` while `count` is 1 — the same fact from the other side, since `count`
-     is `ranked.length` and INCLUDES demoted rows). Demote-don't-hide is this
-     tab's invariant everywhere else (hg-v552 / hg-v572). The mechanism is narrow:
+     bridge on seed 120 it was `2 -> 1` at hg-v968: naming the PAXG feed cost ONE
+     candidate, and the survivor is **kept and demoted**, not deleted
+     (`X120.scalp.best` is `null` while `count` includes demoted rows).
+     hg-v1439 re-derivation: the R:R-unmeasured reject (measured -0.283R fresh,
+     both halves, three windows) drops this tape's ceiling-bound plan, so the
+     unnamed board is 1 candidate now, and that survivor's tally does not ride
+     the volume votes — naming the feed costs ZERO on today's board (1 -> 1).
+     The invariant the letter protects is unchanged: the row is never deleted,
+     and nothing on either board is tradeable. The mechanism is narrow:
      `volumeTrusted:false` zeroes exactly `goldMFI` (goldind.js:607) and
      `goldVolSqueeze` (goldind.js:637), both scalp-mint votes only. */
-  assert(X120.scalp.count === B120.scalp.count - 1,
-    'named binance-paxg costs one candidate (' + B120.scalp.count + ' -> ' + X120.scalp.count + ') — the volume votes are withheld, the row is not deleted');
+  assert(B120.scalp.count === 1 && X120.scalp.count === B120.scalp.count,
+    'named binance-paxg withholds the volume votes and the row is not deleted (' + B120.scalp.count + ' -> ' + X120.scalp.count + '; hg-v1439: the second candidate is R:R-rejected pre-votes, so the cost is zero on this board)');
   assert(X120.scalp.best === null, 'and nothing on that board is tradeable: the pin is empty while the row stays visible');
   const M120 = W.hgGoldInlineBridge(inp(120, { candleSource: 'xm-xauusd' }));
   assert(M120.scalp.count === B120.scalp.count, 'the broker label keeps every candidate (' + M120.scalp.count + ')');

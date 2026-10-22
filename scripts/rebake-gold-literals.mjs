@@ -133,6 +133,15 @@ const changes = [];
   for (const line of src.slice(a, b).split('\n')){
     const lm = line.match(/^(\s+)live: (\{|null)/);
     if (lm){
+      if (cur && !rows[cur]){
+        /* hg-v1439: a row whose live population is GONE (the re-walk settled
+           none of it — vpbook settled zero on the hg-v1439 walk) must have
+           its block nulled, not left stale: keeping the old numbers is how a
+           literal drifts away from the artifact it cites. */
+        const nulled = lm[1] + 'live: null,';
+        if (nulled !== line) n++;
+        out.push(nulled); cur = null; continue;
+      }
       if (cur && rows[cur]){
         const v = rows[cur];
         const fn = v.formsNone ? ', formsNone: true' : '';

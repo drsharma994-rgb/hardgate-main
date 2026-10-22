@@ -90,11 +90,14 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
     ok(c.demoted === true && !c.dropped, 'SCALP ' + key + ' demoted — never MOST PROBABLE / ENGINE lead');
     ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, key + ' EDGE DEMOTE stamp');
   }
+  /* hg-v1439: n re-derived from the hg-v1439 re-walk analysis
+     (scripts/gold-scalp-bt-analysis-floor.json, Aug21-Oct22, post ceiling-reject);
+     the old pins quoted the v699 walk (74/132/167/97). */
   const suppressKeys = [
-    ['sweep', 'LIQUIDITY SWEEP REVERSAL', /n=74/],
-    ['vwap', 'SESSION VWAP BOUNCE', /n=132/],
-    ['nyexh', 'NY VOLUME EXHAUSTION', /n=167/],
-    ['liqsweep', 'GOLD SWEEP ENGINE', /n=97/]
+    ['sweep', 'LIQUIDITY SWEEP REVERSAL', /n=80/],
+    ['vwap', 'SESSION VWAP BOUNCE', /n=153/],
+    ['nyexh', 'NY VOLUME EXHAUSTION', /n=61/],
+    ['liqsweep', 'GOLD SWEEP ENGINE', /n=45/]
   ];
   for (const [key, lab, nRe] of suppressKeys){
     const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
@@ -103,15 +106,24 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
     ok((c.stamps || []).indexOf('EDGE SUPPRESS') >= 0 && nRe.test(c.reason || ''),
        key + ' EDGE SUPPRESS stamp + measured n on the reason line');
   }
+  /* hg-v1439: p9volbar's prefer is DEAD — measured net-negative in both halves on
+     three fresh reads (−0.226 / −0.231 / −0.267R, desks/goldscalp-r3); it is a
+     DEMOTE now. p6fail carries the only scalp prefer (live n=64, net +0.128R).
+     Mutation: flipping either action back reddens both loops. */
   const preferKeys = [
-    ['p6fail', 'S30 FAILED-BREAK REVERSAL'],
-    ['p9volbar', 'S62 VOLUME-BAR S0 SWEEP']
+    ['p6fail', 'S30 FAILED-BREAK REVERSAL']
   ];
   for (const [key, lab] of preferKeys){
     const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
     W.hgGoldSetupEdgeApply(c, { scalp: true });
     ok(!c.dropped && !c.demoted && c.edgeBoost >= 2, 'SCALP ' + key + ' prefer — measured fee-survivor rank boost');
     ok((c.stamps || []).indexOf('EDGE PREFER') >= 0, key + ' EDGE PREFER stamp');
+  }
+  {
+    const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: 'p9volbar', strategy: 'S62 VOLUME-BAR S0 SWEEP' };
+    W.hgGoldSetupEdgeApply(c, { scalp: true });
+    ok(c.demoted === true && !c.dropped && !(c.edgeBoost >= 2), 'SCALP p9volbar DEMOTED — the hg-v1439 re-walk withdrew the prefer');
+    ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, 'p9volbar EDGE DEMOTE stamp');
   }
   /* sweepob sat one settle short of the prefer bar (n=49) — deliberately NO row */
   {

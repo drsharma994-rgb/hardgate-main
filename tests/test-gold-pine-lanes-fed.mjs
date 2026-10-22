@@ -288,10 +288,17 @@ console.log('== 5) the real scalp mint: what the two fed fields do ==');
      `ranked.length`, which INCLUDES demoted rows. The mechanism is narrow and
      intentional: `volumeTrusted:false` zeroes exactly two readers — `goldMFI`
      (goldind.js:607) and `goldVolSqueeze` (goldind.js:637) — both of which vote
-     on the scalp mint only. So the honest claim is: the feed costs a candidate,
-     the survivor is stamped demoted, and the withheld volume reads return NONE
-     (asserted on the next line). */
-  assert(xm120.length === 2 && px120.length === 1, 'on seed 120 the named feed costs one candidate (' + xm120.length + ' -> ' + px120.length + ')');
+     on the scalp mint only.
+     hg-v1439 re-derivation: the R:R-unmeasured reject (measured -0.283R fresh,
+     both halves, three windows) drops this tape's ceiling-bound plan, so the
+     unnamed board is the ONE openrange short now, and naming the feed costs
+     that survivor its volume vote — visible as the GRADE stepping A -> B —
+     not the row. So the honest claim today is: the feed costs a grade, the
+     survivor is stamped demoted either way, and the withheld volume reads
+     return NONE (asserted on the next line). */
+  assert(xm120.length === 1 && px120.length === 1 && xm120[0].grade === 'A' && px120[0].grade === 'B'
+      && xm120[0].stratKey === px120[0].stratKey,
+    'on seed 120 the named feed costs the survivor its volume vote — grade A -> B, the row stays (' + xm120.length + ' -> ' + px120.length + ', hg-v1439 board)');
   assert(px120.every(c => c.demoted === true && (c.stamps || []).indexOf('EDGE DEMOTE') >= 0),
     'and the survivor is demoted, not deleted — the volume votes are withheld and the row stays on the board');
   assert(C.goldMFI(tapeEnding(WED, 40, 900, 3, 24), { volumeTrusted: false }).last === 'NONE' && C.goldVolSqueeze(tapeEnding(WED, 60, 900, 3, 24), { volumeTrusted: false }).state === 'NONE', 'the two volume reads return NONE on untrusted volume (the pre-existing rule, unchanged)');

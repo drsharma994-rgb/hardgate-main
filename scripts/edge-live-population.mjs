@@ -125,9 +125,18 @@ export function liveSwingPopulation(path = SWING_REPLAY){
 
 export function liveEdgePopulation(path = REPLAY){
   const raw = JSON.parse(readFileSync(path, 'utf8'));
-  /* shadow rows never entered the main book — they are a separate ledger */
+  /* shadow rows never entered the main book — they are a separate ledger.
+     hg-v1439: walks taken AFTER a suppression lands shadow that kind's trades
+     (the hg-v1439 floor walk shadows vwap and sweep), so the main book alone
+     no longer contains the population the suppression is withholding — which
+     is exactly the number a formsNone block exists to quote. The withheld
+     population is therefore measured on the shadow ledger of the SUPPRESSED
+     kinds (and only those: fvg/vwapband were shadowed at walk time and stay
+     out, so their live block is null). A kind's non-shadow rows are included
+     as before, so a kind retuned OFF suppress (nyexh, liqsweep — hg-v928) is
+     measured on what the desk forms, unchanged. */
   const book = raw.trades
-    .filter((t) => typeof t.netR === 'number' && !t.shadow)
+    .filter((t) => typeof t.netR === 'number' && (!t.shadow || SUPPRESSED.includes(t.stratKey)))
     .sort((a, b) => String(a.tISO).localeCompare(String(b.tISO)));
 
   /* The population a card can still be minted from. A suppressed kind forms

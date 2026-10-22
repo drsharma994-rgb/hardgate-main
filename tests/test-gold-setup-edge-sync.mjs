@@ -249,9 +249,18 @@ console.log('\n6. the rows that actually govern GOLD SCALP');
   const bakedOf = (r) => (typeof r.actionBaked === 'string') ? r.actionBaked : r.action;
   ok(bakedOf(s.hvn) === 'demote' && bakedOf(s.bosalign) === 'demote' && bakedOf(s.ribbon) === 'demote',
      'the three kinds that dominate the mint are demoted in the BAKE');
-  ok(s.bosalign.action === 'neutral' && s.ribbon.action === 'neutral' && s.hvn.action === 'demote',
-     'and hg-v928 lifted two of them to neutral on instruction, leaving hvn demoted');
-  ok(s.p9volbar.action === 'prefer', 'and the one fee-survivor is preferred');
+  /* hg-v1439 re-derivation: bosalign's hg-v928/hg-v916 instruction-retune LAPSED on
+     the hg-v1439 re-walk (live read net -0.071R over n=94, demote rule fires again —
+     the hg-v916 note warned the sign flips at every split, and it flipped), and
+     p9volbar's prefer was measured dead on three fresh reads (net -0.226 / -0.231 /
+     -0.267R, negative in both halves on each), so the fee-survivor boost is now
+     p6fail alone (live n=64, net +0.128R — the prefer bar clears on the new walk).
+     Mutation: setting bosalign.action back to 'neutral' or p9volbar.action back to
+     'prefer' reddens both assertions below. */
+  ok(s.bosalign.action === 'demote' && s.ribbon.action === 'neutral' && s.hvn.action === 'demote',
+     'hg-v1439: bosalign is demoted again (the instruction-retune lapsed on the re-walk), ribbon stays neutral on instruction, hvn stays demoted');
+  ok(s.p9volbar.action === 'demote' && s.p6fail.action === 'prefer',
+     'and hg-v1439 moved the fee-survivor boost: p9volbar prefer is dead (three fresh reads), p6fail carries the only prefer');
 
   /* a demote must not become a drop: demoted cards still paint */
   const src = fs.readFileSync(root + 'goldind.js', 'utf8');

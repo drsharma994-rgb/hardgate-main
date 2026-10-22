@@ -152,7 +152,14 @@ console.log('== 1) the real server serves goldscalp.js byte-identical to disk ==
 }
 
 /* ------------------------------------------------------------------ 2 */
-console.log('== 2) the baked legs, through the real tab ==');
+console.log('== 2) the baked legs, through the real tab ==');/* hg-v1439 re-derivation (section 2): the hg-v1439 R:R-unmeasured reject drops
+   this tape's ceiling-bound plans (sweep/rsidiv — measured -0.283R fresh, both
+   halves, three windows), so seed 102's board is FIVE candidates (liqsweep,
+   p6fail, nyexh, asian, sweepob), and p9volbar's prefer measured dead on three
+   fresh reads (-0.226/-0.231/-0.267R) so the lead set is the ONE surviving
+   prefer row, p6fail. Every count below re-derives off that board; the v1083
+   serve-time splice needle in section 1 is untouched and still fires. */
+
 let LEAD_TODAY = null;
 {
   /* (a) the closed-bar strip: 16 min past the last bar's open it is closed; 5 min past, it is forming and stripped.
@@ -161,7 +168,7 @@ let LEAD_TODAY = null;
      the bottom of this block, in its own scan. */
   const A = await scan({ now: WED + 16 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: true } });
   const B = await scan({ now: WED + 5 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: true } });
-  assert(!!A.snap && A.cands.length === 7, 'REACHABILITY: at +16 min the desk reads the closed WED bar and forms on seed 102 (' + A.cands.length + ' candidates)');
+  assert(!!A.snap && A.cands.length === 5, 'REACHABILITY: at +16 min the desk reads the closed WED bar and forms on seed 102 (' + A.cands.length + ' candidates; hg-v1439: five — the ceiling-bound plans are R:R-rejected)');
   assert(/420 15m bars/.test(A.stat), 'the stat line counts all 420 bars when the last one is closed (' + A.stat.slice(0, 60) + ')');
   assert(/419 15m bars/.test(B.stat), 'at +5 min the FORMING bar is stripped: 419 bars (hg-v1095 closed-bar rule, baked) — ' + B.stat.slice(0, 60));
   assert(B.cands.length === 0 && A.cands.length > 0, 'and the board differs: ' + B.cands.length + ' on the closed tape vs ' + A.cands.length + ' with the forming bar — the suite used to test the forming-bar board');
@@ -172,32 +179,36 @@ let LEAD_TODAY = null;
   LEAD_TODAY = preferRows;
   assert(typeof A.tab.leadKeys === 'function' && JSON.stringify(A.tab.leadKeys()) === JSON.stringify(preferRows),
     'the lead set rides the HG_tabs registration and equals the table\'s prefer rows (' + preferRows.join(', ') + ')');
-  assert(preferRows.join(',') === 'p6fail,p9volbar', 'today that set is exactly the two keys the server splice had typed by hand — same set, now READ');
+  /* hg-v1439: the set is now ONE key — p9volbar's prefer measured dead on
+     three fresh reads (-0.226/-0.231/-0.267R, both halves each) and moved to
+     demote. The letter stands: the set is READ off the table, and it still
+     contains the key the server splice typed by hand (p6fail). */
+  assert(preferRows.join(',') === 'p6fail', 'today that set is p6fail alone — read off the table (hg-v1439: p9volbar\'s prefer measured dead, now demoted)');
   const acc = A.cands.filter(hasAcc), notAcc = A.cands.filter(c => !hasAcc(c));
-  assert(acc.length === 6 && notAcc.length === 1 && notAcc[0].stratKey === 'p6fail',
-    'six of seven carry ACCURACY; the one that does not is the prefer row p6fail (' + notAcc.map(c => c.stratKey).join(',') + ')');
+  assert(acc.length === 4 && notAcc.length === 1 && notAcc[0].stratKey === 'p6fail',
+    'four of five carry ACCURACY; the one that does not is the prefer row p6fail (' + notAcc.map(c => c.stratKey).join(',') + ') — hg-v1439 board');
   assert(acc.every(c => preferRows.indexOf(c.stratKey) < 0), 'every ACCURACY-stamped candidate is outside the prefer set');
   assert(acc.every(c => c.demoted === true) && A.snap.bestId === null, 'ACCURACY demotes (cannot lead); nothing leads on this board — bestId null');
-  assert(/ACCURACY — 6 scalps cannot lead/.test(A.stat), 'the stat line says what the leg did: "ACCURACY — 6 scalps cannot lead"');
-  assert(/ACCURACY — only p6fail \/ p9volbar has held up on this desk/.test(A.cards.replace(/&#39;|&apos;/g, "'")),
-    'the card note NAMES the set it read (p6fail / p9volbar), not a sentence typed about two mechanics');
+  assert(/ACCURACY — 4 scalps cannot lead/.test(A.stat), 'the stat line says what the leg did: "ACCURACY — 4 scalps cannot lead" (hg-v1439 board)');
+  assert(/ACCURACY — only p6fail has held up on this desk/.test(A.cards.replace(/&#39;|&apos;/g, "'")),
+    'the card note NAMES the set it read (p6fail alone, hg-v1439), not a sentence typed about two mechanics');
 
   /* (c) READ, not typed: move a row to prefer at runtime and the leg follows; an unreadable table fails CLOSED.
      hg-v1290: lever driven ON explicitly so the ACCURACY path is tested. */
   const C = await scan({ now: WED + 16 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: true }, afterBoot: W => { W.HG_GOLD_SETUP_EDGE.scalp.liqsweep.action = 'prefer'; } });
   const liq = C.cands.find(c => c.stratKey === 'liqsweep');
-  assert(!!liq && !hasAcc(liq) && JSON.stringify(C.tab.leadKeys()) === JSON.stringify(['liqsweep', 'p6fail', 'p9volbar']),
+  assert(!!liq && !hasAcc(liq) && JSON.stringify(C.tab.leadKeys()) === JSON.stringify(['liqsweep', 'p6fail']),
     'with liqsweep read as a prefer row the leg lets it through — the set is READ off the table at scan time');
-  assert(/ACCURACY — 5 scalps cannot lead/.test(C.stat), 'and the stat leg counts five (' + C.stat.match(/ACCURACY[^·]*/) + ')');
+  assert(/ACCURACY — 3 scalps cannot lead/.test(C.stat), 'and the stat leg counts three (' + C.stat.match(/ACCURACY[^·]*/) + ')');
   const D = await scan({ now: WED + 16 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: true }, afterBoot: W => { W.HG_GOLD_SETUP_EDGE = null; } });
-  assert(D.cands.length === 7 && D.cands.every(hasAcc) && D.tab.leadKeys() === null,
+  assert(D.cands.length === 5 && D.cands.every(hasAcc) && D.tab.leadKeys() === null,
     'with the table unreadable NO mechanic is measured: every candidate carries ACCURACY (fail CLOSED, the hg-v946 GOLD ULTRA rule), leadKeys() is null');
   assert(/the edge table is unreadable/.test(D.cards), 'and the card says so');
 
   /* (d) the release: an ACCURACY-stamped scalp is NOT held in the conviction store.
      On this tape p6fail (and sweepob) MERGE into a same-zone record rather than
      minting their own key (conviction-lock clMergeCompatible), so releasing the
-     six ACCURACY rows empties the store entirely: nothing of theirs survives. */
+     four ACCURACY rows empties the store entirely: nothing of theirs survives. */
   const accKinds = acc.map(c => c.stratKey);
   const live = liveKeys(A.W);
   assert(live.length === 0 && live.every(k => !accKinds.some(kind => k.indexOf(kind + '|') === 0)),
@@ -208,9 +219,9 @@ let LEAD_TODAY = null;
 
   /* (e) the lever: OFF withholds the lead-set demote and its release; nothing else */
   const E = await scan({ now: WED + 16 * 60000, extra: { HG_GS_LEAD_MEASURED_ONLY: false } });
-  assert(E.cands.length === 7 && E.cands.every(c => !hasAcc(c)), 'lever OFF (window override): no candidate carries ACCURACY on this tape');
-  assert(!/ACCURACY —/.test(E.stat) && liveKeys(E.W).length === 5, 'no ACCURACY stat leg, and every minted conviction is held — five keys, p6fail and sweepob having merged into same-zone records (' + liveKeys(E.W).length + ')');
-  assert(E.cands.every(c => c.demoted === true) && E.snap.bestId === null, 'the desk\'s OTHER demotes still hold: all seven demoted, nothing leads — the lever loosens no gate');
+  assert(E.cands.length === 5 && E.cands.every(c => !hasAcc(c)), 'lever OFF (window override): no candidate carries ACCURACY on this tape');
+  assert(!/ACCURACY —/.test(E.stat) && liveKeys(E.W).length === 3, 'no ACCURACY stat leg, and every minted conviction is held — three keys, p6fail and sweepob having merged into same-zone records (' + liveKeys(E.W).length + ')');
+  assert(E.cands.every(c => c.demoted === true) && E.snap.bestId === null, 'the desk\'s OTHER demotes still hold: all five demoted, nothing leads — the lever loosens no gate');
   assert(typeof E.tab.setLeadMeasuredOnly === 'function' && E.tab.setLeadMeasuredOnly(false) === false && E.W.__store.hg_gs_lead_measured_only === '0',
     'setLeadMeasuredOnly(false) persists "0" under hg_gs_lead_measured_only');
   const F = await scan({ now: WED + 16 * 60000, store: { hg_gs_lead_measured_only: '0' } });
@@ -231,7 +242,7 @@ let LEAD_TODAY = null;
   assert(G.goldscalpScan() === null, 'before mount there is no snapshot');
   gTab.mount(pane().pane);
   const gSnap = await kicked(G);
-  assert(!!gSnap && gSnap.cands.length === 7, 'mount kicks the first scan with no click and no refresh (' + (gSnap && gSnap.cands.length) + ' candidates)');
+  assert(!!gSnap && gSnap.cands.length === 5, 'mount kicks the first scan with no click and no refresh (' + (gSnap && gSnap.cands.length) + ' candidates)');
 
   /* (g) the 90-minute TTL: a held record older than 90 min expires on the next scan; a 60-minute one stands.
      Seeded from the lever-OFF store (E), which is the one that holds records on this tape; the

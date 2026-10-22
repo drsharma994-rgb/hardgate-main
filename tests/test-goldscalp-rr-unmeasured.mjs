@@ -35,8 +35,22 @@
    board (640 minted -> 551) on an argument rather than on evidence, and broke
    a fixture that documents rsidiv painting. The ceiling is deliberate and
    already tested (test-gold-stop-model.mjs documents 13%; test-gold-inst-gates
-   pins 3.5x), so cutting it back needed evidence this pack does not have.
-   Demote is what the measurement supports.
+   pins 3.5x), so cutting it back needed evidence this pack did not have.
+
+   hg-v1439 — THE EVIDENCE NOW EXISTS, AND THE PACK RE-PINS TO THE DROP.
+   Measured on the tab's own 15m replay, net R at the XM venue, negative in
+   BOTH halves at BOTH cost models on three windows:
+     fresh Aug21-Oct22 2026   n=259  -0.283R (H1 -0.349 / H2 -0.218; PAXG -0.866)
+     refreshed Aug19-Oct21    n=252  -0.282R (H1 -0.331 / H2 -0.234)
+     round-1 fresh Aug16-Oct18       -0.115R / -0.211R by half
+   and gross is negative both halves (-0.305/-0.166) — not cost-eaten winners;
+   the geometry loses. The full 6000-bar re-walk with the reject in place
+   (conviction-lock cascade included): book -0.071 -> -0.035R net@XM, better in
+   both halves, gross +0.002 -> +0.043. The hg-v912 lesson applies: a demote
+   stops the card leading, it does not stop the trade. So hg-v1439 DROPS the
+   cohort with a named reason and numeric rr/rrFloor, riding the same
+   .rejected channel as the rr-shortfall drop. Mutation: reverting the
+   goldind.js seam to demote reddens section 3 below.
 
    Run: node tests/test-goldscalp-rr-unmeasured.mjs */
 import fs from 'node:fs';
@@ -112,24 +126,34 @@ console.log('\n2. the claim the stop-model note makes, measured');
 }
 
 /* ---------------------------------------------------------------- 3 */
-console.log('\n3. an unmeasured ladder is demoted and stamped, never dropped');
+console.log('\n3. an unmeasured ladder is REJECTED with a named reason (hg-v1439)');
 {
   ok(/if \(lv\.ceilingBound && !lv\.t1Snapped\)\{/.test(GI),
      'the mint path tests both flags together');
   const blk = GI.slice(GI.indexOf('if (lv.ceilingBound && !lv.t1Snapped){'));
   const body = blk.slice(0, blk.indexOf('\n    }') + 6);
-  ok(/demoted = true;/.test(body), 'it DEMOTES');
-  ok(!/dropped: true/.test(body), 'it does not drop — the card still paints with its levels');
-  ok(/R:R UNMEASURED/.test(body), 'and stamps R:R UNMEASURED');
-  ok(/not a reward the market offered/.test(body),
-     'the gate note says what the number actually is');
-  ok(/never MOST PROBABLE/.test(body), 'and that it cannot lead');
+  ok(/return \{ dropped: true,/.test(body),
+     'hg-v1439: it DROPS — the three-window both-halves measurement replaced the hg-v902 demote');
+  ok(!/demoted = true;/.test(body), 'and no longer demotes — a demote never stopped one trading (hg-v912 lesson)');
+  ok(/R:R UNMEASURED/.test(body), 'the drop reason names what the number is');
+  ok(/rr: lv\.rr,/.test(body) && /rrFloor: GS_MIN_RR,/.test(body),
+     'rr and rrFloor ride the drop as NUMBERS (the hg-v929 reject-funnel contract)');
+  ok(/stratKey: key/.test(body) && /id: key \+ '\|' \+ dir/.test(body),
+     'and the dropped-return shape mirrors the rr-shortfall drop above it');
 
   /* the flags must be read together: either alone is the wrong gate */
-  ok(!/if \(lv\.ceilingBound\)\{[\s\S]{0,80}demoted = true/.test(GI),
-     'ceilingBound alone does not demote — a snapped ceiling case has a real R:R');
-  ok(!/if \(!lv\.t1Snapped\)\{[\s\S]{0,80}demoted = true/.test(GI),
+  ok(!/if \(lv\.ceilingBound\)\{[\s\S]{0,80}dropped: true/.test(GI),
+     'ceilingBound alone does not drop — a snapped ceiling case has a real R:R and still paints');
+  ok(!/if \(!lv\.t1Snapped\)\{[\s\S]{0,80}dropped: true/.test(GI),
      'and t1Snapped alone does not either — an unsnapped ladder inside the ceiling still has a real stop');
+  /* fail-open: the flag initialises false and only sets inside the guard where
+     a finite structure stop distance ran past the ceiling — missing structure
+     (structureStop == null) returns before that line, so the reject can never
+     trip on absent inputs */
+  ok(/var ceilingBound = false, t1Snapped = false;/.test(GI),
+     'ceilingBound initialises false');
+  ok(/if \(d \+ 0\.25\*a15 > GOLD_STOP_MAX_ATR\*a15\) ceilingBound = true;/.test(GI),
+     'and sets only when a measured structure distance exceeds the ceiling — fail-open on missing structure');
 }
 
 /* ---------------------------------------------------------------- 4 */

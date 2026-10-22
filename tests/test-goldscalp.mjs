@@ -725,6 +725,34 @@ function compLongRows(){
   push(119, 2306, 2306.5, 2305, 2305.8, 1100);
   return rows;
 }
+/* hg-v1439: the survivor tape — a gentle two-step drift whose structure sits
+   INSIDE the 3.5×ATR ceiling, so its plans survive the ceiling-bound
+   R:R-unmeasured reject that empties compLongRows' board. Mints asian +
+   openrange longs (both demote rows: they paint, never lead). */
+function sfRows(){
+  const t0 = Math.floor(Date.UTC(2026, 2, 9) / 1000);
+  const rows = []; let c = 4300;
+  for (let i = 0; i < 240; i++){ const o = c; c += (i % 3 === 2) ? -1.2 * 0.6 : 1.2;
+    rows.push({ t: t0 + i * 900, o, h: Math.max(o, c) + 0.6, l: Math.min(o, c) - 0.6, c, v: 900 + (i % 7) * 260 }); }
+  return rows;
+}
+/* hg-v1439: climax-sweep tape — a shallow box sweep on 4x volume with an
+   immediate reclaim; the stop structure sits INSIDE the 3.5xATR ceiling, so
+   the sweep plan is fully CONSTRUCTED (V2 evidence intact) before its gate
+   fires. compLongRows' deep sweep is ceiling-bound and now R:R-rejected
+   pre-construction, so it can no longer host the V2-evidence pins. */
+function climaxSweepRows(){
+  const rows = []; let i = 0;
+  const t0 = Math.floor(Date.UTC(2026, 2, 9) / 1000);
+  const P = (o, h, l, c, v) => { rows.push({ t: t0 + i * 900, o, h, l, c, v }); i++; };
+  for (; i < 90;){ const o = 99.5 + ((i * 7) % 10) / 10, c = 99.5 + ((i * 3) % 10) / 10;
+    P(o, Math.max(o, c) + 0.5, Math.min(o, c) - 0.5, Math.min(Math.max(c, 99.5), 100.5), 900 + (i % 5) * 150); }
+  const vavg = rows.slice(-20).reduce((a, r) => a + r.v, 0) / 20;
+  P(100.0, 100.2, 98.6, 99.8, Math.round(vavg * 4.5));   /* the climax sweep bar */
+  for (let k = 0; k < 10; k++){ const o = 99.7 + k * 0.03, c = o + 0.12;
+    P(o, Math.max(o, c) + 0.15, Math.min(o, c) - 0.15, c, 1400); }
+  return rows;
+}
 const OFF_NOW = Date.UTC(2024, 0, 16, 20, 0, 0);          // 20:00 GMT -> killzone weight 0
 const OVLP_NOW = Date.UTC(2024, 0, 16, 14, 0, 0);         // 14:00 GMT -> weight 3
 
@@ -936,27 +964,49 @@ function checkCandShape(c, key, dir, msg){
          msg + ': >=2 independent agreeing reads in the ledger');
 }
 {
-  /* compLongRows hosts a bullish sweep (10b ago) + a bullish RSI divergence.
-     hg-v699: the SCALP sweep kind is EDGE-SUPPRESSED — the tab's own 15m
-     replay measured it gross −0.07R / net −0.27R at XM over n=74
-     (scripts/gold-setup-edge.json). Like the ribbon fixture below, the setup
-     did not vanish silently: it rides the rejected channel with the measured
-     reason. rsidiv still paints (demoted — measured −0.15R, never lead). */
+  /* compLongRows hosts a bullish sweep (10b ago) + a bullish RSI divergence —
+     and on this tape both plans' structure stops sit past the 3.5×ATR ceiling
+     with no opposing level constraining TP1 (rr reads exactly 1.5 BY
+     CONSTRUCTION). hg-v902 demoted that cohort; hg-v1439 REJECTS it, measured
+     net-negative in both halves of three replay windows (-0.283R fresh
+     Aug21-Oct22 n=259; -0.282R Aug19-Oct21 n=252; -0.115/-0.211R r1) — the
+     hg-v912 lesson: a demote stops the card leading, it does not stop the
+     trade. So on this tape the sweep and the divergence now ride the REJECTED
+     channel with the named R:R reason, numeric rr/rrFloor, and the desk shows
+     an honest empty board instead of a geometry that loses. The EDGE SUPPRESS
+     path itself is pinned behaviorally in test-gold-setup-edge.mjs and on the
+     vwap fixture just below. */
   const rows = compLongRows();
   const cands = W.goldScalpSetups({ rows15m: rows, now: OFF_NOW });
-  assert(Array.isArray(cands) && cands.length >= 1, 'multi-setup: >=1 candidate from one candle set (got ' + cands.length + ')');
+  assert(Array.isArray(cands), 'multi-setup: candidate list is an array (got ' + (cands && cands.length) + ')');
   const swSupp = (cands.rejected || []).find(r => r.stratKey === 'sweep');
-  assert(!!swSupp && swSupp.dropped === true, 'sweep reversal: EDGE-SUPPRESSED into the rejected channel (v699 replay bake)');
-  assert((swSupp.stamps || []).indexOf('EDGE SUPPRESS') >= 0 && /n=74/.test(swSupp.reason || ''),
-         'sweep suppression names the measured evidence (n=74) on the reason line');
-  checkCandShape(cands.find(c => c.stratKey === 'rsidiv'), 'rsidiv', 'long', 'RSI 75/25 divergence');
-  assert(cands.every(c => c.dir === 'long'), 'all candidates agree with the majority direction here');
+  assert(!!swSupp && swSupp.dropped === true && /R:R UNMEASURED/.test(swSupp.reason || ''),
+         'sweep reversal: R:R-UNMEASURED-REJECTED into the rejected channel (hg-v1439: ceiling-bound plan, arithmetic 1.5R)');
+  assert(typeof swSupp.rr === 'number' && typeof swSupp.rrFloor === 'number',
+         'the reject carries rr and rrFloor as NUMBERS (hg-v929 funnel contract)');
+  const rsRej = (cands.rejected || []).find(r => r.stratKey === 'rsidiv');
+  assert(!!rsRej && rsRej.dropped === true && /R:R UNMEASURED/.test(rsRej.reason || ''),
+         'RSI 75/25 divergence: ceiling-bound plan rejected with the named reason (was the demoted painter)');
+  assert(!cands.find(c => c.stratKey === 'rsidiv'), 'and the rejected divergence does not paint');
 
-  /* mirrored construction -> symmetric short candidates */
+  /* candidate PAINTING coverage moved to a tape whose structure fits inside
+     the ceiling (the stopfloor suite's mkRows shape — a gentle two-step
+     drift): the shape contract is unchanged, the tape is honest about which
+     plans survive the hg-v1439 gate. Measured while writing this: it mints
+     asian + openrange longs (both demote rows — they paint, never lead). */
+  const sfBase = sfRows();
+  const sf = W.goldScalpSetups({ rows15m: sfBase, now: (sfBase[sfBase.length - 1].t + 900) * 1000 });
+  assert(sf.length >= 1, 'survivor tape: >=1 candidate paints under the hg-v1439 gate (got ' + sf.length + ')');
+  {
+    const sv = sf.find(c => c.stratKey === 'asian') || sf[0];
+    checkCandShape(sv, sv.stratKey, sv.dir, 'survivor tape candidate');
+    assert(sf.every(c => c.dir === 'long'), 'all survivor-tape candidates agree with the majority direction here');
+  }
+
+  /* mirrored construction -> symmetric short rejections */
   const mc = W.goldScalpSetups({ rows15m: mirrorRows(rows, 2300), now: OFF_NOW });
-  assert(mc.length >= 1 && mc.every(c => c.dir === 'short'), 'mirrored: >=1 short candidate');
   const mSw = (mc.rejected || []).find(r => r.stratKey === 'sweep' && r.dir === 'short');
-  assert(!!mSw && mSw.dropped === true, 'mirrored sweep: suppressed symmetrically on the short side');
+  assert(!!mSw && mSw.dropped === true, 'mirrored sweep: rejected symmetrically on the short side');
 
   /* degenerate input -> empty array (never null, never throws) */
   assert(JSON.stringify(W.goldScalpSetups(null)) === '[]'
@@ -987,8 +1037,8 @@ function checkCandShape(c, key, dir, msg){
      fees. The detection still fires; the reason line carries the evidence. */
   const vwSupp = (vc.rejected || []).find(r => r.stratKey === 'vwap');
   assert(!vc.find(c => c.stratKey === 'vwap'), 'session-VWAP bounce: no longer offered (measured-negative at the venue)');
-  assert(!!vwSupp && (vwSupp.stamps || []).indexOf('EDGE SUPPRESS') >= 0 && /n=132/.test(vwSupp.reason || ''),
-         'session-VWAP bounce: suppressed with the measured evidence named (n=132)');
+  assert(!!vwSupp && (vwSupp.stamps || []).indexOf('EDGE SUPPRESS') >= 0 && /n=153/.test(vwSupp.reason || ''),
+         'session-VWAP bounce: suppressed with the measured evidence named (n=153, hg-v1439 re-walk)');
 
   /* --- EMA ribbon pullback: strong day trend, 4-bar pullback to the 20-EMA --- */
   function ribbonRows(){
@@ -1170,8 +1220,20 @@ function loadConvictionStore(ls){
      instant so the off-session quality gate never makes these lock assertions
      time-of-day dependent (the gate itself is pinned separately in section 25) */
   const realDateNow = Date.now;
-  Date.now = () => OVLP_NOW + 30*60*1000;   // 14:30 GMT -> killzone weight 3
-  const baseRows = compLongRows();
+  /* hg-v1439: pinned to the SURVIVOR tape's own clock (its last close + 14h,
+     probe-verified to mint asian + openrange longs) — compLongRows' plans are
+     ceiling-bound and now R:R-rejected, so the old OVLP_NOW pin mints an
+     honestly empty board. */
+  const sfNowRows = sfRows();
+  Date.now = () => (sfNowRows[sfNowRows.length - 1].t + 900) * 1000 + 14 * 3600 * 1000;
+  /* hg-v1439: the conviction lifecycle needs a candidate that SURVIVES the
+     gates. compLongRows' plans are ceiling-bound unsnapped, and the hg-v1439
+     R:R-unmeasured reject drops them (measured −0.283R fresh, both halves,
+     three windows) — on that tape the board is now honestly empty. The
+     lifecycle moves to the survivor tape from section 19 (asian + openrange
+     longs, both demote rows — they paint, mint convictions, and never lead:
+     exactly the board this section needs). */
+  const baseRows = sfRows();
   C.getGoldCandles = async (tf) => (tf === '15m')
     ? { rows: cloneRows(baseRows), source: 'binance-xau' }
     : { rows: [], source: 'binance-xau' };
@@ -1187,15 +1249,20 @@ function loadConvictionStore(ls){
   assert(r1 === 'refreshed', 'scan 1 (kicked by the mount) completes with the seeded gold feed (got "' + r1 + '")');
   const scan1 = C.goldscalpScan();
   /* hg-v699: on this synthetic tape every surviving candidate is measured-
-     negative (rsidiv is edge-DEMOTED, sweep edge-SUPPRESSED), so nothing may
-     lead: bestId is honestly null and no MOST PROBABLE banner is fabricated.
-     Demoted cards still paint and still mint convictions. */
+     negative (asian + openrange are edge-DEMOTED), so nothing may lead:
+     bestId is honestly null and no MOST PROBABLE banner is fabricated.
+     Demoted cards still paint and still mint convictions. (hg-v1439: tape
+     swapped — compLongRows' candidates are now R:R-rejected; the lifecycle
+     runs on the survivor tape's asian candidate.) */
   assert(!!scan1 && scan1.cands.length >= 1, 'scan 1: >=1 ranked candidate on the board');
   assert(scan1.bestId === null, 'scan 1: all-demoted board -> bestId null (nothing measured-negative may lead)');
-  assert(scan1.cands.every(c => c.locked === false), 'scan 1: every candidate is a NEW conviction');
-  const swc1 = scan1.cands.find(c => c.stratKey === 'rsidiv');
-  assert(!!swc1, 'scan 1: rsidiv candidate on the board (demoted, still painted)');
-  assert(swc1.demoted === true, 'scan 1: rsidiv carries its measured demotion');
+  /* the mount-kicked scan already minted this tape's convictions, so a
+     repeated kind can come back locked on scan 1; the lifecycle below drives
+     off a NEW one (the assertion is scoped to it, the contract unchanged) */
+  assert(scan1.cands.some(c => c.locked === false), 'scan 1: at least one candidate is a NEW conviction');
+  const swc1 = scan1.cands.find(c => c.stratKey === 'asian' && c.locked === false) || scan1.cands.find(c => c.locked === false);
+  assert(!!swc1, 'scan 1: survivor-tape candidate on the board (demoted, still painted)');
+  assert(swc1.demoted === true, 'scan 1: it carries its measured demotion');
   const store1 = loadConvictionStore(ls);
   assert(!!store1 && !!store1.live[swc1.id], 'scan 1: conviction persisted under hgGoldscalpConviction');
   const rec1 = store1.live[swc1.id];
@@ -1234,7 +1301,7 @@ function loadConvictionStore(ls){
      freshly computed ones (never re-pick levels for a live conviction) */
   ls.removeItem('hgGoldscalpConviction');
   const freshDet = C.goldScalpSetups({ rows15m: cloneRows(baseRows), now: Date.now() });
-  const freshSw = freshDet.find(c => c.stratKey === 'rsidiv');
+  const freshSw = freshDet.find(c => c.stratKey === swc1.stratKey && c.dir === swc1.dir);
   assert(!!freshSw && freshSw.id === swc1.id, 'premise: fresh detection reproduces the same structure id');
   const seeded = { id: freshSw.id, dir: freshSw.dir, strategy: freshSw.strategy,
                    entry: freshSw.entry - 1, stop: freshSw.stop - 1, t1: freshSw.t1 - 1, t2: freshSw.t2 - 1,
@@ -1258,6 +1325,10 @@ function loadConvictionStore(ls){
      conviction count must stay FLAT; a genuinely shifted structure (different
      zone) must still mint a NEW conviction. ---- */
   console.log('== 21b) structural ids: drift inside zone vs shifted structure ==');
+  /* hg-v1439: 21b runs on the obZoneRows tape at the OVERLAP clock (the
+     openrange mechanic it counts is an NY-window strategy — at the survivor
+     tape's Asian clock it never fires and the +2 becomes +1) */
+  Date.now = () => OVLP_NOW + 30*60*1000;
   function obZoneRows(){
     const rows = flatRows(25, 100, 0.5, DAY);
     rows.push({ t: DAY + 25*900, o: 100, h: 100.4, l: 98.8, c: 99.6, v: 1200 });   // bearish candle = OB, base 98.8
@@ -1309,22 +1380,27 @@ function loadConvictionStore(ls){
   const liveC = Object.keys(loadConvictionStore(ls).live).length;
   /* MEASURED, and the claim corrected. This used to read `liveC === liveB + 1` —
      "genuinely different structure mints a NEW conviction". Driven on this tape
-     it is `2 -> 4`, and the reason is that the tape mints through TWO mechanics,
-     not one: scan B holds `ob|long|99` + `openrange|short|104`, and the shifted
-     structure carries BOTH to new structural ids (`ob|long|101` +
-     `openrange|short|106`). Two shifted structures, two new convictions — the
-     count is right and the `+1` was the stale part. The invariants that actually
-     matter are asserted instead: the original conviction SURVIVES the shift (a
-     new structure must not evict the old one), and both added keys belong to the
-     shifted zone. */
-  assert(liveC === liveB + 2, 'the shifted structure mints one NEW conviction per mechanic that fired (' + liveB + ' -> ' + liveC + ')');
+     it was `2 -> 4` because the tape minted through TWO mechanics (ob|long|99 +
+     openrange|short|104, carried to ob|long|101 + openrange|short|106). hg-v1439:
+     the openrange plan on this tape is ceiling-bound unsnapped and the R:R-
+     unmeasured reject (measured −0.283R fresh, both halves, three windows) now
+     drops it, so the tape mints through ONE mechanic and the shift reads
+     `1 -> 2` — the original form of the claim is the true one again. The
+     invariants that actually matter: the original conviction SURVIVES the shift
+     (a new structure must not evict the old one), and the added key belongs to
+     the shifted zone. */
+  assert(liveC === liveB + 1, 'the shifted structure mints one NEW conviction per mechanic that fired (' + liveB + ' -> ' + liveC + ')');
   const liveCkeys = Object.keys(loadConvictionStore(ls).live);
   assert(obA && liveCkeys.indexOf(obA.id) >= 0,
     'the ORIGINAL conviction survives the shift — a new structure does not evict the old one (' + (obA && obA.id) + ')');
-  assert(liveCkeys.filter(k => /(^|\|)101$|(^|\|)106$/.test(k)).length === 2,
-    'and both added keys belong to the shifted zone (' + liveCkeys.filter(k => /(^|\|)101$|(^|\|)106$/.test(k)).join(', ') + ')');
+  assert(liveCkeys.filter(k => /(^|\|)101$/.test(k)).length === 1,
+    'and the added key belongs to the shifted zone (' + liveCkeys.filter(k => /(^|\|)101$/.test(k)).join(', ') + ')');
   assert(obC && obC.locked === false, 'the new structure is a fresh conviction, not a restore');
   ls.removeItem('hgGoldscalpConviction');
+  /* hg-v1439: back to the survivor tape's own clock for the invalidation
+     scenarios — rec1 was issued on that clock, and EXPIRED/STOPPED compare
+     issuedAt against Date.now */
+  Date.now = () => (sfNowRows[sfNowRows.length - 1].t + 900) * 1000 + 14 * 3600 * 1000;
   console.log('== 22) conviction invalidation: STOPPED / TARGET HIT / EXPIRED ==');
   /* STOPPED: latest 15m close beyond the stop (seed the live record first) */
   ls.setItem('hgGoldscalpConviction', JSON.stringify({ v: 1, live: {}, history: [] }));
@@ -1446,6 +1522,17 @@ function ctRows25(){                 /* 200-bar wiggle downtrend + bullish sweep
     t: DAY + i*900, o: r.o + (lastC - 2300), h: r.h + (lastC - 2300), l: r.l + (lastC - 2300), c: r.c + (lastC - 2300), v: r.v }));
   return down.concat(tail);
 }
+function rsDivRows25(){               /* hg-v1439: RSI bullish-divergence tape, pivot structure INSIDE the ceiling */
+  const rows = []; let px = 100;
+  const P = (i, o, h, l, c, v) => rows.push({ t: DAY + i*900, o, h, l, c, v: (v === undefined ? 1000 : v) });
+  let i = 0;
+  for (; i < 70; i++){ const o = px; px = o + 0.15; P(i, o, Math.max(o, px) + 0.2, Math.min(o, px) - 0.2, px); }
+  for (let k = 0; k < 12; k++, i++){ const o = px; px = o - 0.9; P(i, o, Math.max(o, px) + 0.25, Math.min(o, px) - 0.25, px, 3000); }
+  for (let k = 0; k < 7; k++, i++){ const o = px; px = o + 0.55; P(i, o, Math.max(o, px) + 0.2, Math.min(o, px) - 0.2, px); }
+  for (let k = 0; k < 9; k++, i++){ const o = px; px = o - 0.45; P(i, o, Math.max(o, px) + 0.18, Math.min(o, px) - 0.18, px, 2000); }
+  for (let k = 0; k < 8; k++, i++){ const o = px; px = o + 0.15; P(i, o, Math.max(o, px) + 0.2, Math.min(o, px) - 0.2, px, 1500); }
+  return rows;                        /* mints rsidiv long (FOLKLORE, stopAtr 2.12) + hvn; ER(20)=0.17 — choppy */
+}
 function rows4hBear25(){ return trendRows(220, 2900, -1.2, DAY - 220*4*3600, 4*3600); }
 function rows4hBull25(){ return trendRows(220, 2300, 1.2, DAY - 220*4*3600, 4*3600); }
 function rrShortRows25(){            /* short into a bearish OB with a bullish OB top ~0.7R below entry */
@@ -1466,22 +1553,37 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
 }
 {
   /* ---- (1) OFF-SESSION DEMOTION + raised tally bar + Asian exception ---- */
-  const offC = W.goldScalpSetups({ rows15m: compLongRows(), now: OFF_NOW });
+  /* hg-v1439: tape moved to the survivor tape (sfRows, asian + openrange
+     longs) at its own off-hours instant (last close + 8h = 20:00 GMT, weight
+     0) — compLongRows' plans are ceiling-bound and now R:R-rejected, so it
+     mints an honestly empty board and cannot exercise the demote. The gate
+     contract is unchanged: everything painted off-hours is demoted + stamped. */
+  const offRows = sfRows();
+  const offNow = (offRows[offRows.length - 1].t + 900) * 1000 + 8 * 3600 * 1000;
+  const offC = W.goldScalpSetups({ rows15m: offRows, now: offNow });
   /* hg-v699: sweep is EDGE-SUPPRESSED (tab replay n=74 gross-negative), so
      this fixture yields fewer painted candidates — the gate contract is
      unchanged: everything painted off-hours is demoted + stamped. */
   assert(offC.length >= 1 && offC.every(c => c.demoted === true && c.offSession === true && c.stamps.indexOf('OFF-SESSION') >= 0),
          'off-session: candidates detected outside every ICT killzone are demoted + stamped OFF-SESSION');
-  const offRank = W.goldRankSetups(offC, { now: OFF_NOW });
+  const offRank = W.goldRankSetups(offC, { now: offNow });
   assert(offRank.rejected.length === 0 && offRank.ranked.length === offC.length && offRank.ranked.every(c => c.demoted),
          'off-session: tally clearing the +2 raised bar still renders (demoted)');
   assert(offRank.best === null, 'off-session: demoted candidates can NEVER be MOST PROBABLE (best null when all demoted)');
-  const offRank2 = W.goldRankSetups(offC, { now: OFF_NOW,
-    news: { loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(OFF_NOW/1000) }] },
+  const offRank2 = W.goldRankSetups(offC, { now: offNow,
+    news: { loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(offNow/1000) }] },
     macro: { realRateHint: 'HEADWIND' } });
+  /* hg-v1439: tape moved to the survivor tape (asian + openrange longs at
+     20:00 GMT). The letter is unchanged — macro/news never UNDEMOTE and never
+     boost tally — but the pinned tally ceiling is now measured per-key
+     against the plain rank on the same tape (headwind may shrink, never grow). */
   assert(offRank2.ranked.length === offC.length && offRank2.rejected.length === 0
-      && offRank2.ranked.every(c => c.demoted && c.tally < 2),
-         'off-session structural bar: macro/news shrink tally but off-hours setups still render demoted');
+      && offRank2.ranked.every(c => c.demoted)
+      && offRank2.ranked.every(c => {
+        const plain = offRank.ranked.find(p => p.stratKey === c.stratKey && p.dir === c.dir);
+        return !plain || c.tally <= plain.tally;
+      }),
+         'off-session structural bar: macro/news shrink-or-hold tally and off-hours setups still render demoted');
   const asianC = W.goldScalpSetups({ rows15m: asianBoRows25(), now: ASIAN_NOW });
   const asianOnly = asianC.find(c => c.stratKey === 'asian');
   /* Session exception still clears OFF-SESSION, but hg-v574 EDGE DEMOTE
@@ -1498,36 +1600,47 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   assert(!!asianAtOff && asianAtOff.demoted === true && asianAtOff.stamps.indexOf('OFF-SESSION') >= 0,
          'the Asian strategy outside its own session is demoted like everything else');
 
-  /* ---- (2) TREND ALIGNMENT ---- */
-  const ctBear = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBear25(), now: OVLP_NOW });
-  const rsiL = ctBear.find(c => c.stratKey === 'rsidiv');
+  /* ---- (2) TREND ALIGNMENT ----
+     hg-v1439: tape moved to rsDivRows25 — a purpose-built RSI-divergence tape
+     whose pivot structure sits INSIDE the 3.5×ATR ceiling (rsidiv stopAtr
+     2.12), because ctRows25's divergence tail came from compLongRows and
+     compLongRows' plans are ceiling-bound unsnapped — the hg-v1439 R:R-
+     unmeasured reject (measured −0.283R fresh, both halves, three windows)
+     drops them, so that tape can no longer exercise the demote gates.
+     Probe-verified on the shipped code: bull-4H and no-4H mint rsidiv long
+     FOLKLORE-demoted; a bear 4H stack removes it from the board entirely
+     (the tally bar) — stronger than the demote, and noted as such; the
+     mirror tape's bearish divergence does not clear the tally bar, so the
+     short-side FOLKLORE class stays pinned in test-gold-forming-layers
+     ('rsidiv stamped FOLKLORE') and the FOLKLORE source list below. */
+  const rsDivNow = (function(){ const r = rsDivRows25(); return (r[r.length - 1].t + 900) * 1000 + 9 * 3600 * 1000; })();
+  const ctBear = W.goldScalpSetups({ rows15m: rsDivRows25(), rows4h: rows4hBear25(), now: rsDivNow });
+  const rsiLbear = ctBear.find(c => c.stratKey === 'rsidiv');
+  assert(!rsiLbear && ctBear.every(c => c.demoted === true),
+         'trend: against a bear 4H stack the divergence does not even paint (tally bar) — nothing counter-trend leads');
   const swL = (ctBear.rejected || []).find(r => r.stratKey === 'sweep');
-  assert(!!rsiL && rsiL.demoted === true && rsiL.stamps.indexOf('FOLKLORE') >= 0,
-         'trend: rsidiv is FOLKLORE-demoted (no defended mechanism) regardless of EMA stack');
-  /* Sweep keeps the COUNTER-TREND exemption in __gsCand, but hg-v699 EDGE
-     SUPPRESS (tab replay: gross −0.07R / net −0.27R at XM, n=74) rejects it
-     with the measured reason — the exemption shows as the ABSENCE of a
-     COUNTER-TREND stamp on the rejected row. */
-  assert(!!swL && (swL.stamps || []).indexOf('COUNTER-TREND') < 0,
-         'trend exception: liquidity-sweep is not COUNTER-TREND demoted');
-  assert(swL.dropped === true && (swL.stamps || []).indexOf('EDGE SUPPRESS') >= 0,
-         'trend: scalp sweep is EDGE SUPPRESS from the v699 tab replay (SWING sweep stays preferred)');
-  const ctBull = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBull25(), now: OVLP_NOW });
+  /* Sweep keeps the COUNTER-TREND exemption in __gsCand — visible as the
+     ABSENCE of a COUNTER-TREND stamp on its rejected row. (The row's gate on
+     this tape is the V2 volume-climax reject; the EDGE SUPPRESS behavior is
+     pinned behaviorally in test-gold-setup-edge.mjs and on the section-19
+     vwap fixture.) */
+  assert(!!swL && swL.dropped === true && (swL.stamps || []).indexOf('COUNTER-TREND') < 0
+      && typeof swL.reason === 'string' && swL.reason.length > 10,
+         'trend exception: liquidity-sweep is not COUNTER-TREND demoted; it is rejected with a named reason');
+  const ctBull = W.goldScalpSetups({ rows15m: rsDivRows25(), rows4h: rows4hBull25(), now: rsDivNow });
   const rsiLB = ctBull.find(c => c.stratKey === 'rsidiv');
   assert(!!rsiLB && rsiLB.demoted === true && rsiLB.stamps.indexOf('FOLKLORE') >= 0,
          'trend: rsidiv stays FOLKLORE-demoted even when 4H stack would clear COUNTER-TREND');
-  const ctNone = W.goldScalpSetups({ rows15m: ctRows25(), now: OVLP_NOW });
+  const ctNone = W.goldScalpSetups({ rows15m: rsDivRows25(), now: rsDivNow });
   const rsiLN = ctNone.find(c => c.stratKey === 'rsidiv');
   assert(!!rsiLN && rsiLN.demoted === true && rsiLN.stamps.indexOf('FOLKLORE') >= 0,
          'trend: rsidiv FOLKLORE demotion when 4H unavailable');
-  const ctMir = W.goldScalpSetups({ rows15m: mirrorRows(ctRows25(), 2560), rows4h: rows4hBull25(), now: OVLP_NOW });
+  const ctMir = W.goldScalpSetups({ rows15m: mirrorRows(rsDivRows25(), 100), rows4h: rows4hBull25(), now: rsDivNow });
   const rsiS = ctMir.find(c => c.stratKey === 'rsidiv');
   const swS = (ctMir.rejected || []).find(r => r.stratKey === 'sweep' && r.dir === 'short');
-  assert(!!rsiS && rsiS.dir === 'short' && rsiS.demoted === true && rsiS.stamps.indexOf('FOLKLORE') >= 0,
-         'trend (mirrored): short rsidiv is FOLKLORE-demoted');
-  assert(!!swS && (swS.stamps || []).indexOf('COUNTER-TREND') < 0
-      && swS.dropped === true && (swS.stamps || []).indexOf('EDGE SUPPRESS') >= 0,
-         'trend (mirrored): sweep-rejection short is COUNTER-TREND-exempt, EDGE SUPPRESS (v699)');
+  assert(!rsiS, 'trend (mirrored): the mirrored bearish divergence does not clear the tally bar — nothing paints');
+  assert(!!swS && swS.dropped === true && (swS.stamps || []).indexOf('COUNTER-TREND') < 0,
+         'trend (mirrored): sweep-rejection short is COUNTER-TREND-exempt, rejected with a named reason');
 
   /* ---- (3) MIN R:R AFTER SNAPPING ---- */
   const rrC = W.goldScalpSetups({ rows15m: rrShortRows25(), now: OVLP_NOW });
@@ -1545,9 +1658,12 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   assert(!!chopOb && chopOb.demoted === true && chopOb.stamps.indexOf('CHOP') >= 0
       && /Kaufman ER .* < 0\.25/.test(chopOb.gateNotes.join(' ')),
          'chop: Kaufman ER(20) < 0.25 demotes the mean-reversion OB retest (stamped CHOP)');
-  const chopBreak = W.goldScalpSetups({ rows15m: compLongRows(), now: OVLP_NOW });
-  /* hg-v699: sweep is EDGE-SUPPRESSED — the chop exemption is still visible
-     as the ABSENCE of a CHOP stamp on its rejected row. */
+  const chopBreak = W.goldScalpSetups({ rows15m: rsDivRows25(), now: OVLP_NOW });
+  /* hg-v1439: tape moved to rsDivRows25 (compLongRows' plans are ceiling-bound
+     and now R:R-rejected). The rsDiv tape is itself choppy by the desk's own
+     measure (Kaufman ER(20) = 0.17 < 0.25), so the exemption is genuinely
+     exercised: the painted divergence and the rejected breakout trigger carry
+     NO chop stamp while the tape is in chop. */
   const chSw = (chopBreak.rejected || []).find(r => r.stratKey === 'sweep');
   const chRs = chopBreak.find(c => c.stratKey === 'rsidiv');
   assert(!!chSw && (chSw.stamps || []).indexOf('CHOP') < 0 && !!chRs && chRs.stamps.indexOf('CHOP') < 0,
@@ -1563,12 +1679,17 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
     vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
     const C2 = globalThis.window;
   C2.HG_GS_LEAD_MEASURED_ONLY = false;   /* hg-v1156: see section 21 */
-    const FIXED = OVLP_NOW + 30*60*1000;
+    /* hg-v1439: tape moved to the survivor tape — compLongRows' plans are
+       ceiling-bound and now R:R-rejected, so after the veto window passes it
+       mints nothing and cannot prove issuance resumes. Clock pinned to the
+       tape's own minting instant (last close + 14h). */
+    const newsRows = sfRows();
+    const FIXED = (newsRows[newsRows.length - 1].t + 900) * 1000 + 14 * 3600 * 1000;
     const realDateNow2 = Date.now;
     Date.now = () => FIXED;
     C2.hgNewsState = () => ({ loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(FIXED/1000) + 300 }] });
     C2.getGoldCandles = async (tf) => (tf === '15m')
-      ? { rows: cloneRows(compLongRows()), source: 'binance-xau' }
+      ? { rows: cloneRows(newsRows), source: 'binance-xau' }
       : { rows: [], source: 'binance-xau' };
     const tab2 = C2.HG_tabs.find(t => t.id === 'goldscalp');
     const M2 = freshPane();
@@ -1670,11 +1791,15 @@ function vwapRows26(){
      checks stay in force. The policy itself is pinned in
      tests/test-gold-served-is-tested.mjs. */
   C3.HG_GS_LEAD_MEASURED_ONLY = false;
-  const FIXED = OVLP_NOW + 30*60*1000;
+  /* hg-v1439: tape moved to the survivor tape (compLongRows' plans are
+     ceiling-bound and now R:R-rejected — the board would be honestly empty);
+     clock pinned to the tape's own minting instant. */
+  const mgmtRows = sfRows();
+  const FIXED = (mgmtRows[mgmtRows.length - 1].t + 900) * 1000 + 14 * 3600 * 1000;
   const realDateNow3 = Date.now;
   Date.now = () => FIXED;
   C3.getGoldCandles = async (tf) => (tf === '15m')
-    ? { rows: cloneRows(compLongRows()), source: 'binance-xau' }
+    ? { rows: cloneRows(mgmtRows), source: 'binance-xau' }
     : { rows: [], source: 'binance-xau' };
   const tab3 = C3.HG_tabs.find(t => t.id === 'goldscalp');
   const M3 = freshPane();
@@ -1689,12 +1814,14 @@ function vwapRows26(){
          'candidate carries its numeric structure anchor (id bucket = Math.round(anchor), got ' + (obDet && obDet.anchor) + ')');
 
   /* (1) TRADE MANAGEMENT block on EVERY card, with the card's real values.
-     hg-v699: sweep is EDGE-SUPPRESSED, so the board carries rsidiv. */
+     hg-v699: sweep is EDGE-SUPPRESSED, so the board carries rsidiv.
+     hg-v1439: on the survivor tape the board carries asian (demoted — it
+     paints, never leads). */
   const html1 = M3.stubs['#gsCards'].innerHTML;
   const mgmtCount = (html1.match(/TRADE MANAGEMENT/g) || []).length;
   assert(mgmtCount === s1.cands.length && s1.cands.length >= 1,
          'trade-management block rendered on EVERY scalp card (' + mgmtCount + '/' + s1.cands.length + ')');
-  const swG = s1.cands.find(c => c.stratKey === 'rsidiv');
+  const swG = s1.cands.find(c => c.stratKey === 'asian') || s1.cands[0];
   assert(html1.indexOf('At TP1 $' + pxLike(swG.t1) + ': close 50%, move stop to breakeven ($' + pxLike(swG.entry)
       + '). Runner targets TP2 $' + pxLike(swG.t2) + '.') >= 0,
          'management block uses the card\'s real TP1/entry(breakeven)/TP2 values');
@@ -1957,11 +2084,12 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
   vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
   const C4 = globalThis.window;
-  const FIXED = OVLP_NOW + 30*60*1000;                     // 14:30 GMT -> killzone weight 3
+  const panelRows = climaxSweepRows();                   /* hg-v1439: climax tape (compLongRows now mints an honestly empty board; this tape still forms the prior-day-raid + equal-extreme watches AND paints candidates) */
+  const FIXED = (panelRows[panelRows.length - 1].t + 900) * 1000 + 9 * 3600 * 1000;
   const realDateNow4 = Date.now;
   Date.now = () => FIXED;
   C4.getGoldCandles = async (tf) => (tf === '15m')
-    ? { rows: cloneRows(compLongRows()), source: 'binance-xau' }
+    ? { rows: cloneRows(panelRows), source: 'binance-xau' }
     : { rows: [], source: 'binance-xau' };
   const tab4 = C4.HG_tabs.find(t => t.id === 'goldscalp');
   const M4 = freshPane();
@@ -2000,6 +2128,7 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
          'additive contract: existing snapshot fields untouched, armed/whySilent added (bestId null on an all-demoted board, v699)');
 
   /* silent scan (flat rows, OVLP): lead = nearest armed trigger with $ + ATR distance */
+  ls4.removeItem('hgGoldscalpConviction');  /* hg-v1439: the premise is DETECTION silence; the climax tape's convictions would otherwise restore as locked cards (persistence is section 21's letter) */
   C4.getGoldCandles = async (tf) => (tf === '15m')
     ? { rows: flat900(240, 100, 0.5), source: 'binance-xau' }
     : { rows: [], source: 'binance-xau' };
@@ -2071,8 +2200,13 @@ console.log('== volume microstructure ==');
   assert(W.goldVolumeSpike(base, 10) === false, 'goldVolumeSpike: mid bar at flat volume -> false');
   const prof = W.goldVolumeProfile(base, 25, 10);
   assert(prof && isFinite(prof.pocPrice) && Array.isArray(prof.hvns), 'goldVolumeProfile: returns POC + hvns array');
-  const sweepRows = compLongRows();
-  const swCands = W.goldScalpSetups({ rows15m: sweepRows, now: OFF_NOW });
+  /* hg-v1439: tape moved to climaxSweepRows — compLongRows' sweep is
+     ceiling-bound and now R:R-rejected PRE-construction, so its row no longer
+     carries the V2 evidence; the shallow climax tape's sweep is constructed
+     (volume-climax why + confluence ledger) before its own gate fires. */
+  const sweepRows = climaxSweepRows();
+  const csNow = (sweepRows[sweepRows.length - 1].t + 900) * 1000 + 9 * 3600 * 1000;
+  const swCands = W.goldScalpSetups({ rows15m: sweepRows, now: csNow });
   /* hg-v699: the sweep kind is EDGE-SUPPRESSED, so the fully-built candidate
      (V2 volume validation and all) rides the rejected channel — the V2
      evidence contract is unchanged, read it from there. */
@@ -2219,9 +2353,13 @@ console.log('== 28) hg-v232 gold enhancement exports ==');
   /* STRUCTURAL BULL + dropping yields must not zero out short cards */
   const yldDrop = [];
   for (let i = 0; i < 6; i++) yldDrop.push({ t: DAY + i * 86400, o: 4.3 - i * 0.05, h: 4.4, l: 4.2, c: 4.3 - i * 0.05, v: 1 });
-  const bullShortRows = mirrorRows(compLongRows(), 2300);
-  const bullShortCands = W.goldScalpSetups({ rows15m: bullShortRows, now: OFF_NOW, us10yCandles: yldDrop });
-  const bullShortRank = W.goldRankSetups(bullShortCands, { goldPro: { word: 'STRUCTURAL BULL' }, now: OFF_NOW });
+  /* hg-v1439: mirrored climax tape (compLongRows' mirrored plans are ceiling-
+     bound and R:R-rejected; this tape's mirrored ribbon/rsidiv/hvn shorts
+     paint demoted) */
+  const bullShortRows = mirrorRows(climaxSweepRows(), 100);
+  const bsNow = (bullShortRows[bullShortRows.length - 1].t + 900) * 1000 + 9 * 3600 * 1000;
+  const bullShortCands = W.goldScalpSetups({ rows15m: bullShortRows, now: bsNow, us10yCandles: yldDrop });
+  const bullShortRank = W.goldRankSetups(bullShortCands, { goldPro: { word: 'STRUCTURAL BULL' }, now: bsNow });
   const shortCards = bullShortRank.ranked.filter(c => c && c.dir === 'short');
   assert(shortCards.length >= 1,
          'gold scalp: short setups survive STRUCTURAL BULL + falling-yield demotion (got ' + shortCards.length + ')');

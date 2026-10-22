@@ -99,16 +99,18 @@ console.log('3. the literal writer');
        about, which is whether the writer rebuilds a corrupted literal
        byte-identically. n=10 net=-0.5 still reads `demote`, so the literal is
        wrong and the verdict is untouched. */
-    gi = gi.replace(/live: \{ n: 263,[^}]*\}/,
+    /* hg-v1439: needle follows the regenerated block (hg-v1439 walk: n=282
+       — was 263 pre-refresh) */
+    gi = gi.replace(/live: \{ n: 282,[^}]*\}/,
                     'live: { n: 10, gross: -0.5, net: -0.5, oosHeld: 0, oosBroke: 0 }');
     ok(gi !== giBefore, 'the goldind fixture actually corrupted a live block');
     writeFileSync(join(ROOT, 'goldind.js'), gi);
 
     let og = readFileSync(join(ROOT, 'omnigold.js'), 'utf8');
     const ogBefore = og;
-    /* hg-v1404: the needle follows the regenerated cell (hg-v1402 walk:
-       144/129 rows, -0.2846/+0.0876 — was 210/156, -0.3434/+0.1449) */
-    og = og.replace("'SCALP/FAIR': { lo: [144, 0.259, -0.2846], hi: [129, 0.3852, 0.0876] }",
+    /* hg-v1439: the needle follows the regenerated cell (hg-v1439 walk:
+       134/128 rows, -0.3396/+0.0866 — was 144/129, -0.2846/+0.0876 at hg-v1404) */
+    og = og.replace("'SCALP/FAIR': { lo: [134, 0.2403, -0.3396], hi: [128, 0.3852, 0.0866] }",
                     "'SCALP/FAIR': { lo: [1, 0.1, -9.9], hi: [1, 0.1, 9.9] }");
     ok(og !== ogBefore, 'the omnigold fixture actually corrupted a cell');
     writeFileSync(join(ROOT, 'omnigold.js'), og);

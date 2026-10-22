@@ -147,9 +147,15 @@ console.log('== 2) the resolver reads the chain: default OFF, lever flips it ON 
   const on = await scan({ extra: { HG_GS_LEAD_MEASURED_ONLY: true } });
   assert(on.tab.leadMeasuredOnly() === true,
     'window.HG_GS_LEAD_MEASURED_ONLY = true flips the lever ON (hg-v1156 override chain intact)');
+  /* hg-v1439 re-derivation: the hg-v1439 R:R-unmeasured reject drops the
+     tape's ceiling-bound plans (sweep/rsidiv minted nothing — measured
+     -0.283R fresh, both halves, three windows), so this tape's board is FIVE
+     candidates now, and the instruction fires on the four measured-not-prefer
+     rows; the exempt one is still the prefer row p6fail. */
   const onAcc = on.cands.filter(c => Array.isArray(c.stamps) && c.stamps.indexOf('ACCURACY') >= 0);
-  assert(onAcc.length === 6,
-    'with the lever ON, six of seven candidates carry ACCURACY (the hg-v1098 instruction fires on measured-not-prefer rows)');
+  assert(on.cands.length === 5 && onAcc.length === 4
+      && on.cands.filter(c => !(Array.isArray(c.stamps) && c.stamps.indexOf('ACCURACY') >= 0)).every(c => c.stratKey === 'p6fail'),
+    'with the lever ON, four of five candidates carry ACCURACY — every measured-not-prefer row; the exempt one is the prefer row p6fail (hg-v1439: board re-derived after the R:R reject emptied the ceiling-bound plans)');
 
   /* localStorage '1' flips it ON too */
   const lsOn = await scan({ store: { hg_gs_lead_measured_only: '1' } });

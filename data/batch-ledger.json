@@ -580,6 +580,11 @@
       "version": "hg-v1438",
       "built": "2026-10-22T21:00:00Z",
       "note": "PINE GOLD round 3: upstream-gate audit \u2014 clause-attribution marks (ledger prices each clause) + measured disclosures (renumbered from hg-v1437: upstream's UI pack took v1437)"
+    },
+    {
+      "version": "hg-v1439",
+      "built": "2026-10-23T08:00:00Z",
+      "note": "GOLD SCALP round 3: reject ceiling-bound R:R-unmeasured (-0.283R three windows, both halves) + EDGE rebake repairs the upstream-broken chain + MIN_RR question answered (keep 1.2)"
     }
   ]
 }

@@ -8490,7 +8490,6 @@ terse status, and never launches a first-time scan on a global refresh.
       '<0.5': { lo: [46, -0.2174], hi: [41, -0.0488] },
       '<0.867': { lo: [57, 0.1793], hi: [51, 0.0239] },
       '<1.733': { lo: [29, -0.405], hi: [36, -0.1568] }
-
     },
     /* What the ceiling costs the book at each venue, measured on the replay.
        Share of rows the cost gate alone vetoes — stable across the fill
@@ -8507,7 +8506,6 @@ terse status, and never launches a first-time scan on a global refresh.
       'SCALP/FAIR': { lo: [134, 0.2403, -0.3396], hi: [128, 0.3852, 0.0866] },
       'SCALP/STRONG': { lo: [95, 0.2766, -0.2509], hi: [83, 0.4512, 0.291] },
       'SWING/FAIR': { lo: [15, 0.3333, -0.0459], hi: [13, 0.3846, 0.118] }
-
     },
     sequentialTicketHorizon: {
 
@@ -10532,10 +10530,10 @@ terse status, and never launches a first-time scan on a global refresh.
      number this desk refuses everywhere else. It states the age and what the
      walk cannot have seen. */
   var HG_OG_WALK = {
-    from: '2026-05-04T16:00:00.000Z',
-    to: '2026-10-18T06:00:00.000Z',
-    generated: '2026-10-18T08:54:17.654Z',
-    trades: 10306,
+    from: '2026-05-07T14:00:00.000Z',
+    to: '2026-10-21T04:00:00.000Z',
+    generated: '2026-10-21T05:48:47.190Z',
+    trades: 10422,
     src: 'scripts/backtest-omnigold-results.json'
   };
 
