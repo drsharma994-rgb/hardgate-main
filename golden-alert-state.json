@@ -629,7 +629,7 @@
       "expired": true
     },
     "W": {
-      "at": "2026-10-22T03:03:10.758Z",
+      "at": "2026-10-22T06:44:28.031Z",
       "score": 4,
       "fresh": true,
       "ago": 9,
@@ -661,15 +661,15 @@
       "expired": true
     },
     "CKB": {
-      "at": "2026-10-21T03:04:25.893Z",
-      "score": 3,
+      "at": "2026-10-22T06:44:32.749Z",
+      "score": 5,
       "fresh": true,
-      "ago": 6,
+      "ago": 7,
       "crossDay": "2026-10-14",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-22T03:03:25.652Z",
+  "lastRunAt": "2026-10-22T06:44:45.884Z",
   "scanned": 504,
   "cards": 0
 }
