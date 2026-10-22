@@ -149,7 +149,7 @@ function tmCrownedCardHTML(s) {
   var dir = (s.bias === 'LONG' || s.bias === 'long') ? 'long' : 'short';
   var color = dir === 'long' ? '#15803d' : '#dc2626';
 
-  return '<div class="card ' + dir + '" style="border-left: 4px solid ' + color + '; background: #ffffff; padding: 16px; border-radius: 8px; font-family: \"JetBrains Mono\", monospace; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">' +
+  return '<div class="card ' + dir + '" style="border-left: 4px solid ' + color + '; background:#1e293b; padding: 16px; border-radius: 8px; font-family: \"JetBrains Mono\", monospace; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">' +
     '<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">' +
       '<b style="font-size: 17px; letter-spacing: .04em;">' + s.sym + '</b>' +
       '<span class="dir" style="font-size: 10px; font-weight: 700; letter-spacing: .14em; color: ' + color + ';">' + dir.toUpperCase() + '</span>' +

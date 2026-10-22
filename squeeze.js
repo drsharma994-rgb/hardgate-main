@@ -636,7 +636,7 @@ function sqLimitBoardHTML(results){
     try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(e){ smcChip = ''; }
     var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: p.stack, scanner: 'squeeze', strategy: 'squeeze' }) : '';
-    return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
+    return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#1e293b">'
       + '<div><b>' + esc(r.sym) + '</b>' + sqVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + smcChip + '</div>'
       + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxF(p.entry) + '</div>'
       + '<div class="note">' + squeezePlanHTML(p) + '</div>'
