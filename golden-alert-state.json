@@ -621,18 +621,18 @@
       "expired": true
     },
     "NIGHT": {
-      "at": "2026-10-21T23:21:49.144Z",
+      "at": "2026-10-22T01:12:32.440Z",
       "score": 4,
       "fresh": true,
-      "ago": 7,
+      "ago": 8,
       "crossDay": "2026-10-13",
       "expired": true
     },
     "W": {
-      "at": "2026-10-21T23:21:46.526Z",
+      "at": "2026-10-22T01:12:30.256Z",
       "score": 4,
       "fresh": true,
-      "ago": 8,
+      "ago": 9,
       "crossDay": "2026-10-12",
       "expired": true
     },
@@ -669,7 +669,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-21T23:22:07.817Z",
+  "lastRunAt": "2026-10-22T01:12:47.890Z",
   "scanned": 504,
   "cards": 0
 }
