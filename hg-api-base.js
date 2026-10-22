@@ -62,6 +62,6 @@
      Both files are in sw.js HG_SHELL for real now, 'shivagold' sits in the
      GOLD group statically, and this injection stays as belt-and-braces.
      The cache-bump check scans runtime literals here. */
-  add('hgShivaDesk', 'shivagold.js?v=1435');
-  add('hgShivaNav', 'shiva-nav.js?v=1435');
+  add('hgShivaDesk', 'shivagold.js?v=1436');
+  add('hgShivaNav', 'shiva-nav.js?v=1436');
 })();
