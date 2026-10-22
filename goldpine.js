@@ -993,6 +993,11 @@ function runGoldPineScan(bars, ctx){
     }
     holdPine(swing, bars && bars.rows4h, 'swing', bars && bars.rows15m);
     holdPine(scalp, bars && bars.rows15m, 'scalp', bars && bars.rows4h);
+    /* hg-v1438: stamp the upstream hold-clause attribution marks AFTER
+       holdPine has settled every row's pineBlock, before anything records.
+       Record-only, additive keys on the same reads bag — no gate reads them. */
+    gpHoldMarkReads(swing);
+    gpHoldMarkReads(scalp);
     if (typeof W.hgGoldInstApply === 'function'){
       W.hgGoldInstApply(scalp, bars && bars.rows15m, macro, { desk: 'goldpine', horizon: 'scalp' });
       W.hgGoldInstApply(swing, bars && bars.rows15m, macro, { desk: 'goldpine', horizon: 'swing' });
@@ -1307,6 +1312,64 @@ function gpR2MarkReads(list, mode, bars){
   }catch(eGpR2){ return 0; }
 }
 
+/* hg-v1438: the r3 upstream-gate audit marks (gp:up*). The desk's census
+   (impl-brief-r3.md, census-r3.json @ hg-v1436) measured every upstream hold
+   clause's sole-holder cohort on the shipped stack; two clauses measured
+   ANTI-SELECTING on swing in-sample (rsi-divergence: removed cohort
+   +0.968R/+0.065R at XM by half, positive both halves; cloud-inside: mixed
+   halves, H2 +1.64R) while no cost model clears a both-halves removal — so
+   the gates stay and the LEDGER prices each clause out of sample. One
+   three-state boolean per instrumented upstream clause: true when that
+   clause is the row's own pineBlock attribution (the clause the desk blamed),
+   false when holdPine judged the row and did not attribute it to the clause,
+   ABSENT when holdPine never judged it (record-only / pre-hold demoted —
+   the hg-v989 third state, never fabricated). Display only, never gates. */
+var GP_UPHOLD_MARKS = [
+  { key: 'gp:upRsiDiv',   needles: ['RSI divergence against the lead'] },
+  { key: 'gp:upCloud',    needles: ['Price is inside the Ichimoku cloud.'] },
+  { key: 'gp:upElder',    needles: ['Elder Impulse is against the lead'] },
+  { key: 'gp:upShanghai', needles: ['The Shanghai hour was pierced'] },
+  { key: 'gp:upWkOpen',   needles: ['wick took the weekly open', 'The weekly open was swept'] }
+];
+function gpHoldMarks(s){
+  var out = {};
+  try{
+    if (!s || typeof s !== 'object') return out;
+    if (s.recordOnly) return out;                       /* holdPine skips these */
+    if (s.demoted && !s.pineBlock) return out;          /* demoted before holdPine: never judged */
+    if (s.dir !== 'long' && s.dir !== 'short') return out;
+    var why = String(s.pineBlock || '');                /* judged; '' = passed every clause */
+    for (var i = 0; i < GP_UPHOLD_MARKS.length; i++){
+      var m = GP_UPHOLD_MARKS[i], hit = false;
+      for (var j = 0; j < m.needles.length; j++){
+        if (why.indexOf(m.needles[j]) >= 0){ hit = true; break; }
+      }
+      out[m.key] = hit;
+    }
+  }catch(eGpUp){ return {}; }
+  return out;
+}
+/* hg-v1438: the r3 marking seam — runs AFTER holdPine has decided (the marks
+   read the settled pineBlock attribution), beside the r2 seam's home
+   (hg-v949). Additive keys on the same reads bag; gates NOTHING. */
+function gpHoldMarkReads(list){
+  try{
+    if (!Array.isArray(list) || !list.length) return 0;
+    var marked = 0;
+    for (var i = 0; i < list.length; i++){
+      var s = list[i];
+      if (!s || (s.dir !== 'long' && s.dir !== 'short')) continue;
+      var up = gpHoldMarks(s), keys = Object.keys(up);
+      if (!keys.length) continue;
+      var bag = (s.freeReads && typeof s.freeReads === 'object') ? s.freeReads : {};
+      for (var k = 0; k < keys.length; k++) bag[keys[k]] = up[keys[k]];
+      s.freeReads = bag;
+      marked++;
+    }
+    return marked;
+  }catch(eGpUpR){ return 0; }
+}
+
 
 function cardHTML(s, rank){
   var tier = (s.tier === 'forming' || s.isRecent) ? 'forming'
@@ -1593,6 +1656,17 @@ function mount(el){
           tapeNote += (W.hgFwdReadSplitHtml('GOLDPINE:swing') || '') + (W.hgFwdReadSplitHtml('GOLDPINE:scalp') || '');
         }
       }catch(eGpSplit){}
+      /* hg-v1438: the r3 upstream-gate audit, said on the board. Static
+         measured line, paint only — no behavior change, nothing gates on it.
+         Numbers: impl-brief-r3.md / census-r3.json / upstream-gate-audit.json. */
+      tapeNote += '<div class="note warn">MEASURED (r3 census @ hg-v1436, 4h 12mo / 15m 6wk, PAXG spot, XM costs):'
+        + ' the upstream hold stack (v1410\u2013v1415) cut the swing book 68 \u2192 24 walked trades and turned it'
+        + ' negative (\u22120.032R/trade vs +0.121R before the holds); the swing cohort it removed paid +0.33R/trade'
+        + ' in BOTH halves, and the v1410 RSI-divergence hold alone removed a cohort that paid +0.968R/+0.065R'
+        + ' by half. The scalp book is EMPTY at shipped parameters \u2014 zero floor-passing trades in six weeks.'
+        + ' No upstream clause is removed (no cost model clears a both-halves removal): every row now carries'
+        + ' clause-attribution marks (gp:up*) and the forward ledger prices each clause\u2019s held cohort out of'
+        + ' sample \u2014 the ledger decides.</div>';
       if (typeof W.hgGoldTapeNotes === 'function'){
         [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
           var rws = bars && bars[L[0]];
@@ -1738,6 +1812,10 @@ W.gpMayLead = gpMayLead;
    nothing. */
 W.gpR2Marks = gpR2Marks;
 W.gpR2MarkReads = gpR2MarkReads;
+/* hg-v1438: the r3 clause-attribution mark helper and seam, exported so the
+   pin suite can drive them as units. */
+W.gpHoldMarks = gpHoldMarks;
+W.gpHoldMarkReads = gpHoldMarkReads;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh,
                  fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml,

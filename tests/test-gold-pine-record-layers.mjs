@@ -342,10 +342,16 @@ const cardOf = (html, label) => { const i = html.indexOf('· ' + label + ' · Gr
   assert(/RECORD ONLY · 0 of 20 settled/.test(stCard) && /NO TRADE HANDOFF — RECORD ONLY/.test(stCard) && !/class="toTrade"/.test(stCard) && !/ADD TO BOOK/.test(stCard),
     'the Supertrend card carries the RECORD ONLY chip and the withheld-handoff note, and NO handoff button');
   assert(/recorded under GOLDPINE:scalp|recorded under GOLDPINE:swing/.test(stCard) && /paying at or over 20 settled/.test(stCard), 'the note names the pool and the release rule');
-  /* hg-v1404: the quoted record follows the regenerated sibling bake —
-     ICHI-KUMO reads n=111, 93 settled, -0.160R, z -1.54 on the hg-v1402
-     walk (was 106/89/-0.161R/-1.27) */
-  assert(/OMNIGOLD ICHI-KUMO, gate-clear n=111, 93 settled, −0\.160R net at XM, z −1\.54/.test(icCard) && /OMNIGOLD’s gates and 1h horizon/.test(icCard), 'the Ichimoku card quotes its twin\'s gate-clear record through hgGoldSiblingRecord, attributed to OMNIGOLD\'s gates and horizon');
+  /* hg-v1404: the quoted record follows the regenerated sibling bake.
+     hg-v1438 RE-DERIVED: upstream's data refresh ceb58645 ("chore(data):
+     refresh all tab/backtest data") regenerated scripts/omnigold-replay-
+     evidence.json and the GENERATED HG_GOLD_SIBLING_RECORD block in
+     gold-extra-strategies.js (scripts/gold-sibling-records.mjs); ICHI-KUMO
+     now reads n=114, 95 settled, -0.172R, z -1.67 (was n=111, 93 settled,
+     -0.160R, z -1.54 on the hg-v1404 regen; 106/89/-0.161R/-1.27 on the
+     hg-v1402 walk). The pin re-derives the literal FROM the shipped
+     generated block, it does not recalibrate a desk number. */
+  assert(/OMNIGOLD ICHI-KUMO, gate-clear n=114, 95 settled, −0\.172R net at XM, z −1\.67/.test(icCard) && /OMNIGOLD’s gates and 1h horizon/.test(icCard), 'the Ichimoku card quotes its twin\'s gate-clear record through hgGoldSiblingRecord, attributed to OMNIGOLD\'s gates and horizon');
   assert(!/Nearest measured twin/.test(stCard), 'the Supertrend card, with no twin, quotes none');
   /* Derive the expected counts FROM the measured rows so the guard tracks the
      table instead of hardcoding a vintage. `rec.length` is asserted above.

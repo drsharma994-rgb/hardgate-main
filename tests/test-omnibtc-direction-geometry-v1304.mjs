@@ -2,7 +2,7 @@
 /* hg-v1434 note: the §version pins ride the current tree stamp again
    (hg-v1433 -> hg-v1434, riding the CRYPTO SINGLES bump the same way it rode
    hg-v1432 -> hg-v1433 with GOLD SINGLES). Earlier:
-   hg-v1435 note: same move again (hg-v1434 -> hg-v1435, riding the PINE/META
+   hg-v1438 note: same move again (hg-v1436 -> hg-v1438, riding the PINE GOLD r3
    bump).
    build-stamp/sw/trendtable — 'Sister suites re-pinned'
    convention. Behavior pins unchanged. */
@@ -430,10 +430,10 @@ console.log('\n[§7] ship stamps align');
      hg-v1404 at the hg-v1404 bump; 'Sister suites re-pinned' convention).
      Behavior pins
      above unchanged. */
-  ok(/version:\s*'hg-v1435'/.test(bs), "build-stamp.js version: 'hg-v1435' (re-pinned hg-v1435)");
-  ok(/HG_CACHE\s*=\s*'hg-v1435'/.test(sw), "sw.js HG_CACHE = 'hg-v1435' (re-pinned hg-v1435)");
-  ok(/hg-v1435/.test(tt), 'trendtable.js stamped hg-v1435 (re-pinned hg-v1435)');
-  ok(/\?v=1435/.test(tt), 'trendtable.js uses ?v=1435 (re-pinned hg-v1435)');
+  ok(/version:\s*'hg-v1438'/.test(bs), "build-stamp.js version: 'hg-v1438' (re-pinned hg-v1438)");
+  ok(/HG_CACHE\s*=\s*'hg-v1438'/.test(sw), "sw.js HG_CACHE = 'hg-v1438' (re-pinned hg-v1438)");
+  ok(/hg-v1438/.test(tt), 'trendtable.js stamped hg-v1438 (re-pinned hg-v1438)');
+  ok(/\?v=1438/.test(tt), 'trendtable.js uses ?v=1438 (re-pinned hg-v1438)');
 }
 
 /* ---------- summary ---------- */
