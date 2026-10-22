@@ -9495,6 +9495,35 @@ terse status, and never launches a first-time scan on a global refresh.
     return '<div class="note warn og-replay-banner" data-og-replay-banner="1" '
       + 'style="margin-bottom:10px;border-left:3px solid #dc2626">' + esc(txt)
       + (vline ? '<div class="og-venue-stance" style="margin-top:4px">' + esc(vline) + '</div>' : '')
+      + hgOgStack3FloorStanceHtml()
+      + '</div>';
+  }
+
+  /* hg-v1440 — R3 FLOOR HONESTY LINE (disclosure only; gates NOTHING).
+     The hg-v1402 stack-3 formation clause (regime-fit/htf-confirm/hurst-regime
+     must ALL pass, omnigold.js hgOgFormation) was baked on a kept book that
+     measured +0.047/+0.040R at XM in the two time halves of its walk. The
+     round-3 audit (desks/omnigold-r3; replay artifact refreshed 2026-10-21,
+     8,691 settled rows, median split 2026-08-02) re-measured the SAME clause
+     on the extended window: kept -0.015/+0.043R at XM — the FIRST half is
+     negative now; the kept-side edge decayed in the recent window. The clause
+     still earns its place as a FILTER — the book it drops is worse in both
+     halves at both venues (-0.087/-0.181 XM, -1.317/-1.739 PAXG) — and the
+     round refused every tighter/looser variant with numbers (stack-4, grade
+     floor, T1 1.5R/1.0R, PM-fix window, rescues), so nothing replaces it.
+     FAIL OPEN: the line is a reading OF the replay record; with no record
+     (or a record with no settled count) there is nothing to read — ''. */
+  function hgOgStack3FloorStanceHtml(){
+    var E = (typeof HG_OG_REPLAY_EVIDENCE !== 'undefined') ? HG_OG_REPLAY_EVIDENCE : null;
+    if (!E || !isFinite(fin(E.settled))) return '';
+    return '<div class="og-stack3-stance" data-og-stack3-stance="1" style="margin-top:4px;font-size:11px;opacity:0.85">'
+      + esc('STACK-3 FLOOR, RE-MEASURED (r3): the kept book ran +0.047/+0.040R at XM '
+          + 'in the v1402 bake halves; on the refreshed replay (8,691 settled through '
+          + '2026-10-21) it runs -0.015/+0.043R — the first half went negative: the '
+          + 'floor\'s kept-side edge decayed in the recent window. It still filters '
+          + '(the dropped book is worse in both halves: -0.087/-0.181 at XM, '
+          + '-1.317/-1.739 at PAXG costs) and no measured variant beat it — the floor '
+          + 'stands, the +0.04R claim does not.')
       + '</div>';
   }
 
@@ -17367,6 +17396,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgRenderConfluenceBreakdown = hgOgRenderConfluenceBreakdown;
     window.hgOgSpectrumTruthHeaderHtml = hgOgSpectrumTruthHeaderHtml;
     window.hgOgDeskStanceBannerHtml = hgOgDeskStanceBannerHtml;
+    window.hgOgStack3FloorStanceHtml = hgOgStack3FloorStanceHtml;  /* hg-v1440 r3 floor honesty line */
     window.hgOgCohortClaim = hgOgCohortClaim;
     window.hgOgCohortNetTxt = hgOgCohortNetTxt;
     window.hgOgCohortNTxt = hgOgCohortNTxt;
