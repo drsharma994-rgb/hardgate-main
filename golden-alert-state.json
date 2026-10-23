@@ -661,7 +661,7 @@
       "expired": true
     },
     "CKB": {
-      "at": "2026-10-23T17:48:14.944Z",
+      "at": "2026-10-23T19:39:01.217Z",
       "score": 4,
       "fresh": true,
       "ago": 8,
@@ -669,7 +669,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-23T17:48:21.636Z",
+  "lastRunAt": "2026-10-23T19:39:10.079Z",
   "scanned": 502,
   "cards": 0
 }
