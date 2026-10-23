@@ -661,15 +661,15 @@
       "expired": true
     },
     "CKB": {
-      "at": "2026-10-22T06:44:32.749Z",
-      "score": 5,
+      "at": "2026-10-23T17:48:14.944Z",
+      "score": 4,
       "fresh": true,
-      "ago": 7,
+      "ago": 8,
       "crossDay": "2026-10-14",
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-23T15:57:43.356Z",
+  "lastRunAt": "2026-10-23T17:48:21.636Z",
   "scanned": 502,
   "cards": 0
 }
