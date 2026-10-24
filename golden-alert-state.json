@@ -645,7 +645,7 @@
       "expired": true
     },
     "AXL": {
-      "at": "2026-10-24T14:05:33.869Z",
+      "at": "2026-10-24T15:56:14.682Z",
       "score": -2,
       "fresh": true,
       "ago": 8,
@@ -669,7 +669,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-24T14:05:47.804Z",
+  "lastRunAt": "2026-10-24T15:56:29.835Z",
   "scanned": 502,
   "cards": 0
 }
