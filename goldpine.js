@@ -489,6 +489,42 @@ function hgGpRecord(list, mode, bars){
       /* hg-v1288: +null===0 passes fin() — add the >0 belt so a null entry/stop
          doesn't record entry:0/stop:0 into the forward ledger (hg-v948 trap). */
       if (!s || !s.dir || !fin(+s.entry) || !fin(+s.stop) || +s.entry <= 0 || +s.stop <= 0) continue;
+      /* hg-v1415: three-state hg-v989 marks for each withhold the mint
+         applied — true=fired on this row, false=ran and did not fire,
+         absent=did not run (loop short-circuited past it, module absent,
+         or states.ok !== true). Rides on top of s.freeReads so the two
+         existing readers (hgGoldFreeFeedLineHtml, hgGoldIndicatorStackHtml)
+         are unaffected. No gate reads these keys. Admission is scalp-only
+         so swing rows record absent for it (gpAdmissionFloor returns
+         ok:true on swing by construction, which is "did not apply here"
+         not "passed", and the mark is absent accordingly). Handoff was
+         consulted on every non-demoted row by stampGpBlockers, so
+         hold:handoff is true/false, never absent, on those rows. */
+      var _hf = s._holdFlags || null;
+      var _rr = (typeof s.rr === 'number' && isFinite(s.rr)) ? s.rr : NaN;
+      var _handoffMark;
+      if (!s.recordOnly && !s.demoted){
+        _handoffMark = s.handoffBlock ? true : (isFinite(_rr) ? false : undefined);
+      } else { _handoffMark = undefined; }
+      var _admissionMark;
+      if (!s.recordOnly && !s.demoted && String(mode) === 'scalp'){
+        _admissionMark = s.admissionBlock ? true : false;
+      } else { _admissionMark = undefined; }
+      var _reads = {};
+      if (s.freeReads && typeof s.freeReads === 'object'){
+        for (var _k in s.freeReads){ if (Object.prototype.hasOwnProperty.call(s.freeReads, _k)) _reads[_k] = s.freeReads[_k]; }
+      }
+      /* strict hg-v989: only true or false survives; a null (did not run)
+         leaves the key absent — never a guessed false. */
+      if (_hf){
+        if (_hf.pineBlocks === true || _hf.pineBlocks === false) _reads['hold:pineBlocks'] = _hf.pineBlocks;
+        if (_hf.formHold   === true || _hf.formHold   === false) _reads['hold:formHold']   = _hf.formHold;
+        if (_hf.htfHold    === true || _hf.htfHold    === false) _reads['hold:htfHold']    = _hf.htfHold;
+        if (_hf.tapeVeto   === true || _hf.tapeVeto   === false) _reads['hold:tapeVeto']   = _hf.tapeVeto;
+      }
+      if (_admissionMark === true || _admissionMark === false) _reads['hold:admission'] = _admissionMark;
+      if (_handoffMark   === true || _handoffMark   === false) _reads['hold:handoff']   = _handoffMark;
+      var _readsOut = Object.keys(_reads).length ? _reads : undefined;
       cands.push({
         mechanic: hgGpKind(s),
         sym: 'XAUUSD',
@@ -502,8 +538,9 @@ function hgGpRecord(list, mode, bars){
         mark: (fin(+s.price) && +s.price > 0) ? +s.price : undefined,
         barT: barT,   /* hg-v979: the lane's own signal bar */
         /* hg-v1162: the free-feed + indicator-stack marks and the funding
-           print, for the ledger's read split and funding split */
-        reads: (s.freeReads && typeof s.freeReads === 'object') ? s.freeReads : undefined,
+           print, for the ledger's read split and funding split.
+           hg-v1415: hold:* marks ride alongside (see _readsOut above). */
+        reads: _readsOut,
         fundingPct: (typeof s.fundingPct === 'number' && isFinite(s.fundingPct)) ? s.fundingPct : undefined,
         /* hg-v1288: the hg-v955 seam goldscalp/goldswing closed and goldpine
            missed — the gold-weekend calendar verdict must reach the ledger so
@@ -894,8 +931,14 @@ function runGoldPineScan(bars, ctx){
   for (gpI = 0; gpI < swing.length; gpI++) if (swing[gpI]) swing[gpI].goldShut = gpShutSwing;
   for (gpI = 0; gpI < scalp.length; gpI++) if (scalp[gpI]) scalp[gpI].goldShut = gpShutScalp;
 
-  hgGpRecord(swing, 'swing', bars);
-  hgGpRecord(scalp, 'scalp', bars);
+  /* hg-v1415: hgGpRecord is MOVED to after holdPine + stampGpBlockers (below)
+     so every record carries the hold:* three-state marks the mint stamped
+     on the row. Pre-pack it ran here, before holdPine populated _holdFlags —
+     which left every record without a hold:* mark, re-introducing the exact
+     hg-v955 defect this pack exists to close. hgGpReorder still runs here
+     because downstream code (hgSmcEnrich, tape stamps, fundamentalScanCands)
+     reads the ordered lists; the final sortSetups inside the holdPine try
+     block (which still sinks demoted rows) runs after. */
   swing = hgGpReorder(swing);
   scalp = hgGpReorder(scalp);
 
@@ -956,6 +999,24 @@ function runGoldPineScan(bars, ctx){
       scalp = sortSetups(scalp);
     }
   }catch(eFS){}
+  /* hg-v1415: WHY NO LEAD aggregator. Every withhold the mint applies —
+     the four hg-v1406..v1414 holdPine functions (pineGoldBlocksLead,
+     pineGoldFormHold, pineGoldHtfHold, pineGoldTapeVeto), the hg-v1400
+     admission floor, and the hg-v1288 R:R handoff floor — pushes its
+     fire into one aggregator so the paint can name the specific blockers
+     instead of a blank "nothing eligible to lead" banner. This is the
+     hg-v1331 trendmxWhyEmptyHtml precedent on a tab eight uncited
+     withhold packs landed on (hg-v1406..v1413 are absent from AGENTS.md
+     and from build-stamp.js's pack text; the measurement that would
+     retire any of them does not exist yet). No threshold is loosened
+     and no withhold is removed — the forward ledger decides which to
+     retire, from records written beside this disclosure. */
+  var scanAgg = {
+    pineBlocks: 0, formHold: 0, htfHold: 0, tapeVeto: 0,
+    admission: 0, handoff: 0,
+    reasons: { pineBlocks: {}, formHold: {}, htfHold: {}, tapeVeto: {},
+               admission: {}, handoff: {} }
+  };
   try{
     var blk = gfn('pineGoldBlocksLead'), formHold = gfn('pineGoldFormHold'), htfHold = gfn('pineGoldHtfHold'), stFn = gfn('pineGoldLayerStates'), tape = gfn('pineGoldTapeVeto');
     function holdPine(list, rows, mode, otherRows){
@@ -964,18 +1025,44 @@ function runGoldPineScan(bars, ctx){
       var other = (stFn && otherRows && otherRows.length >= 60) ? stFn(otherRows) : null;
       for (var z = 0; z < list.length; z++){
         if (!list[z] || list[z].recordOnly || list[z].demoted) continue;
-        var why = (blk && ps && ps.ok === true) ? blk(ps, list[z].dir) : null;
-        if (!why && formHold && ps && ps.ok === true) why = formHold(ps, list[z].dir);
-        if (!why && htfHold && other && other.ok === true) why = htfHold(other, list[z].dir, mode);
+        var row = list[z];
+        /* hg-v1415: per-withhold three-state tracking (hg-v989 strict).
+           true  = this withhold ran AND fired on this row
+           false = ran AND did not fire — the loop continued past it
+           null  = did not run (states.ok !== true, module absent)
+           The short-circuit means only one withhold reaches `true`
+           per row; the ones after an fired one stay null — which is
+           honest (they never ran). */
+        row._holdFlags = { pineBlocks: null, formHold: null, htfHold: null, tapeVeto: null };
+        var why = null, src = null;
+        if (blk && ps && ps.ok === true){
+          why = blk(ps, row.dir);
+          row._holdFlags.pineBlocks = why ? true : false;
+          if (why) src = 'pineBlocks';
+        }
+        if (!why && formHold && ps && ps.ok === true){
+          why = formHold(ps, row.dir);
+          row._holdFlags.formHold = why ? true : false;
+          if (why) src = 'formHold';
+        }
+        if (!why && htfHold && other && other.ok === true){
+          why = htfHold(other, row.dir, mode);
+          row._holdFlags.htfHold = why ? true : false;
+          if (why) src = 'htfHold';
+        }
         if (!why && tape){
           try{
-            why = tape(rows, list[z].dir, { mode: mode, now: Date.now(), macro: macro, silverRows: W.__hgSilverRows || null });
+            why = tape(rows, row.dir, { mode: mode, now: Date.now(), macro: macro, silverRows: W.__hgSilverRows || null });
+            row._holdFlags.tapeVeto = why ? true : false;
           }catch(eT){ why = null; }
         }
         if (!why) continue;
-        list[z].pineBlock = why;
-        list[z].demoted = true;
-        list[z].demotedWhy = why;
+        row.pineBlock = why;
+        row.demoted = true;
+        row.demotedWhy = why;
+        row.holdSource = src;   /* hg-v1415 */
+        scanAgg[src]++;
+        scanAgg.reasons[src][why] = (scanAgg.reasons[src][why] || 0) + 1;
       }
     }
     holdPine(swing, bars && bars.rows4h, 'swing', bars && bars.rows15m);
@@ -987,12 +1074,87 @@ function runGoldPineScan(bars, ctx){
     swing = sortSetups(swing);
     scalp = sortSetups(scalp);
   }catch(ePB){}
+  /* hg-v1415: admission floor (hg-v1400, the one measured pack on this
+     desk) + R:R handoff (hg-v1288) count fires on every non-recordOnly,
+     non-demoted row so the WHY NO LEAD panel sees the full picture.
+     Rows stay on the board and keep their cards exactly as before —
+     this is a DISCLOSURE pass, not a demote. */
+  function stampGpBlockers(list){
+    if (!Array.isArray(list)) return;
+    for (var si = 0; si < list.length; si++){
+      var s = list[si];
+      if (!s || s.recordOnly || s.demoted) continue;
+      try{
+        var adm = gpAdmissionFloor(s);
+        if (adm && adm.ok === false){
+          s.admissionBlock = adm.why || 'admission floor';
+          scanAgg.admission++;
+          var ar = adm.why || 'admission floor';
+          scanAgg.reasons.admission[ar] = (scanAgg.reasons.admission[ar] || 0) + 1;
+        }
+      }catch(eA){}
+      try{
+        var hb = gpHandoffBlock(s);
+        if (hb){
+          s.handoffBlock = hb;
+          scanAgg.handoff++;
+          var hr = 'R:R ' + (+hb.rr).toFixed(2) + ' below floor ' + (+hb.floor).toFixed(2);
+          scanAgg.reasons.handoff[hr] = (scanAgg.reasons.handoff[hr] || 0) + 1;
+        }
+      }catch(eH){}
+    }
+  }
+  stampGpBlockers(swing);
+  stampGpBlockers(scalp);
+  /* hg-v1415: record NOW, after holdPine + stampGpBlockers stamped the
+     row flags — so every record's reads bag carries the three-state
+     hold:* marks (hg-v989 strict) the ledger uses to split by which
+     withhold caught the row. */
+  hgGpRecord(swing, 'swing', bars);
+  hgGpRecord(scalp, 'scalp', bars);
   return { swing: swing, scalp: scalp, levels: levels, source: source,
            goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
            tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now(),
            /* hg-v1162: the context the marks were read on, for the one
               catalog census the board paints */
-           catalogCtx: scanCtx };
+           catalogCtx: scanCtx,
+           /* hg-v1415: the WHY NO LEAD aggregator for the paint's empty
+              branch (hg-v1331 trendmxWhyEmptyHtml precedent). No gate
+              module reads this field — asserted. */
+           heldWhy: scanAgg };
+}
+
+/* hg-v1415: WHY NO LEAD — one panel on the paint's empty branch, naming
+   the specific blockers the mint applied this scan. The hg-v1331
+   trendmxWhyEmptyHtml precedent exactly: counts, top reason per
+   withhold, named packs. Reads only `result.heldWhy` (the aggregator
+   runGoldPineScan builds). Renders nothing when no withhold fired or
+   when the aggregator is missing — a blank panel on a quiet desk is
+   worse than nothing (hg-v955). No gate module reads result.heldWhy;
+   this is a disclosure, not a rule. */
+function gpWhyEmptyHtml(result){
+  try{
+    var a = result && result.heldWhy;
+    if (!a) return '';
+    var total = (a.pineBlocks|0) + (a.formHold|0) + (a.htfHold|0)
+              + (a.tapeVeto|0)   + (a.admission|0) + (a.handoff|0);
+    if (!total) return '';
+    function top(obj){
+      var best = null, bestN = 0;
+      for (var k in obj){ if (obj[k] > bestN){ best = k; bestN = obj[k]; } }
+      return best ? ' (top: ' + esc(best) + ')' : '';
+    }
+    var parts = [];
+    if (a.pineBlocks) parts.push('pine majority against ×' + a.pineBlocks + top(a.reasons.pineBlocks));
+    if (a.formHold)   parts.push('form hold ×'           + a.formHold   + top(a.reasons.formHold));
+    if (a.htfHold)    parts.push('HTF hold ×'            + a.htfHold    + top(a.reasons.htfHold));
+    if (a.tapeVeto)   parts.push('tape veto ×'           + a.tapeVeto   + top(a.reasons.tapeVeto));
+    if (a.admission)  parts.push('admission floor ×'     + a.admission  + top(a.reasons.admission));
+    if (a.handoff)    parts.push('R:R below handoff floor ×' + a.handoff + top(a.reasons.handoff));
+    return '<div class="note warn"><b>WHY NO LEAD</b> — ' + parts.join(' · ')
+         + '. These are the hg-v1400 (admission), hg-v1288 (handoff), and hg-v1406–v1414 withholds the mint applied this scan. '
+         + 'No threshold moves and no withhold is removed; the forward ledger decides which to retire next.</div>';
+  }catch(e){ return ''; }
 }
 
 /* hg-v1162: the two read lines on a card -- gold-catalog.js owns the
@@ -1491,6 +1653,11 @@ function mount(el){
            + ' \u00b7 15m ' + esc(tapeScalp || 'unread') + '). '
            + 'The cards below still print their levels, stamped AGAINST GOLD TAPE \u00b7 HELD.</div>')
         : '';
+      /* hg-v1415: WHY NO LEAD disclosure \u2014 paints only when a withhold
+         fired this scan, so a quiet desk stays quiet. Sits beside
+         heldNote (against-tape) so a reader sees both when they both
+         apply. Reads result.heldWhy; no gate reads this field. */
+      var whyEmptyNote = (typeof gpWhyEmptyHtml === 'function') ? gpWhyEmptyHtml(result) : '';
       /* Pack 907: GOLD PINE draws four legs and moved its numbers on a
          malformed tape without saying so. One note per leg that arrived,
          ahead of everything drawn from it. */
@@ -1515,7 +1682,7 @@ function mount(el){
           + ' The sections stay empty until the window clears; the board below still shows the '
           + 'stack\'s full read.</div>';
       }
-      var html = fundNote + gpFundPanelHtml() + tapeNote + heldNote + killedNote + recordNote
+      var html = fundNote + gpFundPanelHtml() + tapeNote + heldNote + whyEmptyNote + killedNote + recordNote
         + '<div class="gp-board"><aside class="gp-mp-col" aria-label="Most probable setup">'
         + (mpList.length
           ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1))
@@ -1635,10 +1802,16 @@ W.gpWeekendVerdict = gpWeekendVerdict;
    drive them as units — a guard that cannot reach the rule proves nothing. */
 W.gpAdmissionFloor = gpAdmissionFloor;
 W.gpMayLead = gpMayLead;
+/* hg-v1415: expose WHY NO LEAD renderer on the global so tests can call it
+   and so a tab that wants to paint it reads the one home. No gate module
+   reads this name (asserted). */
+W.gpWhyEmptyHtml = gpWhyEmptyHtml;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh,
                  fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml,
                  /* hg-v1164: the release judge and the lead predicate ride the registration (hg-v967) */
-                 recordLayerJudge: gpRecordLayerJudge, mayLead: gpMayLead });
+                 recordLayerJudge: gpRecordLayerJudge, mayLead: gpMayLead,
+                 /* hg-v1415: the WHY NO LEAD renderer rides the registration too */
+                 whyEmptyHtml: gpWhyEmptyHtml });
 
 })();

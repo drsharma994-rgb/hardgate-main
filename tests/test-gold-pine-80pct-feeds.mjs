@@ -446,9 +446,23 @@ console.log('== 6) the marks gate nothing; stamps ==');
   for (const g of ['hg-gates.js', 'cryptogates.js', 'gold-formation.js', 'hg-solidity.js', 'conviction-lock.js', 'hg-forward.js', 'pinegoldmath.js', 'gold-best-levels.js'])
     assert(!/free:(silver|gsRatio|vix|usdjpy|fearGreed|perpFunding|paxgBasis|macroTilt)|hgGoldFreeFeedVerdicts/.test(strip(read(g))), g + ' names no free-feed mark and never asks the home');
   const gp = strip(read('goldpine.js')), p80 = strip(read('eightypercent.js'));
-  assert(!/freeReads\[/.test(gp) && !/freeReads\[/.test(p80), 'neither desk indexes a mark (they carry and render the bag, never read a verdict out of it)');
-  assert(/reads: \(s\.freeReads && typeof s\.freeReads === 'object'\) \? s\.freeReads : undefined,/.test(gp)
-      && /reads: \(sig\.freeReads && typeof sig\.freeReads === 'object'\) \? sig\.freeReads : undefined,/.test(p80), 'both record writers hand the ledger the bag by property access');
+  /* hg-v1415: goldpine's record builder now carries s.freeReads AND six
+     three-state hg-v989 hold:* marks on top (hold:pineBlocks, formHold,
+     htfHold, tapeVeto, admission, handoff) — one local accumulator
+     merges them before `reads:` is handed to the ledger. The merge
+     iterates s.freeReads keys to copy the bag forward (one legitimate
+     index for a COPY, not a verdict read). The intent of this guard —
+     "no gate reads a mark out of freeReads" — stands; the shape is
+     ok to allow a bounded merge expression beside the direct-forward
+     shape eightypercent.js still uses. */
+  assert(!/freeReads\[/.test(p80), 'eightypercent.js never indexes a mark');
+  // goldpine's merge loop is the ONE exception, and it is bounded to
+  // the record builder: only `s.freeReads[_k]` for a COPY to _reads.
+  const gpFreeReadIdx = (gp.match(/s\.freeReads\[_k\]/g) || []).length;
+  assert(gpFreeReadIdx === 1, 'goldpine.js has exactly one bounded freeReads index (the hg-v1415 merge-copy)');
+  assert(/reads: _readsOut,/.test(gp)
+      && /reads: \(sig\.freeReads && typeof sig\.freeReads === 'object'\) \? sig\.freeReads : undefined,/.test(p80),
+      'both record writers hand the ledger the bag by property access (goldpine via _readsOut after merge; 80pct direct)');
   assert(/hg80MarkLive\(rungs, __p\.feeds\);/.test(p80) && /gpMarkReads\(swing, 'swing', bars, scanCtx\);/.test(gp) && /gpMarkReads\(scalp, 'scalp', bars, scanCtx\);/.test(gp),
     'the marking runs once per scan at the seam before the record (textual, and says so)');
   assert(read('build-stamp.js').indexOf("version: '" + HG_VER + "'") > 0, 'build-stamp.js is ' + HG_VER);

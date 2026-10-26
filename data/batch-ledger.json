@@ -515,6 +515,11 @@
       "version": "hg-v1414",
       "built": "2026-10-20T03:10:00Z",
       "note": "GOLD PINE holds a lead while price is inside the Ichimoku cloud, and holds a lead when the Elder Impulse (EMA21 slope and MACD histogram) both point the other way. A close above or below the cloud does not refuse. Neither read mints a ticket."
+    },
+    {
+      "version": "hg-v1415",
+      "built": "2026-10-26T00:00:00Z",
+      "note": "GOLD PINE says WHY NO LEAD. An audit measured eight withhold packs (hg-v1406 through hg-v1413) landed with no AGENTS.md entry and no build-stamp pack-text citation — nine new withhold gates in nine days, zero measurement citations — and the compound empties the board on multi-regime tapes (0 of 55 candidates across chop, pullback, sawtooth; monotonic ramps still mint). Doctrine-safe intervention per hg-v1331 TREND MATRIX precedent: a WHY NO LEAD disclosure panel naming the specific blockers the mint applied (pine majority against, form hold, HTF hold, tape veto, admission floor, R:R handoff) with per-withhold fire counts and top reasons, plus three-state hg-v989 record marks (hold:pineBlocks, hold:formHold, hold:htfHold, hold:tapeVeto, hold:admission, hold:handoff) on every hgGpRecord write so hgFwdReadSplit('GOLDPINE') can measure out of sample which withhold catches rows that would have paid. No threshold moves. No withhold removed. The eight uncited packs stay in force; the ledger decides which to retire. hgGpRecord moved to run after holdPine + stampGpBlockers so marks land on records (the hg-v932 drop otherwise). gpWhyEmptyHtml exposed on window and on the HG_tabs registration. Ticket decisions byte-identical to pre-pack (verified: rising 7/2/5, chop 7/7/0, strong 7/1/6)."
     }
   ]
 }
