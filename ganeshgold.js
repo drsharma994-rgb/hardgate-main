@@ -532,6 +532,39 @@ async function ganeshGoldScan(opts){
         }]);
       }
     }catch(eRec){ }
+    /* hg-v1441 — the measured swing-promotion handoff (desks/goldsweep census:
+       the WATCH swing book the card shows settled +0.278R at XM over n=754,
+       POSITIVE BOTH HALVES +0.26/+0.30, while the ticket gate minted ONE
+       ticket in 12 months). RECORD-FIRST, never auto-live: swing WATCH plans
+       graded A/A+ record to the forward ledger under their OWN mechanic
+       (GANESHGOLD-SWING-PROMO, ticket:false) so the ledger prices the
+       promotion cohort out of sample; the desk's own discipline decides at
+       20 settled (hgGaneshSwingPromoHtml prints the count). This is NOT a
+       ticket mint — the plan stays WATCH, the bridge payload stays
+       drop-me, and nothing here changes a gate. Fail-open: no ledger, no
+       record. Lever HG_GANESH_SWING_PROMO === false restores silence. */
+    try{
+      if (typeof W.HG_GANESH_SWING_PROMO === 'undefined' || W.HG_GANESH_SWING_PROMO !== false){
+        var promoRec = (typeof W.hgFwdRecordScan === 'function') ? W.hgFwdRecordScan : null;
+        if (promoRec && style === 'swing' && plan && plan.tier === 'WATCH'
+            && (plan.grade === 'A' || plan.grade === 'A+')
+            && isFinite(fin(plan.entry)) && isFinite(fin(plan.stop)) && ev && ev.lastT !== __gg.lastPromoBar){
+          __gg.lastPromoBar = ev.lastT;
+          promoRec('GANESHGOLD-SWING-PROMO', '4h', [{
+            sym: 'XAUUSD', dir: plan.dir, entry: +plan.entry, stop: +plan.stop,
+            t1: fin(plan.t1) ? +plan.t1 : undefined, t2: fin(plan.t2) ? +plan.t2 : undefined,
+            signalT: barMs !== null ? barMs : undefined,
+            feed: ggFeed('4h'),
+            held: plan.held || undefined,
+            mark: fin(ev.px) ? +ev.px : undefined,
+            reads: (plan.freeReads && typeof plan.freeReads === 'object') ? plan.freeReads : undefined,
+            fundingPct: (typeof plan.fundingPct === 'number' && isFinite(plan.fundingPct)) ? plan.fundingPct : undefined,
+            mechanic: 'GANESHGOLD-SWING-PROMO', promoCandidate: true,
+            ticket: false, style: 'ganeshgold-swing'
+          }], { horizonBars: 20 });
+        }
+      }
+    }catch(ePromo){ }
     return __gg.snap;
   }catch(e){
     __gg.snap = { ok: false, note: 'scan failed: ' + String(e && e.message ? e.message : e), at: Date.now(), style: style };
@@ -592,6 +625,34 @@ function ggGeoLine(p, snap){
   }catch(e){ return ''; }
 }
 
+/* hg-v1441 — the swing-promotion TRACK status line (the measured handoff:
+   desks/goldsweep census — the WATCH swing book settled +0.278R at XM over
+   n=754, positive both halves +0.26/+0.30, so A/A+ swing WATCH plans now
+   record to the forward ledger as GANESHGOLD-SWING-PROMO candidates,
+   ticket:false, 20-bar horizon). The desk's own discipline decides at 20
+   settled: this line counts them and says what the ledger has priced so
+   far. Paint-level, gates nothing, fail-open when the ledger is absent or
+   the track is empty ('' then). Lever HG_GANESH_SWING_PROMO === false
+   restores silence. */
+function hgGaneshSwingPromoHtml(snap){
+  try{
+    if (typeof W.HG_GANESH_SWING_PROMO !== 'undefined' && W.HG_GANESH_SWING_PROMO === false) return '';
+    var st = (typeof W.hgFwdStats === 'function') ? W.hgFwdStats : null;
+    if (!st) return '';
+    var s = null; try{ s = st('GANESHGOLD-SWING-PROMO', null, false); }catch(e){ s = null; }
+    if (!s || !isFinite(+s.samples) || +s.samples <= 0) return '';
+    var settled = (+s.wins || 0) + (+s.losses || 0);
+    var exp = (typeof s.expR === 'number' && isFinite(s.expR)) ? ((s.expR >= 0 ? '+' : '') + s.expR.toFixed(2) + 'R') : 'unmeasured';
+    var verdict = settled >= 20
+      ? 'the 20-settled bar is met — the ledger has priced the cohort (' + exp + ' expectancy); promotion is the ledger\u2019s call, not this panel\u2019s.'
+      : settled + '/20 settled — promotion is not earned yet; the ledger decides at 20 settled.';
+    return '<div class="note" style="margin-top:4px;font-size:11px;opacity:0.9" data-ganesh-swing-promo="1">'
+      + '<b>SWING PROMOTION TRACK (hg-v1441)</b> · the WATCH swing book measured +0.28R at XM over n=754, positive both halves (+0.26/+0.30), so A/A+ swing WATCH plans now record as promotion candidates (ticket:false — never a free ticket). '
+      + escH(s.samples + ' recorded · ' + settled + ' settled · expectancy ' + exp + ' — ' + verdict)
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
 function callHtml(snap){
   try{
     if (!snap.plan) return '<div class="panel" style="margin-top:10px"><h3>THE CALL</h3><div style="font-size:15px;font-weight:700">STAND ASIDE</div><div class="note" style="margin-top:4px">neither model cleared grade A on this tape - liquidity is the setup, patience is the edge.</div></div>';
@@ -600,6 +661,7 @@ function callHtml(snap){
     var html = '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>THE CALL</h3>'
       + '<div style="font-size:16px;font-weight:700">' + p.dir.toUpperCase() + ' - ' + (p.held ? 'HELD' : (p.tier === 'TICKET' ? 'TICKET' : 'WATCH ONLY')) + ' - XAUUSD - ' + (snap.style === 'scalp' ? 'SCALP 15m' : 'SWING 4h') + ' - grade ' + p.grade + '</div>'
       + (p.held ? '<div class="note warn" style="margin-top:4px">' + escH(p.held) + ' - the TICKET claim is withheld on the bar the model read; levels kept, recorded ticket:false for the ledger.</div>' : '')
+      + hgGaneshSwingPromoHtml(snap)   /* hg-v1441: the measured promotion-track status — paint, gates nothing */
       + '</div>';
     var payload = { v: 1, id: 'GG-XAUUSD', venue: 'delta', symbol: 'XAUUSD', side: p.dir,
       entry: +p.entry, stop: +p.stop, t1: fin(p.t1) ? +p.t1 : null, t2: fin(p.t2) ? +p.t2 : null,
@@ -738,6 +800,7 @@ async function ganeshGoldWarm(opts){
 W.ganeshGoldState = function(){ try{ return __gg.snap ? JSON.parse(JSON.stringify(__gg.snap)) : null; }catch(e){ return null; } };
 W.ganeshGoldScan = ganeshGoldScan;
 W.ganeshGoldEval = ganeshGoldEval;
+W.hgGaneshSwingPromoHtml = hgGaneshSwingPromoHtml;   /* hg-v1441 */
 W.ganeshGoldWarm = ganeshGoldWarm;
 W.ggWeekendVerdict = ggWeekendVerdict;   /* hg-v1154: the census route */
 

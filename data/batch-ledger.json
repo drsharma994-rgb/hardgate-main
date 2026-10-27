@@ -590,6 +590,11 @@
       "version": "hg-v1440",
       "built": "2026-10-23T16:00:00Z",
       "note": "OMNIGOLD round 3: floor-decay honesty disclosure — stack-3 kept book -0.015/+0.043R XM on the refreshed artifact (H1 negative; floor holds as filter) + seven refusals named (PM-fix final, stack-4, grade floor, T1, rescue, auto-review note, decile cuts); no gate/floor/rebake changes"
+    },
+    {
+      "version": "hg-v1441",
+      "built": "2026-10-27T16:00:00Z",
+      "note": "GOLD SWEEP: measured disclosures (gold scalp lane -0.604R XM both halves; omnigold1 tab book -0.625R both halves) + ganeshgold swing promotion handoff (WATCH +0.278R both halves, record-first, 20-settled ledger bar) + confluence aggregation measured and unchanged (READY +0.318R vs WATCH -0.608R) + goldultra failed-check named"
     }
   ]
 }

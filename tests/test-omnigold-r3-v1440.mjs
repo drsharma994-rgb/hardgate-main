@@ -119,23 +119,26 @@ console.log('\n== 4. disclosure gates NOTHING: formation + ledger untouched ==')
      'no stack3/r3 key was pushed onto the gate ledger (fingerprint stands)');
 }
 
-console.log('\n== 5. the build is stamped hg-v1440 everywhere a cache reads ==');
+console.log('\n== 5. the build is stamped at the current version everywhere a cache reads ==');
+/* version pins ride the current stamp (''Sister suites re-pinned'' convention):
+   re-pinned hg-v1440 -> hg-v1441 at the hg-v1441 bump (GOLD SWEEP disclosures).
+   The round''s own pack string stays in the history chain. */
 {
   const stamp = fs.readFileSync(path.join(ROOT, 'build-stamp.js'), 'utf8');
-  ok(/version: 'hg-v1440'/.test(stamp), 'build-stamp version');
+  ok(/version: 'hg-v1441'/.test(stamp), 'build-stamp version');
   ok(/hg-v1440: OMNIGOLD r3/.test(stamp), 'the pack string names the round');
   ok(/hg-v1439:/.test(stamp), 'and the pack history chain is intact');
-  ok(/HG_CACHE = 'hg-v1440'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'sw.js cache id');
+  ok(/HG_CACHE = 'hg-v1441'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'sw.js cache id');
   const idx = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  ok(idx.indexOf('v=1439') < 0 && idx.indexOf('v=1440') >= 0, 'index.html cache-busters all at 1440');
+  ok(idx.indexOf('v=1440') < 0 && idx.indexOf('v=1441') >= 0, 'index.html cache-busters all at 1441');
   const ledger = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'batch-ledger.json'), 'utf8'));
   const entries = (Array.isArray(ledger) ? ledger : Object.values(ledger).find(Array.isArray));
-  ok(entries[entries.length - 1].version === 'hg-v1440', 'the batch ledger last entry is hg-v1440');
+  ok(entries[entries.length - 1].version === 'hg-v1441', 'the batch ledger last entry is hg-v1441');
   let nonDecreasing = true;
   for (let i = 1; i < entries.length; i++)
     if (String(entries[i].built) < String(entries[i - 1].built)) nonDecreasing = false;
   ok(nonDecreasing, 'and its built stamps never go backwards');
-  ok(/hg-v1440/.test(fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8')), 'AGENTS.md carries the entry');
+  ok(/hg-v1441/.test(fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8')), 'AGENTS.md carries the entry');
 }
 
 console.log('\nPASS — test-omnigold-r3-v1440 (' + passed + ' assertions)');

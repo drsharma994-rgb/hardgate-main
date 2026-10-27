@@ -1613,6 +1613,40 @@
     return 'forward log (out-of-sample): ' + s.samples + ' recorded · ' + (s.wins + s.losses) + ' resolved · ' + (s.open || 0) + ' open · expectancy ' + (has(s.expR) ? (s.expR >= 0 ? '+' : '') + num(s.expR, 2) + 'R' : 'unavailable') + ' · avg RR ' + num(s.avgRr, 2);
   }
 
+  /* --- BEGIN GENERATED HG_OG1_TABBOOK_MEASURED (hg-v1441) ---
+     desks/goldsweep census (census-backtest-omnigold1.mjs — the desk's OWN
+     committed harness repointed at the full warm cache, arithmetic
+     untouched): 9,300 1h bars 2025-09-19..2026-10-27 (13.1 months),
+     PAXGUSDT spot, XM 0.020% / PAXG-taker 0.26% / Binance-spot 0.20% RT,
+     the desk's own walk (6-bar fill window, 24-bar timeout, stop-first,
+     both-touch = loss), both halves by signal time. */
+  var HG_OG1_TABBOOK_MEASURED = {
+    measured: true, desk: 'omnigold1', span: '2025-09-19..2026-10-27',
+    tabBook: { n: 45, win: 0.156, xm: -0.625, xmH1: -0.436, xmH2: -0.805, paxg: -1.722, binance: -1.448 },
+    engineBook: { n: 4431, xm: -0.108, xmH1: -0.048, xmH2: -0.169 },
+    note: 'hg-v1441 GOLD SWEEP (desks/goldsweep): over 13.1 months the recorded tab book (tradeReady grades A/B+/B or verdict.qualifies — what hgOg1ForwardRecord writes live) settled -0.625R each at XM, NEGATIVE IN BOTH HALVES; the raw engine book reads -0.108R, the same bet as OMNIGOLD proper (-0.110R on the committed replay). The formation/grade admission layer selects a WORSE-than-engine subset — grades are not edge. Lane-1 replay sweep: all 10 parameter variants negative.'
+  };
+  /* --- END GENERATED HG_OG1_TABBOOK_MEASURED --- */
+  /* hg-v1441: tab-book expectancy disclosure — paint-level, gates nothing,
+     fail-open when the baked census read is absent (lever
+     HG_OG1_TABBOOK_STANCE === false restores silence). */
+  function hgOg1TabBookStanceHtml(){
+    try{
+      if (typeof W.HG_OG1_TABBOOK_STANCE !== 'undefined' && W.HG_OG1_TABBOOK_STANCE === false) return '';
+      var M = (typeof HG_OG1_TABBOOK_MEASURED !== 'undefined') ? HG_OG1_TABBOOK_MEASURED : null;
+      if (!M || M.measured !== true || !M.tabBook || !isFinite(fin(M.tabBook.n))) return '';
+      var t = M.tabBook, e = M.engineBook;
+      var r2 = function(v){ return (v >= 0 ? '+' : '') + Number(v).toFixed(2); };
+      return '<div class="og1-tabbook-stance" data-og1-tabbook-stance="1" style="margin-top:4px;font-size:11px;opacity:0.85">'
+        + esc('TAB BOOK, MEASURED (' + M.span + '): the recorded book (tradeReady or qualifying) settled '
+            + r2(t.xm) + 'R per trade at XM over n=' + t.n + ' — negative in BOTH halves ('
+            + r2(t.xmH1) + ' / ' + r2(t.xmH2) + '); ' + r2(t.paxg) + 'R at PAXG taker. '
+            + 'The raw engine book reads ' + r2(e.xm) + 'R (n=' + e.n + ') — the same bet as OMNIGOLD: '
+            + 'the admission layer, not the engine, is the losing spread. Grades are not edge.')
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
   /* ---------------- BEST SETUPS across both horizons ----------------
      Rank every tape-aligned candidate from SWING + SCALP together:
      qualifying first, then grade, matrix score, gates, RR. Top N are stamped
@@ -1680,14 +1714,16 @@
       if (r && r.replayBias) lines.push(replayLine(r.replayBias, tf));
     });
     var fl = forwardLine(); if (fl) lines.push(fl);
+    var stance = '';
+    try{ stance = hgOg1TabBookStanceHtml() || ''; }catch(eSt){ stance = ''; }   /* hg-v1441: the admission-layer book prints its measured expectancy — paint, gates nothing */
     try{
       if (typeof W.hgFormationNightlyBannerHtml === 'function'){
         var nb = W.hgFormationNightlyBannerHtml();
-        if (nb) return '<div class="og1-measured dim"><b>MEASURED, NOT CLAIMED</b> · ' + lines.map(esc).join('<br>') + '</div>' + nb;
+        if (nb) return '<div class="og1-measured dim"><b>MEASURED, NOT CLAIMED</b> · ' + lines.map(esc).join('<br>') + '</div>' + nb + stance;
       }
     }catch(eNb){}
-    if (!lines.length) return '';
-    return '<div class="og1-measured dim"><b>MEASURED, NOT CLAIMED</b> · ' + lines.map(esc).join('<br>') + '</div>';
+    if (!lines.length) return stance || '';
+    return '<div class="og1-measured dim"><b>MEASURED, NOT CLAIMED</b> · ' + lines.map(esc).join('<br>') + '</div>' + stance;
   }
 
   function hgOg1CardsHtml(runs){
@@ -1876,6 +1912,7 @@
      mapping and the venue/kill-list verdict are testable without a mount. */
   W.hgOg1Confirmations = og1Confirmations;
   W.hgOg1Formation = og1Formation;
+  W.hgOg1TabBookStanceHtml = hgOg1TabBookStanceHtml;   /* hg-v1441 */
   W.omnigold1ScalpState = function(){ return __st.lastScalp; };
   W.hgOg1RunScan = function(){ return __st.ui ? runScan(__st.ui) : Promise.resolve('skipped: not mounted'); };
   W.omnigold1State = function(){ return __st.last; };
