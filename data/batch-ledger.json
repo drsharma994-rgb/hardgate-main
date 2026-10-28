@@ -595,6 +595,11 @@
       "version": "hg-v1441",
       "built": "2026-10-27T16:00:00Z",
       "note": "GOLD SWEEP: measured disclosures (gold scalp lane -0.604R XM both halves; omnigold1 tab book -0.625R both halves) + ganeshgold swing promotion handoff (WATCH +0.278R both halves, record-first, 20-settled ledger bar) + confluence aggregation measured and unchanged (READY +0.318R vs WATCH -0.608R) + goldultra failed-check named"
+    },
+    {
+      "version": "hg-v1442",
+      "built": "2026-10-28T06:49:00Z",
+      "note": "PINE GOLD re-walk 26 Aug-28 Oct 2026, higher-timeframe feed on, one position at a time. The rows the tab would lead filled 57 scalps and lost both halves at every cost (gross -0.025R then -0.021R, XM -0.046R then -0.042R, n=28/29). Stops under 0.3% never entered that lead book and still lost both halves on the wider primary tape (n=19 -4.95R, then n=28 -0.36R at XM), so the floor stays. Swing leads were 10 and mixed. No script was promoted or vetoed. The second half is the forward window; the browser fill ledger is not in this build. The 2-minute refresh is unchanged."
     }
   ]
 }
