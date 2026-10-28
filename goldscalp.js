@@ -3958,9 +3958,9 @@ function goldscalpMountInto(el, scanSt, cfg){
       + '<div class="row"><button class="btn" id="' + p + 'Run">RUN SCAN</button>'
       + '<span class="note" id="' + p + 'Stat">' + statIdle + '</span></div>'
       + deskNote
-      /* hg-v1443: this tab's own walk, paint only. The six-week r3 numbers stay
-         in the edge table; this line is the later window through 27 Oct. */
-      + '<div class="note warn" style="margin-top:8px">MEASURED (this tab own scan, 30 Aug-27 Oct 2026, one live trade per strategy and direction; the second half is the forward window and the browser fill ledger is not in this build): 1,321 settled plans, every one already stood aside, none eligible to lead. Gross was positive both halves (+0.05R, then +0.05R). XM costs took the book slightly negative both halves (-0.026R, then -0.032R). At PAXG taker the same halves are -0.91R and -1.04R. No mechanic was promoted. p6fail stays preferred. nyexh lost both halves and is already demoted. Nothing else was gated.</div>'
+      /* hg-v1444: tape refreshed through 28 Oct 07:00 UTC. The book did not
+         move. Paint only. The six-week r3 numbers stay in the edge table. */
+      + '<div class="note warn" style="margin-top:8px">MEASURED (this tab own scan, tape through 28 Oct 2026 07:00 UTC, settled 30 Aug-28 Oct, one live trade per strategy and direction; the second half is the forward window and the browser fill ledger is not in this build): 1,321 settled plans, every one already stood aside, none eligible to lead. The later bars did not move the book. Gross was positive both halves (+0.05R, then +0.05R). XM costs took the book slightly negative both halves (-0.026R, then -0.032R). At PAXG taker the same halves are -0.91R and -1.04R. No mechanic was promoted. p6fail stays preferred. nyexh lost both halves and is already demoted. Nothing else was gated.</div>'
       /* hg-v968: THE AUTO-REFRESH YOU COULD NOT SEE.
          hg-v965 put GOLD SCALP on a 3-minute clock and hg-v967 fixed the
          resolution that stopped it firing -- and this tab showed NO last-scan

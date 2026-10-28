@@ -1,3 +1,8 @@
+### GOLD SCALP tape refresh — through 28 Oct 07:00 UTC, the book did not move, no new gate — hg-v1444
+- Refreshed PAXGUSDT 15m/1h/4h/1d and re-walked goldScalpSetups then goldRankSetups (5,999 bars, tape through 28 Oct 2026 07:00 UTC). Settled plans still run 30 Aug 20:30–28 Oct 00:45 UTC. One live trade per strategy and direction. The second half (split 28 Sep) is the forward window. The browser fill ledger is not in this build.
+- 1,321 settled, lead-eligible 0. Halves unchanged from hg-v1443: gross +0.048R / +0.052R, XM -0.026R / -0.032R, PAXG taker -0.91R / -1.04R. The later bars added no settled plan that moved the book.
+- Same refusals as hg-v1443. No mechanic promoted. p6fail stays preferred. nyexh stays demoted. No floor, no edge-table edit, no rebake. The tab date line now says 28 Oct. The 5-minute scalp refresh and the 2-minute PINE GOLD refresh are unchanged.
+
 ### GOLD SCALP re-walk — the tab own scan through 27 Oct, nothing eligible to lead, no new gate — hg-v1443
 - Walked goldScalpSetups then goldRankSetups on PAXGUSDT 15m (5,999 bars, 30 Aug-27 Oct 2026), higher timeframes fed at the tab own depths, XM 0.020% RT primary and PAXG taker 0.26% RT beside it. One live trade per strategy and direction. The second half (split 28 Sep) is the forward window. The browser fill ledger is not in this build.
 - 1,321 settled. Lead-eligible 0 — every plan was already demoted (CONF NO TRADE on 1,194, MTF bias 1,044, chop 1,012, edge demote 949). Gross +0.048R / +0.052R both halves. XM -0.026R / -0.032R both halves. PAXG taker -0.91R / -1.04R.

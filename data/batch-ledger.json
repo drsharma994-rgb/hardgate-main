@@ -605,6 +605,11 @@
       "version": "hg-v1443",
       "built": "2026-10-28T07:04:00Z",
       "note": "GOLD SCALP re-walk 30 Aug-27 Oct 2026 of the tab own scan. 1,321 settled, every plan already stood aside, none eligible to lead. Gross positive both halves (+0.05R, then +0.05R); XM slightly negative both halves (-0.026R, then -0.032R); PAXG taker -0.91R then -1.04R. No mechanic promoted. p6fail stays preferred. nyexh already demoted. Nothing else gated. The second half is the forward window; the browser fill ledger is not in this build."
+    },
+    {
+      "version": "hg-v1444",
+      "built": "2026-10-28T07:32:00Z",
+      "note": "GOLD SCALP tape refresh through 28 Oct 2026 07:00 UTC. Same tab scan, 1,321 settled, none eligible to lead. The later bars did not move the book: gross +0.05R then +0.05R, XM -0.026R then -0.032R, PAXG taker -0.91R then -1.04R. No mechanic promoted. p6fail stays preferred. nyexh stays demoted. Nothing else gated. The second half is the forward window; the browser fill ledger is not in this build."
     }
   ]
 }
