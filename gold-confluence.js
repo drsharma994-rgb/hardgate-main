@@ -10,7 +10,7 @@
    desk crowned it or graded it A. A measured spot-versus-XM spread is
    subtracted. An unread spread is named and not invented. A formed
    setup is written to the forward ledger. GOLD DIRECTION is not given
-   a side. */
+   a side. CANDLE FORECAST is not a vote and is not opened to form one. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
@@ -102,7 +102,11 @@ var DESKS = [
       if (!cands.length) return { aside: true };
       return { cands: cands };
   } },
-  { id: 'candle-forecast', label: 'CANDLE FORECAST', read: function(w){ return callFn(w, 'hgCandleForecastAlertState'); } },
+  { id: 'candle-forecast', label: 'CANDLE FORECAST', read: function(){
+      /* A forecast is a next-candle read. It is not an entry, a stop, or a
+         target, and it does not complete the three-desk quorum. */
+      return { __context: 'not used to form a setup. A candle forecast is not an entry, a stop, or a target on this tab.' };
+  } },
   { id: 'goldspot', label: 'GOLD SPOT', read: function(w){
       if (!w || typeof w.goldspotState !== 'function') return undefined;
       var s = null;
@@ -335,7 +339,7 @@ var UNREAD_WHY = {
   milligold: 'not scanned yet. It reads OMNIGOLD after that desk has finished. Press SCAN GOLD DESKS.',
   '80percent': 'not scanned yet. Press SCAN GOLD DESKS.',
   gold: 'the GOLD tab has not published a plan yet. Press SCAN GOLD DESKS.',
-  'candle-forecast': 'not scanned yet. Press SCAN GOLD DESKS.'
+  'candle-forecast': 'not used to form a setup. A candle forecast is not an entry, a stop, or a target on this tab.'
 };
 
 /* How long one desk may take. The user can wait. A hung fetch still ends. */
@@ -352,8 +356,7 @@ var OPEN_DESKS = [
   { id: 'omnigold1', sel: '#og1Run', how: 'refresh' },
   { id: 'goldpro', sel: '[data-gp="run"]', how: 'click' },
   { id: 'milligold', sel: '#milliRun', how: 'auto' },
-  { id: '80percent', sel: '#p80Run', how: 'auto' },
-  { id: 'candle-forecast', sel: '#cfRunBtn', how: 'refresh' }
+  { id: '80percent', sel: '#p80Run', how: 'auto' }
 ];
 
 function warmup(win, id){
@@ -873,8 +876,25 @@ function attachWatch(base, pack, votes, px, opts){
   base.watch = watch;
 }
 
+function forecastDesk(v){
+  if (!v) return false;
+  if (v.id === 'candle-forecast') return true;
+  var d = String(v.desk || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  return d === 'CANDLE FORECAST' || d === 'CANDLEFORECAST';
+}
 function hgGoldConfluenceBuild(votes, iux, cost){
   votes = Array.isArray(votes) ? votes : [];
+  /* A hand-built forecast row is the same exclusion. It cannot complete
+     the quorum and it cannot move the median. */
+  votes = votes.map(function(v){
+    if (!forecastDesk(v) || v.state !== 'setup') return v;
+    return {
+      desk: v.desk || 'CANDLE FORECAST',
+      id: v.id || 'candle-forecast',
+      state: 'context',
+      note: 'not used to form a setup. A candle forecast is not an entry, a stop, or a target on this tab.'
+    };
+  });
   var px = iux && num(iux.px);
   var setups = votes.filter(function(v){ return v && v.state === 'setup'; });
   markEcho(setups);
@@ -1290,7 +1310,7 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three different crowned plans are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three different crowned plans are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
     + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. Three desks are still required.</div></div></div>';
   var btn = root.querySelector('#gc-run');

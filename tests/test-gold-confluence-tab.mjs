@@ -107,6 +107,32 @@ assert.equal(two.watch.reads['cf:synthetic'], true);
 assert.equal(two.watch.reads['cf:spreadUnread'], true);
 assert.equal(two.watch.reads['cf:sessionSplit'], undefined);
 
+/* An armed candle forecast is not a desk. It does not complete three,
+   and its levels do not move the median of the desks that did publish. */
+win.hgCandleForecastAlertState = () => ({
+  dir: 'short', entry: 2400, stop: 2500, t1: 2200, grade: 'A', ticket: true
+});
+const armed = win.hgGoldConfluenceRead(win);
+const cfVote = armed.filter(v => v.id === 'candle-forecast')[0];
+assert.equal(cfVote.state, 'context');
+assert.equal(cfVote.side, undefined);
+assert.match(cfVote.note, /not used to form a setup/);
+const armedBuilt = win.hgGoldConfluenceBuild(armed, { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(armedBuilt.ready, true);
+assert.equal(armedBuilt.entry, 2651);
+assert.ok(armedBuilt.desks.indexOf('CANDLE FORECAST') < 0);
+const forced = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SCALP', id: 'goldscalp', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'GOLD SWING', id: 'goldswing', state: 'setup', side: 'long', entry: 2651, stop: 2642, t1: 2668, grade: 'A', lead: true },
+  { desk: 'CANDLE FORECAST', id: 'candle-forecast', state: 'setup', side: 'long', entry: 2400, stop: 2300, t1: 2800, grade: 'A', lead: true }
+], { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(forced.ready, false);
+assert.equal(forced.longCount, 2);
+assert.equal(forced.watch.count, 2);
+assert.equal(forced.watch.entry, 2650.5);
+assert.ok(forced.watch.desks.indexOf('CANDLE FORECAST') < 0);
+assert.equal(forced.votes.filter(v => v.id === 'candle-forecast')[0].state, 'context');
+
 const chased = win.hgGoldConfluenceBuild([
   { desk: 'A', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2652 },
   { desk: 'B', state: 'setup', side: 'long', entry: 2650.2, stop: 2640, t1: 2652 },
