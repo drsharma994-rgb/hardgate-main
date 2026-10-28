@@ -704,6 +704,83 @@ function markEcho(setups){
   return kept;
 }
 
+/* hg-v1446: record-only. The traded entry, stop, and target stay the
+   component-wise median. These booleans let the forward ledger price two
+   knives that are not yet measured: a plan no desk issued, and a quorum
+   that is one family counted more than once. A key that never landed is
+   absent (hg-v989). Nothing here sets ready. */
+var CF_FAMILY = {
+  goldscalp: 'scalp', ganeshgold: 'scalp',
+  goldswing: 'swing', newgold: 'swing',
+  goldpine: 'pine',
+  omnigold: 'omni', omnigold1: 'omni'
+};
+function cfFamily(id){
+  if (id && CF_FAMILY[id]) return CF_FAMILY[id];
+  return id ? String(id) : 'desk';
+}
+function cfVoteSec(v){
+  if (!v) return null;
+  var st = v.signalT, bt = v.barT, n;
+  if (typeof st === 'number' && isFinite(st) && st > 0){
+    n = st > 1e12 ? Math.floor(st / 1000) : Math.floor(st);
+    return n > 0 ? n : null;
+  }
+  if (typeof bt === 'number' && isFinite(bt) && bt > 0){
+    n = bt > 1e12 ? Math.floor(bt / 1000) : Math.floor(bt);
+    return n > 0 ? n : null;
+  }
+  return null;
+}
+function cfSession(sec){
+  var h = new Date(sec * 1000).getUTCHours();
+  if (h < 7) return 'asia';
+  if (h < 13) return 'london';
+  if (h < 21) return 'ny';
+  return 'off';
+}
+function cfAnnotate(pack, entry, stop, t1, spreadUsd){
+  if (!pack || !pack.length) return null;
+  var midE = median(pack.map(function(v){ return v.entry; }));
+  var leader = pack[0], bestD = Infinity, i, d, fam = {}, nFam = 0, k;
+  for (i = 0; i < pack.length; i++){
+    d = Math.abs(pack[i].entry - midE);
+    if (d < bestD){ bestD = d; leader = pack[i]; }
+    fam[cfFamily(pack[i].id)] = true;
+  }
+  for (k in fam) if (Object.prototype.hasOwnProperty.call(fam, k)) nFam++;
+  var reads = {};
+  reads['cf:synthetic'] = !!(leader && (
+    Math.abs(entry - leader.entry) >= 0.05 ||
+    Math.abs(stop - leader.stop) >= 0.05 ||
+    Math.abs(t1 - leader.t1) >= 0.05));
+  if (pack.length >= 3) reads['cf:familyShort'] = nFam < 3;
+  var secs = [], missing = false, s;
+  for (i = 0; i < pack.length; i++){
+    s = cfVoteSec(pack[i]);
+    if (s == null){ missing = true; break; }
+    secs.push(s);
+  }
+  if (!missing && secs.length === pack.length){
+    var bucket = cfSession(secs[0]);
+    var same = true, lo = secs[0], hi = secs[0];
+    for (i = 0; i < secs.length; i++){
+      if (cfSession(secs[i]) !== bucket) same = false;
+      if (secs[i] < lo) lo = secs[i];
+      if (secs[i] > hi) hi = secs[i];
+    }
+    reads['cf:sessionSplit'] = !(same && (hi - lo) <= 8 * 3600);
+  }
+  reads['cf:spreadUnread'] = spreadUsd == null;
+  return {
+    reads: reads,
+    leader: leader ? {
+      desk: leader.desk || leader.id || '',
+      entry: leader.entry, stop: leader.stop, t1: leader.t1
+    } : null
+  };
+}
+
 function measuredSpread(win){
   /* The same read SUPER GOLD uses: |spot - xm| from GOLD SPOT.
      Missing either leg is unread. Nothing is filled in. */
@@ -791,6 +868,8 @@ function attachWatch(base, pack, votes, px, opts){
     watch.netRr = +(rr - base.spreadUsd / risk).toFixed(2);
     watch.costNote = 'Measured spread $' + fmt(base.spreadUsd) + '.';
   }
+  var ann = cfAnnotate(pack, entry, stop, t1, base.spreadUsd);
+  if (ann){ watch.reads = ann.reads; watch.leader = ann.leader; }
   base.watch = watch;
 }
 
@@ -909,6 +988,8 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     if (typeof leader.barT === 'number' && isFinite(leader.barT) && leader.barT > 0) base.barT = leader.barT;
     if (typeof leader.signalT === 'number' && isFinite(leader.signalT) && leader.signalT > 0) base.signalT = leader.signalT;
   }
+  var ann = cfAnnotate(priced, entry, stop, t1, base.spreadUsd);
+  if (ann){ base.reads = ann.reads; base.leader = ann.leader; }
   if (through >= 0.85){
     base.reason = 'The live IUX price has already travelled most of the way to the target. The entry is not moved up to ' + fmt(px) + '.';
     return base;
@@ -954,6 +1035,8 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   if (base.accuracyTier !== 'HIGH'){
     base.ready = false;
     base.watch = { side: side, entry: entry, stop: stop, t1: t1, count: priced.length, need: 3, rr: +(reward/risk).toFixed(2), mark: px, desks: base.desks, spreadUsd: base.spreadUsd, netRr: base.netRr, costNote: base.costNote, accuracy: base.accuracy };
+    if (base.reads) base.watch.reads = base.reads;
+    if (base.leader) base.watch.leader = base.leader;
     return base;
   }
   base.ready = true;
@@ -1028,6 +1111,17 @@ function recordConfluence(win, built){
     t1: built.t1,
     ticket: true
   };
+  if (built.reads && typeof built.reads === 'object'){
+    var rr = {}, rk, rv, rn = 0;
+    for (rk in built.reads){
+      if (!Object.prototype.hasOwnProperty.call(built.reads, rk)) continue;
+      rv = built.reads[rk];
+      if (rv !== true && rv !== false) continue;
+      rr[rk] = rv;
+      rn++;
+    }
+    if (rn) cand.reads = rr;
+  }
   if (typeof built.mark === 'number' && isFinite(built.mark) && built.mark > 0) cand.mark = built.mark;
   if (typeof built.barT === 'number' && isFinite(built.barT) && built.barT > 0) cand.barT = built.barT;
   if (typeof built.signalT === 'number' && isFinite(built.signalT) && built.signalT > 0) cand.signalT = built.signalT;
@@ -1129,6 +1223,24 @@ function rrText(card){
   if (isFinite(card.rr)) return fmt(card.rr) + (card.spreadUsd == null ? 'R gross' : 'R');
   return '-';
 }
+function cfReadNote(built){
+  var src = (built && built.reads) ? built : ((built && built.watch && built.watch.reads) ? built.watch : null);
+  if (!src || !src.reads) return '';
+  var bits = [];
+  if (src.reads['cf:synthetic'] === true && src.leader){
+    bits.push('Median levels are not one desk plan. Nearest desk is ' + (src.leader.desk || 'a desk')
+      + ' at ' + fmt(src.leader.entry) + ' / ' + fmt(src.leader.stop) + ' / ' + fmt(src.leader.t1)
+      + '. The trade stays the median. This read does not change the gate.');
+  }
+  if (src.reads['cf:familyShort'] === true){
+    bits.push('Fewer than three independent families. Counted on the record, not gated.');
+  }
+  if (src.reads['cf:sessionSplit'] === true){
+    bits.push('Signal bars are not one session. Counted on the record, not gated.');
+  }
+  if (!bits.length) return '';
+  return '<div class="hg-note">' + esc(bits.join(' ')) + '</div>';
+}
 function levelCard(title, card){
   return '<div class="hg-desk-card">'
     + '<div class="hg-desk-top"><div class="hg-desk-sym">' + esc(title) + '</div></div>'
@@ -1167,7 +1279,7 @@ function paint(root, built){
   var cost = '';
   var note = (built.watch && built.watch.costNote) || built.costNote || '';
   if (note && (!built.reason || built.reason.indexOf(note) < 0)) cost = '<div class="hg-note">' + esc(note) + '</div>';
-  desk.innerHTML = '<div class="hg-note">' + esc(built.reason || '') + '</div>' + plan + cost + voteHtml;
+  desk.innerHTML = '<div class="hg-note">' + esc(built.reason || '') + '</div>' + plan + cfReadNote(built) + cost + voteHtml;
 }
 
 var scanGen = 0;
@@ -1179,7 +1291,8 @@ function mount(root){
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
     + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three different crowned plans are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT.</div>'
-    + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div></div></div>';
+    + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
+    + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. Three desks are still required.</div></div></div>';
   var btn = root.querySelector('#gc-run');
   var stat = root.querySelector('#gc-stat');
   function go(doGather){

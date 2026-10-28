@@ -101,6 +101,11 @@ assert.equal(two.ready, false);
 assert.equal(two.watch.count, 2);
 assert.equal(two.watch.entry, 2650.5);
 assert.notEqual(two.watch.entry, 2650);
+assert.equal(two.ready, false);
+assert.equal(two.watch.reads['cf:familyShort'], undefined);
+assert.equal(two.watch.reads['cf:synthetic'], true);
+assert.equal(two.watch.reads['cf:spreadUnread'], true);
+assert.equal(two.watch.reads['cf:sessionSplit'], undefined);
 
 const chased = win.hgGoldConfluenceBuild([
   { desk: 'A', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2652 },

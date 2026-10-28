@@ -103,6 +103,18 @@ function ok(cond, msg){
      gold weekend depends on the day. Three-state: either boolean, never
      fabricated. Here we assert the field is EITHER a boolean OR absent. */
   ok(c.goldShut === true || c.goldShut === false || c.goldShut === undefined, 'goldShut three-state');
+  /* hg-v1446: record-only marks. The traded levels stay the component-wise
+     median. A synthetic median, a short family count, a session split, and
+     an unread spread are booleans on the forward record. None of them sets
+     ready. Missing times leave the session mark absent. */
+  ok(c.reads && c.reads['cf:synthetic'] === true, 'synthetic median is marked, not traded');
+  ok(c.reads['cf:familyShort'] === true, 'scalp and ganesh are one family, marked not gated');
+  ok(c.reads['cf:sessionSplit'] === false, 'same session is recorded false, not omitted');
+  ok(c.reads['cf:spreadUnread'] === false, 'a measured spread is recorded as read');
+  ok(c.entry === 2651 && c.stop === 2640 && c.t1 === 2670, 'levels stay the median');
+  ok(scanned.ready === true, 'the marks do not stand a ready plan aside');
+  ok(scanned.leader && scanned.leader.desk === 'GOLD SWING', 'nearest desk is named');
+  ok(scanned.leader.entry === 2651 && scanned.leader.stop === 2642 && scanned.leader.t1 === 2668, 'leader keeps its own stop and target');
 }
 
 /* ========================================================================
@@ -160,6 +172,8 @@ function ok(cond, msg){
   const c = recorded[0].cands[0];
   ok(c.barT === undefined, '§3 cand barT absent when no plan carries it (three-state)');
   ok(c.signalT === undefined, '§3 cand signalT absent');
+  ok(c.reads && c.reads['cf:sessionSplit'] === undefined, '§3 session mark absent when no plan carries a time');
+  ok(c.reads['cf:synthetic'] === true && c.reads['cf:familyShort'] === true, '§3 synthetic and family marks still land');
   /* mark is still read from the IUX px, which is set by the test's own
      hgGoldIuxAnchor stub -- not a plan field. */
   ok(c.mark === 2651.5, '§3 cand mark still set from live IUX px');
@@ -349,6 +363,11 @@ function ok(cond, msg){
   /* mark differs from entry => the fill model will classify this as
      resting (hg-v980), which was the whole point. */
   ok(rec.mark !== rec.entry, '§6b mark differs from entry (resting plan, fill model engaged)');
+  ok(rec.reads && rec.reads['cf:synthetic'] === true, '§6b ledger kept the synthetic mark');
+  ok(rec.reads['cf:familyShort'] === true, '§6b ledger kept the family mark');
+  ok(rec.reads['cf:spreadUnread'] === false, '§6b ledger kept spread-read false');
+  ok(rec.reads['cf:sessionSplit'] === false, '§6b ledger kept same-session false');
+  ok(rec.entry === 2651 && rec.stop === 2640 && rec.t1 === 2670, '§6b levels stay the median');
 }
 
 /* ========================================================================
