@@ -1,3 +1,10 @@
+### GOLD CONFLUENCE — the trade is one desk plan — hg-v1462
+- The card was printing the median of the entries, the median of the stops, and the median of the targets. That plan was not any desk structure and not any desk ladder.
+- The median entry only chooses the desk. The printed entry, stop, and target are that desk own levels. A tie keeps the first plan. Stops and targets are not averaged. R is the directional ratio of those levels.
+- A desk that sealed geometryOk false, or whose stop or target is on the wrong side of the entry, is not a vote. A price already through the stop is still not a setup. The entry is not moved to the live print.
+- Two plans on the larger side, the smaller side named, a tie showing both plans unblended, and cluster, cost, and risk shape named and not gated, stay. SUPER GOLD and MILLI GOLD are still not a second vote. CANDLE FORECAST is still not a vote.
+- Not re-walked. The hg-v1441 READY census is not replaced. The forward ledger decides.
+
 ### GOLD SETUP GEOMETRY — a wrong-side stop or target is not a positive R — hg-v1461
 - A labelled long or short publishes R only from the directional distance between the levels on the card. The stop has to sit beyond the entry. The target has to sit beyond the entry the other way. `|target − entry| / |entry − stop|` is no longer quoted when both distances exist but one of them is on the wrong side.
 - `hgGoldLegR` returns that ratio, or null. `hgSealGoldSetup` clears the broken leg and sets `geometryOk` only when the side is long or short and T1 pays. The card says the levels were refused instead of printing a positive R. A plan with no direction still uses the absolute ratio, so an unlabelled pair still syncs.

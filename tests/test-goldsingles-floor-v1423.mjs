@@ -203,12 +203,12 @@ console.log('== 7. the honesty displays are present and paint-level ==');
 console.log('== 8. deploy pins moved with the pack (?v= byte-check) ==');
 {
   const idx = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  ok(idx.indexOf('optigold.js?v=1461') !== -1, 'index.html loads optigold.js?v=1461');
-  ok(idx.indexOf('super-gold.js?v=1461') !== -1, 'index.html loads super-gold.js?v=1461');
-  ok(idx.indexOf('golddirection.js?v=1461') !== -1, 'index.html loads golddirection.js?v=1461');
+  ok(idx.indexOf('optigold.js?v=1462') !== -1, 'index.html loads optigold.js?v=1462');
+  ok(idx.indexOf('super-gold.js?v=1462') !== -1, 'index.html loads super-gold.js?v=1462');
+  ok(idx.indexOf('golddirection.js?v=1462') !== -1, 'index.html loads golddirection.js?v=1462');
   ok(idx.indexOf('?v=1432') === -1, 'no ?v=1432 pin survives');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  ok(sw.indexOf("HG_CACHE = 'hg-v1461'") !== -1, 'sw.js cache moved to v1457');
+  ok(sw.indexOf("HG_CACHE = 'hg-v1462'") !== -1, 'sw.js cache moved to v1457');
 }
 
 console.log('== 9. MUTATION PROOFS — the pins read the real seams ==');
