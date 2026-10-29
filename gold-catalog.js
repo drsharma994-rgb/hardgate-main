@@ -573,6 +573,79 @@
       }catch(eHr){}
       /* the census's own helpers: #54 RSI14 · #47 KER20 · #72/#73 ATR regime · #44 linreg slope */
       out.rsi14 = goldRsi14(rows); out.ker20 = goldKer20(rows);
+      /* hg-v1471: TWO ADVANCED REGIME READS, exact math, marks only.
+         #A VARIANCE-RATIO (Lo–MacKinlay, q=4, overlapping): VR = Var(q-period
+         returns) / (q × Var(1-period returns)) — VR > 1 says the walk is
+         TRENDING (variance grows faster than a random walk), VR < 1 says it
+         is MEAN-REVERTING. The read KER does not give: KER measures path
+         efficiency, VR tests the random-walk hypothesis directly. A
+         zero-variance (perfect-ramp) tape leaves both undefined — VR is
+         simply not defined without noise.
+         #B SHANNON ENTROPY of the up/down/flat symbol sequence over the last
+         20 closed bars, normalized by log2(3): 1 = coin-flip disorder, near
+         0 = ordered structure — a low-entropy tape is one where a regime
+         statement is even possible. */
+      try{
+        /* the STANDARD estimator, on price levels (Campbell–Lo–MacKinlay):
+           mu = (p_n - p_0)/n; sigma2_a = (1/(n-1)) sum (p_t - p_{t-1} - mu)^2;
+           sigma2_c(q) = (1/m) sum_{t=q..n} (p_t - p_{t-q} - q*mu)^2, m = q(n-q+1);
+           VR(q) = sigma2_c(q) / (q * sigma2_a). The overlapping windows are
+           the DEFINITION here, not an accident of indexing — this estimator
+           is the one the hypothesis test is derived for. */
+        var q = 4;
+        if (n > q + 4){
+          var mu = (c[n - 1] - c[0]) / (n - 1);
+          var s2a = 0, t1;
+          for (t1 = 1; t1 < n; t1++){
+            var d1 = c[t1] - c[t1 - 1] - mu;
+            s2a += d1 * d1;
+          }
+          s2a /= (n - 1);
+          var m = n - q + 1, s2c = 0, t2;
+          for (t2 = q; t2 < n; t2++){
+            var dq = c[t2] - c[t2 - q] - q * mu;
+            s2c += dq * dq;
+          }
+          s2c /= m; /* the divisor is the COUNT of overlapping q-windows —
+                       the extra q here is the classic overlap error that
+                       deflates VR by exactly q (found by the tape probe: an
+                       i.i.d. walk read VR = 0.33 with q = 4) */
+          if (s2a > 0 && s2c >= 0){
+            var vr = s2c / (q * s2a);
+            if (isFinite(vr) && vr > 0){
+              out.vr20 = vr;
+              out.vrState = vr > 1.05 ? 'TRENDING' : (vr < 0.95 ? 'MEANREV' : 'RANDOM');
+            }
+          }
+        }
+        var ent = 0, tot = 0, buckets = { up: 0, down: 0, flat: 0 }, ib, kk2;
+        for (ib = n - 20; ib < n; ib++){
+          if (ib <= 0 || !isFinite(c[ib]) || !isFinite(c[ib - 1]) || !(c[ib] > 0) || !(c[ib - 1] > 0)) continue;
+          var ch = c[ib] - c[ib - 1];
+          buckets[ch > 1e-9 ? 'up' : (ch < -1e-9 ? 'down' : 'flat')]++;
+          tot++;
+        }
+        if (tot >= 10){
+          var H = 0, syms = 0;
+          for (kk2 in buckets){
+            if (!Object.prototype.hasOwnProperty.call(buckets, kk2)) continue;
+            if (buckets[kk2] > 0){
+              syms++;
+              var p = buckets[kk2] / tot;
+              H -= p * Math.log(p) / Math.LN2;
+            }
+          }
+          /* normalized by the entropy of the OBSERVED support (log2 of the
+             number of symbols that actually occurred) — a two-symbol window
+             that is half up / half down is fully disordered (1.0), and a
+             three-symbol window split evenly is 1.0 too; normalizing by a
+             fixed alphabet would call a two-symbol maximal window 0.63,
+             which reads as order that is not there. A single-symbol window
+             (pure one-way tape) is 0 by definition. */
+          out.entropy20 = (syms >= 2 && H > 0) ? H / Math.log2(syms) : 0;
+          out.entropyState = out.entropy20 <= 0.85 ? 'ORDERED' : 'DISORDER';
+        }
+      }catch(eReg){}
       var atr14 = goldAtrN(rows, 14), atr50 = goldAtrN(rows, 50);
       out.atr14 = atr14; out.atrRegime = (isFinite(atr14) && isFinite(atr50) && atr50 > 0) ? atr14 / atr50 : NaN;
       var lg = hgGoldCatalogLinreg(rows, 50);
@@ -620,6 +693,11 @@
       if (ir.hourRangeHigh === true || ir.hourRangeHigh === false) put('ind:hourRangeP80', ir.hourRangeHigh);
       if (isFinite(ir.rsi14) && ir.rsi14 !== 50) put('ind:rsiWith', side(ir.rsi14 > 50));
       if (isFinite(ir.ker20)){ if (ir.ker20 >= 0.6) put('ind:kerTrend', true); else if (ir.ker20 <= 0.3) put('ind:kerTrend', false); }
+      /* hg-v1471: the two advanced regime reads, as three-state marks */
+      if (ir.vrState === 'TRENDING') put('ind:vrTrending', true);
+      else if (ir.vrState === 'MEANREV') put('ind:vrTrending', false);
+      if (ir.entropyState === 'ORDERED') put('ind:entropyLow', true);
+      else if (ir.entropyState === 'DISORDER') put('ind:entropyLow', false);
       if (isFinite(ir.atrRegime) && ir.atrRegime !== 1) put('ind:atrExpanding', ir.atrRegime > 1);
       if (isFinite(ir.linregSlope) && ir.linregSlope !== 0) put('ind:linregWith', side(ir.linregSlope > 0));
       if (ir.hurstRegime === 'trending') put('ind:hurstTrending', true);
@@ -647,6 +725,8 @@
     ['HOUR RANGE',   'ind:hourRangeP80', '\u2265P80',  '<P80',        function(r){ return isFinite(r.hourRange) ? r.hourRange.toFixed(2) + ' vs p80 ' + r.hourRangeP80.toFixed(2) + ' (' + r.hoursRead + 'h)' : ''; }],
     ['RSI14',        'ind:rsiWith',      'WITH',      'AGAINST',     function(r){ return isFinite(r.rsi14) ? r.rsi14.toFixed(1) : ''; }],
     ['KER20',        'ind:kerTrend',     'TREND',     'MEANREV',     function(r){ return isFinite(r.ker20) ? r.ker20.toFixed(2) : ''; }],
+    ['VR20 (q=4)',   'ind:vrTrending',   'TREND',     'MEANREV',     function(r){ return isFinite(r.vr20) ? r.vr20.toFixed(3) : ''; }],
+    ['ENTROPY20',    'ind:entropyLow',   'ORDERED',   'DISORDER',    function(r){ return isFinite(r.entropy20) ? r.entropy20.toFixed(3) : ''; }],
     ['ATR14/50',     'ind:atrExpanding', 'EXPANDING', 'CONTRACTING', function(r){ return isFinite(r.atrRegime) ? r.atrRegime.toFixed(2) : ''; }],
     ['LINREG50',     'ind:linregWith',   'WITH',      'AGAINST',     function(r){ return isFinite(r.linregSlope) ? r.linregSlope.toFixed(4) + '/bar' : ''; }],
     ['HURST (1d)',   'ind:hurstTrending','TRENDING',  'MEANREV',     function(r){ return isFinite(r.hurst) ? 'H ' + r.hurst.toFixed(2) : 'no daily leg'; }],
