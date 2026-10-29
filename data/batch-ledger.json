@@ -725,6 +725,11 @@
       "version": "hg-v1467",
       "built": "2026-10-30T06:40:00Z",
       "note": "GOLD FOUNDATION. GOLD SCALP, PINE GOLD, OMNIGOLD and GOLD CONFLUENCE lead from the measured record. The scalp prefer bar still admits only p6fail (n=64, net +0.128R at XM). Measured-negative scripts stay demoted. An unmeasured failed-sweep may lead only when no measured prefer is already eligible. A red-folder blackout refuses a fresh setup. A two-vote fundamental headwind demotes it. Sentiment does not choose the side. OMNIGOLD still leads only on its own win-rate bar. Not re-walked."
+    },
+    {
+      "version": "hg-v1468",
+      "built": "2026-10-30T07:45:00Z",
+      "note": "GOLD STRATEGY LEADERBOARD — the win-rate selector over the measured book, named on every setup (rebased over upstream hg-v1467, gold desks lead from the measured win-rate record: the leaderboard NAMES the standing, their policy decides who leads). hgGoldStrategyLeaderboard(desk) ranks HG_GOLD_SETUP_EDGE strategies by shrunk expectancy (net x n / (n+30), a half-weight at n=30, the neighbourhood of the small-sample-never-lead bar); at the book pinned planned R:R 1.49-1.52 expectancy ordering IS win-rate ordering, and expectancy is the number a target-shrink cannot fake (the n=17 +0.205R sample shrinks below the n=64 +0.128R book). The action tier rides beside the number (LEAD-CANDIDATE / FEE-SURVIVOR / PAINTS-NEVER-LEADS / MEASURED-NEGATIVE / SUPPRESSED). hgGoldSetupEdgeApply attaches the standing onto every candidate edge — the one seam GOLD SCALP, GOLD SWING, GOLD ULTRA, GOLD DIRECTION, MILLI GOLD and OMNIGOLD all pass through. The confluence card names the leader standing (rank r of N, tier) three-state. Named, never gating: the mutation test that makes the leaderboard withhold a setup is caught. PINE GOLD per-port selection stays the forward ledger (live measured twin lines). Not re-walked; the forward ledger decides."
     }
   ]
 }

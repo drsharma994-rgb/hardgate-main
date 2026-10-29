@@ -1525,6 +1525,67 @@ function hgGoldEdgeAction(row){
   return row.action;
 }
 
+/* hg-v1466: THE STRATEGY LEADERBOARD — the win-rate selector over the MEASURED
+   book. "Choose strategies by their win rate" is only mathematically sound at
+   a pinned reward-to-risk: this book's replays sit at planned R:R 1.49-1.52
+   across the board (the hg-v1439 sweep's own control), so at fixed R:R the
+   net expectancy per trade orders the strategies EXACTLY as their win rates
+   do — and expectancy is the number a target-shrink cannot fake. Two
+   estimators, both stated:
+     - SHRINKAGE: shrunk = net x n / (n + 30). A half-weight at n=30, the
+       neighbourhood of the house's own "small sample, never lead" bar. A
+       small-sample winner cannot outrank a proven one on one lucky window
+       (the S9 lesson: +0.28R at n=17 vs the prior window's −0.46R at n=24).
+     - THE ACTION TIER: the table's own in-force verdict (hgGoldEdgeAction)
+       rides beside the number — a prefer is a LEAD-CANDIDATE, a measured
+       positive the desk no longer leads with is a FEE-SURVIVOR, a demote is
+       PAINTS-NEVER-LEADS or MEASURED-NEGATIVE at the −0.20 suppress bar, a
+       suppress is SUPPRESSED.
+   NAMED, NEVER GATING: the leaderboard ranks and names; nothing here
+   withholds a setup — the in-force actions (suppress/demote) stay the only
+   levers, exactly as baked. Never throws. */
+function hgGoldStrategyLeaderboard(desk){
+  var out = { desk: desk === 'swing' ? 'swing' : 'scalp', total: 0, rows: [], byKey: {} };
+  try{
+    var table = (typeof HG_GOLD_SETUP_EDGE === 'object' && HG_GOLD_SETUP_EDGE)
+      ? (HG_GOLD_SETUP_EDGE[out.desk] || {}) : {};
+    var K = 30, rows = [];
+    for (var key in table){
+      if (!Object.prototype.hasOwnProperty.call(table, key)) continue;
+      var row = table[key];
+      if (!row || typeof row !== 'object' || !isFinite(+row.n) || !(+row.n > 0) || !isFinite(+row.net)) continue;
+      var n = +row.n, net = +row.net;
+      var act = hgGoldEdgeAction(row) || 'neutral';
+      var shrunk = net * n / (n + K);
+      var tier;
+      if (act === 'suppress') tier = 'SUPPRESSED';
+      else if (act === 'prefer' && net > 0) tier = 'LEAD-CANDIDATE';
+      else if (net > 0) tier = 'FEE-SURVIVOR';
+      else if (net <= -0.20) tier = 'MEASURED-NEGATIVE';
+      else tier = 'PAINTS-NEVER-LEADS';
+      rows.push({ key: key, n: n, net: net, gross: isFinite(+row.gross) ? +row.gross : null,
+                  action: act, shrunk: shrunk, tier: tier, why: row.why || null });
+    }
+    rows.sort(function(a, b){ return (b.shrunk - a.shrunk) || (b.n - a.n); });
+    for (var i = 0; i < rows.length; i++){ rows[i].rank = i + 1; out.byKey[rows[i].key] = rows[i]; }
+    out.rows = rows;
+    out.total = rows.length;
+    return out;
+  }catch(e){ out.rows = []; out.total = 0; out.byKey = {}; return out; }
+}
+
+/* hg-v1466: one named line for a card — the strategy's measured standing.
+   Absent key or absent table: null (three-state), never a guess. */
+function hgGoldStrategyMark(key, desk){
+  try{
+    var lb = hgGoldStrategyLeaderboard(desk);
+    var r = lb && lb.byKey && lb.byKey[String(key || '')];
+    if (!r) return null;
+    return 'EVIDENCE · ' + r.key.toUpperCase() + ' net ' + (r.net >= 0 ? '+' : '') + r.net.toFixed(3) + 'R n=' + r.n
+      + ' · rank ' + r.rank + '/' + lb.total + ' · ' + r.tier;
+  }catch(e){ return null; }
+}
+
 /* hg-v960: THE VERDICT RULE, STATED ONCE, IN CODE.
 
    Until this existed the rule lived only in prose. Every `action` on the table
@@ -2989,6 +3050,22 @@ function hgGoldSetupEdgeApply(cand, opts){
        reading of it on the candidate, so every consumer that already renders
        cand.edge.why can render what the figure means for THIS desk without
        reaching back into the table. */
+    /* hg-v1466: the strategy's MEASURED STANDING rides the card — its rank
+       among the desk's own book by shrunk expectancy, with the action tier.
+       Named, never gating: the in-force action above stays the only lever. */
+    var __lb = hgGoldStrategyLeaderboard(opts.swing ? 'swing' : 'scalp');
+    if (__lb && __lb.total){
+      for (var __k in __lb.byKey){
+        if (Object.prototype.hasOwnProperty.call(__lb.byKey, __k) && table[__k] === row){
+          var __lr = __lb.byKey[__k];
+          cand.edge.rank = __lr.rank;
+          cand.edge.rankTotal = __lb.total;
+          cand.edge.tier = __lr.tier;
+          cand.edge.shrunk = __lr.shrunk;
+          break;
+        }
+      }
+    }
     if (row.live !== undefined) cand.edge.live = row.live;
     var liveNote = hgGoldEdgeLiveNote(row, opts && opts.scalp ? 'scalp' : undefined);
     if (liveNote) cand.edge.liveWhy = liveNote;
@@ -18258,6 +18335,8 @@ W.hgGoldFactorSepHtml = hgGoldFactorSepHtml;
 W.hgGoldPlanSidesOk = hgGoldPlanSidesOk;
 W.hgGoldTickPx = hgGoldTickPx;               /* hg-v1459 venue-tick snap for minted levels */
 W.hgGoldPlanPricingOk = hgGoldPlanPricingOk; /* hg-v1459 exact-pricing audit, named never gating */
+W.hgGoldStrategyLeaderboard = hgGoldStrategyLeaderboard; /* hg-v1466 the win-rate selector over the measured book */
+W.hgGoldStrategyMark = hgGoldStrategyMark;               /* hg-v1466 one named evidence line for a card */
 W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;

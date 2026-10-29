@@ -1258,6 +1258,13 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   if (base.opposed){
     base.reason += ' ' + base.opposed + ' desk' + (base.opposed === 1 ? '' : 's') + ' published the other side. That does not remove this setup.';
   }
+  /* hg-v1466: the leader's strategy EVIDENCE is named on the card — the
+     rank it holds on its own desk's measured book (shrunk expectancy at the
+     pinned R:R) and the action tier. Named, never gating. */
+  if (leader && leader.edge && isFinite(leader.edge.rank) && isFinite(leader.edge.rankTotal)){
+    base.reason += ' The leading strategy stands rank ' + leader.edge.rank + ' of ' + leader.edge.rankTotal
+      + ' on its own measured book (' + String(leader.edge.tier || 'measured') + ').';
+  }
   if (!costOk) return base;
   // hg-v1391/hg-v1458: MOST-ACCURATE confluence scoring (named since hg-v1456, never gating)
   // 1) cluster tightness: entries must cluster within 0.8%
