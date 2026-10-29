@@ -1704,6 +1704,7 @@ function cardHTML(c, isBest, season, tape){
     + '<span class="k"' + gsxSt(GSX_K) + '>venue</span><span' + gsxSt(GSX_V) + '>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
     + '<span class="k"' + gsxSt(GSX_K) + '>reads</span><span' + gsxSt(GSX_V) + '>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
     + '<span class="k"' + gsxSt(GSX_K) + '>killzone</span><span' + gsxSt(GSX_V) + '>' + esc(c.killzone) + '</span>'
+    + (c.kzBook ? '<span class="k"' + gsxSt(GSX_K) + '>kz book</span><span' + gsxSt(GSX_V) + '>n=' + c.kzBook.n + ' · win ' + (c.kzBook.win * 100).toFixed(1) + '% · net ' + (c.kzBook.net >= 0 ? '+' : '') + c.kzBook.net.toFixed(1) + 'R (both halves)</span>' : '')
     + '<span class="k"' + gsxSt(GSX_K) + '>ATR14 15m</span><span' + gsxSt(GSX_V) + '>' + pxF(c.atr) + '</span>'
     + '<span class="k"' + gsxSt(GSX_K) + '>R:R</span><span' + gsxSt(GSX_V) + '>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2)</span>'
     + '</div>'

@@ -522,6 +522,28 @@ function goldKillzone(d){
 }
 
 /** Prefer London-open (07:00 UTC) anchor when in window; else UTC session day. */
+/* hg-v1472 (one home): THE KILLZONE BOOK — the measured per-session standing
+   of the desk's own replay (scripts/backtest-goldscalp-results-floor.json,
+   n=1384 live trades, split at the window midpoint, BOTH halves checked):
+     LONDON KILLZONE  n=189  win 46.0%  net +11.5R   (H1 43% / H2 49%)
+     NY AM            n=211  win 46.0%  net +12.0R   (H1 50.5% / H2 41.8%)
+     ASIAN RANGE      n=381  win 45.1%  net  +4.3R   (H1 42.6% / H2 48%)
+     OFF-HOURS        n=263  win 41.1%  net -27.4R   (H1 43.1% / H2 39.3%)
+     LONDON/NY OVERL. n=340  win 37.4%  net -48.3R   (H1 34.4% / H2 39.8%)
+   The overlap cohort is the book's loser, negative in BOTH halves, and the
+   attribution concentrates it: opening-range entries firing there (n=71,
+   win 28.2%, net -24.2R) and asian entries (n=32, win 25.0%, net -11.9R);
+   hours 14-16 GMT are the worst three. NAMED, NEVER GATING: the stamp rides
+   the card; the killzone filter ships as a TradingView INPUT default
+   (exports/tradingview/goldscalp-sweep-reclaim.pine), not a repo gate -
+   turning it into a gate is a census decision, not a card note. */
+var HG_GOLD_KZ_BOOK = {
+  'LONDON KILLZONE':  { n: 189, win: 0.460, net:  11.5 },
+  'NY AM':            { n: 211, win: 0.460, net:  12.0 },
+  'ASIAN RANGE':      { n: 381, win: 0.451, net:   4.3 },
+  'OFF-HOURS':        { n: 263, win: 0.411, net: -27.4 },
+  'LONDON/NY OVERLAP':{ n: 340, win: 0.374, net: -48.3 }
+};
 function goldSessionAnchor(rows){
   try{
     rows = __rows(rows);
@@ -1131,12 +1153,34 @@ function goldScalpSetup(inp){
     for (i3 = 0; i3 < myEv.length; i3++) confluence.push(myEv[i3].label);
 
     var hh = isFinite(kz.hourGMT) ? ('0' + kz.hourGMT).slice(-2) + ':00 GMT' : 'n/a';
+    /* hg-v1472 (one home): the KILLZONE BOOK — the measured per-session standing
+       of the desk's own replay (scripts/backtest-goldscalp-results-floor.json,
+       n=1384 live trades, split at the window midpoint, BOTH halves checked):
+         LONDON KILLZONE  n=189  win 46.0%  net +11.5R   (H1 43% / H2 49%)
+         NY AM            n=211  win 46.0%  net +12.0R   (H1 50.5% / H2 41.8%)
+         ASIAN RANGE      n=381  win 45.1%  net  +4.3R   (H1 42.6% / H2 48%)
+         OFF-HOURS        n=263  win 41.1%  net -27.4R   (H1 43.1% / H2 39.3%)
+         LONDON/NY OVERL. n=340  win 37.4%  net -48.3R   (H1 34.4% / H2 39.8%)
+       The overlap cohort is the book's loser, negative in BOTH halves, and the
+       attribution concentrates it: opening-range entries firing there (n=71,
+       win 28.2%, net -24.2R) and asian entries (n=32, win 25.0%, net -11.9R);
+       hours 14-16 GMT are the worst three. The killzone filter ships as a
+       TradingView INPUT default (exports/tradingview/goldscalp-sweep-reclaim.pine),
+       not a repo gate — turning it into a gate is a census decision. */
+    var kzBookRow = (typeof HG_GOLD_KZ_BOOK === 'object' && HG_GOLD_KZ_BOOK && HG_GOLD_KZ_BOOK[kz.label]) ? HG_GOLD_KZ_BOOK[kz.label] : null;
     return {
       dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
       rr: rr, rr2: rr2, grade: grade, strategy: strategy,
       confluence: confluence, notes: notes.concat(stopNote ? [stopNote] : []),
       killzone: kz.label + ' · ' + hh,
       killzoneWeight: kz.weight,
+      /* hg-v1472: the killzone's MEASURED standing from the desk's own replay
+         book (HG_GOLD_KZ_BOOK, n=1384 live trades, both halves checked) —
+         named on the card, never gating: the book's loser cohort (the London/NY
+         overlap, win 37.4% net -48.3R, negative in both halves) is named at
+         the point of entry formation; the killzone filter itself ships as a
+         TradingView input default, not a repo gate. */
+      kzBook: kzBookRow ? { n: kzBookRow.n, win: kzBookRow.win, net: kzBookRow.net } : null,
       newsCaution: news.caution,
       newsStamp: news.caution ? NEWS_STAMP + (news.title ? ' (' + news.title + ')' : '') : null,
       reads: { long: longEv.length, short: shortEv.length },
@@ -18404,6 +18448,7 @@ W.hgGoldPlanPricingOk = hgGoldPlanPricingOk; /* hg-v1459 exact-pricing audit, na
 W.hgGoldStrategyLeaderboard = hgGoldStrategyLeaderboard; /* hg-v1466 the win-rate selector over the measured book */
 W.hgGoldStrategyMark = hgGoldStrategyMark;               /* hg-v1466 one named evidence line for a card */
 W.hgGoldStrategyLeaderboardHtml = hgGoldStrategyLeaderboardHtml; /* hg-v1469 the measured-foundation panel */
+W.HG_GOLD_KZ_BOOK = HG_GOLD_KZ_BOOK;                     /* hg-v1472 the measured killzone book, one home */
 W.HG_GOLD_STRAT_WIN = HG_GOLD_STRAT_WIN;                 /* hg-v1469 the literal win-rate ledger, exposed for the suite */
 W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;

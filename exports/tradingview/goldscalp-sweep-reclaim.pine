@@ -1,0 +1,151 @@
+//@version=6
+// ============================================================================
+// GOLD SCALP — SWEEP + RECLAIM (Hardgate port) — hg-v1472
+// ============================================================================
+// A faithful Pine port of the GOLD SCALP tab's core measured strategy:
+// the liquidity-sweep + reclaim of the prior-25-bar pool (goldind.js
+// goldSweeps / goldscalp.js liqsweep), with the shipped gates:
+//   - stop floored at 1.5 x ATR14 (the scalp floor; tighter stops measured
+//     cost-toxic in replay — the hg-v1439 book)
+//   - min R:R 1.2 at the floored stop (GS_MIN_RR)
+//   - TP 1.5R / 2.5R (the upstream hg-v1466 fill-at-next-open ladder)
+//   - the 0.16%-of-entry cost-toxicity reject (8x the venue round trip)
+//   - the gold weekend excluded (Fri 22:00 UTC - Sun 22:00 UTC, hg-v953)
+//   - killzone filter INPUTS defaulting to the MEASURED book
+//     (scripts/backtest-goldscalp-results-floor.json, n=1384 live trades):
+//       LONDON KILLZONE  n=189  win 46.0%  net +11.5R   (both halves ~)
+//       NY AM            n=211  win 46.0%  net +12.0R
+//       ASIAN RANGE      n=381  win 45.1%  net  +4.3R
+//       OFF-HOURS        n=263  win 41.1%  net -27.4R
+//       LONDON/NY OVERL. n=340  win 37.4%  net -48.3R  (34.4% / 39.8% by half)
+//     -> OVERLAP defaults OFF: the book's loser cohort, negative in BOTH
+//     halves, concentrated in opening-range and asian entries firing there
+//     (openrange n=71 win 28.2% net -24.2R; asian n=32 win 25.0% net -11.9R).
+//     Hours 14-16 GMT are the worst three (win 33-35%).
+//
+// HONEST LIMITS OF THIS BACKTEST vs the repo's own harness:
+//   - TradingView fills on bar-close/OHLC assumptions; the repo harness runs
+//     a fill-aware pass with unfilled-limit settling. Treat TV results as
+//     directional; the repo harness remains the arbiter.
+//   - Model the venue spread honestly: XM round trip ~ $0.30-0.50 on gold
+//     depending on account; set slippage + commission accordingly.
+//   - The feed matters: the repo anchors on IUX/PAXG spot; TV broker feeds
+//     carry their own basis. Keep the feed constant across comparisons.
+// ============================================================================
+
+strategy("GOLD SCALP — sweep+reclaim (hg-v1472)",
+     shorttitle = "GS sweep+reclaim",
+     overlay = true,
+     initial_capital = 10000,
+     default_qty_type = strategy.fixed,
+     default_qty_value = 1,
+     commission_type = strategy.commission.cash_per_order,
+     commission_value = 3.5,          // ~half the XM round trip, per side
+     slippage = 15,                   // ~15 points = $0.15 per fill, tune to venue
+     pyramiding = 0,
+     calc_on_every_tick = false,
+     process_orders_on_close = true,
+     max_labels_count = 500)
+
+// ---- inputs (the shipped constants; killzones from the measured book) ----
+grpP = "Pool / trigger"
+poolLen   = input.int(25,   "Sweep pool length (bars)", minval = 10, maxval = 60, group = grpP)
+useLive   = input.bool(true, "Judge on the forming bar's close", group = grpP)
+
+grpR = "Risk"
+atrLen    = input.int(14,    "ATR length", minval = 5, maxval = 50, group = grpR)
+stopFloor = input.float(1.5, "Stop floor (x ATR)", minval = 0.5, maxval = 4.0, step = 0.1, group = grpR)
+minRR     = input.float(1.2, "Min R:R at the floored stop", minval = 0.5, maxval = 3.0, step = 0.1, group = grpR)
+tp1R      = input.float(1.5, "TP1 (R)", minval = 0.5, maxval = 5.0, step = 0.1, group = grpR)
+tp2R      = input.float(2.5, "TP2 (R)", minval = 0.5, maxval = 8.0, step = 0.1, group = grpR)
+maxRR     = input.float(3.0, "Ceiling-bound reject: T1 above this R is refused", minval = 1.0, maxval = 8.0, step = 0.25, group = grpR)
+
+grpC = "Cost / session"
+costRiskPct = input.float(0.16, "Cost-toxicity reject: stop distance under this % of entry", minval = 0.02, maxval = 1.0, step = 0.01, group = grpC)
+kzLondon  = input.bool(true,  "London KILLZONE 07-10 GMT (book: n=189 win 46%)", group = grpC)
+kzNY      = input.bool(true,  "NY AM 10-13 GMT (book: n=211 win 46%)", group = grpC)
+kzAsia    = input.bool(true,  "ASIAN RANGE 00-08 GMT (book: n=381 win 45.1%)", group = grpC)
+kzOverlap = input.bool(false, "LONDON/NY OVERLAP 13-17 GMT (book: n=340 win 37.4% net -48.3R, both halves negative)", group = grpC)
+kzOff     = input.bool(false, "OFF-HOURS (book: n=263 win 41.1% net -27.4R)", group = grpC)
+skipWeekend = input.bool(true, "Skip the gold weekend (Fri 22:00 - Sun 22:00 UTC)", group = grpC)
+
+// ---- gold weekend (Fri 22:00 UTC - Sun 22:00 UTC) ----
+inWeekend() =>
+    wd = dayofweek(time, "UTC")
+    hh = hour(time, "UTC")
+    (wd == friday and hh >= 22) or wd == saturday or (wd == sunday and hh < 22)
+
+// ---- killzone windows (UTC, matching goldind goldKillzone) ----
+hh = hour(time, "UTC")
+inLondon  = hh >= 7  and hh < 10
+inNY      = hh >= 10 and hh < 13
+inOverlap = hh >= 13 and hh < 17
+inAsia    = hh >= 0  and hh < 8
+kzOK = (inLondon and kzLondon) or (inNY and kzNY) or (inOverlap and kzOverlap) or (inAsia and kzAsia) or ((not inLondon) and (not inNY) and (not inOverlap) and (not inAsia) and kzOff)
+
+// ---- the sweep pool: the 25 bars before the bar being judged ----
+n = bar_index
+poolHi = ta.highest(high, poolLen)[1]   // bars [n-poolLen, n-1] before this bar
+poolLo = ta.lowest(low, poolLen)[1]
+
+atr = ta.atr(atrLen)
+sweepBull = low < poolLo and close > poolLo      // wick below the pool + reclaim close
+sweepBear = high > poolHi and close < poolHi     // wick above the pool + rejection close
+
+// ---- the plan, at the floored stop, with the shipped bars ----
+var float plannedStop = na
+var float plannedTP1  = na
+var float plannedTP2  = na
+var int   plannedDir  = 0
+
+longSignal  = sweepBull and kzOK and not (skipWeekend and inWeekend())
+shortSignal = sweepBear and kzOK and not (skipWeekend and inWeekend())
+
+if longSignal or shortSignal
+    dir = longSignal ? 1 : -1
+    // stop = beyond the swept wick, floored at stopFloor x ATR
+    wick = dir == 1 ? math.min(low, poolLo) : math.max(high, poolHi)
+    rawStop = dir == 1 ? wick - 0.15 * atr : wick + 0.15 * atr
+    floorStop = dir == 1 ? close - stopFloor * atr : close + stopFloor * atr
+    plannedStop := dir == 1 ? math.max(rawStop, floorStop) : math.min(rawStop, floorStop)
+    risk = math.abs(close - plannedStop)
+    // the cost-toxicity reject: risk under costRiskPct% of entry never trades
+    costOK = risk / close * 100 >= costRiskPct
+    // T1 at 1.5R off the FLOORED stop (the hg-v1466 ladder); TP2 2.5R
+    plannedTP1 := dir == 1 ? close + tp1R * risk : close - tp1R * risk
+    plannedTP2 := dir == 1 ? close + tp2R * risk : close - tp2R * risk
+    plannedDir := dir
+    if costOK and risk > 0 and not strategy.position_size
+        strategy.entry(dir == 1 ? "L" : "S", dir == 1 ? strategy.long : strategy.short)
+        strategy.exit("TP1", from_entry = dir == 1 ? "L" : "S", limit = plannedTP1, stop = plannedStop, qty_percent = 50)
+        strategy.exit("TP2", from_entry = dir == 1 ? "L" : "S", limit = plannedTP2, stop = plannedStop, qty_percent = 100)
+        label.new(bar_index, dir == 1 ? low : high,
+             text = (dir == 1 ? "SWEEP+RECLAIM LONG" : "SWEEP+REJECT SHORT") + "\nstop " + str.tostring(plannedStop, format.mintick)
+                  + "\nTP1 " + str.tostring(plannedTP1, format.mintick) + " (" + str.tostring(tp1R, "#.#") + "R)"
+                  + "\nTP2 " + str.tostring(plannedTP2, format.mintick) + " (" + str.tostring(tp2R, "#.#") + "R)",
+             style = dir == 1 ? label.style_label_up : label.style_label_down,
+             color = color.new(dir == 1 ? color.teal : color.red, 20), textcolor = color.white, size = size.small)
+
+// ---- the R-multiple metrics table (the tester reports in the desk's units) ----
+var table perf = table.new(position.top_right, 2, 6, border_width = 1)
+if barstate.islastconfirmedhistory
+    tot = strategy.closedtrades
+    grossP = strategy.grossprofit
+    grossL = strategy.grossloss
+    pf = grossL > 0 ? grossP / grossL : 0
+    table.cell(perf, 0, 0, "GS sweep+reclaim", bgcolor = color.new(color.blue, 70), text_color = color.white)
+    table.cell(perf, 1, 0, str.tostring(tot) + " trades", bgcolor = color.new(color.blue, 70), text_color = color.white)
+    table.cell(perf, 0, 1, "win rate")
+    table.cell(perf, 1, 1, tot > 0 ? str.tostring(100.0 * strategy.wintrades / tot, "#.#") + "%" : "—")
+    table.cell(perf, 0, 2, "profit factor")
+    table.cell(perf, 1, 2, pf > 0 ? str.tostring(pf, "#.##") : "—")
+    table.cell(perf, 0, 3, "max DD")
+    table.cell(perf, 1, 3, str.tostring(strategy.max_drawdown, "#.##"))
+    table.cell(perf, 0, 4, "killzones")
+    table.cell(perf, 1, 4, (kzLondon ? "LDN " : "") + (kzNY ? "NY " : "") + (kzAsia ? "ASIA " : "") + (kzOverlap ? "OVL " : "") + (kzOff ? "OFF" : ""))
+    table.cell(perf, 0, 5, "round trip")
+    table.cell(perf, 1, 5, str.tostring(2 * commission_value + 2 * slippage, "#.##") + " pts modelled")
+
+// plot the pool the sweep is judged against
+plot(poolHi, "pool high", color = color.new(color.red, 60), style = plot.style_linebr)
+plot(poolLo, "pool low",  color = color.new(color.teal, 60), style = plot.style_linebr)

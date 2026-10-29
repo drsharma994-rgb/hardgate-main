@@ -130,15 +130,15 @@ console.log('\n== 5. the build is stamped at the current version everywhere a ca
    The round''s own pack string stays in the history chain. */
 {
   const stamp = fs.readFileSync(path.join(ROOT, 'build-stamp.js'), 'utf8');
-  ok(/version: 'hg-v1471'/.test(stamp), 'build-stamp version');
+  ok(/version: 'hg-v1472'/.test(stamp), 'build-stamp version');
   ok(/hg-v1440: OMNIGOLD r3/.test(stamp), 'the pack string names the round');
   ok(/hg-v1439:/.test(stamp), 'and the pack history chain is intact');
-  ok(/HG_CACHE = 'hg-v1471'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'sw.js cache id');
+  ok(/HG_CACHE = 'hg-v1472'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'sw.js cache id');
   const idx = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  ok(idx.indexOf('v=1440') < 0 && idx.indexOf('v=1471') >= 0, 'index.html cache-busters all at 1471 (re-pinned at the hg-v1471 bump)');
+  ok(idx.indexOf('v=1440') < 0 && idx.indexOf('v=1472') >= 0, 'index.html cache-busters all at 1472 (re-pinned at the hg-v1472 bump)');
   const ledger = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'batch-ledger.json'), 'utf8'));
   const entries = (Array.isArray(ledger) ? ledger : Object.values(ledger).find(Array.isArray));
-  ok(entries[entries.length - 1].version === 'hg-v1471', 'the batch ledger last entry is hg-v1460');
+  ok(entries[entries.length - 1].version === 'hg-v1472', 'the batch ledger last entry is hg-v1460');
   let nonDecreasing = true;
   for (let i = 1; i < entries.length; i++)
     if (String(entries[i].built) < String(entries[i - 1].built)) nonDecreasing = false;
