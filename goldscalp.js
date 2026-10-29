@@ -1510,7 +1510,8 @@ function gsApplyAccurateLead(gold, display, displayBest, deskTape, barNow){
       confluence: ['failed-sweep reclaim'],
       notes: [plan.why, off
         ? ('Off-session (' + kzLabel + '). The killzone is named. It does not erase a valid failed-sweep.')
-        : ('Session ' + kzLabel + '.')],
+        : ('Session ' + kzLabel + '.'),
+        'Sentiment is a lagged read. It does not choose this side.'],
       why: plan.why + (off ? ' Off-session (' + kzLabel + ') — named, not a reason to hide the structure.' : ''),
       stamps: ['ACCURACY STRUCTURE'],
       pxNow: plan.mark,
@@ -1529,10 +1530,46 @@ function gsApplyAccurateLead(gold, display, displayBest, deskTape, barNow){
       out.reason = card.gateNotes[0];
       return out;
     }
+    var fund = null;
+    try{
+      var fg = gfn('hgFundamentalGate');
+      if (fg) fund = fg(card.sym || 'XAUUSD', card.dir, { scanner: 'goldscalp' });
+    }catch(eFund){ fund = null; }
+    if (fund && (fund.refuse === true || fund.demote === true)){
+      card.fundGate = { refuse: fund.refuse === true, demote: fund.demote === true,
+        chips: (fund.chips || []).slice(), reason: fund.reason || '' };
+    }
+    if (fund && fund.chips && fund.chips.length) card.notes.push(fund.chips.join(' · '));
+    if (!fund || (fund.unchecked && fund.unchecked.length)){
+      card.notes.push('Fundamental board unread. A dark board does not veto.');
+    } else if (fund.refuse !== true && fund.demote !== true){
+      card.notes.push('Fundamentals checked. No blackout and no two-vote headwind.');
+    }
+    var preferSibling = false;
+    if (out.displayBest && !out.displayBest.demoted && !out.displayBest.vetoed && !out.displayBest.locked){
+      var pref = gfn('hgGoldMeasuredPrefer');
+      if (pref && pref('scalp', out.displayBest.stratKey)) preferSibling = true;
+    }
+    var judge = null;
+    try{
+      var jf = gfn('hgGoldFoundationJudge');
+      if (jf) judge = jf(card, { lane: 'scalp', fund: fund, preferSibling: preferSibling });
+    }catch(eJudge){ judge = null; }
+    if (judge && judge.mayLead !== true){
+      card.demoted = true;
+      var stamp = (fund && fund.refuse === true) ? 'EVENT BLACKOUT'
+        : (fund && fund.demote === true) ? 'FUNDAMENTAL HEADWIND' : 'UNMEASURED';
+      card.stamps = [stamp];
+      card.gateNotes = [judge.reason];
+      card.reason = judge.reason;
+      out.reason = judge.reason;
+      return out;
+    }
     if (out.displayBest && out.displayBest.locked){
       out.reason = null;
       return out;
     }
+    if (judge && judge.reason) card.notes.push(judge.reason);
     out.displayBest = card;
     out.led = true;
     out.reason = null;

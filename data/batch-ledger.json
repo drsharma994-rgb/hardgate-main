@@ -720,6 +720,11 @@
       "version": "hg-v1466",
       "built": "2026-10-30T06:15:00Z",
       "note": "PINE GOLD and GOLD SCALP fill at the next open. A failed-sweep reclaim is the setup. The entry is the next open plus or minus cost, not the signal close. The stop sits 0.25xATR and the cost beyond the swept wick. Scalp targets exactly 1.5R and 2.5R and drops a stop wider than 3.5xATR. Pine targets exactly 2R and drops a stop wider than 3xATR. A gap through the stop is not a trade. Same-bar stop wins over the target. A pine scalp stop under 0.3% of entry still fails the admission floor and does not lead. Asian, opening-range and BOS cards stay demoted. Off-session names the killzone and does not erase a valid failed-sweep. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1467",
+      "built": "2026-10-30T06:40:00Z",
+      "note": "GOLD FOUNDATION. GOLD SCALP, PINE GOLD, OMNIGOLD and GOLD CONFLUENCE lead from the measured record. The scalp prefer bar still admits only p6fail (n=64, net +0.128R at XM). Measured-negative scripts stay demoted. An unmeasured failed-sweep may lead only when no measured prefer is already eligible. A red-folder blackout refuses a fresh setup. A two-vote fundamental headwind demotes it. Sentiment does not choose the side. OMNIGOLD still leads only on its own win-rate bar. Not re-walked."
     }
   ]
 }

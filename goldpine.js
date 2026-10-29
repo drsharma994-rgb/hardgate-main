@@ -908,6 +908,28 @@ function gpAccuratePack(bars, nowMs){
       s.demotedWhy = 'AGAINST GOLD TAPE';
       out.notes.push(label + ': structure is ' + s.dir + ' and the tape is ' + tape);
     }
+    var fund = null;
+    if (!s.demoted){
+      try{
+        var fg = gfn('hgFundamentalGate');
+        fund = fg ? fg('XAUUSD', s.dir, { scanner: 'goldpine' }) : null;
+        if (fund && (fund.refuse === true || fund.demote === true)){
+          s.fundGate = { refuse: fund.refuse === true, demote: fund.demote === true,
+            chips: (fund.chips || []).slice(), reason: fund.reason || '' };
+          s.demoted = true;
+          s.demotedWhy = fund.reason || (fund.refuse ? 'EVENT BLACKOUT' : 'FUNDAMENTAL HEADWIND');
+          out.notes.push(label + ': ' + s.demotedWhy);
+        }
+      }catch(eFund){ fund = null; }
+    }
+    if (s.notes == null) s.notes = [];
+    s.notes.push('Sentiment is a lagged read. It does not choose this side.');
+    if (fund && fund.chips && fund.chips.length) s.notes.push(fund.chips.join(' · '));
+    if (!fund || (fund.unchecked && fund.unchecked.length)){
+      s.notes.push('Fundamental board unread. A dark board does not veto.');
+    } else if (fund.refuse !== true && fund.demote !== true){
+      s.notes.push('Fundamentals checked. No blackout and no two-vote headwind.');
+    }
     return s;
   }
   if (bars){
@@ -1784,11 +1806,14 @@ function mount(el){
          a silent desk is the thing this family keeps having to fix. */
       /* hg-v1164: a record-only layer never leads; it is counted and named */
       var mpList = gpTapeAligned(swingTop.concat(scalpTop).filter(gpMayLead));
-      var accPack = gpAccuratePack(bars, t0);
+      var accPack = (result && result.fundBlackout)
+        ? { scalp: null, swing: null, lead: null, notes: ['EVENT BLACKOUT — no fresh accuracy structure'] }
+        : gpAccuratePack(bars, t0);
       if (accPack.scalp) scalpTop = [accPack.scalp].concat(scalpTop.filter(function(s){ return !(s && accPack.scalp && s.id === accPack.scalp.id); }));
       if (accPack.swing) swingTop = [accPack.swing].concat(swingTop.filter(function(s){ return !(s && accPack.swing && s.id === accPack.swing.id); }));
       if (accPack.lead && gpMayLead(accPack.lead) && !accPack.lead.tapeHeld){
-        mpList = [accPack.lead].concat(mpList.filter(function(s){ return !(s && s.id === accPack.lead.id); }));
+        if (!mpList.length) mpList = [accPack.lead];
+        else accPack.notes.push('A measured Pine lane already leads. The failed-sweep prints and does not replace it.');
       }
       var accNote = (accPack.notes && accPack.notes.length)
         ? ('<div class="note">' + esc(accPack.notes.join(' · ')) + '</div>')

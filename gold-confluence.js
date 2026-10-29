@@ -1500,6 +1500,27 @@ async function hgGoldConfluenceScan(win, opts){
   }
   var built = hgGoldConfluenceBuild(votes, iux, cost);
   built.at = Date.now();
+  try{
+    var fg = win && win.hgFundamentalGate;
+    if (built.ready === true && typeof fg === 'function'){
+      var g = fg('XAUUSD', built.side, { scanner: 'goldconfluence' });
+      if (g && g.refuse === true){
+        built.ready = false;
+        built.fundGate = { refuse: true, demote: false, reason: g.reason || '', chips: (g.chips || []).slice() };
+        built.reason = (built.reason || '') + ' EVENT BLACKOUT — no fresh setup forms into a red-folder print.';
+      } else if (g && g.demote === true){
+        built.ready = false;
+        built.fundGate = { refuse: false, demote: true, reason: g.reason || '', chips: (g.chips || []).slice() };
+        built.reason = (built.reason || '') + ' ' + (g.reason || 'Fundamental headwind — this plan does not lead.');
+      } else if (built.reason && built.reason.indexOf('does not choose this side') < 0){
+        var sent = ' Sentiment is a lagged read. It does not choose this side.';
+        if (!g || (g.unchecked && g.unchecked.length)) sent += ' Fundamental board unread. A dark board does not veto.';
+        else if (g && g.chips && g.chips.length) sent += ' ' + g.chips.join(' · ') + '.';
+        else sent += ' Fundamentals checked. No blackout and no two-vote headwind.';
+        built.reason += sent;
+      }
+    }
+  }catch(eFund){}
   if (!scanHarness(win)) recordConfluence(win, built);
   return built;
 }

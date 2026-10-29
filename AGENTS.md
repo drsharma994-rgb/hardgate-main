@@ -1,3 +1,9 @@
+### GOLD FOUNDATION — lead from the measured record — hg-v1467
+- GOLD SCALP, PINE GOLD, OMNIGOLD and GOLD CONFLUENCE do not gain a new leading script. The scalp prefer bar (n>=50, gross>0, net>=+0.10R at XM) still admits only the failed-break reversal, p6fail, n=64, net +0.128R. Asian, opening range, BOS, RSI divergence and the other measured-negative scripts stay demoted.
+- An unmeasured failed-sweep may lead only when no measured prefer is already eligible. It does not replace one. A red-folder blackout refuses a fresh setup. A two-vote fundamental headwind demotes it. Sentiment is named and does not choose the side. A dark board still vetoes nothing.
+- OMNIGOLD already leads only when its own win-rate bar clears, and a fundamental refuse or headwind is still not the pick. That bar was not loosened.
+- Not re-walked. The hg-v1441 READY census is not replaced. The forward ledger decides. Tests: tests/test-gold-foundation-v1467.mjs.
+
 ### PINE GOLD and GOLD SCALP — the fill is the next open — hg-v1466
 - A failed-sweep reclaim is the setup. The entry is the next open plus or minus the 0.30 cost. The signal close is not the fill. If the next open is unread, there is no setup and no invented entry.
 - The stop is 0.25×ATR and the cost beyond the swept wick. A gap through that stop is not a trade. A bar that trades the stop, including the same bar that also tags the target, is not an open setup. Price that has already covered 85% of the reward is not chased.
