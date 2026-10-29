@@ -630,6 +630,11 @@
       "version": "hg-v1448",
       "built": "2026-10-29T02:44:51Z",
       "note": "GOLD CONFLUENCE ONE SETUP now requires three crowned plans on the live IUX price. An off-scale plan and an uncrowned plan stay on the card and do not move the median. A live price that has already reached the stop is stood aside. The median of the crowned plans stays the trade. Family and session marks stay record-only. The READY n=21 census was the previous gate and is not replaced. The browser fill ledger is not in this build."
+    },
+    {
+      "version": "hg-v1449",
+      "built": "2026-10-29T02:54:56Z",
+      "note": "GOLD PINE lanes show a setup only when solidity is PRIME, SOLID or GOOD and the FTS pillars are OK or one MIX short of OK. Recording, the admission floor and the lead gates are unchanged. A desk that cannot read solidity or FTS does not hide its rows."
     }
   ]
 }

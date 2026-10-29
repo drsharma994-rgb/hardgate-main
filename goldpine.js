@@ -536,6 +536,58 @@ function hgGpReorder(list){
   } catch(e){ return list; }
 }
 
+/* The lanes show a setup only when both reads are in hand and both pass.
+   Good solidity is the shared grader's lead bar: PRIME, SOLID or GOOD.
+   FTS OK is tierHint clean. One step from it is tierHint near. A killed
+   plan is not good. When either reader is absent the bar does not invent
+   a pass and does not hide the row. */
+function gpSolidityGood(s){
+  var g = s && s.solidity;
+  if (!g || g.killed === true) return false;
+  if (g.leadEligible === true) return true;
+  var t = String(g.grade || g.tier || '').toUpperCase();
+  return t === 'PRIME' || t === 'SOLID' || t === 'GOOD';
+}
+function gpFtsNearOk(s){
+  var st = s && s.stack;
+  if (!st || st.tierHint === 'aside') return false;
+  var parts = String(st.summary || '').split('\u00b7');
+  var ok = 0, bad = 0, n = 0, i, tag;
+  for (i = 0; i < parts.length; i++){
+    tag = parts[i].split(':').pop().trim();
+    if (!tag) continue;
+    n++;
+    if (tag === 'OK') ok++;
+    else if (tag === 'WEAK' || tag === 'VETO') bad++;
+  }
+  if (n < 3 || bad) return false;
+  /* Three OK pillars is FTS OK. Two OK and one MIX is one step from it.
+     A clean tier whose pillars are still MIX is not. */
+  return ok >= 2;
+}
+function gpBoardBarOn(){
+  return typeof W.hgSolidityGrade === 'function' && typeof W.hgSetupStackForPineSig === 'function';
+}
+function gpBoardPick(s){
+  return !!(s && gpSolidityGood(s) && gpFtsNearOk(s));
+}
+function gpAttachFts(list){
+  if (!Array.isArray(list) || typeof W.hgSetupStackForPineSig !== 'function') return;
+  for (var i = 0; i < list.length; i++){
+    var s = list[i];
+    if (!s || s.stack || (s.dir !== 'long' && s.dir !== 'short')) continue;
+    try{
+      s.stack = W.hgSetupStackForPineSig({
+        sym: 'XAUUSD', dir: s.dir,
+        isNew: s.tier === 'primary' || s.tier === 'native',
+        isRecent: s.isRecent,
+        isContext: s.isContext || s.tier === 'aligned',
+        tier: s.tier
+      }, { style: 'goldpine', asset: 'gold' });
+    }catch(eFts){}
+  }
+}
+
 function collectNativeScalp(bars, ctx, source){
   var out = [];
   var cached = null;
@@ -1005,6 +1057,8 @@ function runGoldPineScan(bars, ctx){
     swing = sortSetups(swing);
     scalp = sortSetups(scalp);
   }catch(ePB){}
+  gpAttachFts(swing);
+  gpAttachFts(scalp);
   return { swing: swing, scalp: scalp, levels: levels, source: source,
            goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
            tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now(),
@@ -1511,8 +1565,7 @@ function mount(el){
     + '<div class="panel">'
     + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
     + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
-    + 'plus native GOLD SWING/SCALP candidates. UI shows the <b>top ' + TOP_SETUPS + ' highest-probability formations</b> per section '
-    + '(NEW/RECENT/FORMING weighted). '
+    + 'plus native GOLD SWING/SCALP candidates. The swing and scalp lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS stack is OK or one step from OK. '
     + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
     + 'A scalp primary does not pass in premium or discount without a sweep, during the London fix (London local time), or when it fades an Asian range that already expanded. '
     + 'A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. '
@@ -1597,6 +1650,13 @@ function mount(el){
       var tapeScalp = (result.tape && result.tape.scalp) || '';
       var swingTop = result.swing.slice(0, TOP_SETUPS);
       var scalpTop = result.scalp.slice(0, TOP_SETUPS);
+      var boardBar = gpBoardBarOn();
+      var swingFit = boardBar ? result.swing.filter(gpBoardPick) : null;
+      var scalpFit = boardBar ? result.scalp.filter(gpBoardPick) : null;
+      if (boardBar){
+        swingTop = swingFit.slice(0, 6);
+        scalpTop = scalpFit.slice(0, 6);
+      }
       result.swingTop = swingTop;
       result.scalpTop = scalpTop;
       __goldPineSnap = result;
@@ -1644,6 +1704,13 @@ function mount(el){
            + ' \u00b7 15m ' + esc(tapeScalp || 'unread') + '). '
            + 'The cards below still print their levels, stamped AGAINST GOLD TAPE \u00b7 HELD.</div>')
         : '';
+      var fitNote = '';
+      if (boardBar){
+        var heldN = (result.swing.length - swingFit.length) + (result.scalp.length - scalpFit.length);
+        fitNote = '<div class="note">These lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS stack is OK or one step from OK.'
+          + (heldN ? (' ' + heldN + ' formation' + (heldN === 1 ? '' : 's') + ' on this scan did not clear that.') : '')
+          + '</div>';
+      }
       /* Pack 907: GOLD PINE draws four legs and moved its numbers on a
          malformed tape without saying so. One note per leg that arrived,
          ahead of everything drawn from it. */
@@ -1693,14 +1760,23 @@ function mount(el){
         + '<div class="gp-board"><aside class="gp-mp-col" aria-label="Most probable setup">'
         + (mpList.length
           ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1) + '<div class="gp-mp-banner" id="gp-mp-banner"></div>')
-          : ('<div class="gp-eye">NO LEAD</div><div class="note">Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.</div>'))
+          : ('<div class="gp-eye">NO LEAD</div><div class="note">'
+            + (boardBar
+              ? 'No setup is both good solidity and FTS OK or one step from it, so nothing leads.'
+              : 'Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.')
+            + '</div>'))
         + '</aside><div class="gp-rest">'
+        + fitNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
-          'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
-          { total: result.swing.length })
+          boardBar
+            ? 'No swing setup is both good solidity and FTS OK or one step from it.'
+            : 'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
+          { total: boardBar ? swingFit.length : result.swing.length })
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
-          'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
-          { total: result.scalp.length })
+          boardBar
+            ? 'No scalp setup is both good solidity and FTS OK or one step from it.'
+            : 'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
+          { total: boardBar ? scalpFit.length : result.scalp.length })
         + recordSection
         + gpCatalogHtml(result, bars)
         + '</div></div>';
@@ -1810,6 +1886,8 @@ W.gpWeekendVerdict = gpWeekendVerdict;
    drive them as units — a guard that cannot reach the rule proves nothing. */
 W.gpAdmissionFloor = gpAdmissionFloor;
 W.gpMayLead = gpMayLead;
+W.gpBoardPick = gpBoardPick;
+W.gpAttachFts = gpAttachFts;
 /* hg-v1420: the r2 record-mark helper and seam, exported so the pin suite
    can drive them as units — a guard that cannot reach the rule proves
    nothing. */
