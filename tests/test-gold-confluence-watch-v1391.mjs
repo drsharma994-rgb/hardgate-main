@@ -69,13 +69,13 @@ function makeVote(desk, side, entry, stop, t1, barT){
     makeVote('GOLD PRO', 'short', 4022, 4042, 3982)
   ];
   const bA = build(votesA, { px: 4001 }, null);
-  eq('1.b case A ready false', bA.ready, false);
-  ok('1.c case A watch present', !!bA.watch);
-  eq('1.d case A watch side', bA.watch && bA.watch.side, 'long');
-  eq('1.e case A watch count', bA.watch && bA.watch.count, 3);
-  eq('1.f case A watch reason', bA.watch && bA.watch.reason, 'desks disagree');
-  ok('1.g case A watch label names DESKS DISAGREE', bA.watch && /DESKS DISAGREE/.test(bA.watch.label || ''));
-  ok('1.h case A watch has levels', bA.watch && bA.watch.entry > 0 && bA.watch.stop > 0 && bA.watch.t1 > 0);
+  eq('1.b case A ready', bA.ready, true);
+  ok('1.c case A is a setup, not a watch', !bA.watch);
+  eq('1.d case A side', bA.side, 'long');
+  eq('1.e case A desk count', bA.deskCount, 3);
+  eq('1.f case A opposed', bA.opposed, 2);
+  ok('1.g case A names the other side', /does not remove this setup/.test(bA.reason || ''));
+  ok('1.h case A has levels', bA.entry > 0 && bA.stop > 0 && bA.t1 > 0);
 
   // Case A mirror: shorts dominant 3S vs 1L
   const votesAM = [
@@ -85,9 +85,10 @@ function makeVote(desk, side, entry, stop, t1, barT){
     makeVote('GOLD PRO', 'short', 3998, 4018, 3958)
   ];
   const bAM = build(votesAM, { px: 4001 }, null);
-  eq('1.i case A mirror side', bAM.watch && bAM.watch.side, 'short');
-  eq('1.j case A mirror count', bAM.watch && bAM.watch.count, 3);
-  ok('1.k case A mirror label', bAM.watch && /DESKS DISAGREE/.test(bAM.watch.label || ''));
+  eq('1.i case A mirror ready', bAM.ready, true);
+  eq('1.j case A mirror side', bAM.side, 'short');
+  eq('1.k case A mirror desks', bAM.deskCount, 3);
+  eq('1.k2 case A mirror opposed', bAM.opposed, 1);
 
   // Case A tie: 2L vs 2S -> no watch (honest)
   const votesTie = [
@@ -269,7 +270,7 @@ function makeVote(desk, side, entry, stop, t1, barT){
             makeVote('GOLD DIRECTION', 'short', 4002, 4022, 3962)
           ];
           const b = build(votes, { px: 4001 }, null);
-          if (b.watch) caught = true;
+          if (b.ready === true) caught = true;
         } else if (name === 'M4_ready_true_on_watch'){
           const votes = [
             makeVote('GOLD SCALP', 'long', 4000, 3980, 4040),
@@ -311,7 +312,7 @@ function makeVote(desk, side, entry, stop, t1, barT){
     makeVote('C', 'long', 3998, 3978, 4038),
     makeVote('D', 'short', 4020, 4040, 3980)
   ], { px: 4001 }, null);
-  ok('8.baseline dominant watch', bA.watch && bA.watch.reason === 'desks disagree');
+  ok('8.baseline dominant side is a setup', bA.ready === true && bA.side === 'long' && !bA.watch);
 
   runMutation('M1_drop_dominant_watch', s =>
     s.replace(/if \(dom\)\{[\s\S]*?attachWatch\(base, dom, votes, px, \{[\s\S]*?\}\);\s*\}/, 'if (dom){ /* dropped */ }'));

@@ -66,16 +66,14 @@ assert.equal(rec.length, 1);
 
 win.goldDirectionScan = () => ({ cands: [{ dir: 'short', entry: 2652, stop: 2662, t1: 2640, grade: 'A' }] });
 const split = win.hgGoldConfluenceBuild(win.hgGoldConfluenceRead(win), { px: 2651.5 });
-assert.equal(split.ready, false);
+assert.equal(split.ready, true);
 assert.equal(split.longCount, 3);
 assert.equal(split.shortCount, 1);
-/* hg-v1393: hg-v1391 widened attachWatch so a dominant-side longs+shorts
-   split now paints a WATCH naming the dominant side. The pre-pack
-   `split.watch === undefined` assertion was the behaviour this pack
-   explicitly changed. */
-assert.ok(split.watch, 'desks-disagree split now carries a WATCH (hg-v1391)');
-assert.equal(split.watch.reason, 'desks disagree');
-assert.match(split.watch.label, /DESKS DISAGREE/);
+assert.equal(split.side, 'long');
+assert.equal(split.entry, 2651);
+assert.equal(split.watch, undefined);
+assert.equal(split.opposed, 1);
+assert.match(split.reason, /does not remove this setup/);
 
 const noPx = win.hgGoldConfluenceBuild(votes, null);
 assert.equal(noPx.ready, false);
@@ -259,11 +257,11 @@ assert.equal(cheap.ready, true);
 assert.ok(cheap.netRr >= 1);
 assert.match(cheap.reason, /Measured spread/);
 const wide = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 20 });
-assert.equal(wide.ready, false);
+assert.equal(wide.ready, true);
 assert.equal(wide.entry, 2651);
 assert.ok(wide.netRr < 1);
 assert.match(wide.reason, /under 1R/);
-assert.match(wide.reason, /not a setup/);
+assert.match(wide.reason, /does not remove this setup/);
 
 /* hg-v1393: upstream's hg-v1391 ready gate reads vote.grade/lead for the
    crowned filter and needs a measured spread for netRr. Pass both. */

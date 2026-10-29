@@ -1,3 +1,6 @@
+### GOLD CONFLUENCE — a smaller side does not erase the setup — hg-v1456
+- The card was empty because one desk on the other side, a cluster wider than 0.80%, or the spot-versus-XM spread under 1R stood the plan aside. Two or more plans on the larger side, both within 2.5% of the live IUX price, are a setup. The smaller side is named. A tie is not a setup. The cluster and the spread stay on the card and do not change ready. A price through the stop is still stood aside. The entry, stop, and target stay the median. This was not re-walked.
+
 ### GOLD CONFLUENCE — the score is a label, not a gate — hg-v1455
 - The 100-point score was taking every live plan off the card. A tape that scores under 78 became a watch, and under 68 stood aside, so the tab showed no setup. The score is still printed when the tape is in hand. It does not change ready. Two plans on the same side, both within 2.5% of the live IUX price, are still a setup. The entry, stop, and target stay their median. A price through the stop is still stood aside. This was not re-walked.
 

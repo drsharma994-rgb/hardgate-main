@@ -5,7 +5,10 @@
    gold-api XAU). The entry is the median of the crowned plans that
    sit on that price. It is not moved to the live print. No anchor, no
    setup. Three desks are not required. Two plans on the same side,
-   both within 2.5% of the live price, are a setup. A crown is not
+   both within 2.5% of the live price, are a setup. A smaller number
+   of plans on the other side does not remove it. A tie does. A wide
+   cluster and a spread that leaves under 1R are named. They do not
+   remove the setup. A crown is not
    required for those two to count. When two or more are crowned, the
    entry is the median of the crowned plans. Otherwise it is the median
    of the plans on the price. A live price that has already
@@ -825,8 +828,8 @@ function applyCost(base, risk, reward){
   var net = (isFinite(rr) && isFinite(drag)) ? +(rr - drag).toFixed(2) : NaN;
   base.netRr = net;
   if (!(net >= 1)){
-    base.costNote = 'Measured spread $' + fmt(base.spreadUsd) + ' leaves ' + (isFinite(net) ? fmt(net) : '-') + 'R after cost, which is under 1R, so this is not a setup.';
-    return false;
+    base.costNote = 'Measured spread $' + fmt(base.spreadUsd) + ' leaves ' + (isFinite(net) ? fmt(net) : '-') + 'R after cost, which is under 1R. The spread is on the card. It does not remove this setup.';
+    return true;
   }
   base.costNote = 'Measured spread $' + fmt(base.spreadUsd) + ' leaves ' + fmt(net) + 'R after cost.';
   return true;
@@ -982,22 +985,24 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     return base;
   }
   if (longs.length && shorts.length){
-    base.reason = longs.length + ' gold desk' + (longs.length === 1 ? '' : 's') + ' published long and ' + shorts.length + ' published short. A setup on the other side stands this plan aside.';
-    /* hg-v1391: the dominant side's crowns ARE measurements -- real desks
-       priced real plans -- and refusing to paint them is hg-v932 in this
-       pack's own code. Show the larger side as a watch labelled DESKS
-       DISAGREE so the user sees what the published side has. A true tie
-       (same count both sides) shows nothing but the vote list, honestly:
-       there is no dominant side to name. The 3-desk-on-scale setup gate
-       is unchanged (ready stays false). hg-v966 holds. */
     var dom = (longs.length > shorts.length) ? longs : (shorts.length > longs.length) ? shorts : null;
-    if (dom){
-      attachWatch(base, dom, votes, px, {
-        reason: 'desks disagree',
-        label: 'DESKS DISAGREE · ' + dom.length + ' ' + dom[0].side.toUpperCase() + ' vs ' + (dom === longs ? shorts.length : longs.length) + ' ' + (dom === longs ? 'SHORT' : 'LONG')
-      });
+    /* A smaller side used to erase the larger one, so a live tape with
+       one desk the other way showed no setup. Two or more on the larger
+       side are the setup. The smaller side is named. A tie is not. */
+    if (dom && dom.length >= 2){
+      base.opposed = (dom === longs) ? shorts.length : longs.length;
+      if (dom === longs) shorts = [];
+      else longs = [];
+    } else {
+      base.reason = longs.length + ' gold desk' + (longs.length === 1 ? '' : 's') + ' published long and ' + shorts.length + ' published short. Neither side has two more plans than a tie, so no setup is formed.';
+      if (dom){
+        attachWatch(base, dom, votes, px, {
+          reason: 'desks disagree',
+          label: 'DESKS DISAGREE · ' + dom.length + ' ' + dom[0].side.toUpperCase() + ' vs ' + (dom === longs ? shorts.length : longs.length) + ' ' + (dom === longs ? 'SHORT' : 'LONG')
+        });
+      }
+      return base;
     }
-    return base;
   }
   var side = null, pack = null;
   if (longs.length >= 2){ side = 'long'; pack = longs; }
@@ -1103,6 +1108,9 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   if (priced.length > formed.length){
     base.reason += ' ' + (priced.length - formed.length) + ' uncrowned plan' + (priced.length - formed.length === 1 ? ' was' : 's were') + ' not counted.';
   }
+  if (base.opposed){
+    base.reason += ' ' + base.opposed + ' desk' + (base.opposed === 1 ? '' : 's') + ' published the other side. That does not remove this setup.';
+  }
   if (!costOk) return base;
   // hg-v1391: MOST-ACCURATE confluence scoring
   // 1) cluster tightness: entries must cluster within 0.8%
@@ -1135,14 +1143,9 @@ function hgGoldConfluenceBuild(votes, iux, cost){
       base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + crowned + ' crowned — MOST ACCURATE.';
     }
   }
-  // Stand aside only if caller wants strict HIGH; default keeps ready but tags tier
-  // For this task: require HIGH for ready (most accurate only)
+  // A loose cluster or a thin net R is named. It does not take the setup off the card.
   if (base.accuracyTier !== 'HIGH'){
-    base.ready = false;
-    base.watch = { side: side, entry: entry, stop: stop, t1: t1, count: formed.length, need: 3, rr: +(reward/risk).toFixed(2), mark: px, desks: base.desks, spreadUsd: base.spreadUsd, netRr: base.netRr, costNote: base.costNote, accuracy: base.accuracy };
-    if (base.reads) base.watch.reads = base.reads;
-    if (base.leader) base.watch.leader = base.leader;
-    return base;
+    base.reason += ' The cluster and the cost stay on the card. They do not remove this setup.';
   }
   base.ready = true;
   cfApplyCore(base, cost);
@@ -1408,7 +1411,7 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. The entry is their median, or the median of the crowned ones when two or more are crowned. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie does. A wide cluster and a spread under 1R are named and do not remove it. The entry is their median, or the median of the crowned ones when two or more are crowned. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
     + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. The 100-point score is a label. It does not change ready.</div></div></div>';
   var btn = root.querySelector('#gc-run');

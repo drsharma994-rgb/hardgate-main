@@ -665,6 +665,11 @@
       "version": "hg-v1455",
       "built": "2026-10-29T12:59:28Z",
       "note": "GOLD CONFLUENCE prints the 100-point score on a formed plan and does not use it to remove the setup. A live tape often scores under 78, and that gate left the tab empty. Two desks on the live price stay a setup. Levels stay the median. Not re-walked."
+    },
+    {
+      "version": "hg-v1456",
+      "built": "2026-10-29T13:37:50Z",
+      "note": "GOLD CONFLUENCE shows a setup when two or more plans on the larger side sit on the live price. A smaller opposite side, a cluster wider than 0.80%, and a spread that leaves under 1R are named and do not remove it. A tie, one desk, a price through the stop, and a plan more than 2.5% from the live price still do not. Not re-walked."
     }
   ]
 }
