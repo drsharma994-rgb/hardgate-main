@@ -97,18 +97,16 @@ const two = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670 },
   { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2641, t1: 2671 }
 ], { px: 2650 });
-assert.equal(two.ready, false);
-assert.equal(two.watch.count, 2);
-assert.equal(two.watch.entry, 2650.5);
-assert.notEqual(two.watch.entry, 2650);
-assert.equal(two.ready, false);
-assert.equal(two.watch.reads['cf:familyShort'], undefined);
-assert.equal(two.watch.reads['cf:synthetic'], true);
-assert.equal(two.watch.reads['cf:spreadUnread'], true);
-assert.equal(two.watch.reads['cf:sessionSplit'], undefined);
+assert.equal(two.ready, true);
+assert.equal(two.entry, 2650.5);
+assert.notEqual(two.entry, 2650);
+assert.equal(two.reads['cf:familyShort'], undefined);
+assert.equal(two.reads['cf:synthetic'], true);
+assert.equal(two.reads['cf:spreadUnread'], true);
+assert.equal(two.reads['cf:sessionSplit'], undefined);
 
-/* An armed candle forecast is not a desk. It does not complete three,
-   and its levels do not move the median of the desks that did publish. */
+/* An armed candle forecast is not a desk. Two real plans on the live
+   price are a setup, and the forecast does not move their median. */
 win.hgCandleForecastAlertState = () => ({
   dir: 'short', entry: 2400, stop: 2500, t1: 2200, grade: 'A', ticket: true
 });
@@ -126,11 +124,10 @@ const forced = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SWING', id: 'goldswing', state: 'setup', side: 'long', entry: 2651, stop: 2642, t1: 2668, grade: 'A', lead: true },
   { desk: 'CANDLE FORECAST', id: 'candle-forecast', state: 'setup', side: 'long', entry: 2400, stop: 2300, t1: 2800, grade: 'A', lead: true }
 ], { px: 2651.5 }, { spreadUsd: 0.30 });
-assert.equal(forced.ready, false);
+assert.equal(forced.ready, true);
 assert.equal(forced.longCount, 2);
-assert.equal(forced.watch.count, 2);
-assert.equal(forced.watch.entry, 2650.5);
-assert.ok(forced.watch.desks.indexOf('CANDLE FORECAST') < 0);
+assert.equal(forced.entry, 2650.5);
+assert.ok(forced.desks.indexOf('CANDLE FORECAST') < 0);
 assert.equal(forced.votes.filter(v => v.id === 'candle-forecast')[0].state, 'context');
 
 /* Two crowned plans on the live price are a setup once a third desk
@@ -219,7 +216,7 @@ assert.equal(one.watch.entry, 4174.4);
 assert.equal(one.watch.stop, 4210.15);
 assert.equal(one.watch.t1, 4120.78);
 assert.notEqual(one.watch.entry, 4174.2);
-assert.match(one.reason, /WATCH 1 of 3/);
+assert.match(one.reason, /WATCH 1 of 2/);
 
 const copied = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SWING', state: 'setup', side: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78 },
@@ -233,8 +230,9 @@ const twoShort = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SWING', state: 'setup', side: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78 },
   { desk: 'GOLD SCALP', state: 'setup', side: 'short', entry: 4170, stop: 4205, t1: 4110 }
 ], { px: 4174 });
-assert.equal(twoShort.ready, false);
+assert.equal(twoShort.ready, true);
 assert.equal(twoShort.shortCount, 2);
+assert.equal(twoShort.entry, 4172.2);
 
 win.goldscalpScan = () => ({ cands: [], whySilent: 'no 15m setup' });
 const silent = win.hgGoldConfluenceRead(win).filter(v => v.id === 'goldscalp')[0];
@@ -248,12 +246,13 @@ assert.match(dir.note, /LONG or SHORT/);
 
 win.goldscalpScan = () => ({ cands: [{ dir: 'long', entry: 2650, stop: 2640, t1: 2670 }] });
 const bare = win.hgGoldConfluenceRead(win).filter(v => v.id === 'goldscalp')[0];
-assert.equal(bare.state, 'none');
-assert.match(bare.note, /did not crown/);
+assert.equal(bare.state, 'setup');
+assert.equal(bare.side, 'long');
+assert.equal(bare.entry, 2650);
 win.goldscalpScan = () => ({ cands: [{ dir: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'B' }] });
 const bee = win.hgGoldConfluenceRead(win).filter(v => v.id === 'goldscalp')[0];
-assert.equal(bee.state, 'none');
-assert.match(bee.note, /did not crown/);
+assert.equal(bee.state, 'setup');
+assert.equal(bee.side, 'long');
 
 const cheap = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.22 });
 assert.equal(cheap.ready, true);

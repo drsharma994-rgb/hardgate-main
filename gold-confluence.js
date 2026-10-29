@@ -4,13 +4,14 @@
    is opened here. The live price is the IUX anchor (gold-iux.js,
    gold-api XAU). The entry is the median of the crowned plans that
    sit on that price. It is not moved to the live print. No anchor, no
-   setup. Three desks on the same side are required. At least two of
-   those plans must be crowned or grade A and sit on the live price.
-   A third plan that is off the price, or not crowned, does not erase
-   the setup and does not move it. A live price that has already
+   setup. Three desks are not required. Two plans on the same side,
+   both within 2.5% of the live price, are a setup. A crown is not
+   required for those two to count. When two or more are crowned, the
+   entry is the median of the crowned plans. Otherwise it is the median
+   of the plans on the price. A live price that has already
    reached the stop is not a setup. SUPER GOLD reads GOLD SCALP and GOLD SWING. MILLI GOLD reads
-   OMNIGOLD. Neither is a second vote. A plan counts toward a setup only
-   when the desk crowned it or graded it A. A measured spot-versus-XM spread is
+   OMNIGOLD. Neither is a second vote. A published plan counts even
+   when it is not crowned. A demoted plan does not. A measured spot-versus-XM spread is
    subtracted. An unread spread is named and not invented. A formed
    setup is written to the forward ledger. GOLD DIRECTION is not given
    a side. CANDLE FORECAST is not a vote and is not opened to form one. */
@@ -242,13 +243,18 @@ function collectRows(snap){
   return rows;
 }
 function listsOf(snap){
-  /* A list is not a vote. The row the desk would send is the crown
-     (best id, ticket, qualifying verdict) or an A grade. A B, a C, or
-     a row with no grade does not fill the quorum. */
+  /* Prefer the crown, then a grade A. A published plan that is neither
+     is still a vote. A demoted plan was already dropped by rowOf. */
   var rows = collectRows(snap);
+  if (!rows.length) return [];
   var leads = rows.filter(function(r){ return r.lead; });
   if (leads.length) return leads;
-  return rows.filter(function(r){ return sendGrade(r.grade); });
+  var graded = rows.filter(function(r){ return sendGrade(r.grade); });
+  if (graded.length) return graded;
+  /* A published plan with an entry, a stop, and a target is a vote
+     even when the desk did not crown it. A demoted plan never reaches
+     here. */
+  return rows;
 }
 function uncrowned(snap){
   var rows = collectRows(snap);
@@ -948,8 +954,8 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     return base;
   }
   var side = null, pack = null;
-  if (longs.length >= 3){ side = 'long'; pack = longs; }
-  else if (shorts.length >= 3){ side = 'short'; pack = shorts; }
+  if (longs.length >= 2){ side = 'long'; pack = longs; }
+  else if (shorts.length >= 2){ side = 'short'; pack = shorts; }
   else {
     var who = live.map(function(v){ return v.desk + ' ' + v.side.toUpperCase(); }).join(', ');
     if (!live.length && setups.length){
@@ -957,11 +963,11 @@ function hgGoldConfluenceBuild(votes, iux, cost){
       return base;
     }
     base.reason = live.length
-      ? (nDesk(live.length) + ' published a priced setup' + (who ? ' (' + who + ')' : '') + '. ' + longs.length + ' long, ' + shorts.length + ' short. Three on the same side are required, and the other side must be empty. A desk that has not run is not a vote, and a copy of the same plan is not a second vote.')
+      ? (nDesk(live.length) + ' published a priced setup' + (who ? ' (' + who + ')' : '') + '. ' + longs.length + ' long, ' + shorts.length + ' short. Two on the same side are required, and the other side must be empty. A desk that has not run is not a vote, and a copy of the same plan is not a second vote.')
       : 'No gold desk has published a setup yet. A desk that has not scanned is not a vote.';
     attachWatch(base, longs.length ? longs : shorts, votes, px);
     if (base.watch){
-      base.reason += ' WATCH ' + base.watch.count + ' of 3. Entry ' + fmt(base.watch.entry)
+      base.reason += ' WATCH ' + base.watch.count + ' of 2. Entry ' + fmt(base.watch.entry)
         + ' is the median of the desks that published, not the live print ' + fmt(px) + '.';
     }
     return base;
@@ -982,18 +988,18 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     });
     return base;
   }
-  /* The trade is the crowned plans on the live price. Two are enough
-     once three desks have agreed. An off-scale plan and an uncrowned
-     plan stay on the card. Neither erases the setup, and neither moves
-     the median. Fewer than two crowned plans on the price is a watch. */
-  var formed = priced.filter(crownedVote);
+  /* Two plans on the live price are the trade. When two or more of
+     them are crowned, the median uses only those. Otherwise every
+     on-scale plan is in the median, crowned or not. */
+  var crowns = priced.filter(crownedVote);
+  var formed = crowns.length >= 2 ? crowns : priced;
   if (formed.length < 2){
     base.side = side;
     base.offChart = off;
-    base.reason = 'Only ' + formed.length + ' crowned plan' + (formed.length === 1 ? '' : 's') + ' sit on the live IUX price (' + fmt(px) + '). Two are required, and a third desk must have agreed.';
-    attachWatch(base, formed.length ? formed : priced, votes, px, {
-      reason: 'fewer than two crowned on the live price',
-      label: formed.length + ' OF 2 CROWNED ON THE LIVE PRICE'
+    base.reason = 'Fewer than two plans sit on the live IUX price (' + fmt(px) + ').';
+    attachWatch(base, priced.length ? priced : pack, votes, px, {
+      reason: 'fewer than two on the live price',
+      label: priced.length + ' ON THE LIVE PRICE'
     });
     return base;
   }
@@ -1063,8 +1069,8 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   /* An unread venue spread is named. It is not a failed cost check.
      A measured spread still has to leave at least 1.20R. */
   var netOk = base.spreadUsd == null ? true : (isFinite(base.netRr) && base.netRr >= 1.20);
-  var crowned = formed.length;
-  var crownOk = crowned >= 2;
+  var crowned = crowns.length;
+  var crownOk = true;
   base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk, crowned: crowned, crownOk: crownOk };
   if (!tightOk){
     base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — median held but accuracy is degraded.';
@@ -1343,7 +1349,7 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three desks on the same side, with two crowned plans on the live price, are a setup. The entry is the median of those crowned plans, not the live IUX print. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. The entry is their median, or the median of the crowned ones when two or more are crowned. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
     + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. Three desks are still required.</div></div></div>';
   var btn = root.querySelector('#gc-run');

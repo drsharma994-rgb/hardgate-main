@@ -645,6 +645,11 @@
       "version": "hg-v1451",
       "built": "2026-10-29T04:22:51Z",
       "note": "GOLD CONFLUENCE shows a setup again when three desks agree and two crowned plans sit on the live IUX price. The median is those crowned plans. An off-scale or uncrowned third does not erase it and does not move it. A price through the stop stays stood aside. CANDLE FORECAST stays out."
+    },
+    {
+      "version": "hg-v1452",
+      "built": "2026-10-29T04:26:26Z",
+      "note": "GOLD CONFLUENCE loosened one step. Two plans on the same side, both within 2.5% of the live IUX price, are a setup. A crown is not required for a published plan to count. When two or more are crowned, the median uses only those. Otherwise the median uses every plan on the price. One desk stays a watch. A price through the stop stays stood aside. CANDLE FORECAST stays out. Cluster and cost checks stay."
     }
   ]
 }

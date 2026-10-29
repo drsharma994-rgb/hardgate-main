@@ -4,9 +4,10 @@
    "awaiting third desk" (1-2 same side) must all end up calling attachWatch
    through its one home, with distinct reasons/labels and WITH THE SETUP
    THRESHOLD UNCHANGED. hg-v966 holds: a watch is NOT a ticket; the ready
-   gate from hg-v1384..v1387 requires >=3 same-side. Two of those plans
-   must be crowned and on the live price. Ordered, through<0.85, cost
-   OK, and a live price that has not reached the stop are still required.
+   gate from hg-v1384..v1387 required three desks. Two plans on the
+   same side, both on the live price, are now a setup. One desk is
+   still a watch. Ordered, through<0.85, cost OK, and a live price
+   that has not reached the stop are still required.
    The guard drives the REAL hgGoldConfluenceBuild in a vm sandbox and
    asserts behaviour, then mutates the source to prove every assertion
    is load-bearing. */
@@ -112,16 +113,16 @@ function makeVote(desk, side, entry, stop, t1, barT){
   eq('1.q case B watch count', bB.watch && bB.watch.count, 3);
   ok('1.r case B label names OFF-SCALE', bB.watch && /OFF-SCALE/.test(bB.watch.label || ''));
 
-  // Case C: pre-pack path -- 1-2 same side -> AWAITING THIRD DESK watch (unchanged)
+  // Case C: two same-side plans on the live price are a setup.
   const votesC = [
     makeVote('GOLD SCALP', 'long', 4000, 3980, 4040),
     makeVote('GOLD SWING', 'long', 4005, 3985, 4045)
   ];
   const bC = build(votesC, { px: 4001 }, null);
-  eq('1.s case C ready false', bC.ready, false);
-  ok('1.t case C watch present', !!bC.watch);
-  eq('1.u case C watch reason default', bC.watch && bC.watch.reason, 'awaiting third desk');
-  eq('1.v case C watch count', bC.watch && bC.watch.count, 2);
+  eq('1.s case C ready', bC.ready, true);
+  eq('1.t case C entry is the median', bC.entry, 4002.5);
+  ok('1.u case C is not a watch', !bC.watch);
+  eq('1.v case C two desks', bC.deskCount, 2);
 })();
 
 // ---------- §2 setup threshold UNCHANGED (hg-v966) ----------
@@ -140,14 +141,14 @@ function makeVote(desk, side, entry, stop, t1, barT){
   eq('2.b ready side', bR.side, 'long');
   ok('2.c ready has entry', bR.entry > 0);
 
-  // Two on-scale same-side still NOT ready (watch only)
+  // Two on-scale same-side is a setup. One on-scale is still a watch.
   const votesN = [
     makeVote('GOLD SCALP', 'long', 4000, 3980, 4040),
     makeVote('GOLD SWING', 'long', 4005, 3985, 4045)
   ];
   const bN = build(votesN, { px: 4001 }, null);
-  eq('2.d 2 agree -> ready false', bN.ready, false);
-  ok('2.e 2 agree -> watch', !!bN.watch);
+  eq('2.d 2 agree -> ready', bN.ready, true);
+  eq('2.e 2 agree -> entry is the median', bN.entry, 4002.5);
 
   // Three agree but ONE on-scale: OFF-SCALE branch now shows watch, still NOT ready
   const votesO = [

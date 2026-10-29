@@ -1,3 +1,6 @@
+### GOLD CONFLUENCE — two plans on the live price are a setup — hg-v1452
+- The third desk and the crown were what kept the card empty. Two plans on the same side, both within 2.5% of the live IUX price, are a setup. A published plan counts even when the desk did not crown it. A demoted plan still does not. When two or more of the plans are crowned, the median uses only those. Otherwise the median uses every plan on the price. One desk is a watch. A price through the stop is stood aside. CANDLE FORECAST is still not a vote. The 0.80% cluster and the 1.20R cost check stay. The hg-v1441 three-desk census is not replaced.
+
 ### GOLD CONFLUENCE — two crowned plans on the live price are a setup — hg-v1451
 - The tab was empty of setups because every plan had to be crowned and on the live price. The book that paid did not work that way. Three desks still have to agree. Two crowned or grade-A plans on the live IUX price are enough. The entry, stop, and target are the median of those crowned plans. A third plan off the price, or not crowned, stays on the card and does not move the median. A live price already through the stop is stood aside. CANDLE FORECAST is still not a vote. The hg-v1441 READY census was the looser gate and is not replaced.
 
