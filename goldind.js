@@ -1563,8 +1563,14 @@ function hgGoldStrategyLeaderboard(desk){
       else if (net > 0) tier = 'FEE-SURVIVOR';
       else if (net <= -0.20) tier = 'MEASURED-NEGATIVE';
       else tier = 'PAINTS-NEVER-LEADS';
+      /* hg-v1469: the literal win rate from the baked books rides beside the
+         expectancy — three-state (a book without the row's win rate leaves it
+         absent). At the pinned R:R the two order identically; showing both
+         is the honesty the ask names. */
+      var winMap = (typeof HG_GOLD_STRAT_WIN === 'object' && HG_GOLD_STRAT_WIN) ? HG_GOLD_STRAT_WIN[out.desk] : null;
+      var win = (winMap && isFinite(winMap[key])) ? winMap[key] : null;
       rows.push({ key: key, n: n, net: net, gross: isFinite(+row.gross) ? +row.gross : null,
-                  action: act, shrunk: shrunk, tier: tier, why: row.why || null });
+                  win: win, action: act, shrunk: shrunk, tier: tier, why: row.why || null });
     }
     rows.sort(function(a, b){ return (b.shrunk - a.shrunk) || (b.n - a.n); });
     for (var i = 0; i < rows.length; i++){ rows[i].rank = i + 1; out.byKey[rows[i].key] = rows[i]; }
@@ -1582,8 +1588,36 @@ function hgGoldStrategyMark(key, desk){
     var r = lb && lb.byKey && lb.byKey[String(key || '')];
     if (!r) return null;
     return 'EVIDENCE · ' + r.key.toUpperCase() + ' net ' + (r.net >= 0 ? '+' : '') + r.net.toFixed(3) + 'R n=' + r.n
+      + (r.win != null ? ' · win ' + (r.win * 100).toFixed(1) + '%' : '')
       + ' · rank ' + r.rank + '/' + lb.total + ' · ' + r.tier;
   }catch(e){ return null; }
+}
+
+/* hg-v1469: THE MEASURED FOUNDATION PANEL — the leaderboard as HTML, for the
+   gold tabs to render where their strategy foundation is shown. Named only:
+   it renders the book, it gates nothing. Never throws. */
+function hgGoldStrategyLeaderboardHtml(desk){
+  try{
+    if (desk !== 'scalp' && desk !== 'swing') return ''; /* an unknown book renders nothing */
+    var lb = hgGoldStrategyLeaderboard(desk);
+    if (!lb || !lb.total) return '';
+    var body = '', i, r;
+    for (i = 0; i < lb.rows.length; i++){
+      r = lb.rows[i];
+      body += '<div class="hg-fnd-row">'
+        + '<span class="hg-fnd-rank">' + r.rank + '/' + lb.total + '</span>'
+        + ' <b>' + String(r.key).toUpperCase() + '</b>'
+        + ' <span class="hg-fnd-nums">n=' + r.n
+        + (r.win != null ? ' · win ' + (r.win * 100).toFixed(1) + '%' : '')
+        + ' · net ' + (r.net >= 0 ? '+' : '') + r.net.toFixed(3) + 'R</span>'
+        + ' <span class="hg-fnd-tier">' + r.tier + '</span></div>';
+    }
+    return '<div class="hg-fnd-panel" data-hg-foundation="' + lb.desk + '">'
+      + '<b>MEASURED FOUNDATION · ' + lb.desk.toUpperCase() + '</b> — the desk own replay book, ranked by shrunk expectancy '
+      + '(net × n/(n+30); at the pinned planned R:R this orders exactly as win rate). '
+      + 'The tier is the in-force action. Named, never gating.'
+      + body + '</div>';
+  }catch(e){ return ''; }
 }
 
 /* hg-v960: THE VERDICT RULE, STATED ONCE, IN CODE.
@@ -2069,6 +2103,38 @@ function hgGoldFactorSepHtml(sep){
       + 'and returns is a number being searched for, not measured.</div></div>';
   }catch(eFs){ return ''; }
 }
+
+
+/* hg-v1469: THE WIN-RATE LEDGER — the literal per-strategy win rates from the
+   baked replay books (scripts/backtest-goldscalp-results-floor.json /
+   backtest-goldswing-results.json, aggregates.byStrategy). The leaderboard
+   ranks by shrunk expectancy (the number a target-shrink cannot fake) and
+   DISPLAYS the win rate beside it — at the book pinned planned R:R the two
+   order identically. Keys the books do not carry stay absent (three-state). */
+var HG_GOLD_STRAT_WIN = {
+  scalp: {
+    nyexh: 0.672,
+    liqsweep: 0.489,
+    hvn: 0.422,
+    ob: 0.434,
+    openrange: 0.374,
+    bosalign: 0.394,
+    asian: 0.384,
+    ribbon: 0.442,
+    rsidiv: 0.346,
+    p4laf: 0.588,
+    silverb: 0.333,
+    p6fail: 0.484,
+    p9volbar: 0.38,
+    p5drive: 0.6,
+    p6comp: 0.286,
+    p8vpinbo: 0.3,
+    p8range: 0.382
+  },
+  swing: {
+
+  }
+};
 
 var HG_GOLD_SETUP_EDGE = {
   scalp: {
@@ -18337,6 +18403,8 @@ W.hgGoldTickPx = hgGoldTickPx;               /* hg-v1459 venue-tick snap for min
 W.hgGoldPlanPricingOk = hgGoldPlanPricingOk; /* hg-v1459 exact-pricing audit, named never gating */
 W.hgGoldStrategyLeaderboard = hgGoldStrategyLeaderboard; /* hg-v1466 the win-rate selector over the measured book */
 W.hgGoldStrategyMark = hgGoldStrategyMark;               /* hg-v1466 one named evidence line for a card */
+W.hgGoldStrategyLeaderboardHtml = hgGoldStrategyLeaderboardHtml; /* hg-v1469 the measured-foundation panel */
+W.HG_GOLD_STRAT_WIN = HG_GOLD_STRAT_WIN;                 /* hg-v1469 the literal win-rate ledger, exposed for the suite */
 W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;

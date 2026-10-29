@@ -252,15 +252,15 @@ async function scanWith(W, barT){
   const idx = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const tt = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
   ok('5.a version shape', /^hg-v\d+$/.test(HG_VER));
-  eq('5.b build-stamp version', HG_VER, 'hg-v1468');
+  eq('5.b build-stamp version', HG_VER, 'hg-v1469');
   ok('5.c sw cache matches', new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw));
-  ok('5.d index rides gold-confluence.js?v=1468', idx.includes('gold-confluence.js?v=1468'));
-  ok('5.e index rides goldind.js?v=1468', idx.includes('goldind.js?v=1468'));
-  ok('5.f trendtable stamped', tt.includes('hg-v1468.'));
+  ok('5.d index rides gold-confluence.js?v=1469', idx.includes('gold-confluence.js?v=1469'));
+  ok('5.e index rides goldind.js?v=1469', idx.includes('goldind.js?v=1469'));
+  ok('5.f trendtable stamped', tt.includes('hg-v1469.'));
   ok('5.g header carries the round own pack stamp', SRC.includes('hg-v1458'));
   const led = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'batch-ledger.json'), 'utf8'));
   const last = led.batches[led.batches.length - 1];
-  eq('5.h ledger last entry', last.version, 'hg-v1468');
+  eq('5.h ledger last entry', last.version, 'hg-v1469');
   const agents = fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8');
   ok('5.i AGENTS.md carries the round', agents.includes('hg-v1460'));
 }

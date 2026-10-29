@@ -189,18 +189,18 @@ function bootCtx(files){
 /* ============ 5. the shipped build is stamped hg-v1464 ============ */
 {
   const stamp = read('build-stamp.js');
-  ok(/version: 'hg-v1468'/.test(stamp), 'build-stamp version');
-  ok(/built: '2026-10-30T07:45:00Z'/.test(stamp), 'build-stamp built (non-decreasing, re-pinned at the hg-v1468 bump)');
+  ok(/version: 'hg-v1469'/.test(stamp), 'build-stamp version');
+  ok(/built: '2026-10-30T08:05:00Z'/.test(stamp), 'build-stamp built (non-decreasing, re-pinned at the hg-v1469 bump)');
   ok(/hg-v1464: GOLD TAB MATH/.test(stamp), 'the pack string names the round');
   ok(/hg-v1463: GOLD SETUP LOGIC/.test(stamp), 'and the pack history chain is intact');
-  ok(/HG_CACHE = 'hg-v1468'/.test(read('sw.js')), 'sw.js cache id');
+  ok(/HG_CACHE = 'hg-v1469'/.test(read('sw.js')), 'sw.js cache id');
   const idx = read('index.html');
-  ok(idx.indexOf('?v=1463') < 0 && idx.indexOf('?v=1468') >= 0, 'index.html cache-busters all at 1466');
+  ok(idx.indexOf('?v=1463') < 0 && idx.indexOf('?v=1469') >= 0, 'index.html cache-busters all at 1466');
   ok(read('hg-api-base.js').indexOf('1463') < 0, 'hg-api-base at 1464');
   ok(read('trendtable.js').indexOf('1463') < 0, 'trendtable loader at 1464');
   const ledger = JSON.parse(read('data/batch-ledger.json'));
   const entries = (Array.isArray(ledger) ? ledger : Object.values(ledger).find(Array.isArray));
-  ok(entries[entries.length - 1].version === 'hg-v1468', 'the batch ledger last entry is hg-v1468');
+  ok(entries[entries.length - 1].version === 'hg-v1469', 'the batch ledger last entry is hg-v1469');
 }
 
 /* ============ mutations ============ */
