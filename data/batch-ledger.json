@@ -635,6 +635,11 @@
       "version": "hg-v1449",
       "built": "2026-10-29T02:54:56Z",
       "note": "GOLD PINE lanes show a setup only when solidity is PRIME, SOLID or GOOD and the FTS pillars are OK or one MIX short of OK. Recording, the admission floor and the lead gates are unchanged. A desk that cannot read solidity or FTS does not hide its rows."
+    },
+    {
+      "version": "hg-v1450",
+      "built": "2026-10-29T03:04:42Z",
+      "note": "GOLD PINE lanes use the FTS tier itself. A setup shows when solidity is PRIME, SOLID or GOOD and the FTS tier is near or OK. Forming and aside stay off the lane. Recording and the admission floor are unchanged."
     }
   ]
 }

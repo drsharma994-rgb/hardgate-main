@@ -536,11 +536,10 @@ function hgGpReorder(list){
   } catch(e){ return list; }
 }
 
-/* The lanes show a setup only when both reads are in hand and both pass.
-   Good solidity is the shared grader's lead bar: PRIME, SOLID or GOOD.
-   FTS OK is tierHint clean. One step from it is tierHint near. A killed
-   plan is not good. When either reader is absent the bar does not invent
-   a pass and does not hide the row. */
+/* The lanes show a setup only when both reads pass. Good solidity is
+   PRIME, SOLID or GOOD. Near FTS is the stack's own tier: near, or clean
+   which is FTS OK. Forming and aside stay off the lane. A killed plan
+   is not good. When either reader is absent the bar does not hide the row. */
 function gpSolidityGood(s){
   var g = s && s.solidity;
   if (!g || g.killed === true) return false;
@@ -549,21 +548,8 @@ function gpSolidityGood(s){
   return t === 'PRIME' || t === 'SOLID' || t === 'GOOD';
 }
 function gpFtsNearOk(s){
-  var st = s && s.stack;
-  if (!st || st.tierHint === 'aside') return false;
-  var parts = String(st.summary || '').split('\u00b7');
-  var ok = 0, bad = 0, n = 0, i, tag;
-  for (i = 0; i < parts.length; i++){
-    tag = parts[i].split(':').pop().trim();
-    if (!tag) continue;
-    n++;
-    if (tag === 'OK') ok++;
-    else if (tag === 'WEAK' || tag === 'VETO') bad++;
-  }
-  if (n < 3 || bad) return false;
-  /* Three OK pillars is FTS OK. Two OK and one MIX is one step from it.
-     A clean tier whose pillars are still MIX is not. */
-  return ok >= 2;
+  var h = s && s.stack && s.stack.tierHint;
+  return h === 'near' || h === 'clean';
 }
 function gpBoardBarOn(){
   return typeof W.hgSolidityGrade === 'function' && typeof W.hgSetupStackForPineSig === 'function';
@@ -1565,7 +1551,7 @@ function mount(el){
     + '<div class="panel">'
     + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
     + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
-    + 'plus native GOLD SWING/SCALP candidates. The swing and scalp lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS stack is OK or one step from OK. '
+    + 'plus native GOLD SWING/SCALP candidates. The swing and scalp lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS tier is near or OK. '
     + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
     + 'A scalp primary does not pass in premium or discount without a sweep, during the London fix (London local time), or when it fades an Asian range that already expanded. '
     + 'A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. '
@@ -1707,7 +1693,7 @@ function mount(el){
       var fitNote = '';
       if (boardBar){
         var heldN = (result.swing.length - swingFit.length) + (result.scalp.length - scalpFit.length);
-        fitNote = '<div class="note">These lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS stack is OK or one step from OK.'
+        fitNote = '<div class="note">These lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS tier is near or OK.'
           + (heldN ? (' ' + heldN + ' formation' + (heldN === 1 ? '' : 's') + ' on this scan did not clear that.') : '')
           + '</div>';
       }
@@ -1762,19 +1748,19 @@ function mount(el){
           ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1) + '<div class="gp-mp-banner" id="gp-mp-banner"></div>')
           : ('<div class="gp-eye">NO LEAD</div><div class="note">'
             + (boardBar
-              ? 'No setup is both good solidity and FTS OK or one step from it, so nothing leads.'
+              ? 'No setup is both good solidity and near or OK on FTS, so nothing leads.'
               : 'Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.')
             + '</div>'))
         + '</aside><div class="gp-rest">'
         + fitNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           boardBar
-            ? 'No swing setup is both good solidity and FTS OK or one step from it.'
+            ? 'No swing setup has good solidity and a near or OK FTS tier.'
             : 'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: boardBar ? swingFit.length : result.swing.length })
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
           boardBar
-            ? 'No scalp setup is both good solidity and FTS OK or one step from it.'
+            ? 'No scalp setup has good solidity and a near or OK FTS tier.'
             : 'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
           { total: boardBar ? scalpFit.length : result.scalp.length })
         + recordSection

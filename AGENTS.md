@@ -1,3 +1,6 @@
+### GOLD PINE — the lane uses the FTS tier, not the pillar letters — hg-v1450
+- A setup is shown when solidity is PRIME, SOLID or GOOD and the FTS tier is near or OK. Forming and aside stay off the swing lane, the scalp lane, and the lead. The previous pillar-letter bar hid a card the desk already called near. Recording is unchanged. The 0.3% scalp floor is unchanged. If solidity or the FTS reader is not loaded, the lanes are not emptied.
+
 ### GOLD PINE — the lanes show good solidity and FTS OK or one step from it — hg-v1449
 - The swing and scalp lanes, and the lead, show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS pillars are OK, or two OK and one MIX. A WEAK or VETO pillar does not pass. A forced clean tier whose pillars are still MIX does not pass. Up to six per lane. Everything else stays off those lanes and is counted. Recording is unchanged. The 0.3% scalp floor is unchanged. If solidity or the FTS reader is not loaded, the lanes are not emptied. The 2-minute refresh is unchanged.
 

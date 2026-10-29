@@ -435,10 +435,10 @@ console.log('\n[§7] ship stamps align');
      hg-v1444 at the hg-v1444 bump (GOLD SCALP tape refresh).
      hg-v1445 at the hg-v1445 bump (SUPER GOLD and CONFLUENCE). Behavior pins
      above unchanged. */
-  ok(/version:\s*'hg-v1449'/.test(bs), "build-stamp.js version: 'hg-v1449' (re-pinned hg-v1449)");
-  ok(/HG_CACHE\s*=\s*'hg-v1449'/.test(sw), "sw.js HG_CACHE = 'hg-v1449' (re-pinned hg-v1449)");
-  ok(/hg-v1449/.test(tt), 'trendtable.js stamped hg-v1449 (re-pinned hg-v1449)');
-  ok(/\?v=1449/.test(tt), 'trendtable.js uses ?v=1449 (re-pinned hg-v1449)');
+  ok(/version:\s*'hg-v1450'/.test(bs), "build-stamp.js version: 'hg-v1450' (re-pinned hg-v1450)");
+  ok(/HG_CACHE\s*=\s*'hg-v1450'/.test(sw), "sw.js HG_CACHE = 'hg-v1450' (re-pinned hg-v1450)");
+  ok(/hg-v1450/.test(tt), 'trendtable.js stamped hg-v1450 (re-pinned hg-v1450)');
+  ok(/\?v=1450/.test(tt), 'trendtable.js uses ?v=1450 (re-pinned hg-v1450)');
 }
 
 /* ---------- summary ---------- */
