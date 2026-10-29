@@ -1123,12 +1123,37 @@ function goldUltraVotes(rows, rows1h){
 
   /* ---------------- INTERMARKET / MACRO ---------------- */
   G = 'INTERMARKET';
-  push(R('im_gsr', G, 'Gold/Silver ratio', 'n/a', 0, '—', 'needs the silver series — not fed to the vote; the GOLD tabs carry it live'));
-  push(R('im_dxy', G, 'DXY correlation', 'n/a', 0, '—', 'needs the dollar index series'));
-  push(R('im_us10y', G, 'US 10Y yield overlay', 'n/a', 0, '—', 'needs the yield series'));
-  push(R('im_real', G, 'Real yields / TIPS spread', 'n/a', 0, '—', 'needs the TIPS series'));
+  var gm = null, cotSt = null;
+  try{ gm = W.__hgGoldMacroSnap || null; }catch(eGm){}
+  try{ cotSt = W.__hgGoldCot || null; }catch(eCot){}
+  function goldFromTrend(tr){
+    var tt = String(tr || '').toUpperCase();
+    if (tt === 'FALLING') return 1;
+    if (tt === 'RISING') return -1;
+    return 0;
+  }
+  var gsr = (gm && isFinite(+gm.goldSilverRatio)) ? +gm.goldSilverRatio : NaN;
+  if (isFinite(gsr)){
+    var gsrV = gsr >= 90 ? -1 : (gsr <= 60 ? 1 : 0);
+    push(R('im_gsr', G, 'Gold/Silver ratio', 'vote', gsrV, gsr.toFixed(1), 'gold-api XAU divided by XAG. Above 90 gold is stretched versus silver. Under 60 gold is cheap versus silver.'));
+  } else push(R('im_gsr', G, 'Gold/Silver ratio', 'n/a', 0, '—', 'silver spot was not read'));
+  var dxyT = gm && gm.dxy && gm.dxy.trend20;
+  var dxyN = (gm && gm.dxy && isFinite(+gm.dxy.value)) ? ((+gm.dxy.value).toFixed(2) + ' ' + dxyT) : '—';
+  if (dxyT) push(R('im_dxy', G, 'DXY correlation', 'vote', goldFromTrend(dxyT), dxyN, 'a falling dollar is with gold. A rising dollar is against it.'));
+  else push(R('im_dxy', G, 'DXY correlation', 'n/a', 0, '—', 'dollar index was not read'));
+  var tnxT = gm && gm.tnxTrend;
+  var tnxN = (gm && isFinite(+gm.tnx)) ? ((+gm.tnx).toFixed(2) + '% ' + tnxT) : '—';
+  if (tnxT) push(R('im_us10y', G, 'US 10Y yield overlay', 'vote', goldFromTrend(tnxT), tnxN, 'a falling 10-year is with gold. A rising 10-year is against it.'));
+  else push(R('im_us10y', G, 'US 10Y yield overlay', 'n/a', 0, '—', '10-year yield was not read'));
+  var ry = gm && gm.realRateMeasured;
+  if (ry && ry.measured && ry.trend) push(R('im_real', G, 'Real yields / TIPS spread', 'vote', goldFromTrend(ry.trend), (isFinite(+ry.level) ? (+ry.level).toFixed(2) + '% ' : '') + ry.trend, 'falling real yield is with gold. Rising real yield is against it.'));
+  else push(R('im_real', G, 'Real yields / TIPS spread', 'n/a', 0, '—', 'real yield was not read'));
   push(R('im_vix', G, 'VIX correlation', 'n/a', 0, '—', 'needs the VIX series'));
-  push(R('im_cot', G, 'COT net positioning (gold futures)', 'n/a', 0, '—', 'weekly CFTC data — not a 15m read'));
+  var crowd = cotSt && cotSt.crowding;
+  if (crowd === 'SPEC CROWDED LONG') push(R('im_cot', G, 'COT net positioning (gold futures)', 'vote', -1, crowd, 'CFTC managed money is crowded long — a fresh gold long is the crowded side'));
+  else if (crowd === 'SPEC CROWDED SHORT') push(R('im_cot', G, 'COT net positioning (gold futures)', 'vote', 1, crowd, 'CFTC managed money is crowded short — a fresh gold short is the crowded side'));
+  else if (cotSt) push(R('im_cot', G, 'COT net positioning (gold futures)', 'vote', 0, String(crowd || 'read'), 'weekly CFTC gold positioning, not crowded enough to take a side'));
+  else push(R('im_cot', G, 'COT net positioning (gold futures)', 'n/a', 0, '—', 'CFTC gold report was not read'));
   push(R('im_oil', G, 'Gold/Oil ratio', 'n/a', 0, '—', 'needs the crude series'));
   push(R('im_spx', G, 'S&P 500 / Gold ratio', 'n/a', 0, '—', 'needs the index series'));
   push(R('im_ccfp', G, 'CCFP currency power', 'n/a', 0, '—', 'needs a basket of pairs'));
@@ -1294,7 +1319,8 @@ function goldUltraVotes(rows, rows1h){
   var eqLvl = (isFinite(fH) && isFinite(fL)) ? (fH + fL) / 2 : NaN;
   push(R('equilibrium', G, 'Dynamic equilibrium level (last swing range midpoint)', 'vote', isFinite(eqLvl) ? vs(px, eqLvl) : 0, fmt(eqLvl), 'trading in the upper half of the last swing range = long (premium/discount as structure)'));
   push(R('daily_ohlc_map', G, 'Daily OHLC market structure map', 'print', 0, 'open ' + fmt(dayOpen) + ' · prev H ' + (pd ? fmt(pd.h) : '—') + ' · prev L ' + (pd ? fmt(pd.l) : '—'), 'the reference levels — the anchored-momentum and ADHL reads vote on them'));
-  push(R('dxy_bias', G, 'DXY bias filter overlay', 'n/a', 0, '—', 'needs the dollar index series — never faked'));
+  if (dxyT) push(R('dxy_bias', G, 'DXY bias filter overlay', 'vote', goldFromTrend(dxyT), dxyN, 'same free dollar trend as the intermarket read — falling with gold, rising against it'));
+  else push(R('dxy_bias', G, 'DXY bias filter overlay', 'n/a', 0, '—', 'dollar index was not read'));
   var atrPct = (function(){ var arr = []; for (var k = 0; k < 200 && i - k >= 14; k++) arr.push(A14[i - k]); arr.sort(function(a, b){ return a - b; }); var below = arr.filter(function(x){ return x < a14; }).length; return 100 * below / arr.length; })();
   push(R('atr_killzones', G, 'ATR-adjusted institutional killzones', 'regime', (kz && atrPct > 60) ? 1 : 0, (kz || 'outside') + ' · ATR ' + fmt(atrPct, 0) + 'th pct', 'a killzone with expanded ATR = live conditions (regime); no side'));
   push(R('adr_pct', G, 'Session-adjusted ADR%', 'regime', isFinite(adrv) && todayR > adrv ? -1 : 0, isFinite(adrv) ? fmt(100 * todayR / adrv, 0) + '% of ADR' : '—', 'range already spent = stretched (regime); no side'));
@@ -1828,15 +1854,23 @@ function setupCardHTML(c, pxNow, crowned){
   /* hg-v1005: the fundamental-stack verdict chip, fed by the fundGate the
      selectSetups pass stamped. '' when the stack saw nothing to say. */
   try{ if (typeof W.hgFundamentalChipHtml === 'function' && c.fundGate) chips += W.hgFundamentalChipHtml(c.fundGate) || ''; }catch(eFu){}
-  var risk = Math.abs(c.entry - c.stop), t2 = isFinite(c.t2) ? c.t2 : (c.dir === 'long' ? c.entry + 2.5 * risk : c.entry - 2.5 * risk);
-  var rr1 = isFinite(c.rr) ? c.rr : Math.abs(c.t1 - c.entry) / risk, away = isFinite(pxNow) ? (c.entry - pxNow) : NaN;
+  var rr1 = (typeof hgGoldLegR === 'function')
+    ? hgGoldLegR(c.dir, c.entry, c.stop, c.t1)
+    : null;
+  var risk = (c.dir === 'long') ? (c.entry - c.stop) : (c.dir === 'short') ? (c.stop - c.entry) : NaN;
+  var t2 = isFinite(c.t2) ? c.t2 : (isFinite(risk) && risk > 0 ? (c.dir === 'long' ? c.entry + 2.5 * risk : c.entry - 2.5 * risk) : NaN);
+  var away = isFinite(pxNow) ? (c.entry - pxNow) : NaN;
+  var planLine = (rr1 == null)
+    ? 'levels refused — the stop or the target is not beyond the entry'
+    : esc(guOrderWord(c.dir, c.entry, pxNow)) + ' <b>$' + esc(fmt(c.entry)) + '</b>'
+    + (isFinite(away) ? ' <span class="gu-away">' + (Math.abs(away) / pxNow <= 0.0003 ? 'at the last trade' : '$' + esc(fmt(Math.abs(away))) + ' ' + (away < 0 ? 'below' : 'above') + ' the last trade ($' + esc(fmt(pxNow)) + ') — resting order') + '</span>' : '')
+    + ' · STOP <b>$' + esc(fmt(c.stop)) + '</b> · TP1 <b>$' + esc(fmt(c.t1)) + '</b> (' + esc(fmt(rr1, 1)) + 'R)'
+    + (isFinite(t2) ? ' · TP2 <b>$' + esc(fmt(t2)) + '</b>' : '')
+    + '<br>At TP1 close 50%, stop to breakeven ($' + esc(fmt(c.entry)) + '); runner to TP2. A 15m close beyond the stop kills the idea.';
   return '<div class="gu-setup' + (crowned ? ' crowned' : '') + '">'
     + (crowned ? '<div class="gu-crown">BEST SETUP — GOLD SCALP prefer row, AGAINST the consensus</div>' : '')
     + '<div class="gu-chips">' + chips + '</div>'
-    + '<div class="gu-plan">' + esc(guOrderWord(c.dir, c.entry, pxNow)) + ' <b>$' + esc(fmt(c.entry)) + '</b>'
-    + (isFinite(away) ? ' <span class="gu-away">' + (Math.abs(away) / pxNow <= 0.0003 ? 'at the last trade' : '$' + esc(fmt(Math.abs(away))) + ' ' + (away < 0 ? 'below' : 'above') + ' the last trade ($' + esc(fmt(pxNow)) + ') — resting order') + '</span>' : '')
-    + ' · STOP <b>$' + esc(fmt(c.stop)) + '</b> · TP1 <b>$' + esc(fmt(c.t1)) + '</b> (' + esc(fmt(rr1, 1)) + 'R) · TP2 <b>$' + esc(fmt(t2)) + '</b>'
-    + '<br>At TP1 close 50%, stop to breakeven ($' + esc(fmt(c.entry)) + '); runner to TP2. A 15m close beyond the stop kills the idea.</div>'
+    + '<div class="gu-plan">' + planLine + '</div>'
     + guGeoLine(c, pxNow)
     + '<div class="gu-measured">' + esc(measuredLine(c.confluence, c.book)) + (c.edge && c.edge.why ? ' · desk row: ' + esc(c.edge.why) : '')
       + (c.edge && c.edge.liveWhy ? '<br><span class="gu-live">' + esc(c.edge.liveWhy) + '</span>' : '') + '</div>'
@@ -2008,6 +2042,7 @@ async function runScan(ui){
     if (ui && ui.btn) ui.btn.disabled = true;
     setStat(ui, 'reading closed 15m + 1h gold bars…');
     var f = await fetchRows();
+    try{ var gmFn = gfn('getGoldMacro'); if (gmFn) W.__hgGoldMacroSnap = await gmFn(); }catch(eGmSnap){}
     if (!f.rows15m.length){ setStat(ui, 'feeds failed — no gold klines from any source; nothing fabricated', true); return 'error: no feed'; }
     /* hg-v971: the live quote + book for the borrowed GOLD SCALP mint */
     try{ var lfFn = gfn('hgGoldLiveFeed'); f.live = lfFn ? await lfFn({ symbol: 'XAUTUSD' }) : null; }catch(eLive){ f.live = null; }

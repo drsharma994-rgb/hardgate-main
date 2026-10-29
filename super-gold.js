@@ -100,6 +100,11 @@ function goldCalcTrade(riskOpts, hit, rrForCalc){
 }
 
 function effectiveGoldRr(hit){
+  if (typeof hgGoldLegR === 'function'){
+    var sealed = hgGoldLegR(hit.dir, hit.entry, hit.stop, hit.t1);
+    if (sealed != null) return sealed;
+    if (hit.dir === 'long' || hit.dir === 'short') return null;
+  }
   if (hit && N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
     var riskDist = Math.abs(hit.entry - hit.stop);
     if (riskDist > 0) return Math.abs(hit.t1 - hit.entry) / riskDist;
@@ -3800,6 +3805,9 @@ function mount(el){
        conviction layer is not proven; at PAXG taker it is −0.740R in both
        halves. The forward ledger decides. No behavior reads this. */
     '      <div class="hg-note">Measured (hg-v1433 census, 12.6mo PAXG replay): crowned picks gross +0.067R, net +0.005R @XM — halves <b>sign-flip</b> (+0.184 / −0.170), so treat the crown as unproven; −0.740R @PAXG taker both halves. The forward ledger decides.</div>',
+    /* hg-v1445: fresh tape, the feed the swing mint requires, paint only.
+       GRADE A PASS (the ledger ticket) was 0 in both halves. No gate. */
+    '      <div class="hg-note">Measured (hg-v1445, this tab own merge, PAXG 29 Aug-28 Oct 2026, dollar and 10-year read as of the prior completed print): 360 four-hour closes. Swing published on 169 once the feed was on. An unread feed publishes nothing. Same-side merge on 43 closes (10 then 33). Every ranked plan on both desks was already demoted, so GRADE A PASS tickets were 0 in both halves. No new gate. The 12.6-month sign-flip above is not replaced. The second half is the forward window.</div>',
     '    </div>',
     '    <div class="hg-super-badge">Super Gold · GRADE desk</div>',
     '  </div>',

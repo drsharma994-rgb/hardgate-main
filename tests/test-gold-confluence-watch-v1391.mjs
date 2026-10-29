@@ -4,10 +4,13 @@
    "awaiting third desk" (1-2 same side) must all end up calling attachWatch
    through its one home, with distinct reasons/labels and WITH THE SETUP
    THRESHOLD UNCHANGED. hg-v966 holds: a watch is NOT a ticket; the ready
-   gate from hg-v1384..v1387 requires >=3 same-side AND >=2 within 2.5% of
-   IUX AND ordered AND through<0.85 AND cost OK. The guard drives the REAL
-   hgGoldConfluenceBuild in a vm sandbox and asserts behaviour, then mutates
-   the source to prove every assertion is load-bearing. */
+   gate from hg-v1384..v1387 required three desks. Two plans on the
+   same side, both on the live price, are now a setup. One desk is
+   still a watch. Ordered, through<0.85, cost OK, and a live price
+   that has not reached the stop are still required.
+   The guard drives the REAL hgGoldConfluenceBuild in a vm sandbox and
+   asserts behaviour, then mutates the source to prove every assertion
+   is load-bearing. */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -66,13 +69,13 @@ function makeVote(desk, side, entry, stop, t1, barT){
     makeVote('GOLD PRO', 'short', 4022, 4042, 3982)
   ];
   const bA = build(votesA, { px: 4001 }, null);
-  eq('1.b case A ready false', bA.ready, false);
-  ok('1.c case A watch present', !!bA.watch);
-  eq('1.d case A watch side', bA.watch && bA.watch.side, 'long');
-  eq('1.e case A watch count', bA.watch && bA.watch.count, 3);
-  eq('1.f case A watch reason', bA.watch && bA.watch.reason, 'desks disagree');
-  ok('1.g case A watch label names DESKS DISAGREE', bA.watch && /DESKS DISAGREE/.test(bA.watch.label || ''));
-  ok('1.h case A watch has levels', bA.watch && bA.watch.entry > 0 && bA.watch.stop > 0 && bA.watch.t1 > 0);
+  eq('1.b case A ready', bA.ready, true);
+  ok('1.c case A is a setup, not a watch', !bA.watch);
+  eq('1.d case A side', bA.side, 'long');
+  eq('1.e case A desk count', bA.deskCount, 3);
+  eq('1.f case A opposed', bA.opposed, 2);
+  ok('1.g case A names the other side', /does not remove this setup/.test(bA.reason || ''));
+  ok('1.h case A has levels', bA.entry > 0 && bA.stop > 0 && bA.t1 > 0);
 
   // Case A mirror: shorts dominant 3S vs 1L
   const votesAM = [
@@ -82,9 +85,10 @@ function makeVote(desk, side, entry, stop, t1, barT){
     makeVote('GOLD PRO', 'short', 3998, 4018, 3958)
   ];
   const bAM = build(votesAM, { px: 4001 }, null);
-  eq('1.i case A mirror side', bAM.watch && bAM.watch.side, 'short');
-  eq('1.j case A mirror count', bAM.watch && bAM.watch.count, 3);
-  ok('1.k case A mirror label', bAM.watch && /DESKS DISAGREE/.test(bAM.watch.label || ''));
+  eq('1.i case A mirror ready', bAM.ready, true);
+  eq('1.j case A mirror side', bAM.side, 'short');
+  eq('1.k case A mirror desks', bAM.deskCount, 3);
+  eq('1.k2 case A mirror opposed', bAM.opposed, 1);
 
   // Case A tie: 2L vs 2S -> no watch (honest)
   const votesTie = [
@@ -95,7 +99,10 @@ function makeVote(desk, side, entry, stop, t1, barT){
   ];
   const bTie = build(votesTie, { px: 4001 }, null);
   eq('1.l tie ready false', bTie.ready, false);
-  ok('1.m tie has NO watch (true tie)', !bTie.watch);
+  ok('1.m tie has NO single watch', !bTie.watch);
+  eq('1.m2 tie shows both plans', bTie.pair && bTie.pair.length, 2);
+  eq('1.m3 tie keeps both sides', bTie.pair && bTie.pair[0].side, 'long');
+  eq('1.m4 tie keeps the short', bTie.pair && bTie.pair[1].side, 'short');
 
   // Case B: OFF-SCALE -- 3 longs agree, but entries sit >2.5% from IUX
   const votesB = [
@@ -110,16 +117,16 @@ function makeVote(desk, side, entry, stop, t1, barT){
   eq('1.q case B watch count', bB.watch && bB.watch.count, 3);
   ok('1.r case B label names OFF-SCALE', bB.watch && /OFF-SCALE/.test(bB.watch.label || ''));
 
-  // Case C: pre-pack path -- 1-2 same side -> AWAITING THIRD DESK watch (unchanged)
+  // Case C: two same-side plans on the live price are a setup.
   const votesC = [
     makeVote('GOLD SCALP', 'long', 4000, 3980, 4040),
     makeVote('GOLD SWING', 'long', 4005, 3985, 4045)
   ];
   const bC = build(votesC, { px: 4001 }, null);
-  eq('1.s case C ready false', bC.ready, false);
-  ok('1.t case C watch present', !!bC.watch);
-  eq('1.u case C watch reason default', bC.watch && bC.watch.reason, 'awaiting third desk');
-  eq('1.v case C watch count', bC.watch && bC.watch.count, 2);
+  eq('1.s case C ready', bC.ready, true);
+  eq('1.t case C entry is the median', bC.entry, 4002.5);
+  ok('1.u case C is not a watch', !bC.watch);
+  eq('1.v case C two desks', bC.deskCount, 2);
 })();
 
 // ---------- §2 setup threshold UNCHANGED (hg-v966) ----------
@@ -138,14 +145,14 @@ function makeVote(desk, side, entry, stop, t1, barT){
   eq('2.b ready side', bR.side, 'long');
   ok('2.c ready has entry', bR.entry > 0);
 
-  // Two on-scale same-side still NOT ready (watch only)
+  // Two on-scale same-side is a setup. One on-scale is still a watch.
   const votesN = [
     makeVote('GOLD SCALP', 'long', 4000, 3980, 4040),
     makeVote('GOLD SWING', 'long', 4005, 3985, 4045)
   ];
   const bN = build(votesN, { px: 4001 }, null);
-  eq('2.d 2 agree -> ready false', bN.ready, false);
-  ok('2.e 2 agree -> watch', !!bN.watch);
+  eq('2.d 2 agree -> ready', bN.ready, true);
+  eq('2.e 2 agree -> entry is the median', bN.entry, 4002.5);
 
   // Three agree but ONE on-scale: OFF-SCALE branch now shows watch, still NOT ready
   const votesO = [
@@ -241,15 +248,13 @@ function makeVote(desk, side, entry, stop, t1, barT){
       let caught = false;
       try{
         // M1-5 each change behaviour the guard asserts.
-        if (name === 'M1_drop_dominant_watch'){
+        if (name === 'M1_drop_tie_pair'){
           const votes = [
-            makeVote('GOLD SCALP', 'long', 4000, 3980, 4040),
-            makeVote('GOLD SWING', 'long', 4005, 3985, 4045),
-            makeVote('OMNIGOLD', 'long', 3998, 3978, 4038),
-            makeVote('GOLD DIRECTION', 'short', 4020, 4040, 3980)
+            makeVote('GANESH GOLD', 'long', 4026.64, 3990.41, 4068.68),
+            makeVote('GOLD PRO', 'short', 4027.10, 4086.17, 3908.96)
           ];
-          const b = build(votes, { px: 4001 }, null);
-          if (!b.watch) caught = true;
+          const b = build(votes, { px: 4033 }, null);
+          if (!b.pair || b.pair.length !== 2) caught = true;
         } else if (name === 'M2_drop_offscale_watch'){
           const votes = [
             makeVote('GOLD SCALP', 'long', 5000, 4950, 5100),
@@ -266,7 +271,7 @@ function makeVote(desk, side, entry, stop, t1, barT){
             makeVote('GOLD DIRECTION', 'short', 4002, 4022, 3962)
           ];
           const b = build(votes, { px: 4001 }, null);
-          if (b.watch) caught = true;
+          if (b.ready === true) caught = true;
         } else if (name === 'M4_ready_true_on_watch'){
           const votes = [
             makeVote('GOLD SCALP', 'long', 4000, 3980, 4040),
@@ -308,10 +313,11 @@ function makeVote(desk, side, entry, stop, t1, barT){
     makeVote('C', 'long', 3998, 3978, 4038),
     makeVote('D', 'short', 4020, 4040, 3980)
   ], { px: 4001 }, null);
-  ok('8.baseline dominant watch', bA.watch && bA.watch.reason === 'desks disagree');
+  ok('8.baseline dominant side is a setup', bA.ready === true && bA.side === 'long' && !bA.watch);
 
-  runMutation('M1_drop_dominant_watch', s =>
-    s.replace(/if \(dom\)\{[\s\S]*?attachWatch\(base, dom, votes, px, \{[\s\S]*?\}\);\s*\}/, 'if (dom){ /* dropped */ }'));
+  runMutation('M1_drop_tie_pair', s =>
+    s.replace(/base\.pair = \[sideCard\(longs, px\), sideCard\(shorts, px\)\]\.filter\(function\(c\)\{ return c; \}\);/,
+              'base.pair = [];'));
 
   runMutation('M2_drop_offscale_watch', s =>
     s.replace(/attachWatch\(base, pack, votes, px, \{\s*reason:\s*'off-scale from IUX'[\s\S]*?\}\);/, '/* dropped */'));

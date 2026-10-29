@@ -233,6 +233,44 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok(resurrect == null, 'bind does not resurrect a fallback card with TP1 below entry');
 }
 
+/* Forming geometry: R is |target − entry| / |entry − stop|. A missing
+   target is still a legal side check and does not invent an R. A stop
+   on the wrong side is illegal even when the target was never printed. */
+{
+  const geo = W.hgGoldPlanSidesOk({ dir: 'long', entry: 100, stop: 90, t1: 125 });
+  ok(geo.ok === true && geo.risk === 10 && geo.reward === 25 && Math.abs(geo.rr - 2.5) < 1e-12,
+    'long geometry R is 25/10 = 2.5');
+  const geoS = W.hgGoldPlanSidesOk({ dir: 'short', entry: 100, stop: 110, t1: 80 });
+  ok(geoS.ok === true && geoS.risk === 10 && geoS.reward === 20 && Math.abs(geoS.rr - 2) < 1e-12,
+    'short geometry R is 20/10 = 2');
+  const noT = W.hgGoldPlanSidesOk({ dir: 'long', entry: 100, stop: 90 });
+  ok(noT.ok === true && noT.rr === undefined && noT.reward === undefined && noT.risk === 10,
+    'a plan with entry and stop and no target is legal and does not invent an R');
+  const badStop = W.hgGoldPlanSidesOk({ dir: 'long', entry: 100, stop: 110 });
+  ok(badStop.ok === false && /BELOW/.test(badStop.why || ''),
+    'a long stop above entry is illegal even with no target');
+  const lied = W.goldRankSetups([{
+    id: 'geo|long|100', dir: 'long', entry: 100, stop: 90, t1: 125, rr: 9.99,
+    stratKey: 'sweep', strategy: 'LIQUIDITY SWEEP', grade: 'B', agree: 3, oppose: 0, atr: 5
+  }], {});
+  const liedRow = (lied.ranked || []).find(c => c.id === 'geo|long|100');
+  ok(liedRow && liedRow.rr === 2.5,
+    'the ranker prints the geometry R (2.5), not the advertised 9.99 — got ' + (liedRow && liedRow.rr));
+  const bare = W.goldRankSetups([{
+    id: 'bare|long|100', dir: 'long', entry: 100, stop: 90,
+    stratKey: 'sweep', strategy: 'LIQUIDITY SWEEP', grade: 'B', agree: 3, oppose: 0, atr: 5
+  }], {});
+  ok((bare.ranked || []).some(c => c.id === 'bare|long|100'),
+    'entry and stop, no target, still ranks — a missing target is not a rejection');
+  const wrong = W.goldRankSetups([{
+    id: 'wrong|long|100', dir: 'long', entry: 100, stop: 110,
+    stratKey: 'sweep', strategy: 'LIQUIDITY SWEEP', grade: 'B', agree: 3, oppose: 0, atr: 5
+  }], {});
+  ok(!(wrong.ranked || []).some(c => c.id === 'wrong|long|100')
+      && (wrong.rejected || []).some(x => /BELOW/.test(String(x.reason || ''))),
+    'a wrong-side stop with no target is rejected and named');
+}
+
 /* Demoted never gets prefer boost in goldRankSetups.
    hg-v700: a rows-free rank ctx scores BOTH cards CONF NO_TRADE, and the
    stamp now DEMOTES (paints, never leads) — the swing replay measured the MP

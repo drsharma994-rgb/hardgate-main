@@ -321,7 +321,7 @@ function __atrLocal(rows, p){
 var _atr = (typeof atr === 'function') ? atr : __atrLocal;
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
-                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
+                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'IUX XAUUSD',
                   'delta-xaut': 'DELTA XAUTUSD', 'xm-xauusd': 'XM XAUUSD' };
 var ST_GOLD_SYM = 'XAUUSD';
 function venueLabel(src){
@@ -368,11 +368,14 @@ function goldScaleOneCandidate(c, fromRef, liveRef){
     if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
     if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
   }
-  var risk = Math.abs(c.entry - c.stop);
-  if (risk > 0){
-    if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
-    if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
-    if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+  if (typeof hgSyncPlanRr === 'function') hgSyncPlanRr(c);
+  else {
+    var risk = Math.abs(c.entry - c.stop);
+    if (risk > 0){
+      if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
+      if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
+      if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+    }
   }
   c.spotRealigned = true;
   c.spotAlignRatio = ratio;
@@ -2509,10 +2512,10 @@ function nearestArmed(armed, watchMeta){
     if (!w || w.state !== 'armed' || !(typeof w.level === 'number' && isFinite(w.level))) continue;
     var m = watchMeta ? watchMeta[w.venue] : null;
     if (!m || !isFinite(m.lastClose)) continue;
-    var dist = Math.abs(w.level - m.lastClose);
+    var dist = Math.round(Math.abs(w.level - m.lastClose) * 100) / 100;
     if (!best || dist < best.dist){
       best = { strategy: w.strategy, venue: w.venue, level: w.level, dist: dist,
-               distAtr: (isFinite(m.atr) && m.atr > 0) ? dist/m.atr : NaN };
+               distAtr: (isFinite(m.atr) && m.atr > 0) ? dist / m.atr : NaN };
     }
   }
   return best;
@@ -3958,6 +3961,9 @@ function goldscalpMountInto(el, scanSt, cfg){
       + '<div class="row"><button class="btn" id="' + p + 'Run">RUN SCAN</button>'
       + '<span class="note" id="' + p + 'Stat">' + statIdle + '</span></div>'
       + deskNote
+      /* hg-v1444: tape refreshed through 28 Oct 07:00 UTC. The book did not
+         move. Paint only. The six-week r3 numbers stay in the edge table. */
+      + '<div class="note warn" style="margin-top:8px">MEASURED (this tab own scan, tape through 28 Oct 2026 07:00 UTC, settled 30 Aug-28 Oct, one live trade per strategy and direction; the second half is the forward window and the browser fill ledger is not in this build): 1,321 settled plans, every one already stood aside, none eligible to lead. The later bars did not move the book. Gross was positive both halves (+0.05R, then +0.05R). XM costs took the book slightly negative both halves (-0.026R, then -0.032R). At PAXG taker the same halves are -0.91R and -1.04R. No mechanic was promoted. p6fail stays preferred. nyexh lost both halves and is already demoted. Nothing else was gated.</div>'
       /* hg-v968: THE AUTO-REFRESH YOU COULD NOT SEE.
          hg-v965 put GOLD SCALP on a 3-minute clock and hg-v967 fixed the
          resolution that stopped it firing -- and this tab showed NO last-scan

@@ -66,16 +66,14 @@ assert.equal(rec.length, 1);
 
 win.goldDirectionScan = () => ({ cands: [{ dir: 'short', entry: 2652, stop: 2662, t1: 2640, grade: 'A' }] });
 const split = win.hgGoldConfluenceBuild(win.hgGoldConfluenceRead(win), { px: 2651.5 });
-assert.equal(split.ready, false);
+assert.equal(split.ready, true);
 assert.equal(split.longCount, 3);
 assert.equal(split.shortCount, 1);
-/* hg-v1393: hg-v1391 widened attachWatch so a dominant-side longs+shorts
-   split now paints a WATCH naming the dominant side. The pre-pack
-   `split.watch === undefined` assertion was the behaviour this pack
-   explicitly changed. */
-assert.ok(split.watch, 'desks-disagree split now carries a WATCH (hg-v1391)');
-assert.equal(split.watch.reason, 'desks disagree');
-assert.match(split.watch.label, /DESKS DISAGREE/);
+assert.equal(split.side, 'long');
+assert.equal(split.entry, 2651);
+assert.equal(split.watch, undefined);
+assert.equal(split.opposed, 1);
+assert.match(split.reason, /does not remove this setup/);
 
 const noPx = win.hgGoldConfluenceBuild(votes, null);
 assert.equal(noPx.ready, false);
@@ -97,10 +95,90 @@ const two = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670 },
   { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2641, t1: 2671 }
 ], { px: 2650 });
-assert.equal(two.ready, false);
-assert.equal(two.watch.count, 2);
-assert.equal(two.watch.entry, 2650.5);
-assert.notEqual(two.watch.entry, 2650);
+assert.equal(two.ready, true);
+assert.equal(two.entry, 2650.5);
+assert.notEqual(two.entry, 2650);
+assert.equal(two.reads['cf:familyShort'], undefined);
+assert.equal(two.reads['cf:synthetic'], true);
+assert.equal(two.reads['cf:spreadUnread'], true);
+assert.equal(two.reads['cf:sessionSplit'], undefined);
+
+/* An armed candle forecast is not a desk. Two real plans on the live
+   price are a setup, and the forecast does not move their median. */
+win.hgCandleForecastAlertState = () => ({
+  dir: 'short', entry: 2400, stop: 2500, t1: 2200, grade: 'A', ticket: true
+});
+const armed = win.hgGoldConfluenceRead(win);
+const cfVote = armed.filter(v => v.id === 'candle-forecast')[0];
+assert.equal(cfVote.state, 'context');
+assert.equal(cfVote.side, undefined);
+assert.match(cfVote.note, /not used to form a setup/);
+const armedBuilt = win.hgGoldConfluenceBuild(armed, { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(armedBuilt.ready, true);
+assert.equal(armedBuilt.entry, 2651);
+assert.ok(armedBuilt.desks.indexOf('CANDLE FORECAST') < 0);
+const forced = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SCALP', id: 'goldscalp', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'GOLD SWING', id: 'goldswing', state: 'setup', side: 'long', entry: 2651, stop: 2642, t1: 2668, grade: 'A', lead: true },
+  { desk: 'CANDLE FORECAST', id: 'candle-forecast', state: 'setup', side: 'long', entry: 2400, stop: 2300, t1: 2800, grade: 'A', lead: true }
+], { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(forced.ready, true);
+assert.equal(forced.longCount, 2);
+assert.equal(forced.entry, 2650.5);
+assert.ok(forced.desks.indexOf('CANDLE FORECAST') < 0);
+assert.equal(forced.votes.filter(v => v.id === 'candle-forecast')[0].state, 'context');
+
+/* Two crowned plans on the live price are a setup once a third desk
+   has agreed. The off-scale plan does not move the median. */
+const thin = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'GOLD PINE', state: 'setup', side: 'long', entry: 3000, stop: 2900, t1: 3200, grade: 'A', lead: true }
+], { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(thin.ready, true);
+assert.equal(thin.entry, 2650.5);
+assert.ok(thin.desks.indexOf('GOLD PINE') < 0);
+assert.ok(thin.offChart >= 1);
+
+/* An uncrowned plan does not move the median, and it does not erase
+   the two crowned plans that sit on the live price. */
+const bareThird = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2652, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'NEW GOLD', state: 'setup', side: 'long', entry: 2660, stop: 2600, t1: 2800 }
+], { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(bareThird.ready, true);
+assert.equal(bareThird.entry, 2651);
+assert.ok(bareThird.desks.indexOf('NEW GOLD') < 0);
+
+/* A price already through the stop is finished. A price still above the
+   stop, even if it has not reached the entry, is still a setup. */
+function crowned(desk, entry, stop, t1, side){
+  return { desk: desk, state: 'setup', side: side || 'long', entry: entry, stop: stop, t1: t1, grade: 'A', lead: true };
+}
+const dead = win.hgGoldConfluenceBuild([
+  crowned('GOLD SCALP', 2650, 2640, 2670),
+  crowned('GOLD SWING', 2651, 2640, 2670),
+  crowned('GANESH GOLD', 2652, 2640, 2670)
+], { px: 2639 }, { spreadUsd: 0.30 });
+assert.equal(dead.ready, false);
+assert.equal(dead.watch, undefined);
+assert.equal(dead.entry, 2651);
+assert.match(dead.reason, /through the stop/);
+const pending = win.hgGoldConfluenceBuild([
+  crowned('GOLD SCALP', 2650, 2640, 2670),
+  crowned('GOLD SWING', 2651, 2640, 2670),
+  crowned('GANESH GOLD', 2652, 2640, 2670)
+], { px: 2645 }, { spreadUsd: 0.30 });
+assert.equal(pending.ready, true);
+assert.equal(pending.entry, 2651);
+const deadShort = win.hgGoldConfluenceBuild([
+  crowned('GOLD SCALP', 2650, 2660, 2630, 'short'),
+  crowned('GOLD SWING', 2651, 2660, 2630, 'short'),
+  crowned('GANESH GOLD', 2652, 2660, 2630, 'short')
+], { px: 2660 }, { spreadUsd: 0.30 });
+assert.equal(deadShort.ready, false);
+assert.match(deadShort.reason, /through the stop/);
 
 const chased = win.hgGoldConfluenceBuild([
   { desk: 'A', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2652 },
@@ -136,7 +214,7 @@ assert.equal(one.watch.entry, 4174.4);
 assert.equal(one.watch.stop, 4210.15);
 assert.equal(one.watch.t1, 4120.78);
 assert.notEqual(one.watch.entry, 4174.2);
-assert.match(one.reason, /WATCH 1 of 3/);
+assert.match(one.reason, /WATCH 1 of 2/);
 
 const copied = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SWING', state: 'setup', side: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78 },
@@ -150,8 +228,9 @@ const twoShort = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SWING', state: 'setup', side: 'short', entry: 4174.4, stop: 4210.15, t1: 4120.78 },
   { desk: 'GOLD SCALP', state: 'setup', side: 'short', entry: 4170, stop: 4205, t1: 4110 }
 ], { px: 4174 });
-assert.equal(twoShort.ready, false);
+assert.equal(twoShort.ready, true);
 assert.equal(twoShort.shortCount, 2);
+assert.equal(twoShort.entry, 4172.2);
 
 win.goldscalpScan = () => ({ cands: [], whySilent: 'no 15m setup' });
 const silent = win.hgGoldConfluenceRead(win).filter(v => v.id === 'goldscalp')[0];
@@ -165,23 +244,24 @@ assert.match(dir.note, /LONG or SHORT/);
 
 win.goldscalpScan = () => ({ cands: [{ dir: 'long', entry: 2650, stop: 2640, t1: 2670 }] });
 const bare = win.hgGoldConfluenceRead(win).filter(v => v.id === 'goldscalp')[0];
-assert.equal(bare.state, 'none');
-assert.match(bare.note, /did not crown/);
+assert.equal(bare.state, 'setup');
+assert.equal(bare.side, 'long');
+assert.equal(bare.entry, 2650);
 win.goldscalpScan = () => ({ cands: [{ dir: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'B' }] });
 const bee = win.hgGoldConfluenceRead(win).filter(v => v.id === 'goldscalp')[0];
-assert.equal(bee.state, 'none');
-assert.match(bee.note, /did not crown/);
+assert.equal(bee.state, 'setup');
+assert.equal(bee.side, 'long');
 
 const cheap = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.22 });
 assert.equal(cheap.ready, true);
 assert.ok(cheap.netRr >= 1);
 assert.match(cheap.reason, /Measured spread/);
 const wide = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 20 });
-assert.equal(wide.ready, false);
+assert.equal(wide.ready, true);
 assert.equal(wide.entry, 2651);
 assert.ok(wide.netRr < 1);
 assert.match(wide.reason, /under 1R/);
-assert.match(wide.reason, /not a setup/);
+assert.match(wide.reason, /does not remove this setup/);
 
 /* hg-v1393: upstream's hg-v1391 ready gate reads vote.grade/lead for the
    crowned filter and needs a measured spread for netRr. Pass both. */
@@ -197,6 +277,59 @@ assert.ok(milli.desks.indexOf('MILLI GOLD') < 0);
 const milliVote = milli.votes.filter(v => v.id === 'milligold')[0];
 assert.equal(milliVote.derived, true);
 assert.equal(milliVote.sameAs, 'OMNIGOLD');
+
+const liveTie = win.hgGoldConfluenceBuild([
+  { desk: 'GANESH GOLD', state: 'setup', side: 'long', entry: 4026.64, stop: 3990.41, t1: 4068.68 },
+  { desk: 'GOLD PRO', state: 'setup', side: 'short', entry: 4027.10, stop: 4086.17, t1: 3908.96 }
+], { px: 4033 });
+assert.equal(liveTie.ready, false);
+assert.equal(liveTie.pair.length, 2);
+assert.equal(liveTie.pair[0].desk, 'GANESH GOLD');
+assert.equal(liveTie.pair[0].entry, 4026.64);
+assert.equal(liveTie.pair[0].stop, 3990.41);
+assert.equal(liveTie.pair[0].t1, 4068.68);
+assert.equal(liveTie.pair[1].desk, 'GOLD PRO');
+assert.equal(liveTie.pair[1].entry, 4027.10);
+assert.equal(liveTie.pair[1].stop, 4086.17);
+assert.equal(liveTie.pair[1].t1, 3908.96);
+assert.match(liveTie.reason, /Both plans are on the card/);
+
+/* The 100-point score is a label. A low score does not take the setup off the card. */
+const tapeRows = [{ t: 1, o: 2650, h: 2652, l: 2648, c: 2651 }];
+function scored(tier, score, alertOk){
+  win.HG_GOLD_CONF_GOOD = 78;
+  win.HG_GOLD_CONF_WATCH = 68;
+  win.hgGoldConfluenceScore = () => ({
+    ok: true, score: score, tier: tier, alertOk: alertOk, why: 'stub',
+    parts: { htf: 20, location: 14, momentum: 10, volRegime: 8, volume: 6, macro: 8, trigger: 8 }
+  });
+  return win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.30, rows15m: tapeRows });
+}
+const hi = scored('A', 90, true);
+assert.equal(hi.ready, true);
+assert.equal(hi.confScore, 90);
+assert.equal(hi.confTier, 'A');
+assert.equal(hi.entry, 2651);
+const watchScore = scored('WATCH', 70, false);
+assert.equal(watchScore.ready, true);
+assert.equal(watchScore.watch, undefined);
+assert.equal(watchScore.confScore, 70);
+assert.equal(watchScore.entry, 2651);
+const low = scored('NO_TRADE', 50, false);
+assert.equal(low.ready, true);
+assert.equal(low.watch, undefined);
+assert.equal(low.confTier, 'NO_TRADE');
+assert.equal(low.entry, 2651);
+assert.match(low.reason, /does not remove this setup/);
+delete win.hgGoldConfluenceScore;
+const unread = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.30, rows15m: tapeRows });
+assert.equal(unread.ready, true);
+assert.equal(unread.confScore, undefined);
+win.hgGoldConfluenceScore = () => ({ ok: true, score: 10, tier: 'NO_TRADE', alertOk: false, why: 'stub' });
+const noTape = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(noTape.ready, true);
+assert.equal(noTape.confScore, undefined);
+delete win.hgGoldConfluenceScore;
 
 const gw = {
   Date, Math, Number, String, Array, Object, Promise, isFinite,

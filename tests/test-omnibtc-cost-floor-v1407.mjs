@@ -4,6 +4,7 @@
    hg-v1433: re-pinned again with the GOLD SINGLES bump (hg-v1432 -> hg-v1433); the pack under test remains hg-v1418.
    hg-v1434: re-pinned again with the CRYPTO SINGLES bump (hg-v1433 -> hg-v1434); the pack under test remains hg-v1418.
    hg-v1435: re-pinned again with the PINE/META bump (hg-v1434 -> hg-v1435); the pack under test remains hg-v1418.
+   hg-v1445: re-pinned again with the SUPER GOLD / CONFLUENCE bump; the pack under test remains hg-v1418.
    hg-v1432: re-pinned again with the INLINE SCANNERS bump (hg-v1421 -> hg-v1432); the pack under test remains hg-v1418.
    hg-v1420: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1420); the pack under test remains hg-v1418.
    hg-v1419: sister-suite re-pin — the stamp assertions below follow the tree version (now hg-v1419); the pack under test remains hg-v1418.
@@ -240,10 +241,10 @@ console.log('\n== 7) both lever surfaces exist by name (a rename trips here) =='
 console.log('\n== 8) the deploy pins moved with the pack (?v= byte-check) ==');
 {
   const bs = (read('build-stamp.js').match(/version:\s*'([^']+)'/) || [])[1];
-  ok(bs === 'hg-v1435', 'build-stamp.js carries hg-v1435 (got ' + bs + ')');
+  ok(bs === 'hg-v1461', 'build-stamp.js carries hg-v1459 (got ' + bs + ')');
   ok(bs === HG_VER, 'and it is the tree version ' + HG_VER);
   const idx = read('index.html');
-  ok(idx.indexOf('omnibtc.js?v=1435') !== -1, 'index.html loads omnibtc.js?v=1435');
+  ok(idx.indexOf('omnibtc.js?v=1461') !== -1, 'index.html loads omnibtc.js?v=1461');
   ok(!/\?v=1406\b/.test(idx), 'no stale ?v=1406 pin survives in index.html');
 }
 

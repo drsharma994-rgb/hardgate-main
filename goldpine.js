@@ -536,6 +536,44 @@ function hgGpReorder(list){
   } catch(e){ return list; }
 }
 
+/* The lanes show a setup only when both reads pass. Good solidity is
+   PRIME, SOLID or GOOD. Near FTS is the stack's own tier: near, or clean
+   which is FTS OK. Forming and aside stay off the lane. A killed plan
+   is not good. When either reader is absent the bar does not hide the row. */
+function gpSolidityGood(s){
+  var g = s && s.solidity;
+  if (!g || g.killed === true) return false;
+  if (g.leadEligible === true) return true;
+  var t = String(g.grade || g.tier || '').toUpperCase();
+  return t === 'PRIME' || t === 'SOLID' || t === 'GOOD';
+}
+function gpFtsNearOk(s){
+  var h = s && s.stack && s.stack.tierHint;
+  return h === 'near' || h === 'clean';
+}
+function gpBoardBarOn(){
+  return typeof W.hgSolidityGrade === 'function' && typeof W.hgSetupStackForPineSig === 'function';
+}
+function gpBoardPick(s){
+  return !!(s && gpSolidityGood(s) && gpFtsNearOk(s));
+}
+function gpAttachFts(list){
+  if (!Array.isArray(list) || typeof W.hgSetupStackForPineSig !== 'function') return;
+  for (var i = 0; i < list.length; i++){
+    var s = list[i];
+    if (!s || s.stack || (s.dir !== 'long' && s.dir !== 'short')) continue;
+    try{
+      s.stack = W.hgSetupStackForPineSig({
+        sym: 'XAUUSD', dir: s.dir,
+        isNew: s.tier === 'primary' || s.tier === 'native',
+        isRecent: s.isRecent,
+        isContext: s.isContext || s.tier === 'aligned',
+        tier: s.tier
+      }, { style: 'goldpine', asset: 'gold' });
+    }catch(eFts){}
+  }
+}
+
 function collectNativeScalp(bars, ctx, source){
   var out = [];
   var cached = null;
@@ -1005,6 +1043,8 @@ function runGoldPineScan(bars, ctx){
     swing = sortSetups(swing);
     scalp = sortSetups(scalp);
   }catch(ePB){}
+  gpAttachFts(swing);
+  gpAttachFts(scalp);
   return { swing: swing, scalp: scalp, levels: levels, source: source,
            goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
            tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now(),
@@ -1235,7 +1275,8 @@ function gpAdmissionFloor(s){
     /* hg-v1420: the pinned prefix is verbatim (the r2 venue audit is appended,
        never reworded — test-goldpine-admission-floor §1 is a prefix match). */
     return { ok: false, why: 'stop under 0.3% of entry — the round trip is a multiple of the risk'
-      + '; at XM costs the floor is 15x the round trip, at PAXG taker only 1.15x, and even the kept cohort settled negative at taker (census r2) — the venue, not the floor, is the remaining lever' };
+      + '; at XM costs the floor is 15x the round trip, at PAXG taker only 1.15x, and even the kept cohort settled negative at taker (census r2) — the venue, not the floor, is the remaining lever'
+      + '. Re-walked 26 Aug–28 Oct 2026 with the higher-timeframe feed on: these stops never entered the lead book, and on the wider primary tape they lost both halves at XM (n=19 −4.95R, then n=28 −0.36R). The floor stays' };
   }
   return { ok: true };
 }
@@ -1510,12 +1551,12 @@ function mount(el){
     + '<div class="panel">'
     + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
     + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
-    + 'plus native GOLD SWING/SCALP candidates. UI shows the <b>top ' + TOP_SETUPS + ' highest-probability formations</b> per section '
-    + '(NEW/RECENT/FORMING weighted). '
+    + 'plus native GOLD SWING/SCALP candidates. The swing and scalp lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS tier is near or OK. '
     + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
     + 'A scalp primary does not pass in premium or discount without a sweep, during the London fix (London local time), or when it fades an Asian range that already expanded. '
     + 'A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. '
-    + '<b>ALIGNED</b> = per-layer or watch context. <b>NATIVE</b> = goldind strategies.</div>'
+    + '<b>ALIGNED</b> = per-layer or watch context. <b>NATIVE</b> = goldind strategies. '
+    + 'Re-walk 26 Aug–28 Oct 2026 (second half is the forward window): the scalps this tab would lead lost both halves. Stops under 0.3% of entry stay floored. Swing leads were mixed. Nothing else was gated.</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="goldPineRun">RUN GOLD PINE SCAN</button>'
     + '<span class="note" id="goldPineStat">Fetches XAU/PAXG candles then scores swing + scalp. Refreshes every 2 minutes while this tab is open.</span>'
@@ -1595,6 +1636,13 @@ function mount(el){
       var tapeScalp = (result.tape && result.tape.scalp) || '';
       var swingTop = result.swing.slice(0, TOP_SETUPS);
       var scalpTop = result.scalp.slice(0, TOP_SETUPS);
+      var boardBar = gpBoardBarOn();
+      var swingFit = boardBar ? result.swing.filter(gpBoardPick) : null;
+      var scalpFit = boardBar ? result.scalp.filter(gpBoardPick) : null;
+      if (boardBar){
+        swingTop = swingFit.slice(0, 6);
+        scalpTop = scalpFit.slice(0, 6);
+      }
       result.swingTop = swingTop;
       result.scalpTop = scalpTop;
       __goldPineSnap = result;
@@ -1642,6 +1690,13 @@ function mount(el){
            + ' \u00b7 15m ' + esc(tapeScalp || 'unread') + '). '
            + 'The cards below still print their levels, stamped AGAINST GOLD TAPE \u00b7 HELD.</div>')
         : '';
+      var fitNote = '';
+      if (boardBar){
+        var heldN = (result.swing.length - swingFit.length) + (result.scalp.length - scalpFit.length);
+        fitNote = '<div class="note">These lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS tier is near or OK.'
+          + (heldN ? (' ' + heldN + ' formation' + (heldN === 1 ? '' : 's') + ' on this scan did not clear that.') : '')
+          + '</div>';
+      }
       /* Pack 907: GOLD PINE draws four legs and moved its numbers on a
          malformed tape without saying so. One note per leg that arrived,
          ahead of everything drawn from it. */
@@ -1666,7 +1721,8 @@ function mount(el){
         + ' by half. The scalp book is EMPTY at shipped parameters \u2014 zero floor-passing trades in six weeks.'
         + ' No upstream clause is removed (no cost model clears a both-halves removal): every row now carries'
         + ' clause-attribution marks (gp:up*) and the forward ledger prices each clause\u2019s held cohort out of'
-        + ' sample \u2014 the ledger decides.</div>';
+        + ' sample \u2014 the ledger decides.'
+        + ' Re-walk 26 Aug\u201328 Oct 2026, higher-timeframe feed on, one position at a time (the second half is the forward window; the browser fill ledger is not in this build): the rows this tab would actually lead filled 57 scalps and lost both halves at every cost (gross \u22120.025R then \u22120.021R, XM \u22120.046R then \u22120.042R, n=28/29). Stops under 0.3% never entered that lead book and still lost both halves on the wider primary tape (n=19 \u22124.95R, then n=28 \u22120.36R at XM), so the floor stays. Swing leads were 10 and mixed. No script was promoted or vetoed.</div>';
       if (typeof W.hgGoldTapeNotes === 'function'){
         [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
           var rws = bars && bars[L[0]];
@@ -1690,14 +1746,23 @@ function mount(el){
         + '<div class="gp-board"><aside class="gp-mp-col" aria-label="Most probable setup">'
         + (mpList.length
           ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1) + '<div class="gp-mp-banner" id="gp-mp-banner"></div>')
-          : ('<div class="gp-eye">NO LEAD</div><div class="note">Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.</div>'))
+          : ('<div class="gp-eye">NO LEAD</div><div class="note">'
+            + (boardBar
+              ? 'No setup is both good solidity and near or OK on FTS, so nothing leads.'
+              : 'Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.')
+            + '</div>'))
         + '</aside><div class="gp-rest">'
+        + fitNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
-          'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
-          { total: result.swing.length })
+          boardBar
+            ? 'No swing setup has good solidity and a near or OK FTS tier.'
+            : 'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
+          { total: boardBar ? swingFit.length : result.swing.length })
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
-          'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
-          { total: result.scalp.length })
+          boardBar
+            ? 'No scalp setup has good solidity and a near or OK FTS tier.'
+            : 'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
+          { total: boardBar ? scalpFit.length : result.scalp.length })
         + recordSection
         + gpCatalogHtml(result, bars)
         + '</div></div>';
@@ -1807,6 +1872,8 @@ W.gpWeekendVerdict = gpWeekendVerdict;
    drive them as units — a guard that cannot reach the rule proves nothing. */
 W.gpAdmissionFloor = gpAdmissionFloor;
 W.gpMayLead = gpMayLead;
+W.gpBoardPick = gpBoardPick;
+W.gpAttachFts = gpAttachFts;
 /* hg-v1420: the r2 record-mark helper and seam, exported so the pin suite
    can drive them as units — a guard that cannot reach the rule proves
    nothing. */

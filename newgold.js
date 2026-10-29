@@ -563,10 +563,12 @@ function ngAssess(rows){
      never print 1.75 \u2014 so the headroom gate rewarded exactly the cards
      whose geometry the detector got wrong. Derive from the levels the card
      actually carries; never inherit (the plans.js hgSyncPlanRatios rule). */
-  risk = Math.abs(entry - stop);
+  risk = dir === 'long' ? entry - stop : stop - entry;
   if (!(risk > 0)) return null;
-  var rr1Final = Math.abs(t1 - entry) / risk;
-  var rr2Final = Math.abs(t2 - entry) / risk;
+  var rew1 = dir === 'long' ? t1 - entry : entry - t1;
+  var rew2 = dir === 'long' ? t2 - entry : entry - t2;
+  var rr1Final = (typeof hgGoldLegR === 'function') ? hgGoldLegR(dir, entry, stop, t1) : (rew1 > 0 ? rew1 / risk : NaN);
+  var rr2Final = (typeof hgGoldLegR === 'function') ? hgGoldLegR(dir, entry, stop, t2) : (rew2 > 0 ? rew2 / risk : NaN);
 
   /* Fail closed (hg-v700): the composed floor must never ship a card whose
      FINAL T1 pays under the module's MIN_RR. The R-multiple ladder re-prices

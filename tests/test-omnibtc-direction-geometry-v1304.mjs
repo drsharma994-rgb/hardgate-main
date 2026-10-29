@@ -429,12 +429,16 @@ console.log('\n[§7] ship stamps align');
   /* hg-v1404: version pins ride the current stamp (re-pinned hg-v1403 ->
      hg-v1404 at the hg-v1404 bump; 'Sister suites re-pinned' convention).
      hg-v1440 at the hg-v1440 bump (OMNIGOLD r3 disclosure);
-     hg-v1441 at the hg-v1441 bump (GOLD SWEEP disclosures). Behavior pins
+     hg-v1441 at the hg-v1441 bump (GOLD SWEEP disclosures);
+     hg-v1442 at the hg-v1442 bump (PINE GOLD re-walk).
+     hg-v1443 at the hg-v1443 bump (GOLD SCALP re-walk).
+     hg-v1444 at the hg-v1444 bump (GOLD SCALP tape refresh).
+     hg-v1445 at the hg-v1445 bump (SUPER GOLD and CONFLUENCE). Behavior pins
      above unchanged. */
-  ok(/version:\s*'hg-v1441'/.test(bs), "build-stamp.js version: 'hg-v1441' (re-pinned hg-v1441)");
-  ok(/HG_CACHE\s*=\s*'hg-v1441'/.test(sw), "sw.js HG_CACHE = 'hg-v1441' (re-pinned hg-v1441)");
-  ok(/hg-v1441/.test(tt), 'trendtable.js stamped hg-v1441 (re-pinned hg-v1441)');
-  ok(/\?v=1441/.test(tt), 'trendtable.js uses ?v=1441 (re-pinned hg-v1441)');
+  ok(/version:\s*'hg-v1461'/.test(bs), "build-stamp.js version: 'hg-v1460' (re-pinned hg-v1459)");
+  ok(/HG_CACHE\s*=\s*'hg-v1461'/.test(sw), "sw.js HG_CACHE = 'hg-v1460' (re-pinned hg-v1459)");
+  ok(/hg-v1461/.test(tt), 'trendtable.js stamped hg-v1460 (re-pinned hg-v1460)');
+  ok(/\?v=1461/.test(tt), 'trendtable.js uses ?v=1460 (re-pinned hg-v1459)');
 }
 
 /* ---------- summary ---------- */

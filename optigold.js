@@ -1143,6 +1143,8 @@ function ogBetterPick(a, b){
 /* ---------- rendering ---------- */
 
 function card(s, mark){
+  if (s && typeof hgSealGoldSetup === 'function') hgSealGoldSetup(s);
+  var rrLabel = (s && s.geometryOk === false) ? 'target (refused)' : ('target (' + fmt(s.rr, 1) + 'R)');
   var cls = s.dir === 'long' ? 'long' : 'short';
   var stateLabel = { waiting: 'WAITING — price has not retraced to entry',
                      open: 'FILLED — running',
@@ -1193,7 +1195,7 @@ function card(s, mark){
                + '</b> (' + fmt(d.pct, 2) + '% · ' + fmt(d.px) + ')</span>' : ''))
     + '<span class="k">entry (50% eq)</span><span>' + fmt(s.entry) + '</span>'
     + '<span class="k">stop</span><span>' + fmt(s.stop) + '</span>'
-    + '<span class="k">target (' + fmt(s.rr, 1) + 'R)</span><span>' + fmt(s.t1) + '</span>'
+    + '<span class="k">' + rrLabel + '</span><span>' + fmt(s.t1) + '</span>'
     + '<span class="k">risk</span><span>' + fmt(s.risk) + '</span>'
     + '<span class="k">expires in</span><span>' + esc(String(s.horizonBars || '—')) + ' × ' + esc(String(s.interval || '')) + ' bars</span>'
     + '<span class="k">broken level</span><span>' + fmt(s.dir === 'long' ? s.res : s.sup) + '</span>'

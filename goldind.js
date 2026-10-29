@@ -2292,8 +2292,77 @@ function hgGoldPlanSidesOk(cand){
       if (!(s < e)){ out.ok = false; out.why = 'LONG stop must sit BELOW entry (got stop ' + s + ' vs entry ' + e + ')'; return out; }
       if (isFinite(t1) && !(t1 > e)){ out.ok = false; out.why = 'LONG TP1 must sit ABOVE entry'; return out; }
     }
+    out.risk = Math.abs(e - s);
+    if (isFinite(t1) && out.risk > 0){
+      out.reward = Math.abs(t1 - e);
+      out.rr = out.reward / out.risk;
+    }
     return out;
   }catch(e){ out.ok = false; out.why = 'plan-sides check error'; return out; }
+}
+
+/** hg-v1460: snap a minted gold price to the venue's 0.01 tick. Gold setup
+ *  tabs mint levels from ATR multiples and zone midpoints, and an unrounded
+ *  mint (entry - 1.5*ATR) publishes a price the venue cannot place — the
+ *  fill snaps it, and every downstream R:R, net-R and size computed from
+ *  the unrounded mint then disagrees with the filled trade. Mint sites call
+ *  this ONCE at the mint, and re-derive risk and R:R from the snapped level,
+ *  so the card's numbers are the trade's numbers. Never throws. */
+function hgGoldTickPx(x){
+  var v = +x;
+  if (!isFinite(v)) return NaN;
+  return Math.round(v * 100) / 100;
+}
+
+/** hg-v1460: exact-pricing audit of a PUBLISHED gold plan. NAMED, never
+ *  gating (the house rule): the return carries what drifts, no desk reads it
+ *  to withhold a setup. On the published levels it checks
+ *    - geometry matches direction (reuses hgGoldPlanSidesOk);
+ *    - a published rr/rr1 equals the exact |TP1-entry| / |entry-stop| of the
+ *      published levels, within half a display tick (0.005);
+ *    - a published risk/riskDist equals the exact |entry-stop|, same bar;
+ *    - TP2 sits beyond TP1 when both are published.
+ *  Levels that are not aligned to the 0.01 tick are NAMED in offTick without
+ *  flipping ok — structural passthrough levels are feed prints, and the
+ *  minting cores snap at the mint (hgGoldTickPx), so ok stays meaningful:
+ *  it answers "does this card's arithmetic agree with this card's levels".
+ *  Absent fields are absent checks, not failures. Never throws. */
+function hgGoldPlanPricingOk(plan){
+  var out = { ok: true, drifts: [], offTick: [] };
+  try{
+    if (!plan || typeof plan !== 'object'){ out.ok = false; out.drifts.push('no plan'); return out; }
+    var e = +plan.entry, s = +plan.stop;
+    if (!isFinite(e) || !isFinite(s) || !(e > 0) || !(s > 0)){ out.ok = false; out.drifts.push('missing entry/stop'); return out; }
+    var t1 = isFinite(+plan.t1) ? +plan.t1 : NaN;
+    var t2 = isFinite(+plan.t2) ? +plan.t2 : NaN;
+    var names = ['entry', 'stop'];
+    var vals = [e, s];
+    if (isFinite(t1)){ names.push('t1'); vals.push(t1); }
+    if (isFinite(t2)){ names.push('t2'); vals.push(t2); }
+    for (var i = 0; i < vals.length; i++){
+      if (!(vals[i] > 0)){ out.ok = false; out.drifts.push(names[i] + ' not positive'); }
+      else if (Math.abs(vals[i] * 100 - Math.round(vals[i] * 100)) > 1e-6) out.offTick.push(names[i]);
+    }
+    var sides = hgGoldPlanSidesOk({ dir: plan.dir, entry: e, stop: s, t1: t1 });
+    if (!sides.ok){ out.ok = false; out.drifts.push('geometry: ' + sides.why); }
+    if (isFinite(t1) && isFinite(t2)){
+      if (plan.dir === 'long' && !(t2 > t1)){ out.ok = false; out.drifts.push('TP2 not beyond TP1'); }
+      if (plan.dir === 'short' && !(t2 < t1)){ out.ok = false; out.drifts.push('TP2 not beyond TP1'); }
+    }
+    var risk = Math.abs(e - s);
+    if (isFinite(t1) && risk > 0){
+      var exactRr = Math.abs(t1 - e) / risk;
+      var rrPub = isFinite(+plan.rr) ? +plan.rr : (isFinite(+plan.rr1) ? +plan.rr1 : NaN);
+      if (isFinite(rrPub) && Math.abs(rrPub - exactRr) > 0.005 + 1e-9){
+        out.ok = false; out.drifts.push('rr ' + rrPub + ' vs exact ' + exactRr.toFixed(4));
+      }
+    }
+    var riskPub = isFinite(+plan.risk) ? +plan.risk : (isFinite(+plan.riskDist) ? +plan.riskDist : NaN);
+    if (isFinite(riskPub) && risk > 0 && Math.abs(riskPub - risk) > 0.005 + 1e-9){
+      out.ok = false; out.drifts.push('risk ' + riskPub + ' vs exact ' + risk.toFixed(4));
+    }
+    return out;
+  }catch(eP){ out.ok = false; out.drifts.push('pricing audit error'); return out; }
 }
 
 /** Copy engine entry/stop/T1 onto a house card only when the bundle stays legal.
@@ -2328,8 +2397,10 @@ function hgGoldBindEnginePlan(cand, hit, ctx){
   if (!hit || (hit.dir !== 'long' && hit.dir !== 'short')) return null;
   var entryPx = isFinite(hit.level) ? +hit.level
     : (hit.plan && isFinite(hit.plan.entry) ? +hit.plan.entry : NaN);
+  /* hg-v1460: the 1.5xATR fallback stop is a MINT — snap it to the venue
+     tick so the published stop is a placeable price (hgGoldTickPx). */
   var stopPx = (hit.plan && isFinite(hit.plan.stop)) ? +hit.plan.stop
-    : (hit.dir === 'long' ? entryPx - 1.5 * a : entryPx + 1.5 * a);
+    : hgGoldTickPx(hit.dir === 'long' ? entryPx - 1.5 * a : entryPx + 1.5 * a);
   if (cand && !cand.dropped){
     if (isFinite(entryPx)){
       var trialE = { dir: cand.dir, entry: entryPx, stop: cand.stop, t1: cand.t1 };
@@ -3130,9 +3201,18 @@ function hgGoldScalpStopFloor(c, a15){
       if (c.stamps.indexOf('STOP FLOOR') < 0) c.stamps.push('STOP FLOOR');
       return c;
     }
-    c.stop = (c.dir === 'long') ? e - floorD : e + floorD;
-    c.rr = rr1F;
-    if (isFinite(+c.t2)) c.rr2 = Math.abs(+c.t2 - e) / floorD;
+    /* hg-v1460: the floored stop is a MINT — entry minus a raw ATR multiple —
+       so it is snapped to the venue tick at the mint (hgGoldTickPx), and the
+       published rr is re-derived from the SNAPPED stop, exact
+       |TP1-entry| / |entry-stop| of the published levels. The drop decision
+       above stays keyed to the floor distance itself; only the published
+       numbers change shape. */
+    var stopMint = (c.dir === 'long') ? e - floorD : e + floorD;
+    c.stop = hgGoldTickPx(stopMint);
+    var riskPub = Math.abs(e - c.stop);
+    if (!(riskPub > 0)) riskPub = floorD;
+    c.rr = isFinite(+c.t1) ? Math.abs(+c.t1 - e) / riskPub : rr1F;
+    if (isFinite(+c.t2)) c.rr2 = Math.abs(+c.t2 - e) / riskPub;
     if (!Array.isArray(c.stamps)) c.stamps = [];
     if (c.stamps.indexOf('STOP FLOORED 1.5×ATR') < 0) c.stamps.push('STOP FLOORED 1.5×ATR');
     var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
@@ -5139,9 +5219,9 @@ function goldWatch(inp){
 
     /* 1) liquidity sweep — the prior-25-bar swing high/low is the watched
        liquidity pool; the trigger is a wick beyond it + a reclaim close. */
-    if (n >= 26){
+    if (n >= 27){
       var sH = -Infinity, sL = Infinity;
-      for (var i = Math.max(0, n - 25); i < n - 1; i++){   /* exclude the forming bar (goldSweeps parity) */
+      for (var i = Math.max(0, n - 26); i < n - 1; i++){   /* 25 bars before the last, same window as goldSweeps */
         if (rows[i].h > sH) sH = rows[i].h;
         if (rows[i].l < sL) sL = rows[i].l;
       }
@@ -5485,12 +5565,12 @@ function gdRr(v){
    GOLD CONFLUENCE SCORE (hg-v559) — 100-pt core stack, not an indicator pile.
    HTF structure 25 · Location 20 · Momentum 15 · Vol regime 10 ·
    Volume/OF 10 · Macro 10 · Entry trigger 10.
-   Tiers: A 85–100 · GOOD 75–84 · WATCH 65–74 · NO TRADE <65.
+   Tiers: A 85–100 · GOOD 78–84 · WATCH 68–77 · NO TRADE <68.
    COT is weekly sentiment only (lagged) — never a live entry trigger.
 ========================================================================= */
 var HG_GOLD_CONF_A = 85;
-var HG_GOLD_CONF_GOOD = 75;
-var HG_GOLD_CONF_WATCH = 65;
+var HG_GOLD_CONF_GOOD = 78;
+var HG_GOLD_CONF_WATCH = 68;
 
 function hgGoldConfluenceTier(score){
   if (!(isFinite(score))) return 'NO_TRADE';
@@ -5561,6 +5641,20 @@ function hgGoldConfluenceScore(cand, ctx){
     var key = cand.stratKey || '';
     if (/sweep|liqsweep|nyexh|sweepob|silverb|smcliq|ob|asian|pdraid|eqhi|eqlo|hvn|vwap|fvg/i.test(key)){
       p.location += 7; tools.push('S/R / liquidity location');
+    } else if (key === 'confluence'){
+      /* hg-v1455: the CONFLUENCE tab scores its median plan here with
+         stratKey 'confluence' (since hg-v1454). That key matched no
+         mechanic family, so the location leg read 2/… for a plan whose
+         levels are, by construction, desk-chosen structural levels — every
+         member desk already passed its own location gate on these bars.
+         Starved at location (−5), trigger (−4) and volume (−4), a fully
+         aligned plan capped near 66/100 — under even the 68 WATCH bar —
+         so the hg-v1454 score gate stood aside nearly every plan whenever
+         the tape was in hand. The confluence plan gets the structural
+         location credit the desks' own plans earn, capped as always at 20.
+         Quality-stack calibration, not an edge claim; the forward ledger
+         decides. */
+      p.location += 7; tools.push('S/R location (desk median levels)');
     } else p.location += 2;
     if (cand.vpTargets && cand.vpTargets.ok){
       p.location += cand.vpTargets.confirmed ? 6 : 3;
@@ -5625,6 +5719,11 @@ function hgGoldConfluenceScore(cand, ctx){
     if (cand.sweepScore >= 75 || cand.nyExhScore >= 75) p.volume += 8;
     else if (cand.sweepScore >= 65 || cand.nyExhScore >= 65) p.volume += 5;
     else if (/sweep|liqsweep|nyexh|sweepob|silverb|smcliq|oitrap/i.test(key)) p.volume += 4;
+    /* hg-v1455: the participation floor the mechanic families get. Every
+       member desk of a CONFLUENCE plan already passed its own
+       volume/participation gate on the same bars; the median inherits
+       that floor, not a bonus. */
+    else if (key === 'confluence') p.volume += 4;
     if (cand.vpTargets && cand.vpTargets.confirmed) p.volume += 2;
     if (ctx.rvol && ctx.rvol >= 1.25) p.volume += 2;
     p.volume = Math.min(10, p.volume);
@@ -5675,6 +5774,12 @@ function hgGoldConfluenceScore(cand, ctx){
     if (/sweep|liqsweep|nyexh|sweepob|silverb|smcliq/i.test(key) && (cand.confirmed || cand.sweepTier === 'alert' || cand.nyExhTier === 'alert' || cand.sweepObTier === 'alert' || cand.silverBTier === 'alert' || isFinite(cand.smcSweptAge)))
       p.trigger += 10;
     else if (/sweep|liqsweep|nyexh|sweepob|silverb|smcliq|ob|fvg|openrange|asian|bosalign/i.test(key))
+      p.trigger += 7;
+    /* hg-v1455: the family bracket, not the alert tier. Each member desk of
+       a CONFLUENCE plan fired its own trigger to mint its plan; the median
+       carries every member's fired trigger but no single alert-tier stamp
+       of its own, so it earns 7 (a defined structural entry), never 10. */
+    else if (key === 'confluence')
       p.trigger += 7;
     else if (/ribbon|vwap|stochrsi|hvn/i.test(key))
       p.trigger += 5;
@@ -6049,7 +6154,7 @@ function goldRankSetups(cands, ctx){
                             reason: c.reason || 'failed a quality gate' });
         continue;
       }
-      if (isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1)){
+      if (isFinite(+c.entry) && isFinite(+c.stop)){
         var sideGate = hgGoldPlanSidesOk(c);
         if (!sideGate.ok){
           out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
@@ -6057,6 +6162,9 @@ function goldRankSetups(cands, ctx){
                               reason: sideGate.why || 'plan sides invalid' });
           continue;
         }
+        /* The printed R is the geometry, |target − entry| / |entry − stop|.
+           A desk that advertised a different R was not describing this plan. */
+        if (isFinite(sideGate.rr)) c.rr = +sideGate.rr.toFixed(2);
       }
       var parts = [], tally = 0;
       /* hg-v1155: THE FREE-FEED LEGS, RECORDED. Every leg below that reads a
@@ -7002,11 +7110,20 @@ function calculatePositionSize(accountBalanceUSD, riskPercent, entryPrice, stopL
     var priceRiskPerUnit = Math.abs(entry - stop);
     if (!(priceRiskPerUnit > 0)) return { error: 'Invalid SL distance' };
     var rawPositionSize = riskAmountUSD / priceRiskPerUnit;
-    var notionalValue = rawPositionSize * entry;
+    /* hg-v1460: risk-based sizing rounds DOWN to the 0.001-unit step, never
+       to nearest. toFixed(3) nearest-rounding could take a size ABOVE the raw
+       budget (raw 59.1716 -> 59.172), so the realized risk — size x stop
+       distance — could exceed the budgeted riskAmountUSD. A sizing answer
+       that can overspend its own risk budget is not mathematically accurate:
+       floor keeps realized risk <= budget on every input, and the notional is
+       recomputed from the TAKEN size so the two published numbers agree. */
+    var takenUnits = Math.floor(rawPositionSize * 1000 + 1e-6) / 1000;
+    if (!(takenUnits > 0)) return { error: 'Size rounds to zero at the 0.001 unit step' };
+    var notionalValue = takenUnits * entry;
     return {
       riskAmountUSD: riskAmountUSD,
       stopDistanceUSD: priceRiskPerUnit,
-      positionSizeUnits: Number(rawPositionSize.toFixed(3)),
+      positionSizeUnits: takenUnits,
       notionalValueUSD: Number(notionalValue.toFixed(2))
     };
   }catch(e){ return { error: 'Invalid inputs' }; }
@@ -18122,6 +18239,8 @@ W.HG_GOLD_SETUP_EDGE = HG_GOLD_SETUP_EDGE;
 W.HG_GOLD_FACTOR_SEP = HG_GOLD_FACTOR_SEP;
 W.hgGoldFactorSepHtml = hgGoldFactorSepHtml;
 W.hgGoldPlanSidesOk = hgGoldPlanSidesOk;
+W.hgGoldTickPx = hgGoldTickPx;               /* hg-v1459 venue-tick snap for minted levels */
+W.hgGoldPlanPricingOk = hgGoldPlanPricingOk; /* hg-v1459 exact-pricing audit, named never gating */
 W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;
