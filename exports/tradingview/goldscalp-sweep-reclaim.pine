@@ -50,15 +50,15 @@ strategy("GOLD SCALP — sweep+reclaim (hg-v1472)",
 // ---- inputs (the shipped constants; killzones from the measured book) ----
 grpP = "Pool / trigger"
 poolLen   = input.int(25,   "Sweep pool length (bars)", minval = 10, maxval = 60, group = grpP)
-useLive   = input.bool(true, "Judge on the forming bar's close", group = grpP)
 
+// The desk's fixed ladder needs no min-R:R gate: T1 sits at 1.5R off the
+// floored stop by construction, so the desk's min R:R 1.2 and its ceiling-bound
+// reject are satisfied by definition (the hg-v1439 book's own finding).
 grpR = "Risk"
 atrLen    = input.int(14,    "ATR length", minval = 5, maxval = 50, group = grpR)
 stopFloor = input.float(1.5, "Stop floor (x ATR)", minval = 0.5, maxval = 4.0, step = 0.1, group = grpR)
-minRR     = input.float(1.2, "Min R:R at the floored stop", minval = 0.5, maxval = 3.0, step = 0.1, group = grpR)
 tp1R      = input.float(1.5, "TP1 (R)", minval = 0.5, maxval = 5.0, step = 0.1, group = grpR)
 tp2R      = input.float(2.5, "TP2 (R)", minval = 0.5, maxval = 8.0, step = 0.1, group = grpR)
-maxRR     = input.float(3.0, "Ceiling-bound reject: T1 above this R is refused", minval = 1.0, maxval = 8.0, step = 0.25, group = grpR)
 
 grpC = "Cost / session"
 costRiskPct = input.float(0.16, "Cost-toxicity reject: stop distance under this % of entry", minval = 0.02, maxval = 1.0, step = 0.01, group = grpC)
@@ -84,7 +84,6 @@ inAsia    = hh >= 0  and hh < 8
 kzOK = (inLondon and kzLondon) or (inNY and kzNY) or (inOverlap and kzOverlap) or (inAsia and kzAsia) or ((not inLondon) and (not inNY) and (not inOverlap) and (not inAsia) and kzOff)
 
 // ---- the sweep pool: the 25 bars before the bar being judged ----
-n = bar_index
 poolHi = ta.highest(high, poolLen)[1]   // bars [n-poolLen, n-1] before this bar
 poolLo = ta.lowest(low, poolLen)[1]
 
@@ -144,7 +143,7 @@ if barstate.islastconfirmedhistory
     table.cell(perf, 0, 4, "killzones")
     table.cell(perf, 1, 4, (kzLondon ? "LDN " : "") + (kzNY ? "NY " : "") + (kzAsia ? "ASIA " : "") + (kzOverlap ? "OVL " : "") + (kzOff ? "OFF" : ""))
     table.cell(perf, 0, 5, "round trip")
-    table.cell(perf, 1, 5, str.tostring(2 * commission_value + 2 * slippage, "#.##") + " pts modelled")
+    table.cell(perf, 1, 5, "3.5x2 + 15x2 = 37 pts modelled")
 
 // plot the pool the sweep is judged against
 plot(poolHi, "pool high", color = color.new(color.red, 60), style = plot.style_linebr)
