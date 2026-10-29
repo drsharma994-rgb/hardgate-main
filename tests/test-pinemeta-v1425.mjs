@@ -72,8 +72,8 @@ console.log('== 1) SHIVA GOLD nav registration + precache + comment truth ==');
   ok(sw.includes("'./shivagold.js'"), 'sw.js HG_SHELL precaches shivagold.js');
   ok(sw.includes("'./shiva-nav.js'"), 'sw.js HG_SHELL precaches shiva-nav.js');
   const api = read('hg-api-base.js');
-  ok(api.includes("add('hgShivaDesk', 'shivagold.js?v=1447')") && api.includes("add('hgShivaNav', 'shiva-nav.js?v=1447')"),
-    'hg-api-base shiva loaders carry ?v=1447');
+  ok(api.includes("add('hgShivaDesk', 'shivagold.js?v=1448')") && api.includes("add('hgShivaNav', 'shiva-nav.js?v=1448')"),
+    'hg-api-base shiva loaders carry ?v=1448');
   ok(api.includes('USED to claim'), 'the hg-api-base comment names its own earlier lie (honesty repair)');
   const nav = read('shiva-nav.js');
   ok(nav.includes("g.tabs.indexOf('shivagold') < 0"), 'shiva-nav splice guards on presence — no double-add against the static group');
@@ -244,20 +244,20 @@ console.log('== 5) BRAIN member-freshness labels ==');
 console.log('== 6) ?v= byte-check (live stamp; pack under test remains v1435) ==');
 {
   const idx = read('index.html');
-  ok(idx.includes('?v=1447') && !idx.includes('?v=1434'), 'index.html pins are all ?v=1447');
+  ok(idx.includes('?v=1448') && !idx.includes('?v=1434'), 'index.html pins are all ?v=1448');
   const bs = read('build-stamp.js');
-  ok(/version:\s*'hg-v1447'/.test(bs), 'build-stamp version is hg-v1447');
+  ok(/version:\s*'hg-v1448'/.test(bs), 'build-stamp version is hg-v1448');
   ok(bs.includes('hg-v1435: PINE/META'), 'build-stamp pack names the wave');
   const sw = read('sw.js');
-  ok(sw.includes("HG_CACHE = 'hg-v1447'"), 'sw.js cache id is hg-v1447');
+  ok(sw.includes("HG_CACHE = 'hg-v1448'"), 'sw.js cache id is hg-v1448');
   const tt = read('trendtable.js');
-  ok(tt.includes('hg-v1447.') && tt.includes('?v=1447'), 'trendtable header + loader carry v1447');
+  ok(tt.includes('hg-v1448.') && tt.includes('?v=1448'), 'trendtable header + loader carry v1448');
   const api = read('hg-api-base.js');
-  ok(api.includes("setAttribute('data-v', '1447')"), 'hg-api-base data-v is 1447');
+  ok(api.includes("setAttribute('data-v', '1448')"), 'hg-api-base data-v is 1448');
   const ledger = JSON.parse(read('data/batch-ledger.json'));
   const list = ledger.batches || ledger.entries || ledger;
   const arr = Array.isArray(list) ? list : Object.values(list)[0];
-  ok(arr[arr.length - 1].version === 'hg-v1447', 'batch ledger last entry is hg-v1447');
+  ok(arr[arr.length - 1].version === 'hg-v1448', 'batch ledger last entry is hg-v1448');
 }
 
 console.log('\ntest-pinemeta-v1425: ' + passed + ' passed, 0 failed');

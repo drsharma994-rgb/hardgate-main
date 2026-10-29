@@ -133,6 +133,59 @@ assert.equal(forced.watch.entry, 2650.5);
 assert.ok(forced.watch.desks.indexOf('CANDLE FORECAST') < 0);
 assert.equal(forced.votes.filter(v => v.id === 'candle-forecast')[0].state, 'context');
 
+/* Two on the live price do not become a setup because a third agreed
+   somewhere else. The off-scale plan does not move the median. */
+const thin = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'GOLD PINE', state: 'setup', side: 'long', entry: 3000, stop: 2900, t1: 3200, grade: 'A', lead: true }
+], { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(thin.ready, false);
+assert.equal(thin.watch.count, 2);
+assert.equal(thin.watch.entry, 2650.5);
+assert.match(thin.watch.label, /ON THE LIVE PRICE/);
+assert.ok(thin.watch.desks.indexOf('GOLD PINE') < 0);
+
+/* An uncrowned plan does not complete three and does not move the median. */
+const bareThird = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2652, stop: 2640, t1: 2670, grade: 'A', lead: true },
+  { desk: 'NEW GOLD', state: 'setup', side: 'long', entry: 2660, stop: 2600, t1: 2800 }
+], { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(bareThird.ready, false);
+assert.equal(bareThird.watch.entry, 2651);
+assert.match(bareThird.watch.label, /CROWNED/);
+assert.ok(bareThird.watch.desks.indexOf('NEW GOLD') < 0);
+
+/* A price already through the stop is finished. A price still above the
+   stop, even if it has not reached the entry, is still a setup. */
+function crowned(desk, entry, stop, t1, side){
+  return { desk: desk, state: 'setup', side: side || 'long', entry: entry, stop: stop, t1: t1, grade: 'A', lead: true };
+}
+const dead = win.hgGoldConfluenceBuild([
+  crowned('GOLD SCALP', 2650, 2640, 2670),
+  crowned('GOLD SWING', 2651, 2640, 2670),
+  crowned('GANESH GOLD', 2652, 2640, 2670)
+], { px: 2639 }, { spreadUsd: 0.30 });
+assert.equal(dead.ready, false);
+assert.equal(dead.watch, undefined);
+assert.equal(dead.entry, 2651);
+assert.match(dead.reason, /through the stop/);
+const pending = win.hgGoldConfluenceBuild([
+  crowned('GOLD SCALP', 2650, 2640, 2670),
+  crowned('GOLD SWING', 2651, 2640, 2670),
+  crowned('GANESH GOLD', 2652, 2640, 2670)
+], { px: 2645 }, { spreadUsd: 0.30 });
+assert.equal(pending.ready, true);
+assert.equal(pending.entry, 2651);
+const deadShort = win.hgGoldConfluenceBuild([
+  crowned('GOLD SCALP', 2650, 2660, 2630, 'short'),
+  crowned('GOLD SWING', 2651, 2660, 2630, 'short'),
+  crowned('GANESH GOLD', 2652, 2660, 2630, 'short')
+], { px: 2660 }, { spreadUsd: 0.30 });
+assert.equal(deadShort.ready, false);
+assert.match(deadShort.reason, /through the stop/);
+
 const chased = win.hgGoldConfluenceBuild([
   { desk: 'A', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2652 },
   { desk: 'B', state: 'setup', side: 'long', entry: 2650.2, stop: 2640, t1: 2652 },

@@ -4,10 +4,12 @@
    "awaiting third desk" (1-2 same side) must all end up calling attachWatch
    through its one home, with distinct reasons/labels and WITH THE SETUP
    THRESHOLD UNCHANGED. hg-v966 holds: a watch is NOT a ticket; the ready
-   gate from hg-v1384..v1387 requires >=3 same-side AND >=2 within 2.5% of
-   IUX AND ordered AND through<0.85 AND cost OK. The guard drives the REAL
-   hgGoldConfluenceBuild in a vm sandbox and asserts behaviour, then mutates
-   the source to prove every assertion is load-bearing. */
+   gate from hg-v1384..v1387 requires >=3 same-side. hg-v1448 requires those
+   three to be crowned and on the live price. Ordered, through<0.85, cost
+   OK, and a live price that has not reached the stop are still required.
+   The guard drives the REAL hgGoldConfluenceBuild in a vm sandbox and
+   asserts behaviour, then mutates the source to prove every assertion
+   is load-bearing. */
 
 import fs from 'node:fs';
 import path from 'node:path';

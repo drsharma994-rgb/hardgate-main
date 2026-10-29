@@ -542,8 +542,8 @@ const mutations = [
   {
     name: 'M6: leader selection reads first priced plan always (ignores median)',
     patch: s => mutate(s,
-      /var midE = median\(priced\.map\(function\(v\)\{ return v\.entry; \}\)\);\n\s*var leader = priced\[0\], bestD = Infinity;\n\s*priced\.forEach\(function\(v\)\{\n\s*var d = Math\.abs\(v\.entry - midE\);\n\s*if \(d < bestD\)\{ bestD = d; leader = v; \}\n\s*\}\);/,
-      'var leader = priced[0];'),
+      /var midE = median\(formed\.map\(function\(v\)\{ return v\.entry; \}\)\);\n\s*var leader = formed\[0\], bestD = Infinity;\n\s*formed\.forEach\(function\(v\)\{\n\s*var d = Math\.abs\(v\.entry - midE\);\n\s*if \(d < bestD\)\{ bestD = d; leader = v; \}\n\s*\}\);/,
+      'var leader = formed[0];'),
     check: ({recorded}) => {
       /* The three plan barTs are BT, BT+60, BT+120, entries 2650, 2651, 2652.
          Median entry = 2651 (the swing). With M6, leader = priced[0] = scalp

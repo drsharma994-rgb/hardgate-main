@@ -2,12 +2,13 @@
    SCAN opens every gold desk that has not published yet and waits for
    that scan to finish. A desk that only runs while its own tab is open
    is opened here. The live price is the IUX anchor (gold-iux.js,
-   gold-api XAU). The entry is the median of the agreeing plans that
+   gold-api XAU). The entry is the median of the crowned plans that
    sit on that price. It is not moved to the live print. No anchor, no
-   setup. Fewer than three independent desks is a watch, not a setup.
-   SUPER GOLD reads GOLD SCALP and GOLD SWING. MILLI GOLD reads
-   OMNIGOLD. Neither is a second vote. A candidate votes only when the
-   desk crowned it or graded it A. A measured spot-versus-XM spread is
+   setup. Fewer than three crowned plans on that price is a watch, not
+   a setup. A live price that has already reached the stop is not a
+   setup. SUPER GOLD reads GOLD SCALP and GOLD SWING. MILLI GOLD reads
+   OMNIGOLD. Neither is a second vote. A plan counts toward a setup only
+   when the desk crowned it or graded it A. A measured spot-versus-XM spread is
    subtracted. An unread spread is named and not invented. A formed
    setup is written to the forward ledger. GOLD DIRECTION is not given
    a side. CANDLE FORECAST is not a vote and is not opened to form one. */
@@ -882,6 +883,15 @@ function forecastDesk(v){
   var d = String(v.desk || '').replace(/\s+/g, ' ').trim().toUpperCase();
   return d === 'CANDLE FORECAST' || d === 'CANDLEFORECAST';
 }
+function stoppedOut(side, px, stop){
+  if (!(px > 0) || !(stop > 0)) return false;
+  if (side === 'long') return px <= stop;
+  if (side === 'short') return px >= stop;
+  return false;
+}
+function crownedVote(v){
+  return !!(v && (v.lead === true || sendGrade(v.grade)));
+}
 function hgGoldConfluenceBuild(votes, iux, cost){
   votes = Array.isArray(votes) ? votes : [];
   /* A hand-built forecast row is the same exclusion. It cannot complete
@@ -963,17 +973,38 @@ function hgGoldConfluenceBuild(votes, iux, cost){
        what fails is the on-scale rule. The agreeing side has entry/stop/t1
        in hand -- show it as a watch labelled OFF-SCALE so the reader sees
        what the desks said, and sees that it sits >2.5% from the live IUX
-       print. ready still requires >=2 priced within band (hg-v1384..v1387
-       on-scale gate unchanged). */
+       print. ready still requires the crowned plans to sit on the print. */
     attachWatch(base, pack, votes, px, {
       reason: 'off-scale from IUX',
       label: 'OFF-SCALE · ' + pack.length + ' AGREE ' + side.toUpperCase()
     });
     return base;
   }
-  var entry = +median(priced.map(function(v){ return v.entry; })).toFixed(2);
-  var stop = +median(priced.map(function(v){ return v.stop; })).toFixed(2);
-  var t1 = +median(priced.map(function(v){ return v.t1; })).toFixed(2);
+  /* The plans that form the trade are the crowned ones on the live price.
+     An off-scale plan and an uncrowned plan stay in the vote list. Neither
+     completes three, and neither moves the median. */
+  var formed = priced.filter(crownedVote);
+  if (formed.length < 3){
+    base.side = side;
+    base.offChart = off;
+    if (priced.length < 3){
+      base.reason = priced.length + ' of ' + pack.length + ' plans sit within 2.5% of the live IUX price (' + fmt(px) + '). Three crowned plans on the live price are required.';
+      attachWatch(base, priced, votes, px, {
+        reason: 'fewer than three on the live price',
+        label: priced.length + ' OF ' + pack.length + ' ON THE LIVE PRICE'
+      });
+    } else {
+      base.reason = 'Only ' + formed.length + ' of ' + priced.length + ' plans on the live price are crowned or grade A. An uncrowned plan does not form the setup.';
+      attachWatch(base, formed.length ? formed : priced, votes, px, {
+        reason: 'uncrowned plan',
+        label: formed.length + ' OF 3 CROWNED'
+      });
+    }
+    return base;
+  }
+  var entry = +median(formed.map(function(v){ return v.entry; })).toFixed(2);
+  var stop = +median(formed.map(function(v){ return v.stop; })).toFixed(2);
+  var t1 = +median(formed.map(function(v){ return v.t1; })).toFixed(2);
   if (!ordered(side, entry, stop, t1)){
     base.side = side;
     base.reason = 'The median entry, stop, and target are not in order, so no setup is formed.';
@@ -987,9 +1018,9 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   base.stop = stop;
   base.t1 = t1;
   base.mark = px;
-  base.deskCount = priced.length;
+  base.deskCount = formed.length;
   base.offChart = off;
-  base.desks = priced.map(function(v){ return v.desk; });
+  base.desks = formed.map(function(v){ return v.desk; });
   /* hg-v1389: the signal-bar fields of the plan whose entry sits nearest
      the median ride onto base so recordConfluence can hand them to
      hgFwdRecordScan. Nearest-median rather than median-of-barTs because
@@ -998,9 +1029,9 @@ function hgGoldConfluenceBuild(votes, iux, cost){
      mint instants. A desk whose plan carried neither leaves both absent;
      hg-forward's barOf then falls back to flooring the scan clock to the
      15m grid (unchanged from current behaviour). */
-  var midE = median(priced.map(function(v){ return v.entry; }));
-  var leader = priced[0], bestD = Infinity;
-  priced.forEach(function(v){
+  var midE = median(formed.map(function(v){ return v.entry; }));
+  var leader = formed[0], bestD = Infinity;
+  formed.forEach(function(v){
     var d = Math.abs(v.entry - midE);
     if (d < bestD){ bestD = d; leader = v; }
   });
@@ -1008,30 +1039,37 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     if (typeof leader.barT === 'number' && isFinite(leader.barT) && leader.barT > 0) base.barT = leader.barT;
     if (typeof leader.signalT === 'number' && isFinite(leader.signalT) && leader.signalT > 0) base.signalT = leader.signalT;
   }
-  var ann = cfAnnotate(priced, entry, stop, t1, base.spreadUsd);
+  var ann = cfAnnotate(formed, entry, stop, t1, base.spreadUsd);
   if (ann){ base.reads = ann.reads; base.leader = ann.leader; }
+  if (stoppedOut(side, px, stop)){
+    base.reason = 'The live IUX price ' + fmt(px) + ' is already through the stop ' + fmt(stop) + '. This plan is finished. It is not a setup.';
+    return base;
+  }
   if (through >= 0.85){
     base.reason = 'The live IUX price has already travelled most of the way to the target. The entry is not moved up to ' + fmt(px) + '.';
     return base;
   }
   var costOk = applyCost(base, risk, reward);
-  base.reason = priced.length + ' desks agree ' + side.toUpperCase()
+  base.reason = formed.length + ' desks agree ' + side.toUpperCase()
     + '. Entry ' + fmt(entry) + ' is the median of their plans, not the live print ' + fmt(px) + '.'
     + (base.costNote ? ' ' + base.costNote : '');
+  if (priced.length > formed.length){
+    base.reason += ' ' + (priced.length - formed.length) + ' uncrowned plan' + (priced.length - formed.length === 1 ? ' was' : 's were') + ' not counted.';
+  }
   if (!costOk) return base;
-  // hg-v1391: MOST-ACCURATE confluence scoring (3 desks -> accurate, not just quorum)
-  // 1) cluster tightness: entries must cluster within 0.8% (~$28 at $3500) — loose cluster = degraded accuracy
-  // 2) netR after measured spread must survive 1.2R (was 1R) — cost-toxic median blocked
-  // 3) at least 2 of priced desks are crowned/A-grade (sendGrade) — B/C swarm cannot lead
-  var entries = priced.map(function(v){ return v.entry; });
+  // hg-v1391: MOST-ACCURATE confluence scoring
+  // 1) cluster tightness: entries must cluster within 0.8%
+  // 2) netR after measured spread must survive 1.2R
+  // 3) the plans in the median are already crowned or grade A
+  var entries = formed.map(function(v){ return v.entry; });
   var maxE = Math.max.apply(null, entries), minE = Math.min.apply(null, entries);
   var spreadPct = (maxE - minE) / entry * 100;
   var tightOk = spreadPct <= 0.80;
   /* An unread venue spread is named. It is not a failed cost check.
      A measured spread still has to leave at least 1.20R. */
   var netOk = base.spreadUsd == null ? true : (isFinite(base.netRr) && base.netRr >= 1.20);
-  var crowned = priced.filter(function(v){ return v.lead === true || sendGrade(v.grade); }).length;
-  var crownOk = crowned >= 2;
+  var crowned = formed.length;
+  var crownOk = crowned >= 3;
   base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk, crowned: crowned, crownOk: crownOk };
   if (!tightOk){
     base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — median held but accuracy is degraded.';
@@ -1040,21 +1078,21 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     base.reason += ' Net ' + fmt(base.netRr) + 'R after $' + fmt(base.spreadUsd) + ' spread is under 1.20R — cost degrades accuracy.';
     base.accuracyTier = 'WATCH';
   } else if (!crownOk){
-    base.reason += ' Only ' + crowned + ' of ' + priced.length + ' desks are crowned/A — B/C swarm cannot be MOST ACCURATE.';
+    base.reason += ' Only ' + crowned + ' crowned plans sit on the live price. Three are required.';
     base.accuracyTier = 'WATCH';
   } else {
     base.accuracyTier = 'HIGH';
     if (base.spreadUsd == null){
-      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, ' + crowned + '/' + priced.length + ' crowned. The venue spread was not read, so the cost was not subtracted.';
+      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, ' + crowned + '/' + crowned + ' crowned. The venue spread was not read, so the cost was not subtracted.';
     } else {
-      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + priced.length + ' crowned — MOST ACCURATE.';
+      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + crowned + ' crowned — MOST ACCURATE.';
     }
   }
   // Stand aside only if caller wants strict HIGH; default keeps ready but tags tier
   // For this task: require HIGH for ready (most accurate only)
   if (base.accuracyTier !== 'HIGH'){
     base.ready = false;
-    base.watch = { side: side, entry: entry, stop: stop, t1: t1, count: priced.length, need: 3, rr: +(reward/risk).toFixed(2), mark: px, desks: base.desks, spreadUsd: base.spreadUsd, netRr: base.netRr, costNote: base.costNote, accuracy: base.accuracy };
+    base.watch = { side: side, entry: entry, stop: stop, t1: t1, count: formed.length, need: 3, rr: +(reward/risk).toFixed(2), mark: px, desks: base.desks, spreadUsd: base.spreadUsd, netRr: base.netRr, costNote: base.costNote, accuracy: base.accuracy };
     if (base.reads) base.watch.reads = base.reads;
     if (base.leader) base.watch.leader = base.leader;
     return base;
@@ -1310,7 +1348,7 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three different crowned plans are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three crowned plans on the live price are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
     + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. Three desks are still required.</div></div></div>';
   var btn = root.querySelector('#gc-run');
