@@ -655,6 +655,11 @@
       "version": "hg-v1453",
       "built": "2026-10-29T07:08:44Z",
       "note": "GOLD CONFLUENCE SCORE bar raised. A stays 85. GOOD is 78 (was 75). WATCH is 68 (was 65). Below 68 is NO TRADE and still demotes. An alert still needs GOOD and no news lock. COT stays a weekly caution, not an entry. Not re-walked."
+    },
+    {
+      "version": "hg-v1454",
+      "built": "2026-10-29T12:30:41Z",
+      "note": "GOLD CONFLUENCE tab applies the 100-point score when the gold tape is in hand. 78 or better can stay a setup. 68 to 77 becomes a watch. Below 68 is not a setup and is not recorded. No tape, or no scorer, leaves the desk plan. Levels stay the median. Not re-walked."
     }
   ]
 }

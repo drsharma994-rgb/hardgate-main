@@ -1,3 +1,6 @@
+### GOLD CONFLUENCE — the 100-point score is on the card — hg-v1454
+- Two desks on the live price still form the plan, and the levels stay their median. When the gold tape is in hand, that plan is scored on the same stack the desks use: HTF 25, location 20, momentum 15, vol regime 10, volume 10, macro 10, entry trigger 10. 78 or better, with no news lock, stays ONE SETUP. 68 to 77 is a WATCH and keeps the levels. Below 68 is stood aside and is not recorded. If the tape or the scorer is missing, the score is unread and the desk plan is not erased. This was not re-walked.
+
 ### GOLD CONFLUENCE SCORE — GOOD 78, WATCH 68 — hg-v1453
 - The 100-point stack is unchanged: HTF 25, location 20, momentum 15, vol regime 10, volume 10, macro 10, entry trigger 10. The cuts moved. A is still 85. GOOD is 78, so 75–77 is a watch, not an alert. WATCH is 68, so 65–67 is no trade and still demotes. An alert still needs the GOOD bar and no news lock. COT stays weekly and lagged. This was not re-walked.
 

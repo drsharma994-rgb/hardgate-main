@@ -126,19 +126,19 @@ console.log('\n== 5. the build is stamped at the current version everywhere a ca
    re-pinned hg-v1442 -> hg-v1443 at the hg-v1443 bump (GOLD SCALP re-walk).
    re-pinned hg-v1443 -> hg-v1444 at the hg-v1444 bump (GOLD SCALP tape refresh).
    re-pinned hg-v1444 -> hg-v1445 at the hg-v1445 bump (SUPER GOLD and CONFLUENCE).
-   re-pinned hg-v1445 -> hg-v1453 at the hg-v1453 bump (CONFLUENCE record-only marks).
+   re-pinned hg-v1445 -> hg-v1454 at the hg-v1454 bump (CONFLUENCE record-only marks).
    The round''s own pack string stays in the history chain. */
 {
   const stamp = fs.readFileSync(path.join(ROOT, 'build-stamp.js'), 'utf8');
-  ok(/version: 'hg-v1453'/.test(stamp), 'build-stamp version');
+  ok(/version: 'hg-v1454'/.test(stamp), 'build-stamp version');
   ok(/hg-v1440: OMNIGOLD r3/.test(stamp), 'the pack string names the round');
   ok(/hg-v1439:/.test(stamp), 'and the pack history chain is intact');
-  ok(/HG_CACHE = 'hg-v1453'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'sw.js cache id');
+  ok(/HG_CACHE = 'hg-v1454'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'sw.js cache id');
   const idx = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  ok(idx.indexOf('v=1440') < 0 && idx.indexOf('v=1453') >= 0, 'index.html cache-busters all at 1453');
+  ok(idx.indexOf('v=1440') < 0 && idx.indexOf('v=1454') >= 0, 'index.html cache-busters all at 1454');
   const ledger = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'batch-ledger.json'), 'utf8'));
   const entries = (Array.isArray(ledger) ? ledger : Object.values(ledger).find(Array.isArray));
-  ok(entries[entries.length - 1].version === 'hg-v1453', 'the batch ledger last entry is hg-v1453');
+  ok(entries[entries.length - 1].version === 'hg-v1454', 'the batch ledger last entry is hg-v1454');
   let nonDecreasing = true;
   for (let i = 1; i < entries.length; i++)
     if (String(entries[i].built) < String(entries[i - 1].built)) nonDecreasing = false;

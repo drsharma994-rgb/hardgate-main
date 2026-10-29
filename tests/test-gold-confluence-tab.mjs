@@ -280,6 +280,43 @@ const milliVote = milli.votes.filter(v => v.id === 'milligold')[0];
 assert.equal(milliVote.derived, true);
 assert.equal(milliVote.sameAs, 'OMNIGOLD');
 
+/* The 100-point score changes the card only when the tape is in hand.
+   No scorer, or no rows, leaves the desk plan. */
+const tapeRows = [{ t: 1, o: 2650, h: 2652, l: 2648, c: 2651 }];
+function scored(tier, score, alertOk){
+  win.HG_GOLD_CONF_GOOD = 78;
+  win.HG_GOLD_CONF_WATCH = 68;
+  win.hgGoldConfluenceScore = () => ({
+    ok: true, score: score, tier: tier, alertOk: alertOk, why: 'stub',
+    parts: { htf: 20, location: 14, momentum: 10, volRegime: 8, volume: 6, macro: 8, trigger: 8 }
+  });
+  return win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.30, rows15m: tapeRows });
+}
+const hi = scored('A', 90, true);
+assert.equal(hi.ready, true);
+assert.equal(hi.confScore, 90);
+assert.equal(hi.confTier, 'A');
+assert.equal(hi.confAlertOk, true);
+const watchScore = scored('WATCH', 70, false);
+assert.equal(watchScore.ready, false);
+assert.equal(watchScore.watch.entry, 2651);
+assert.match(watchScore.watch.label, /SCORE WATCH 70/);
+assert.match(watchScore.reason, /needs 78/);
+const low = scored('NO_TRADE', 50, false);
+assert.equal(low.ready, false);
+assert.equal(low.watch, undefined);
+assert.equal(low.entry, 2651);
+assert.match(low.reason, /below 68/);
+delete win.hgGoldConfluenceScore;
+const unread = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.30, rows15m: tapeRows });
+assert.equal(unread.ready, true);
+assert.equal(unread.confScore, undefined);
+win.hgGoldConfluenceScore = () => ({ ok: true, score: 10, tier: 'NO_TRADE', alertOk: false, why: 'stub' });
+const noTape = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(noTape.ready, true);
+assert.equal(noTape.confScore, undefined);
+delete win.hgGoldConfluenceScore;
+
 const gw = {
   Date, Math, Number, String, Array, Object, Promise, isFinite,
   setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),

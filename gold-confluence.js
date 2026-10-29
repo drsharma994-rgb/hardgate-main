@@ -13,7 +13,10 @@
    OMNIGOLD. Neither is a second vote. A published plan counts even
    when it is not crowned. A demoted plan does not. A measured spot-versus-XM spread is
    subtracted. An unread spread is named and not invented. A formed
-   setup is written to the forward ledger. GOLD DIRECTION is not given
+   setup is scored on the 100-point stack when the gold tape is in
+   hand. 78 or better can stay a setup. 68 to 77 is a watch. Below 68
+   is not a setup. No tape, no score, and the desk plan is not erased.
+   A formed setup is written to the forward ledger. GOLD DIRECTION is not given
    a side. CANDLE FORECAST is not a vote and is not opened to form one. */
 (function(){
 'use strict';
@@ -900,6 +903,73 @@ function stoppedOut(side, px, stop){
 function crownedVote(v){
   return !!(v && (v.lead === true || sendGrade(v.grade)));
 }
+function cfTape(cost){
+  if (!cost) return null;
+  var rows = cost.rows15m || cost.rows || cost.rows4h || cost.rows1h;
+  if (!rows || !rows.length) return null;
+  return cost;
+}
+/* The 100-point stack (HTF 25, location 20, momentum 15, vol 10,
+   volume 10, macro 10, trigger 10). It runs only when the tape is
+   here. A missing score does not erase a desk plan. */
+function cfApplyCore(base, cost){
+  var tape = cfTape(cost);
+  if (!tape || !base || typeof W.hgGoldConfluenceScore !== 'function') return;
+  var sc = null;
+  try{
+    sc = W.hgGoldConfluenceScore({
+      dir: base.side, entry: base.entry, stratKey: 'confluence',
+      agree: base.deskCount || 0, confirmed: true
+    }, {
+      rows15m: tape.rows15m, rows1h: tape.rows1h, rows4h: tape.rows4h, rows1d: tape.rows1d,
+      rows: tape.rows, macro: tape.macro, newsGate: tape.newsGate, news: tape.news,
+      cot: tape.cot, adx: tape.adx, vwap: tape.vwap, macd: tape.macd, rvol: tape.rvol
+    });
+  }catch(eSc){ return; }
+  if (!sc || sc.ok !== true || !isFinite(sc.score)) return;
+  var good = (typeof W.HG_GOLD_CONF_GOOD === 'number') ? W.HG_GOLD_CONF_GOOD : 78;
+  var watchCut = (typeof W.HG_GOLD_CONF_WATCH === 'number') ? W.HG_GOLD_CONF_WATCH : 68;
+  base.confScore = sc.score;
+  base.confTier = sc.tier;
+  base.confAlertOk = sc.alertOk === true;
+  base.confWhy = sc.why || '';
+  base.confParts = sc.parts || null;
+  if (sc.tier === 'NO_TRADE' || sc.score < watchCut){
+    base.ready = false;
+    base.watch = undefined;
+    base.reason += ' Core score ' + sc.score + '/100 is below ' + watchCut + '. NO TRADE. This is not a setup.';
+    return;
+  }
+  if (sc.tier === 'WATCH' || sc.alertOk !== true || sc.score < good){
+    base.ready = false;
+    base.watch = {
+      side: base.side, entry: base.entry, stop: base.stop, t1: base.t1,
+      count: base.deskCount, need: 2, rr: base.rr, mark: base.mark,
+      desks: base.desks, spreadUsd: base.spreadUsd, netRr: base.netRr,
+      costNote: base.costNote, accuracy: base.accuracy,
+      label: 'SCORE ' + (sc.tier || 'WATCH') + ' ' + sc.score,
+      reason: 'core score'
+    };
+    if (base.reads) base.watch.reads = base.reads;
+    if (base.leader) base.watch.leader = base.leader;
+    base.reason += ' Core score ' + sc.score + '/100 is a watch. A setup needs ' + good + '.';
+    return;
+  }
+  base.reason += ' Core score ' + sc.score + '/100 ' + sc.tier + '.';
+}
+function cfScoreNote(built){
+  if (!built || !isFinite(built.confScore)) return '';
+  var parts = built.confParts;
+  var line = 'Core ' + built.confScore + '/100 · ' + (built.confTier || '');
+  if (built.confAlertOk) line += ' · ALERT';
+  if (parts){
+    line += ' · HTF ' + (parts.htf || 0) + ' · loc ' + (parts.location || 0)
+      + ' · mom ' + (parts.momentum || 0) + ' · vol ' + (parts.volRegime || 0)
+      + ' · flow ' + (parts.volume || 0) + ' · macro ' + (parts.macro || 0)
+      + ' · trig ' + (parts.trigger || 0);
+  }
+  return '<div class="hg-note">' + esc(line) + '</div>';
+}
 function hgGoldConfluenceBuild(votes, iux, cost){
   votes = Array.isArray(votes) ? votes : [];
   /* A hand-built forecast row is the same exclusion. It cannot complete
@@ -1099,6 +1169,7 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     return base;
   }
   base.ready = true;
+  cfApplyCore(base, cost);
   return base;
 }
 
@@ -1255,7 +1326,19 @@ async function hgGoldConfluenceScan(win, opts){
   }
   var votes = hgGoldConfluenceRead(win, extra);
   var iux = await readAnchor(win);
-  var built = hgGoldConfluenceBuild(votes, iux, { spreadUsd: measuredSpread(win) });
+  var cost = { spreadUsd: measuredSpread(win) };
+  if (opts.gather && !scanHarness(win)){
+    try{
+      var tape = await pineBars(win);
+      if (tape && ((tape.rows15m && tape.rows15m.length) || (tape.rows4h && tape.rows4h.length) || (tape.rows1h && tape.rows1h.length))){
+        cost.rows15m = tape.rows15m;
+        cost.rows1h = tape.rows1h;
+        cost.rows4h = tape.rows4h;
+        cost.rows1d = tape.rows1d;
+      }
+    }catch(eTape){}
+  }
+  var built = hgGoldConfluenceBuild(votes, iux, cost);
   built.at = Date.now();
   if (!scanHarness(win)) recordConfluence(win, built);
   return built;
@@ -1338,7 +1421,7 @@ function paint(root, built){
   var cost = '';
   var note = (built.watch && built.watch.costNote) || built.costNote || '';
   if (note && (!built.reason || built.reason.indexOf(note) < 0)) cost = '<div class="hg-note">' + esc(note) + '</div>';
-  desk.innerHTML = '<div class="hg-note">' + esc(built.reason || '') + '</div>' + plan + cfReadNote(built) + cost + voteHtml;
+  desk.innerHTML = '<div class="hg-note">' + esc(built.reason || '') + '</div>' + plan + cfScoreNote(built) + cfReadNote(built) + cost + voteHtml;
 }
 
 var scanGen = 0;
@@ -1349,9 +1432,9 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. The entry is their median, or the median of the crowned ones when two or more are crowned. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. The entry is their median, or the median of the crowned ones when two or more are crowned. When the gold tape is in hand, the 100-point score is applied: 78 or better can stay a setup, 68 to 77 is a watch, and below 68 is not a setup. No tape means the score is unread and the desk plan stays. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
-    + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. Three desks are still required.</div></div></div>';
+    + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. The 100-point score changes ready only when the tape was read.</div></div></div>';
   var btn = root.querySelector('#gc-run');
   var stat = root.querySelector('#gc-stat');
   function go(doGather){
