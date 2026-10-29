@@ -364,17 +364,43 @@ function goldScaleOneCandidate(c, fromRef, liveRef){
   for (var k = 0; k < keys.length; k++){
     if (isFinite(c[keys[k]])) c[keys[k]] = c[keys[k]] * ratio;
   }
+  /* hg-v1465: every PRICE-DENOMINATED field rides the realignment. The live
+     print (mark) and the detector mark (pxNow) were read on the drifted
+     feed — leaving them unscaled put an XAUT-units print beside a
+     spot-realigned entry on one card, and the zone check compared
+     spot-scaled bounds against an unscaled pxNow. R ratios are
+     scale-invariant, so the seal re-run below lands on the same numbers. */
+  if (isFinite(c.mark)) c.mark = c.mark * ratio;
+  if (isFinite(c.pxNow)) c.pxNow = c.pxNow * ratio;
   if (c.zone){
     if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
     if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
   }
-  if (typeof hgSyncPlanRr === 'function') hgSyncPlanRr(c);
+  /* hg-v1465: the seal is looked up through the window EXPLICITLY. The bare
+     identifier only resolves because the browser's classic scripts share one
+     global — a harness (or any future module boundary) where window is not
+     the global object silently dropped to the absolute-ratio fallback, which
+     quotes a POSITIVE R for a plan whose stop sits on the wrong side (the
+     pre-hg-v1461 lie, resurrected by a lookup accident). gfn is this file's
+     own window reader. */
+  var syncFn = (typeof gfn === 'function') ? gfn('hgSyncPlanRr') : null;
+  if (syncFn) syncFn(c);
+  else if (typeof hgSyncPlanRr === 'function') hgSyncPlanRr(c);
   else {
+    /* the no-seam fallback is DIRECTIONAL too: an absolute ratio is not a
+       side — a wrong-side leg quotes null, never a positive R */
     var risk = Math.abs(c.entry - c.stop);
     if (risk > 0){
-      if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
-      if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
-      if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+      var __d = String(c.dir || '').toLowerCase();
+      var __signed = __d === 'long' || __d === 'short';
+      var __leg = function(t){
+        if (!isFinite(+t)) return null;
+        var rew = __d === 'long' ? (+t - c.entry) : (c.entry - +t);
+        return __signed ? (rew > 0 ? rew / risk : null) : Math.abs(+t - c.entry) / risk;
+      };
+      if (isFinite(+c.t1)) c.rr = __leg(c.t1);
+      if (isFinite(+c.t2)) c.rr2 = __leg(c.t2);
+      if (isFinite(+c.t3)) c.rr3 = __leg(c.t3);
     }
   }
   c.spotRealigned = true;
@@ -499,6 +525,11 @@ function goldAlignLevelsToSpot(cands, klineRef, liveRef){
     for (var k = 0; k < keys.length; k++){
       if (isFinite(c[keys[k]])) c[keys[k]] = c[keys[k]] * ratio;
     }
+    /* hg-v1465: the same unit rule as goldScaleOneCandidate — the live print
+       and the detector mark ride the realignment, so the card and the zone
+       check compare like with like. */
+    if (isFinite(c.mark)) c.mark = c.mark * ratio;
+    if (isFinite(c.pxNow)) c.pxNow = c.pxNow * ratio;
     if (c.zone){
       if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
       if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
@@ -4154,6 +4185,8 @@ W.gsBreakevenHtml = gsBreakevenHtml;
    really stops leading, against the SHIPPED function rather than a copy of
    its logic that would agree with a broken one */
 W.goldPickSpotAlignedBest = goldPickSpotAlignedBest;
+W.goldScaleOneCandidate = goldScaleOneCandidate;         /* hg-v1465: read-only, for the two-tab exactness suite */
+W.goldAlignLevelsToSpot = goldAlignLevelsToSpot;         /* hg-v1465: read-only, for the two-tab exactness suite */
 
 W.goldscalpState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }

@@ -200,7 +200,7 @@ function setupFromNative(c, mode, source, forming){
   var note = c.strategy || c.stratKey || 'native gold detector';
   if (forming && c.reason) note = (c.strategy || c.stratKey || 'native') + ' — ' + c.reason;
   else if (c.why) note += ' — ' + String(c.why).slice(0, 80);
-  return {
+  var __row = {
     mode: mode,
     dir: c.dir,
     sym: c.sym || 'XAUUSD',
@@ -244,6 +244,44 @@ function setupFromNative(c, mode, source, forming){
     indReads: (c.indReads && typeof c.indReads === 'object') ? c.indReads : undefined,
     fundingPct: (typeof c.fundingPct === 'number' && isFinite(c.fundingPct)) ? c.fundingPct : undefined
   };
+  /* hg-v1465: THE MINT IS SEALED. The row quoted whatever R the borrowed
+     mint or the native detector advertised — a stale or absolute-ratio R
+     that may not describe these levels at all (the pre-hg-v1461 disease
+     this desk inherited through every borrow). The house seal
+     (hgSealGoldSetup / hgSyncPlanRr, gold-best-levels) recomputes every leg
+     from the row's OWN published levels and clears an unread or wrong-side
+     leg to null with a named rrNote — the card quotes the geometry, never
+     the advertisement. Named, never gating: the seal clears fields, it
+     does not withhold the row (confluence's own geometryOk intake rule
+     applies downstream, unchanged). */
+  /* the seal is looked up through the window EXPLICITLY (same rule as the
+     hg-v1465 scalp fix): the bare identifier only resolves while the
+     browser's classic scripts share one global. */
+  var __gpW = (typeof W !== 'undefined') ? W : ((typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : null));
+  if (__gpW && typeof __gpW.hgSealGoldSetup === 'function') __gpW.hgSealGoldSetup(__row);
+  else if (typeof hgSealGoldSetup === 'function') hgSealGoldSetup(__row);
+  else if (__gpW && typeof __gpW.hgSyncPlanRr === 'function') __gpW.hgSyncPlanRr(__row);
+  else if (typeof hgSyncPlanRr === 'function') hgSyncPlanRr(__row);
+  else {
+    /* no seal module loaded: the legs still recompute from the row's own
+       levels, DIRECTIONALLY — a wrong-side leg quotes null, never a
+       positive absolute-ratio lie */
+    var __e = +__row.entry, __s = +__row.stop;
+    var __d = String(__row.dir || '').toLowerCase();
+    var __risk = __d === 'long' ? (__e - __s) : (__d === 'short' ? (__s - __e) : Math.abs(__e - __s));
+    var __signed = __d === 'long' || __d === 'short';
+    if (isFinite(__risk) && __risk > 0){
+      var __leg = function(t){
+        if (!isFinite(+t)) return null;
+        var rew = __d === 'long' ? (+t - __e) : (__e - +t);
+        return __signed ? (rew > 0 ? rew / __risk : null) : Math.abs(+t - __e) / __risk;
+      };
+      __row.rr = __leg(__row.t1);
+      __row.rr2 = __leg(__row.t2);
+      __row.rr3 = __leg(__row.t3);
+    }
+  }
+  return __row;
 }
 
 /* hg-v1162: THE MARKS, ON EVERY ROW THIS DESK FORMS.
@@ -1883,6 +1921,7 @@ W.gpR2MarkReads = gpR2MarkReads;
    pin suite can drive them as units. */
 W.gpHoldMarks = gpHoldMarks;
 W.gpHoldMarkReads = gpHoldMarkReads;
+W.hgPineSetupFromNative = setupFromNative; /* hg-v1465: exported read-only for the two-tab exactness suite */
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh,
                  fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml,
