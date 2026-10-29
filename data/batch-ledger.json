@@ -700,6 +700,11 @@
       "version": "hg-v1462",
       "built": "2026-10-29T17:20:00Z",
       "note": "GOLD CONFLUENCE prints one desk plan. The median entry only chooses which desk: the plan nearest it, and a tie keeps the first. The stop and the target stay that desk own levels. They are not averaged. A desk with geometryOk false, or a stop or target on the wrong side, is not a vote. R is the directional ratio of that desk. Agreement, a tie, the cluster, the cost, and the risk shape stay named and do not gate. Not re-walked."
+    },
+    {
+      "version": "hg-v1463",
+      "built": "2026-10-29T18:10:00Z",
+      "note": "GOLD SETUP LOGIC, accords with hg-v1462's leader-quote card. hgPlanFromRisk (the shared plan builder behind NEWGOLD, OMNIGOLD, OMNIROUTE and FORMATION) could ship an inverted T2 — the resolved T2 landing closer to entry than the surviving T1 when a structural T1 hint sat past the t2R policy rung or a caller configured t2R <= t1R (2875 of 20000 fuzzed plans inverted); the unordered T2 is dropped to absent with a named t2Unordered flag, rr2 unread, the plan still passes. GANESH GOLD planFor drops an unordered rung (the range equilibrium can sit nearer than the previous day high; TP3 nearer than a kept TP2) to absent with named tp2Unordered/tp3Unordered flags; ok still keys on TP1 only. GOLD CONFLUENCE: the watch and the tie card no longer go silent when the leader publishes no target — a risk-only quote paints the leader entry/stop with the reward leg absent and named; applyCost leaves rr and net R unread and names the unread net; the cf:synthetic t1 leg is absent, not silently passed; the ready path keeps hg-v1462's honest refusal. Scope note: the median-filter hardening found on the v1460 architecture is superseded by hg-v1462 intake — the reachable null path is gone, the upstream filter stands. Not re-walked; the forward ledger decides."
     }
   ]
 }

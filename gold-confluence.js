@@ -212,11 +212,33 @@ function quoteSide(side, pack){
     risk: risk, reward: reward, rr: +ratio.toFixed(2)
   };
 }
+/* hg-v1463: the risk-only quote. Upstream hg-v1459 made a target-less plan
+   legal at the ranker (a plan with entry and stop and no target invents no
+   R), so a pack — or a leader — can legitimately carry no target. The
+   leader pick is the same as quoteSide; the reward leg stays ABSENT and
+   named, never invented. A broken stop (wrong side, or risk <= 0) still
+   returns null — only the target may be unread. */
+function quoteSideRiskOnly(side, pack){
+  if (!pack || !pack.length) return null;
+  var midE = median(pack.map(function(v){ return v.entry; }));
+  var leader = pack[0], bestD = Infinity, i, d;
+  for (i = 0; i < pack.length; i++){
+    d = Math.abs(pack[i].entry - midE);
+    if (d < bestD){ bestD = d; leader = pack[i]; }
+  }
+  var entry = +(+leader.entry).toFixed(2);
+  var stop = +(+leader.stop).toFixed(2);
+  var risk = side === 'long' ? (entry - stop) : (stop - entry);
+  if (!(isFinite(entry) && entry > 0 && isFinite(risk) && risk > 0)) return null;
+  return { leader: leader, entry: entry, stop: stop, t1: null,
+           risk: risk, reward: NaN, rr: null, noTarget: true };
+}
 function tradableVote(v){
   if (!v || v.state !== 'setup') return false;
   if (v.geometryOk === false) return false;
   return legR(v.side, v.entry, v.stop, v.t1) != null;
 }
+W.hgCfQuoteRiskOnly = quoteSideRiskOnly; /* hg-v1463: exported read-only for the setup-logic suite */
 /* hg-v1389: READ the fields each gold desk already stamps on its own
    candidates (hg-v978 barT / hg-v977 signalT, so the ledger dates on the
    signal bar, never the floor of the scan clock) and carry them through
@@ -830,10 +852,12 @@ function cfAnnotate(pack, entry, stop, t1, spreadUsd){
   }
   for (k in fam) if (Object.prototype.hasOwnProperty.call(fam, k)) nFam++;
   var reads = {};
+  /* hg-v1463: an unread target leaves the t1 leg of the synthetic check
+     ABSENT (three-state), not silently passed by a NaN comparison. */
   reads['cf:synthetic'] = !!(leader && (
     Math.abs(entry - leader.entry) >= 0.05 ||
     Math.abs(stop - leader.stop) >= 0.05 ||
-    Math.abs(t1 - leader.t1) >= 0.05));
+    (isFinite(t1) && Math.abs(t1 - leader.t1) >= 0.05)));
   if (pack.length >= 3) reads['cf:familyShort'] = nFam < 3;
   /* hg-v1458: a two-plan pack from ONE mechanic family is the same knife
      the 3+ pack names — one idea counted more than once (hg-v1446
@@ -885,11 +909,18 @@ function costOf(cost){
   return +s.toFixed(2);
 }
 function applyCost(base, risk, reward){
-  var rr = risk > 0 ? +(reward / risk).toFixed(2) : NaN;
-  base.rr = rr;
+  /* hg-v1463: an unread reward (a plan that prices no target) leaves rr and
+     net R UNREAD — named on the card, never rendered as a failed check. */
+  var rr = (risk > 0 && isFinite(reward)) ? +(reward / risk).toFixed(2) : NaN;
+  base.rr = isFinite(rr) ? rr : null;
   if (base.spreadUsd == null){
     base.netRr = null;
     base.costNote = 'The venue spread was not read.';
+    return true;
+  }
+  if (!isFinite(rr)){
+    base.netRr = null;
+    base.costNote = 'The venue spread $' + fmt(base.spreadUsd) + ' was read, but the plan publishes no target, so net R is unread.';
     return true;
   }
   var drag = risk > 0 ? base.spreadUsd / risk : NaN;
@@ -926,13 +957,24 @@ function attachWatch(base, pack, votes, px, opts){
   if (!pack || pack.length < 1 || pack.length > 20) return;
   var side = pack[0].side;
   var q = quoteSide(side, pack);
-  if (!q) return;
+  /* hg-v1463: a watch pack whose leader published no target is not silent
+     (the hg-v932 sin: work done upstream, dropped at the handoff). The
+     watch paints on the leader's entry/stop with the reward leg absent and
+     named — the reward is unread, never invented; a broken stop still
+     returns null. */
+  var watchNoTarget = false;
+  if (!q){
+    q = quoteSideRiskOnly(side, pack);
+    if (!q) return;
+    watchNoTarget = true;
+  }
   var entry = q.entry, stop = q.stop, t1 = q.t1, risk = q.risk, rr = q.rr;
   var watch = {
     side: side,
     entry: entry,
     stop: stop,
-    t1: t1,
+    t1: (t1 != null && isFinite(t1)) ? t1 : null,
+    noTarget: watchNoTarget,
     count: pack.length,
     need: 3,
     rr: rr,
@@ -949,6 +991,11 @@ function attachWatch(base, pack, votes, px, opts){
     watch.netRr = +(rr - base.spreadUsd / risk).toFixed(2);
     watch.costNote = 'Measured spread $' + fmt(base.spreadUsd) + '.';
   }
+  if (watchNoTarget){
+    watch.label = (watch.label ? watch.label + ' · ' : '') + 'NO TARGET PUBLISHED';
+    watch.reason = (watch.reason ? watch.reason + '. ' : '')
+      + 'No member published a target, so the reward leg is unread — the watch prices risk only.';
+  }
   var ann = cfAnnotate(pack, entry, stop, t1, base.spreadUsd);
   if (ann){ watch.reads = ann.reads; watch.leader = ann.leader; }
   base.watch = watch;
@@ -957,10 +1004,18 @@ function sideCard(pack, px){
   if (!pack || !pack.length) return null;
   var side = pack[0].side;
   var q = quoteSide(side, pack);
-  if (!q) return null;
+  /* hg-v1463: a tie card whose leader published no target prices risk only —
+     the reward leg stays absent and named, never invented. */
+  var noTarget = false;
+  if (!q){
+    q = quoteSideRiskOnly(side, pack);
+    if (!q) return null;
+    noTarget = true;
+  }
   return {
     desk: pack.map(function(v){ return v.desk; }).join(' + '),
     side: side, entry: q.entry, stop: q.stop, t1: q.t1,
+    noTarget: noTarget,
     mark: (px > 0) ? px : null,
     rr: q.rr,
     spreadUsd: null,

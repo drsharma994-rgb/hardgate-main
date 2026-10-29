@@ -140,7 +140,7 @@ const SHORT_TAPE = tape(20, 14400, (i, p) => ({ c: p * 1.001, v: 1000 }));      
   const idx = fs.readFileSync('index.html', 'utf8');
   ok(!idx.includes('?v=1433'), 'no stale ?v=1433 tags remain');
   const stamp = fs.readFileSync('build-stamp.js', 'utf8');
-  ok(stamp.includes("version: 'hg-v1462'"), 'build-stamp at hg-v1459');
+  ok(stamp.includes("version: 'hg-v1463'"), 'build-stamp at hg-v1459');
   ok(stamp.includes('hgCryptoSinglesFloor') && stamp.includes('-0.655R'), 'pack note names the wave and its key measured cohort');
   ok(swCacheOk(fs.readFileSync('sw.js', 'utf8')), 'service-worker cache key tracks the build stamp');
 }

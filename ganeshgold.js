@@ -360,13 +360,27 @@ function planFor(ev, m){
     var tp2 = bull ? (fin(ev.eqH) ? ev.eqH : ev.lv.wkH) : (fin(ev.eqL) ? ev.eqL : ev.lv.wkL);
     var tp3 = bull ? ev.rangeHi : ev.rangeLo;
     if (!fin(tp1)) tp1 = NaN; if (!fin(tp2)) tp2 = NaN; if (!fin(tp3)) tp3 = NaN;
+    /* hg-v1461: the ladder must pay in order. TP2 is the range EQUILIBRIUM
+       before it is the week extreme — the equilibrium of a compressing range
+       can sit NEARER than the previous day high (and mirrored on shorts),
+       and TP3 (the range extreme) can sit nearer than a kept TP2. A closer
+       rung published as the further target is the inverted-ladder lie: the
+       card advertises TP2 beyond TP1 while TP2 pays less R. A rung that
+       fails to sit beyond the nearest kept rung is dropped to absent — the
+       paint already prints n/a for an unread rung — and the plan names it.
+       Named, never gating: ok still keys on TP1 only. */
+    var tp2Unordered = false, tp3Unordered = false;
+    if (fin(tp2) && fin(tp1) && !(bull ? tp2 > tp1 : tp2 < tp1)){ tp2 = NaN; tp2Unordered = true; }
+    var nearKept = fin(tp2) ? tp2 : tp1;
+    if (fin(tp3) && fin(nearKept) && !(bull ? tp3 > nearKept : tp3 < nearKept)){ tp3 = NaN; tp3Unordered = true; }
     var risk = Math.abs(entry - stop);
     var rr1 = fin(tp1) ? Math.abs(tp1 - entry) / risk : NaN;
     var rr2 = fin(tp2) ? Math.abs(tp2 - entry) / risk : NaN;
     var minRr = MIN_RR[ev.style] || 1.2;
     var ok = fin(rr1) && rr1 >= minRr - 1e-9;
     return { dir: m.dir, entry: entry, stop: stop, t1: tp1, t2: tp2, t3: tp3, rr1: rr1, rr2: rr2,
-      grade: m.grade, ok: ok, tier: (ok && (m.grade === 'A+' || m.grade === 'A')) ? 'TICKET' : ((m.grade === 'B' || (m.grade && !ok)) ? 'WATCH' : null) };
+      grade: m.grade, ok: ok, tp2Unordered: tp2Unordered, tp3Unordered: tp3Unordered,
+      tier: (ok && (m.grade === 'A+' || m.grade === 'A')) ? 'TICKET' : ((m.grade === 'B' || (m.grade && !ok)) ? 'WATCH' : null) };
   }catch(e){ return null; }
 }
 
@@ -799,6 +813,7 @@ async function ganeshGoldWarm(opts){
 
 W.ganeshGoldState = function(){ try{ return __gg.snap ? JSON.parse(JSON.stringify(__gg.snap)) : null; }catch(e){ return null; } };
 W.ganeshGoldScan = ganeshGoldScan;
+W.ganeshGoldPlanFor = planFor; /* hg-v1461: exported for the setup-logic suite (read-only) */
 W.ganeshGoldEval = ganeshGoldEval;
 W.hgGaneshSwingPromoHtml = hgGaneshSwingPromoHtml;   /* hg-v1441 */
 W.ganeshGoldWarm = ganeshGoldWarm;

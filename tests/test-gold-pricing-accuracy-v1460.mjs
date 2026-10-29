@@ -161,19 +161,19 @@ const W = globalThis.window;
 /* ============ 6. the shipped build is stamped hg-v1460 ============ */
 {
   const stamp = fs.readFileSync(path.join(ROOT, 'build-stamp.js'), 'utf8');
-  ok(/version: 'hg-v1462'/.test(stamp), 'build-stamp version');
+  ok(/version: 'hg-v1463'/.test(stamp), 'build-stamp version');
   ok(/built: '2026-10-29T/.test(stamp), 'build-stamp built (non-decreasing)');
   ok(/hg-v1460: GOLD PRICING ACCURACY/.test(stamp), 'the pack string names the round');
   ok(/hg-v1459: GOLD forming watch/.test(stamp), 'the pack history chain carries the upstream hg-v1459 round');
   ok(/hg-v1458: CONFLUENCE accuracy round/.test(stamp), 'and the older chain is intact');
-  ok(/HG_CACHE = 'hg-v1462'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'sw.js cache id');
+  ok(/HG_CACHE = 'hg-v1463'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'sw.js cache id');
   const idx = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  ok(idx.indexOf('?v=1458') < 0 && idx.indexOf('?v=1462') >= 0, 'index.html cache-busters all at 1460');
+  ok(idx.indexOf('?v=1458') < 0 && idx.indexOf('?v=1463') >= 0, 'index.html cache-busters all at 1460');
   ok(fs.readFileSync(path.join(ROOT, 'hg-api-base.js'), 'utf8').indexOf('1458') < 0, 'hg-api-base at 1460');
   ok(fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8').indexOf('1458') < 0, 'trendtable loader at 1460');
   const ledger = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'batch-ledger.json'), 'utf8'));
   const entries = (Array.isArray(ledger) ? ledger : Object.values(ledger).find(Array.isArray));
-  ok(entries[entries.length - 1].version === 'hg-v1462', 'the batch ledger last entry is hg-v1460');
+  ok(entries[entries.length - 1].version === 'hg-v1463', 'the batch ledger last entry is hg-v1460');
 }
 
 /* ============ mutations ============ */
