@@ -198,9 +198,22 @@ function goldProPlan(inp){
       var d = Math.abs(entry - structStop);
       if (rightSide && d > stopDist){ stopDist = d; structural = true; }
     }
-    var stop = (dir === 'long') ? entry - stopDist : entry + stopDist;
-    var t1 = (dir === 'long') ? entry + 2 * stopDist : entry - 2 * stopDist;
-    var t2 = (dir === 'long') ? entry + 3.5 * stopDist : entry - 3.5 * stopDist;
+    /* hg-v1460: every level this plan MINTS is snapped to the venue's 0.01
+       tick (W.hgGoldTickPx) and the risk is re-derived from the SNAPPED
+       stop, so the published rr is the exact ratio of the published levels —
+       what the venue fills is what the card prices. The structural choice
+       above is unchanged; only the minted numbers are snapped. With clean
+       2dp inputs the snapped plan is bit-identical to the old one. */
+    var W = (typeof window !== 'undefined') ? window : globalThis.window;
+    var tick = (W && typeof W.hgGoldTickPx === 'function') ? W.hgGoldTickPx : function(x){ return Math.round(+x * 100) / 100; };
+    var pubEntry = tick(entry);
+    var pubStop = tick((dir === 'long') ? entry - stopDist : entry + stopDist);
+    var riskPub = Math.abs(pubEntry - pubStop);
+    var t1 = tick((dir === 'long') ? pubEntry + 2 * riskPub : pubEntry - 2 * riskPub);
+    var t2 = tick((dir === 'long') ? pubEntry + 3.5 * riskPub : pubEntry - 3.5 * riskPub);
+    entry = pubEntry;
+    stopDist = riskPub;
+    var stop = pubStop;
     /* sym: this desk reads gold and nothing else, and the plan it returns is
        handed straight to hgMpPin. Without it the MOST PROBABLE panel rendered
        its `row.sym || '?'` fallback, so the pinned leader read
@@ -208,7 +221,9 @@ function goldProPlan(inp){
        ticket that could not name its instrument. */
     return { sym: 'XAUUSD', dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
              risk: stopDist, riskPct: stopDist / entry * 100,
-             rr1: 2, rr2: 3.5, structural: structural };
+             rr1: (stopDist > 0) ? Math.abs(t1 - entry) / stopDist : NaN,
+             rr2: (stopDist > 0) ? Math.abs(t2 - entry) / stopDist : NaN,
+             structural: structural };
   }catch(e){ return null; }
 }
 
@@ -886,11 +901,18 @@ async function runGoldPro(ui){
               });
               if (gsd && gsd.aside === false && isFinite(gsd.entry) && isFinite(gsd.stop) &&
                   isFinite(gsd.t1) && isFinite(gsd.t2) && gsd.entry > 0){
+                /* hg-v1460: the R multiples are computed from the composite's
+                   own published levels, exact |TP-entry| / |entry-stop| — the
+                   hardcoded 2 / 3.5 claimed a geometry the composite's
+                   structural T1/T2 do not necessarily have. */
+                var lvRisk = Math.abs(gsd.entry - gsd.stop);
                 lvPlan = { sym: 'XAUUSD', dir: gsd.dir, entry: gsd.entry, stop: gsd.stop, t1: gsd.t1, t2: gsd.t2,
-                           risk: Math.abs(gsd.entry - gsd.stop),
+                           risk: lvRisk,
                            riskPct: isFinite(gsd.riskPct) ? gsd.riskPct
-                                    : Math.abs(gsd.entry - gsd.stop) / gsd.entry * 100,
-                           rr1: 2, rr2: 3.5, structural: true };
+                                    : lvRisk / gsd.entry * 100,
+                           rr1: (lvRisk > 0) ? Math.abs(gsd.t1 - gsd.entry) / lvRisk : NaN,
+                           rr2: (lvRisk > 0) ? Math.abs(gsd.t2 - gsd.entry) / lvRisk : NaN,
+                           structural: true };
                 lvNote = 'levels aligned with the GOLD SETUP composite decision ('
                        + (gsd.confidence || 'n/a') + ' confidence · ' + (gsd.entryType || 'market') + ').';
               } else if (gsd && gsd.aside){
