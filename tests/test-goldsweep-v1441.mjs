@@ -201,12 +201,12 @@ console.log('— 4. confluence + goldultra audit notes (AGENTS.md) —');
 console.log('— 5. cache-bump byte-check —');
 {
   const html = read('index.html');
-  ok(html.includes('?v=1457'), 'index.html rides ?v=1457');
+  ok(html.includes('?v=1458'), 'index.html rides ?v=1458');
   ok(!html.includes('?v=1440'), 'no stale ?v=1440 byte in index.html');
   const sw = read('sw.js');
-  ok(sw.includes("HG_CACHE = 'hg-v1457'"), 'sw.js HG_CACHE bumped');
+  ok(sw.includes("HG_CACHE = 'hg-v1458'"), 'sw.js HG_CACHE bumped');
   const stamp = read('build-stamp.js');
-  ok(stamp.includes("version: 'hg-v1457'"), 'build-stamp version field bumped');
+  ok(stamp.includes("version: 'hg-v1458'"), 'build-stamp version field bumped');
   const ledger = read('data/batch-ledger.json');
   ok(ledger.includes('"hg-v1441"'), 'batch ledger carries the non-decreasing hg-v1441 entry');
 }

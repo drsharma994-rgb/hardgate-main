@@ -19,7 +19,16 @@
    subtracted. An unread spread is named and not invented. A formed
    setup is scored on the 100-point stack when the gold tape is in
    hand. The score is printed on the card. It does not remove a setup.
-   No tape, no score. A formed setup is written to the forward ledger. GOLD DIRECTION is not given
+   No tape, no score. A formed setup is written to the forward ledger.
+   hg-v1458: the score is fed the cached macro ledger when it has been
+   read (the same leg the desks feed), and the key it is scored with is
+   taught its honest brackets in the stack itself. Risk shape is named
+   beside the cluster and the cost — a forming plan whose stop distance
+   sits outside 0.5×–2× of the pack median risk is named, never gated.
+   The crown count is printed as crowned-of-formed, honestly. A
+   two-plan pack from one mechanic family and a signal more than eight
+   hours stale are record-only marks, counted, never gated.
+   GOLD DIRECTION is not given
    a side. CANDLE FORECAST is not a vote and is not opened to form one. */
 (function(){
 'use strict';
@@ -733,9 +742,17 @@ var CF_FAMILY = {
   goldpine: 'pine',
   omnigold: 'omni', omnigold1: 'omni'
 };
-function cfFamily(id){
+function cfFamily(id, desk){
   if (id && CF_FAMILY[id]) return CF_FAMILY[id];
-  return id ? String(id) : 'desk';
+  /* hg-v1458: a hand-built vote row (offline replays, tests) can carry a
+     desk label and no id. Normalising the label re-uses the same family
+     map the id path reads, so a GOLD SCALP + GANESH GOLD pair is still
+     one scalp family even when the ids are absent, and two desks from
+     two families never read as one. */
+  var norm = String(desk || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (norm && CF_FAMILY[norm]) return CF_FAMILY[norm];
+  if (id) return String(id);
+  return norm || 'desk';
 }
 function cfVoteSec(v){
   if (!v) return null;
@@ -764,7 +781,7 @@ function cfAnnotate(pack, entry, stop, t1, spreadUsd){
   for (i = 0; i < pack.length; i++){
     d = Math.abs(pack[i].entry - midE);
     if (d < bestD){ bestD = d; leader = pack[i]; }
-    fam[cfFamily(pack[i].id)] = true;
+    fam[cfFamily(pack[i].id, pack[i].desk)] = true;
   }
   for (k in fam) if (Object.prototype.hasOwnProperty.call(fam, k)) nFam++;
   var reads = {};
@@ -773,6 +790,11 @@ function cfAnnotate(pack, entry, stop, t1, spreadUsd){
     Math.abs(stop - leader.stop) >= 0.05 ||
     Math.abs(t1 - leader.t1) >= 0.05));
   if (pack.length >= 3) reads['cf:familyShort'] = nFam < 3;
+  /* hg-v1458: a two-plan pack from ONE mechanic family is the same knife
+     the 3+ pack names — one idea counted more than once (hg-v1446
+     doctrine). Marked, not gated. A two-plan pack from two families
+     leaves the key absent (hg-v989 three-state). */
+  else if (pack.length === 2 && nFam < 2) reads['cf:familyShort'] = true;
   var secs = [], missing = false, s;
   for (i = 0; i < pack.length; i++){
     s = cfVoteSec(pack[i]);
@@ -930,9 +952,21 @@ function cfTape(cost){
   if (!rows || !rows.length) return null;
   return cost;
 }
+function cfMacro(){
+  /* hg-v1458: the same cached macro read the gold desks feed this stack
+     (the goldscalp.js:2934 pattern). Fail-open: no cached read leaves the
+     macro leg 'unchecked' exactly as before — nothing is invented. */
+  try{
+    if (typeof W.getGoldMacroCached === 'function') return W.getGoldMacroCached() || null;
+  }catch(eM){ return null; }
+  return null;
+}
 /* The 100-point stack is a label on a plan the desks already formed.
    It does not take that plan off the card. A live tape often scores
-   under 78, and using that as a gate left the tab with no setup. */
+   under 78, and using that as a gate left the tab with no setup.
+   hg-v1458: the label is only honest when the stack knows this tab's
+   key — goldind.js teaches 'confluence' its brackets, and the macro
+   leg is fed above when the read is cached. */
 function cfApplyCore(base, cost){
   var tape = cfTape(cost);
   if (!tape || !base || typeof W.hgGoldConfluenceScore !== 'function') return;
@@ -943,7 +977,7 @@ function cfApplyCore(base, cost){
       agree: base.deskCount || 0, confirmed: true
     }, {
       rows15m: tape.rows15m, rows1h: tape.rows1h, rows4h: tape.rows4h, rows1d: tape.rows1d,
-      rows: tape.rows, macro: tape.macro, newsGate: tape.newsGate, news: tape.news,
+      rows: tape.rows, macro: tape.macro || cfMacro(), newsGate: tape.newsGate, news: tape.news,
       cot: tape.cot, adx: tape.adx, vwap: tape.vwap, macd: tape.macd, rvol: tape.rvol
     });
   }catch(eSc){ return; }
@@ -1126,10 +1160,12 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     base.reason += ' ' + base.opposed + ' desk' + (base.opposed === 1 ? '' : 's') + ' published the other side. That does not remove this setup.';
   }
   if (!costOk) return base;
-  // hg-v1391: MOST-ACCURATE confluence scoring
+  // hg-v1391/hg-v1458: MOST-ACCURATE confluence scoring (named since hg-v1456, never gating)
   // 1) cluster tightness: entries must cluster within 0.8%
   // 2) netR after measured spread must survive 1.2R
-  // 3) the plans in the median are already crowned or grade A
+  // 3) risk shape (hg-v1458): every forming plan prices the trade with a
+  //    stop inside 0.5x-2x of the pack median risk, so the median stop is
+  //    a plan shape the desks actually measured
   var entries = formed.map(function(v){ return v.entry; });
   var maxE = Math.max.apply(null, entries), minE = Math.min.apply(null, entries);
   var spreadPct = (maxE - minE) / entry * 100;
@@ -1137,29 +1173,45 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   /* An unread venue spread is named. It is not a failed cost check.
      A measured spread still has to leave at least 1.20R. */
   var netOk = base.spreadUsd == null ? true : (isFinite(base.netRr) && base.netRr >= 1.20);
+  var risks = formed.map(function(v){ return Math.abs(v.entry - v.stop); });
+  var medRisk = median(risks);
+  var riskOk = formed.every(function(v){
+    var r = Math.abs(v.entry - v.stop);
+    return medRisk > 0 && r > 0 && (r / medRisk) >= 0.5 && (r / medRisk) <= 2;
+  });
   var crowned = crowns.length;
-  var crownOk = true;
-  base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk, crowned: crowned, crownOk: crownOk };
+  /* hg-v1458: crownOk is gone. The hg-v1391 branch was dead code from the
+     day hg-v1452 dropped the crown requirement (crownOk was hard-set
+     true, so "Only N crowned plans" could never fire), and the HIGH line
+     printed "N/N crowned" with the same number twice — which read as a
+     passed check even when the median carried uncrowned plans. The count
+     is now printed honestly as crowned-of-formed. The crown still
+     prefers: two or more crowned plans move the median alone. */
+  base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk,
+    crowned: crowned, crownTotal: formed.length, riskOk: riskOk };
   if (!tightOk){
     base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — median held but accuracy is degraded.';
     base.accuracyTier = 'WATCH';
   } else if (!netOk){
     base.reason += ' Net ' + fmt(base.netRr) + 'R after $' + fmt(base.spreadUsd) + ' spread is under 1.20R — cost degrades accuracy.';
     base.accuracyTier = 'WATCH';
-  } else if (!crownOk){
-    base.reason += ' Only ' + crowned + ' crowned plans sit on the live price. Two are required.';
+  } else if (!riskOk){
+    base.reason += ' The desks agree ' + side.toUpperCase() + ' but do not agree where risk lives — stop distances run ' + fmt(Math.min.apply(null, risks)) + ' to ' + fmt(Math.max.apply(null, risks)) + ', and each plan sits outside 0.5x-2x of the median risk ' + fmt(medRisk) + '. The median stop is no desk measured plan, the card names it, it does not remove the setup.';
     base.accuracyTier = 'WATCH';
   } else {
     base.accuracyTier = 'HIGH';
     if (base.spreadUsd == null){
-      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, ' + crowned + '/' + crowned + ' crowned. The venue spread was not read, so the cost was not subtracted.';
+      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, ' + crowned + '/' + formed.length + ' crowned. The venue spread was not read, so the cost was not subtracted.';
     } else {
-      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + crowned + ' crowned — MOST ACCURATE.';
+      base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + formed.length + ' crowned — MOST ACCURATE.';
     }
   }
-  // A loose cluster or a thin net R is named. It does not take the setup off the card.
+  /* hg-v1456/hg-v1458: a loose cluster, a thin net R or an incoherent risk
+     shape is NAMED. It does not take the setup off the card — the hg-v1391
+     demotion was removed upstream (hg-v1456) and the risk-shape leg joins
+     it as a named caveat in the same direction, never a gate. */
   if (base.accuracyTier !== 'HIGH'){
-    base.reason += ' The cluster and the cost stay on the card. They do not remove this setup.';
+    base.reason += ' The cluster, the cost and the risk shape stay on the card. They do not remove this setup.';
   }
   base.ready = true;
   cfApplyCore(base, cost);
@@ -1234,6 +1286,23 @@ function recordConfluence(win, built){
     t1: built.t1,
     ticket: true
   };
+  /* hg-v1458: stale-signal record-only mark. The plan that led the
+     median carries its own signal instant (hg-v1389); when that instant
+     is more than eight hours before this scan, the record says so.
+     Counted, never gated: the stopped-out and travelled-most-of-the-way
+     checks above already stand aside a plan the tape has finished with,
+     and hg-v966 refuses an unmeasured new gate. No instant, or no scan
+     clock, leaves the mark absent (hg-v989 three-state). The instant is
+     read signalT-first then barT — the same preference order the
+     goldShut leg below uses, never the scan clock alone. */
+  if (built.reads && typeof built.reads === 'object'){
+    var sigSec = NaN;
+    if (typeof built.signalT === 'number' && isFinite(built.signalT) && built.signalT > 0) sigSec = Math.floor(built.signalT / 1000);
+    else if (typeof built.barT === 'number' && isFinite(built.barT) && built.barT > 0) sigSec = Math.floor(built.barT > 1e12 ? built.barT / 1000 : built.barT);
+    if (isFinite(sigSec) && sigSec > 0 && typeof built.at === 'number' && isFinite(built.at) && built.at > 0){
+      built.reads['cf:staleSignal'] = (Math.floor(built.at / 1000) - sigSec) > 8 * 3600;
+    }
+  }
   if (built.reads && typeof built.reads === 'object'){
     var rr = {}, rk, rv, rn = 0;
     for (rk in built.reads){
@@ -1373,6 +1442,9 @@ function cfReadNote(built){
   if (src.reads['cf:sessionSplit'] === true){
     bits.push('Signal bars are not one session. Counted on the record, not gated.');
   }
+  if (src.reads['cf:staleSignal'] === true){
+    bits.push('The plan that led the median was formed more than eight hours before this scan. Counted on the record, not gated.');
+  }
   if (!bits.length) return '';
   return '<div class="hg-note">' + esc(bits.join(' ')) + '</div>';
 }
@@ -1429,7 +1501,7 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie shows both plans and does not blend them. A wide cluster and a spread under 1R are named and do not remove it. The entry is their median, or the median of the crowned ones when two or more are crowned. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie shows both plans and does not blend them. A wide cluster and a spread under 1R are named and do not remove it. The entry is their median, or the median of the crowned ones when two or more are crowned. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup. When the forming plans disagree on where risk lives — a stop distance outside 0.5×–2× of the pack median — the card names it. It does not remove the setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
     + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. The 100-point score is a label. It does not change ready.</div></div></div>';
   var btn = root.querySelector('#gc-run');

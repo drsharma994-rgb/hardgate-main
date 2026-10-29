@@ -5561,6 +5561,20 @@ function hgGoldConfluenceScore(cand, ctx){
     var key = cand.stratKey || '';
     if (/sweep|liqsweep|nyexh|sweepob|silverb|smcliq|ob|asian|pdraid|eqhi|eqlo|hvn|vwap|fvg/i.test(key)){
       p.location += 7; tools.push('S/R / liquidity location');
+    } else if (key === 'confluence'){
+      /* hg-v1455: the CONFLUENCE tab scores its median plan here with
+         stratKey 'confluence' (since hg-v1454). That key matched no
+         mechanic family, so the location leg read 2/… for a plan whose
+         levels are, by construction, desk-chosen structural levels — every
+         member desk already passed its own location gate on these bars.
+         Starved at location (−5), trigger (−4) and volume (−4), a fully
+         aligned plan capped near 66/100 — under even the 68 WATCH bar —
+         so the hg-v1454 score gate stood aside nearly every plan whenever
+         the tape was in hand. The confluence plan gets the structural
+         location credit the desks' own plans earn, capped as always at 20.
+         Quality-stack calibration, not an edge claim; the forward ledger
+         decides. */
+      p.location += 7; tools.push('S/R location (desk median levels)');
     } else p.location += 2;
     if (cand.vpTargets && cand.vpTargets.ok){
       p.location += cand.vpTargets.confirmed ? 6 : 3;
@@ -5625,6 +5639,11 @@ function hgGoldConfluenceScore(cand, ctx){
     if (cand.sweepScore >= 75 || cand.nyExhScore >= 75) p.volume += 8;
     else if (cand.sweepScore >= 65 || cand.nyExhScore >= 65) p.volume += 5;
     else if (/sweep|liqsweep|nyexh|sweepob|silverb|smcliq|oitrap/i.test(key)) p.volume += 4;
+    /* hg-v1455: the participation floor the mechanic families get. Every
+       member desk of a CONFLUENCE plan already passed its own
+       volume/participation gate on the same bars; the median inherits
+       that floor, not a bonus. */
+    else if (key === 'confluence') p.volume += 4;
     if (cand.vpTargets && cand.vpTargets.confirmed) p.volume += 2;
     if (ctx.rvol && ctx.rvol >= 1.25) p.volume += 2;
     p.volume = Math.min(10, p.volume);
@@ -5675,6 +5694,12 @@ function hgGoldConfluenceScore(cand, ctx){
     if (/sweep|liqsweep|nyexh|sweepob|silverb|smcliq/i.test(key) && (cand.confirmed || cand.sweepTier === 'alert' || cand.nyExhTier === 'alert' || cand.sweepObTier === 'alert' || cand.silverBTier === 'alert' || isFinite(cand.smcSweptAge)))
       p.trigger += 10;
     else if (/sweep|liqsweep|nyexh|sweepob|silverb|smcliq|ob|fvg|openrange|asian|bosalign/i.test(key))
+      p.trigger += 7;
+    /* hg-v1455: the family bracket, not the alert tier. Each member desk of
+       a CONFLUENCE plan fired its own trigger to mint its plan; the median
+       carries every member's fired trigger but no single alert-tier stamp
+       of its own, so it earns 7 (a defined structural entry), never 10. */
+    else if (key === 'confluence')
       p.trigger += 7;
     else if (/ribbon|vwap|stochrsi|hvn/i.test(key))
       p.trigger += 5;

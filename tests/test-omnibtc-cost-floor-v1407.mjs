@@ -241,10 +241,10 @@ console.log('\n== 7) both lever surfaces exist by name (a rename trips here) =='
 console.log('\n== 8) the deploy pins moved with the pack (?v= byte-check) ==');
 {
   const bs = (read('build-stamp.js').match(/version:\s*'([^']+)'/) || [])[1];
-  ok(bs === 'hg-v1457', 'build-stamp.js carries hg-v1457 (got ' + bs + ')');
+  ok(bs === 'hg-v1458', 'build-stamp.js carries hg-v1458 (got ' + bs + ')');
   ok(bs === HG_VER, 'and it is the tree version ' + HG_VER);
   const idx = read('index.html');
-  ok(idx.indexOf('omnibtc.js?v=1457') !== -1, 'index.html loads omnibtc.js?v=1457');
+  ok(idx.indexOf('omnibtc.js?v=1458') !== -1, 'index.html loads omnibtc.js?v=1458');
   ok(!/\?v=1406\b/.test(idx), 'no stale ?v=1406 pin survives in index.html');
 }
 

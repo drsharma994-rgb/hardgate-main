@@ -329,7 +329,7 @@ const chopRowsVol = mkRows('chop+vol', 60);
 
   console.log('== 6) the stamp ==');
   {
-    assert(HG_VER === 'hg-v1457', 'build-stamp version is hg-v1457 (got ' + HG_VER + ')');
+    assert(HG_VER === 'hg-v1458', 'build-stamp version is hg-v1458 (got ' + HG_VER + ')');
     assert(swCacheOk(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw.js HG_CACHE is ' + HG_VER);
     assert(!/\?v=1433/.test(html), 'index.html carries no ?v=1433 byte left');
     assert(/hg-v1435/.test(readFileSync(path.join(root, 'AGENTS.md'), 'utf8')), 'AGENTS.md records hg-v1435');
