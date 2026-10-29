@@ -280,8 +280,7 @@ const milliVote = milli.votes.filter(v => v.id === 'milligold')[0];
 assert.equal(milliVote.derived, true);
 assert.equal(milliVote.sameAs, 'OMNIGOLD');
 
-/* The 100-point score changes the card only when the tape is in hand.
-   No scorer, or no rows, leaves the desk plan. */
+/* The 100-point score is a label. A low score does not take the setup off the card. */
 const tapeRows = [{ t: 1, o: 2650, h: 2652, l: 2648, c: 2651 }];
 function scored(tier, score, alertOk){
   win.HG_GOLD_CONF_GOOD = 78;
@@ -296,17 +295,18 @@ const hi = scored('A', 90, true);
 assert.equal(hi.ready, true);
 assert.equal(hi.confScore, 90);
 assert.equal(hi.confTier, 'A');
-assert.equal(hi.confAlertOk, true);
+assert.equal(hi.entry, 2651);
 const watchScore = scored('WATCH', 70, false);
-assert.equal(watchScore.ready, false);
-assert.equal(watchScore.watch.entry, 2651);
-assert.match(watchScore.watch.label, /SCORE WATCH 70/);
-assert.match(watchScore.reason, /needs 78/);
+assert.equal(watchScore.ready, true);
+assert.equal(watchScore.watch, undefined);
+assert.equal(watchScore.confScore, 70);
+assert.equal(watchScore.entry, 2651);
 const low = scored('NO_TRADE', 50, false);
-assert.equal(low.ready, false);
+assert.equal(low.ready, true);
 assert.equal(low.watch, undefined);
+assert.equal(low.confTier, 'NO_TRADE');
 assert.equal(low.entry, 2651);
-assert.match(low.reason, /below 68/);
+assert.match(low.reason, /does not remove this setup/);
 delete win.hgGoldConfluenceScore;
 const unread = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.30, rows15m: tapeRows });
 assert.equal(unread.ready, true);

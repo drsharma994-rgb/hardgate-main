@@ -1,3 +1,6 @@
+### GOLD CONFLUENCE — the score is a label, not a gate — hg-v1455
+- The 100-point score was taking every live plan off the card. A tape that scores under 78 became a watch, and under 68 stood aside, so the tab showed no setup. The score is still printed when the tape is in hand. It does not change ready. Two plans on the same side, both within 2.5% of the live IUX price, are still a setup. The entry, stop, and target stay their median. A price through the stop is still stood aside. This was not re-walked.
+
 ### GOLD CONFLUENCE — the 100-point score is on the card — hg-v1454
 - Two desks on the live price still form the plan, and the levels stay their median. When the gold tape is in hand, that plan is scored on the same stack the desks use: HTF 25, location 20, momentum 15, vol regime 10, volume 10, macro 10, entry trigger 10. 78 or better, with no news lock, stays ONE SETUP. 68 to 77 is a WATCH and keeps the levels. Below 68 is stood aside and is not recorded. If the tape or the scorer is missing, the score is unread and the desk plan is not erased. This was not re-walked.
 
