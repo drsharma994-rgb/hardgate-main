@@ -657,7 +657,8 @@
     var risk = vf.risk;
     var tg = g.targets(ctx, entry, dir, { risk: risk });
     var t1 = tg.t1 ? tg.t1.level : NaN, t2 = tg.t2 ? tg.t2.level : NaN;
-    var rr1 = risk > 0 && has(t1) ? Math.abs(t1 - entry) / risk : NaN, rr2 = risk > 0 && has(t2) ? Math.abs(t2 - entry) / risk : NaN;
+    var rr1 = (typeof hgGoldLegR === 'function') ? hgGoldLegR(dir, entry, stop, t1) : (risk > 0 && has(t1) ? ((dir === 'long' ? t1 - entry : entry - t1) / risk) : NaN);
+    var rr2 = (typeof hgGoldLegR === 'function') ? hgGoldLegR(dir, entry, stop, t2) : (risk > 0 && has(t2) ? ((dir === 'long' ? t2 - entry : entry - t2) / risk) : NaN);
     /* sweep-candle OB (Playbook P1 §6.1) — see gold-seven-step.js buildCandidate */
     var ob = dir === 'long' ? ctx.obs.bull : ctx.obs.bear, obSrc = ob ? 'fresh OB' : null;
     if (sbZone){
@@ -1497,7 +1498,7 @@
         var tg = g.targets({ vp4h: vp, atr1h: atr, asia: pc.asia, pd: pc.pd, pw: pc.pw, nakedPoc: null }, entry, dir, { risk: risk });
         if (!tg.t1 || !(risk > 0)) continue;
         if (isFinite(opts.minRisk) && risk < opts.minRisk){ out.rejected.risk = (out.rejected.risk || 0) + 1; continue; }
-        var t1 = tg.t1.level, rr = Math.abs(t1 - entry) / risk;
+        var t1 = tg.t1.level, rew = dir === 'long' ? t1 - entry : entry - t1, rr = rew > 0 && risk > 0 ? rew / risk : NaN;
         if (gated || opts.biasSide){
           var cxb = cx || (ctxRows || []).filter(function(r){ return r.t + ctxTf <= barCloseMs / 1000; });
           if (opts.biasSide && cxb.length >= 60){

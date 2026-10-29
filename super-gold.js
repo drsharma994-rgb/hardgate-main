@@ -100,6 +100,11 @@ function goldCalcTrade(riskOpts, hit, rrForCalc){
 }
 
 function effectiveGoldRr(hit){
+  if (typeof hgGoldLegR === 'function'){
+    var sealed = hgGoldLegR(hit.dir, hit.entry, hit.stop, hit.t1);
+    if (sealed != null) return sealed;
+    if (hit.dir === 'long' || hit.dir === 'short') return null;
+  }
   if (hit && N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
     var riskDist = Math.abs(hit.entry - hit.stop);
     if (riskDist > 0) return Math.abs(hit.t1 - hit.entry) / riskDist;

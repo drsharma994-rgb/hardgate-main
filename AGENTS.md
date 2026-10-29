@@ -1,3 +1,8 @@
+### GOLD SETUP GEOMETRY — a wrong-side stop or target is not a positive R — hg-v1461
+- A labelled long or short publishes R only from the directional distance between the levels on the card. The stop has to sit beyond the entry. The target has to sit beyond the entry the other way. `|target − entry| / |entry − stop|` is no longer quoted when both distances exist but one of them is on the wrong side.
+- `hgGoldLegR` returns that ratio, or null. `hgSealGoldSetup` clears the broken leg and sets `geometryOk` only when the side is long or short and T1 pays. The card says the levels were refused instead of printing a positive R. A plan with no direction still uses the absolute ratio, so an unlabelled pair still syncs.
+- The desk ladders are unchanged: scalp stays at its own minimum, swing at 1.5 / 2.5 / 4, NEW GOLD at 1.5 / 2.5, OPTI at its own R, GOLD PRO at the ratio of the published levels. This was not re-walked.
+
 ### GOLD SCALP and GOLD SWING — the forming watch matches the sweep it names — hg-v1459
 - The liquidity-sweep watch looked at 24 bars (n-25 through n-2). goldSweeps looks at the 25 bars before the bar being judged (n-26 through n-2). The watch now uses that window. The last bar's own wick is not the pool.
 - The WHY SILENT dollar distance on GOLD SCALP and GOLD SWING is rounded to the cent before the ATR multiple.

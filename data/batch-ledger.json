@@ -690,6 +690,11 @@
       "built": "2026-10-29T15:05:00Z",
       "note": "GOLD PRICING ACCURACY across the gold setup pricing core. calculatePositionSize rounds the taken size DOWN to the 0.001 unit step (toFixed(3) nearest-rounding could publish a size whose realized risk exceeds the budgeted riskAmountUSD — raw 59.1716 units on a $100 budget took 59.172 and realized $100.00068); the notional is recomputed from the taken size and a sub-step input refuses with a named error instead of publishing a 0-unit position. hgGoldTickPx snaps a minted level to the venue 0.01 tick and hgGoldPlanPricingOk audits a published plan (geometry, published rr == exact |TP1-entry|/|entry-stop| within half a display tick, published risk == exact |entry-stop|, TP2 beyond TP1) — named, never gating, sub-cent passthrough levels named in offTick without flipping ok. hgGoldScalpStopFloor snaps the minted floored stop and re-derives the published rr from the snapped stop; the drop decision stays keyed to the floor distance, the measured gate untouched. goldProPlan snaps every minted level and publishes rr1/rr2 as the exact ratio of the published levels (clean 2dp inputs bit-identical), and the composite-aligned lvPlan publishes the composite own exact R multiples instead of hardcoded 2/3.5. Not re-walked; the forward ledger decides.",
       "version": "hg-v1460"
+    },
+    {
+      "version": "hg-v1461",
+      "built": "2026-10-29T16:59:12Z",
+      "note": "GOLD SETUP GEOMETRY. A labelled long or short publishes R only when the stop sits beyond the entry and the target sits beyond the entry the other way. A stop or target on the wrong side clears that leg instead of printing the absolute ratio as a positive R. Unlabelled plans keep the absolute ratio. Desk ladders are unchanged. Not re-walked."
     }
   ]
 }

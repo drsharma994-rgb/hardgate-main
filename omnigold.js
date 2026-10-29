@@ -5403,8 +5403,8 @@ terse status, and never launches a first-time scan on a global refresh.
     plan.t1 = t1;
     plan.t2 = t2;
     plan.t1Source = t1Source;
-    plan.rr1 = Math.abs(t1 - entry) / risk;
-    plan.rr2 = Math.abs(t2 - entry) / risk;
+    plan.rr1 = (typeof hgGoldLegR === 'function') ? hgGoldLegR(dir, entry, stop, t1) : ((dir === 'long' ? t1 - entry : entry - t1) / risk);
+    plan.rr2 = (typeof hgGoldLegR === 'function') ? hgGoldLegR(dir, entry, stop, t2) : ((dir === 'long' ? t2 - entry : entry - t2) / risk);
     plan.rr = plan.rr1;
     plan.risk = risk;
     plan.riskPct = (entry > 0) ? (risk / entry * 100) : null;
@@ -13127,9 +13127,9 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgBridgeSetupToPick(setup, horizon){
     if (!setup || !setup.dir) return null;
     if (!(isFinite(fin(setup.entry)) && isFinite(fin(setup.stop)) && isFinite(fin(setup.t1)))) return null;
-    var risk = Math.abs(fin(setup.entry) - fin(setup.stop));
-    var rr1 = isFinite(fin(setup.rr)) ? fin(setup.rr)
-      : (risk > 0 ? Math.abs(fin(setup.t1) - fin(setup.entry)) / risk : NaN);
+    var rr1 = (typeof hgGoldLegR === 'function')
+      ? hgGoldLegR(setup.dir, setup.entry, setup.stop, setup.t1)
+      : (isFinite(fin(setup.rr)) ? fin(setup.rr) : NaN);
     return {
       horizon: horizon,
       kind: String(setup.strategy || setup.stratKey || 'GOLD-ENGINE'),

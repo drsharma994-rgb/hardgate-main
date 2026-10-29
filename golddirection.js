@@ -1253,6 +1253,8 @@ function gdGeoLine(c, pxNow){
 }
 
 function cardHTML(c, tape, pxNow, crowned){
+  if (c && typeof hgSealGoldSetup === 'function') hgSealGoldSetup(c);
+  var levelsRefused = !!(c && c.geometryOk === false);
   var chips = '';
   chips += '<span class="gdx-chip">' + esc(c.horizon) + '</span>';
   if (c.grade) chips += '<span class="gdx-chip ok">GRADE ' + esc(c.grade) + '</span>';
@@ -1306,11 +1308,13 @@ function cardHTML(c, tape, pxNow, crowned){
     + '<div>' + srcChip(c) + '<span class="gdx-strat">' + esc(c.strategy) + '</span>'
     + ' · <b>' + esc(String(c.dir).toUpperCase()) + '</b></div>'
     + '<div class="gdx-chips">' + chips + '</div>'
-    + '<div class="gdx-planline">' + esc(gdOrderWord(c.dir, c.entry, pxNow)) + ' <b>' + zoneTxt + '</b>'
+    + '<div class="gdx-planline">' + (levelsRefused
+      ? '<b>LEVELS REFUSED</b> — ' + esc(c.geometryReason || 'the stop or the target is not beyond the entry')
+      : esc(gdOrderWord(c.dir, c.entry, pxNow)) + ' <b>' + zoneTxt + '</b>'
     + ' · ENTRY <b>$' + pxF(c.entry) + '</b> ' + gdAwayNote(c.entry, pxNow)
     + ' · STOP <b>$' + pxF(c.stop) + '</b>'
     + ' · TP1 <b>$' + pxF(c.t1) + '</b>' + (isFinite(c.rr) ? ' (' + fmtF(c.rr, 1) + 'R)' : '')
-    + ' · TP2 <b>$' + pxF(c.t2) + '</b>' + (isFinite(c.rr2) ? ' (' + fmtF(c.rr2, 1) + 'R)' : '')
+    + ' · TP2 <b>$' + pxF(c.t2) + '</b>' + (isFinite(c.rr2) ? ' (' + fmtF(c.rr2, 1) + 'R)' : ''))
     + '</div>'
     + gdGeoLine(c, pxNow)
     + (crowned ? measuredHtml(c) : '')

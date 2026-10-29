@@ -1282,13 +1282,21 @@ function hgSyncPlanRatios(p){
   if (!p) return p;
   try{
     var entry = hgPlanNum(p.entry), stop = hgPlanNum(p.stop);
-    var risk = (isFinite(entry) && isFinite(stop)) ? Math.abs(entry - stop) : NaN;
-    var usable = isFinite(risk) && risk > 0;
+    var d = String(p.dir || '').toLowerCase();
     var t1 = hgPlanNum(p.t1), t2 = hgPlanNum(p.t2);
-    p.rr1 = (usable && isFinite(t1)) ? Math.abs(t1 - entry) / risk : null;
-    p.rr2 = (usable && isFinite(t2)) ? Math.abs(t2 - entry) / risk : null;
+    var leg = (typeof hgGoldLegR === 'function') ? hgGoldLegR : null;
+    if (leg && (d === 'long' || d === 'short')){
+      p.rr1 = leg(d, entry, stop, t1);
+      p.rr2 = leg(d, entry, stop, t2);
+    } else {
+      var risk = (isFinite(entry) && isFinite(stop)) ? Math.abs(entry - stop) : NaN;
+      var usable = isFinite(risk) && risk > 0;
+      p.rr1 = (usable && isFinite(t1)) ? Math.abs(t1 - entry) / risk : null;
+      p.rr2 = (usable && isFinite(t2)) ? Math.abs(t2 - entry) / risk : null;
+    }
     if (p.rr !== undefined) p.rr = p.rr1;
-    p.riskPct = (usable && isFinite(entry) && entry > 0) ? (risk / entry * 100) : null;
+    var sideRisk = d === 'long' ? entry - stop : d === 'short' ? stop - entry : Math.abs(entry - stop);
+    p.riskPct = (isFinite(sideRisk) && sideRisk > 0 && isFinite(entry) && entry > 0) ? (sideRisk / entry * 100) : null;
   }catch(e){}
   return p;
 }

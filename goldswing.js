@@ -241,11 +241,14 @@ function goldScaleOneCandidate(c, fromRef, liveRef){
     if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
     if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
   }
-  var risk = Math.abs(c.entry - c.stop);
-  if (risk > 0){
-    if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
-    if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
-    if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+  if (typeof hgSyncPlanRr === 'function') hgSyncPlanRr(c);
+  else {
+    var risk = Math.abs(c.entry - c.stop);
+    if (risk > 0){
+      if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
+      if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
+      if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+    }
   }
   c.spotRealigned = true;
   c.spotAlignRatio = ratio;
@@ -895,10 +898,9 @@ function __cardFromLiveRec(rec){
       : { long: (rec.dir === 'long') ? (isFinite(rec.agree) ? rec.agree : 2) : 0,
           short: (rec.dir === 'short') ? (isFinite(rec.agree) ? rec.agree : 2) : 0 },
     atr: isFinite(rec.atr) ? rec.atr : NaN,
-    rr: risk > 0 ? Math.abs(rec.t1 - rec.entry) / risk : NaN,
-    rr2: risk > 0 && isFinite(rec.t2) ? Math.abs(rec.t2 - rec.entry) / risk : NaN,
-    rr3: (risk > 0 && rec.t3 !== null && rec.t3 !== undefined && isFinite(rec.t3))
-      ? Math.abs(rec.t3 - rec.entry) / risk : null
+    rr: (typeof hgGoldLegR === 'function') ? hgGoldLegR(rec.dir, rec.entry, rec.stop, rec.t1) : (risk > 0 ? Math.abs(rec.t1 - rec.entry) / risk : NaN),
+    rr2: (typeof hgGoldLegR === 'function') ? hgGoldLegR(rec.dir, rec.entry, rec.stop, rec.t2) : (risk > 0 && isFinite(rec.t2) ? Math.abs(rec.t2 - rec.entry) / risk : NaN),
+    rr3: (typeof hgGoldLegR === 'function') ? hgGoldLegR(rec.dir, rec.entry, rec.stop, rec.t3) : ((risk > 0 && rec.t3 !== null && rec.t3 !== undefined && isFinite(rec.t3)) ? Math.abs(rec.t3 - rec.entry) / risk : null)
   };
   try{
     card.asOf = isFinite(card.issuedAt)

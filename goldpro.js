@@ -605,6 +605,8 @@ function renderLevelsPanel(o){
   var h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span></h2>';
   if (!o || !o.plan) return h + '<div class="note warn">' + esc((o && o.reason) || 'levels unavailable.') + '</div></div>';
   var p = o.plan;
+  if (p && typeof hgSealGoldSetup === 'function') hgSealGoldSetup(p);
+  var levelsRefused = !!(p && p.geometryOk === false);
   if (o.context && o.context.read){
     h += '<div class="note">' + esc(o.context.read)
       + (o.context.againstN > o.context.withN ? ' — the indicator context leans AGAINST this setup' : '')
@@ -637,14 +639,16 @@ function renderLevelsPanel(o){
      + gpSmcChip
      + gpFundChip
      + '</div>';
-  h += '<div class="plan">ENTRY <b>' + esc(pxF(p.entry)) + '</b>'
+  h += '<div class="plan">' + (levelsRefused
+     ? 'levels refused — ' + esc(p.geometryReason || 'the stop or the target is not beyond the entry')
+     : 'ENTRY <b>' + esc(pxF(p.entry)) + '</b>'
      + ' · STOP <b>' + esc(pxF(p.stop)) + '</b>'
      + ' · T1 ' + esc(pxF(p.t1)) + ' (' + fnum(p.rr1, 1) + 'R)'
      + ' · T2 ' + esc(pxF(p.t2)) + ' (' + fnum(p.rr2, 1) + 'R)'
      + ' · risk ' + fnum(p.riskPct, 2) + '%'
      + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(p.entry, p.stop) : '')
      + (p.structural ? ' — stop = wider of 1.5×ATR14(4H) / structure beyond the 30-bar swing'
-                     : ' — stop = 1.5×ATR14(4H)')
+                     : ' — stop = 1.5×ATR14(4H)'))
      + '</div>';
   h += gpGeoLine(p, o);
   if (o.note) h += '<div class="note" style="margin-top:6px">' + esc(o.note) + '</div>';

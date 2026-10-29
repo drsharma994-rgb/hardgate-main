@@ -321,7 +321,7 @@ function __atrLocal(rows, p){
 var _atr = (typeof atr === 'function') ? atr : __atrLocal;
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
-                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
+                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'IUX XAUUSD',
                   'delta-xaut': 'DELTA XAUTUSD', 'xm-xauusd': 'XM XAUUSD' };
 var ST_GOLD_SYM = 'XAUUSD';
 function venueLabel(src){
@@ -368,11 +368,14 @@ function goldScaleOneCandidate(c, fromRef, liveRef){
     if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
     if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
   }
-  var risk = Math.abs(c.entry - c.stop);
-  if (risk > 0){
-    if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
-    if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
-    if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+  if (typeof hgSyncPlanRr === 'function') hgSyncPlanRr(c);
+  else {
+    var risk = Math.abs(c.entry - c.stop);
+    if (risk > 0){
+      if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
+      if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
+      if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+    }
   }
   c.spotRealigned = true;
   c.spotAlignRatio = ratio;
