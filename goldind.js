@@ -2292,6 +2292,11 @@ function hgGoldPlanSidesOk(cand){
       if (!(s < e)){ out.ok = false; out.why = 'LONG stop must sit BELOW entry (got stop ' + s + ' vs entry ' + e + ')'; return out; }
       if (isFinite(t1) && !(t1 > e)){ out.ok = false; out.why = 'LONG TP1 must sit ABOVE entry'; return out; }
     }
+    out.risk = Math.abs(e - s);
+    if (isFinite(t1) && out.risk > 0){
+      out.reward = Math.abs(t1 - e);
+      out.rr = out.reward / out.risk;
+    }
     return out;
   }catch(e){ out.ok = false; out.why = 'plan-sides check error'; return out; }
 }
@@ -5139,9 +5144,9 @@ function goldWatch(inp){
 
     /* 1) liquidity sweep — the prior-25-bar swing high/low is the watched
        liquidity pool; the trigger is a wick beyond it + a reclaim close. */
-    if (n >= 26){
+    if (n >= 27){
       var sH = -Infinity, sL = Infinity;
-      for (var i = Math.max(0, n - 25); i < n - 1; i++){   /* exclude the forming bar (goldSweeps parity) */
+      for (var i = Math.max(0, n - 26); i < n - 1; i++){   /* 25 bars before the last, same window as goldSweeps */
         if (rows[i].h > sH) sH = rows[i].h;
         if (rows[i].l < sL) sL = rows[i].l;
       }
@@ -6074,7 +6079,7 @@ function goldRankSetups(cands, ctx){
                             reason: c.reason || 'failed a quality gate' });
         continue;
       }
-      if (isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1)){
+      if (isFinite(+c.entry) && isFinite(+c.stop)){
         var sideGate = hgGoldPlanSidesOk(c);
         if (!sideGate.ok){
           out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
@@ -6082,6 +6087,9 @@ function goldRankSetups(cands, ctx){
                               reason: sideGate.why || 'plan sides invalid' });
           continue;
         }
+        /* The printed R is the geometry, |target − entry| / |entry − stop|.
+           A desk that advertised a different R was not describing this plan. */
+        if (isFinite(sideGate.rr)) c.rr = +sideGate.rr.toFixed(2);
       }
       var parts = [], tally = 0;
       /* hg-v1155: THE FREE-FEED LEGS, RECORDED. Every leg below that reads a

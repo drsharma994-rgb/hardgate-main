@@ -1995,12 +1995,30 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
   const byKey = {};
   for (const w of wl) if (!byKey[w.stratKey]) byKey[w.stratKey] = w;
 
-  /* sweep: armed on the NEARER of the last-25-bar swing high/low */
-  const sH = Math.max(...rows.slice(-25).map(r => r.h)), sL = Math.min(...rows.slice(-25).map(r => r.l));
+  /* sweep: armed on the NEARER of the 25 bars BEFORE the last bar.
+     That is goldSweeps at the last index: k from i-25 to i-1, not the
+     last 25 bars including the bar being judged. */
+  const prior = rows.slice(-26, -1);
+  const sH = Math.max(...prior.map(r => r.h)), sL = Math.min(...prior.map(r => r.l));
   const entry = rows[rows.length - 1].c;
   const swLvl = Math.abs(entry - sL) <= Math.abs(sH - entry) ? sL : sH;
+  assert(prior.length === 25, 'sweep window is 25 bars, not 24 and not 26');
   assert(byKey.sweep.state === 'armed' && byKey.sweep.level === swLvl,
          'sweep: armed on the nearer 25-bar swing ' + (swLvl === sL ? 'low' : 'high') + ' ' + swLvl);
+
+  /* The last bar's own wick is not the pool, and the bar just outside a
+     24-bar lookback is. A window that includes the last bar, or that
+     drops the 25th prior bar, picks a different level on this tape. */
+  {
+    const disc = flatRows(40, 100, 1, DAY);
+    for (let i = 0; i < disc.length; i++){ disc[i].h = 110; disc[i].l = 99; disc[i].c = 100; disc[i].o = 100; }
+    disc[40 - 26].l = 95;
+    disc[39].l = 40;
+    const dw = W.goldWatch({ rows15m: disc, now: OFF_NOW, tf: '15m' });
+    const dsw = dw.find(w => w.stratKey === 'sweep');
+    assert(dsw && dsw.state === 'armed' && dsw.level === 95 && dsw.dir === 'long',
+      'sweep uses the 25 bars before the last (level 95), not the last wick (40) and not a 24-bar window (99) — got ' + (dsw && dsw.level));
+  }
   assert(/last 15m swing (low|high)/.test(byKey.sweep.condition) && /fires on a wick/.test(byKey.sweep.condition),
          'sweep: condition names the exact live trigger — got "' + byKey.sweep.condition + '"');
 

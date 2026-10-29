@@ -1518,10 +1518,10 @@ function nearestArmed(armed, watchMeta){
     if (!w || w.state !== 'armed' || !(typeof w.level === 'number' && isFinite(w.level))) continue;
     var m = watchMeta ? watchMeta[w.venue] : null;
     if (!m || !isFinite(m.lastClose)) continue;
-    var dist = Math.abs(w.level - m.lastClose);
+    var dist = Math.round(Math.abs(w.level - m.lastClose) * 100) / 100;
     if (!best || dist < best.dist){
       best = { strategy: w.strategy, venue: w.venue, level: w.level, dist: dist,
-               distAtr: (isFinite(m.atr) && m.atr > 0) ? dist/m.atr : NaN };
+               distAtr: (isFinite(m.atr) && m.atr > 0) ? dist / m.atr : NaN };
     }
   }
   return best;

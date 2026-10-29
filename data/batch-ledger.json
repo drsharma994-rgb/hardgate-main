@@ -680,6 +680,11 @@
       "version": "hg-v1458",
       "built": "2026-10-29T13:56:00Z",
       "note": "GOLD CONFLUENCE accuracy round, rebased over hg-v1455..v1457. The 100-point stack starved the tab's own median plan: hg-v1454 scored it with stratKey 'confluence', a key no mechanic family matched, so location, trigger and volume read 13 points under an equivalent desk plan and a fully aligned plan capped near 66 — under the 68 WATCH bar. Since the score is now a label on the card (hg-v1455 upstream), a starved 66 would be actively misleading on every scan. The key now earns its honest brackets: structural location 7, trigger family bracket 7 (never the alert 10), participation floor 4. Measured on the BOS tape: 79/GOOD/alert with the macro read, 77/WATCH without it, 66/NO_TRADE with the brackets stripped, short-on-bull 48, chop long 52. The score is fed the cached macro ledger when read (getGoldMacroCached, fail-open). The build names risk shape beside the cluster and the cost (every forming plan within 0.5x-2x of the pack median risk, named on the card, not gating — the hg-v1456 direction), prints the crown count crowned-of-formed (the hg-v1391 crownOk branch was dead code since hg-v1452 and printed N/N crowned), and adds two record-only marks: a two-plan pack from one mechanic family is cf:familyShort, a leading signal more than eight hours stale is cf:staleSignal. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1459",
+      "built": "2026-10-29T14:52:00Z",
+      "note": "GOLD SCALP and GOLD SWING forming watch. The liquidity-sweep watch looked at 24 bars (n-25 through n-2) while goldSweeps looks at the 25 bars before the bar (n-26 through n-2). The watch now uses that window, so the last bar's own wick is not the pool. The WHY SILENT dollar distance is rounded to the cent before the ATR multiple. The shared ranker prints R as |target-entry|/|entry-stop|. A plan with entry and stop and no target still passes the side check and does not invent an R. A stop on the wrong side is rejected even when the target is missing. Not re-walked. The confluence quorum was not changed."
     }
   ]
 }
