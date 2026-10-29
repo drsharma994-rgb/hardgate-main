@@ -37,8 +37,7 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
   ok(/strategy\(/.test(pine) && /process_orders_on_close = true/.test(pine), 'pine: a strategy() with close-confirmed fills (the desk judges on closed bars)');
   ok(/poolLen\s*=\s*input\.int\(25/.test(pine), 'pine: the sweep pool is the shipped 25 bars');
   ok(/stopFloor\s*=\s*input\.float\(1\.5/.test(pine), 'pine: the 1.5xATR stop floor');
-  ok(/min R:R 1\.2/.test(pine) && /1\.5R\/2\.5R ladder/.test(pine.replace(/
-  ok(/min R:R 1.2/.test(pine) && /TP 1.5R / 2.5R/.test(pine), 'pine: the desk min R:R 1.2 and the 1.5R/2.5R ladder documented (satisfied by the fixed-ladder construction)');
+  ok(/min R:R 1.2/.test(pine) && pine.indexOf('TP 1.5R / 2.5R') >= 0, 'pine: the desk min R:R 1.2 and the 1.5R/2.5R ladder documented (satisfied by the fixed-ladder construction)');
   ok(/tp1R\s*=\s*input\.float\(1\.5/.test(pine) && /tp2R\s*=\s*input\.float\(2\.5/.test(pine), 'pine: the 1.5R/2.5R ladder (the hg-v1466 fill-at-next-open targets)');
   ok(/costRiskPct\s*=\s*input\.float\(0\.16/.test(pine), 'pine: the 0.16% cost-toxicity reject');
   ok(/sweepBull = low < poolLo and close > poolLo/.test(pine) && /sweepBear = high > poolHi and close < poolHi/.test(pine), 'pine: the sweep+reclaim trigger exactly as goldSweeps defines it');
