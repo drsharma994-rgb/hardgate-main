@@ -124,7 +124,9 @@ function makeVote(desk, side, entry, stop, t1, barT){
   ];
   const bC = build(votesC, { px: 4001 }, null);
   eq('1.s case C ready', bC.ready, true);
-  eq('1.t case C entry is the median', bC.entry, 4002.5);
+  eq('1.t case C entry is the nearest desk plan', bC.entry, 4000);
+  eq('1.t2 case C stop is that desk', bC.stop, 3980);
+  eq('1.t3 case C target is that desk', bC.t1, 4040);
   ok('1.u case C is not a watch', !bC.watch);
   eq('1.v case C two desks', bC.deskCount, 2);
 })();
@@ -152,7 +154,9 @@ function makeVote(desk, side, entry, stop, t1, barT){
   ];
   const bN = build(votesN, { px: 4001 }, null);
   eq('2.d 2 agree -> ready', bN.ready, true);
-  eq('2.e 2 agree -> entry is the median', bN.entry, 4002.5);
+  eq('2.e 2 agree -> entry is the nearest desk plan', bN.entry, 4000);
+  eq('2.e2 stop is that desk', bN.stop, 3980);
+  eq('2.e3 target is that desk', bN.t1, 4040);
 
   // Three agree but ONE on-scale: OFF-SCALE branch now shows watch, still NOT ready
   const votesO = [
@@ -240,10 +244,7 @@ function makeVote(desk, side, entry, stop, t1, barT){
       fail++;
       return;
     }
-    fs.writeFileSync(file, mutated);
-    try{
-      // re-boot sandbox against mutated source
-      const win = boot(mutated);
+    const win = boot(mutated);
       const build = win.hgGoldConfluenceBuild;
       let caught = false;
       try{
@@ -297,11 +298,8 @@ function makeVote(desk, side, entry, stop, t1, barT){
           if (b.watch && b.watch.reason !== 'off-scale from IUX') caught = true;
         }
       }catch(e){ caught = true; }
-      if (caught){ pass++; }
-      else { fail++; console.error('MUTATION ' + name + ' NOT CAUGHT'); }
-    } finally {
-      fs.writeFileSync(file, original);
-    }
+    if (caught){ pass++; }
+    else { fail++; console.error('MUTATION ' + name + ' NOT CAUGHT'); }
   }
 
   // Baseline: must be green BEFORE the mutation pass.

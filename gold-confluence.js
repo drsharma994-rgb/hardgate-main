@@ -2,8 +2,10 @@
    SCAN opens every gold desk that has not published yet and waits for
    that scan to finish. A desk that only runs while its own tab is open
    is opened here. The live price is the IUX anchor (gold-iux.js,
-   gold-api XAU). The entry is the median of the crowned plans that
-   sit on that price. It is not moved to the live print. No anchor, no
+   gold-api XAU). The entry, the stop, and the target are one
+   desk's own plan: the plan whose entry sits nearest the median
+   entry. A tie keeps the first plan. Stops and targets are not
+   averaged. The entry is not moved to the live print. No anchor, no
    setup. Three desks are not required. Two plans on the same side,
    both within 2.5% of the live price, are a setup. A smaller number
    of plans on the other side does not remove it. A tie shows both
@@ -11,7 +13,7 @@
    cluster and a spread that leaves under 1R are named. They do not
    remove the setup. A crown is not
    required for those two to count. When two or more are crowned, the
-   entry is the median of the crowned plans. Otherwise it is the median
+   plan is the nearest of the crowned plans. Otherwise it is the nearest
    of the plans on the price. A live price that has already
    reached the stop is not a setup. SUPER GOLD reads GOLD SCALP and GOLD SWING. MILLI GOLD reads
    OMNIGOLD. Neither is a second vote. A published plan counts even
@@ -170,10 +172,50 @@ function median(xs){
   return (s[m - 1] + s[m]) / 2;
 }
 function ordered(side, entry, stop, t1){
-  if (!(entry > 0 && stop > 0 && t1 > 0) || entry === stop) return false;
-  if (side === 'long') return stop < entry && entry < t1;
-  if (side === 'short') return t1 < entry && entry < stop;
-  return false;
+  return legR(side, entry, stop, t1) != null;
+}
+/* Reward / risk for one published plan. The stop has to sit beyond the
+   entry and the target beyond it the other way, or this is not an R.
+   Absolute value is not a side: a long whose stop is above the entry
+   and whose target is below it is already invalidated. */
+function legR(side, entry, stop, t1){
+  if (typeof hgGoldLegR === 'function') return hgGoldLegR(side, entry, stop, t1);
+  entry = +entry; stop = +stop; t1 = +t1;
+  var d = String(side || '').toLowerCase();
+  var risk, rew;
+  if (d === 'long'){ risk = entry - stop; rew = t1 - entry; }
+  else if (d === 'short'){ risk = stop - entry; rew = entry - t1; }
+  else return null;
+  if (!(isFinite(entry) && entry > 0 && isFinite(risk) && risk > 0 && isFinite(rew) && rew > 0)) return null;
+  return rew / risk;
+}
+/* The card prints one desk's levels. The median entry only picks which
+   desk: the plan closest to it. A tie keeps the first. The stop and the
+   target are not averaged with the other desks. */
+function quoteSide(side, pack){
+  if (!pack || !pack.length) return null;
+  var midE = median(pack.map(function(v){ return v.entry; }));
+  var leader = pack[0], bestD = Infinity, i, d, entry, stop, t1, ratio, risk, reward;
+  for (i = 0; i < pack.length; i++){
+    d = Math.abs(pack[i].entry - midE);
+    if (d < bestD){ bestD = d; leader = pack[i]; }
+  }
+  entry = +(+leader.entry).toFixed(2);
+  stop = +(+leader.stop).toFixed(2);
+  t1 = +(+leader.t1).toFixed(2);
+  ratio = legR(side, entry, stop, t1);
+  if (ratio == null) return null;
+  risk = side === 'long' ? (entry - stop) : (stop - entry);
+  reward = side === 'long' ? (t1 - entry) : (entry - t1);
+  return {
+    leader: leader, entry: entry, stop: stop, t1: t1,
+    risk: risk, reward: reward, rr: +ratio.toFixed(2)
+  };
+}
+function tradableVote(v){
+  if (!v || v.state !== 'setup') return false;
+  if (v.geometryOk === false) return false;
+  return legR(v.side, v.entry, v.stop, v.t1) != null;
 }
 /* hg-v1389: READ the fields each gold desk already stamps on its own
    candidates (hg-v978 barT / hg-v977 signalT, so the ledger dates on the
@@ -199,6 +241,7 @@ function readBarT(o){
 }
 function rowOf(o){
   if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  if (o.geometryOk === false) return null;
   if (o.vetoed === true || o.demoted === true || o.dropped === true || o.aside === true) return null;
   if (o.recordOnly === true) return null;
   if (o.verdict && o.verdict.qualifies === false) return null;
@@ -731,11 +774,13 @@ function markEcho(setups){
   return kept;
 }
 
-/* hg-v1446: record-only. The traded entry, stop, and target stay the
-   component-wise median. These booleans let the forward ledger price two
-   knives that are not yet measured: a plan no desk issued, and a quorum
-   that is one family counted more than once. A key that never landed is
-   absent (hg-v989). Nothing here sets ready. */
+/* hg-v1446 marks, still record-only. The traded entry, stop, and
+   target are the nearest desk's own levels. They are not a blend of
+   the pack. These booleans let the forward ledger price two knives
+   that are not a gate: a printed level that moved off that desk by
+   half a dime or more, and a quorum that is one family counted more
+   than once. A key that never landed is absent (hg-v989). Nothing
+   here sets ready. */
 var CF_FAMILY = {
   goldscalp: 'scalp', ganeshgold: 'scalp',
   goldswing: 'swing', newgold: 'swing',
@@ -880,13 +925,9 @@ function attachWatch(base, pack, votes, px, opts){
   opts = opts || {};
   if (!pack || pack.length < 1 || pack.length > 20) return;
   var side = pack[0].side;
-  var entry = +median(pack.map(function(v){ return v.entry; })).toFixed(2);
-  var stop = +median(pack.map(function(v){ return v.stop; })).toFixed(2);
-  var t1 = +median(pack.map(function(v){ return v.t1; })).toFixed(2);
-  if (!ordered(side, entry, stop, t1)) return;
-  var risk = Math.abs(entry - stop);
-  var reward = Math.abs(t1 - entry);
-  var rr = risk > 0 ? +(reward / risk).toFixed(2) : NaN;
+  var q = quoteSide(side, pack);
+  if (!q) return;
+  var entry = q.entry, stop = q.stop, t1 = q.t1, risk = q.risk, rr = q.rr;
   var watch = {
     side: side,
     entry: entry,
@@ -915,17 +956,13 @@ function attachWatch(base, pack, votes, px, opts){
 function sideCard(pack, px){
   if (!pack || !pack.length) return null;
   var side = pack[0].side;
-  var entry = +median(pack.map(function(v){ return v.entry; })).toFixed(2);
-  var stop = +median(pack.map(function(v){ return v.stop; })).toFixed(2);
-  var t1 = +median(pack.map(function(v){ return v.t1; })).toFixed(2);
-  if (!ordered(side, entry, stop, t1)) return null;
-  var risk = Math.abs(entry - stop);
-  var reward = Math.abs(t1 - entry);
+  var q = quoteSide(side, pack);
+  if (!q) return null;
   return {
     desk: pack.map(function(v){ return v.desk; }).join(' + '),
-    side: side, entry: entry, stop: stop, t1: t1,
+    side: side, entry: q.entry, stop: q.stop, t1: q.t1,
     mark: (px > 0) ? px : null,
-    rr: risk > 0 ? +(reward / risk).toFixed(2) : NaN,
+    rr: q.rr,
     spreadUsd: null,
     count: pack.length
   };
@@ -1005,7 +1042,7 @@ function cfScoreNote(built){
 function hgGoldConfluenceBuild(votes, iux, cost){
   votes = Array.isArray(votes) ? votes : [];
   /* A hand-built forecast row is the same exclusion. It cannot complete
-     the quorum and it cannot move the median. */
+     the quorum and it cannot move the leading desk's levels. */
   votes = votes.map(function(v){
     if (!forecastDesk(v) || v.state !== 'setup') return v;
     return {
@@ -1016,7 +1053,7 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     };
   });
   var px = iux && num(iux.px);
-  var setups = votes.filter(function(v){ return v && v.state === 'setup'; });
+  var setups = votes.filter(tradableVote);
   markEcho(setups);
   var live = setups.filter(function(v){ return !v.echo; });
   var longs = live.filter(function(v){ return v.side === 'long'; });
@@ -1067,7 +1104,7 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     attachWatch(base, longs.length ? longs : shorts, votes, px);
     if (base.watch){
       base.reason += ' WATCH ' + base.watch.count + ' of 2. Entry ' + fmt(base.watch.entry)
-        + ' is the median of the desks that published, not the live print ' + fmt(px) + '.';
+        + ' is the nearest desk\'s own plan, not the live print ' + fmt(px) + '.';
     }
     return base;
   }
@@ -1087,9 +1124,10 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     });
     return base;
   }
-  /* Two plans on the live price are the trade. When two or more of
-     them are crowned, the median uses only those. Otherwise every
-     on-scale plan is in the median, crowned or not. */
+  /* Two plans on the live price agree the side. When two or more of
+     them are crowned, only those are eligible. The trade is the one
+     whose entry sits nearest the median entry. Its stop and its target
+     stay that desk's own levels. They are not averaged. */
   var crowns = priced.filter(crownedVote);
   var formed = crowns.length >= 2 ? crowns : priced;
   if (formed.length < 2){
@@ -1102,16 +1140,31 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     });
     return base;
   }
-  var entry = +median(formed.map(function(v){ return v.entry; })).toFixed(2);
-  var stop = +median(formed.map(function(v){ return v.stop; })).toFixed(2);
-  var t1 = +median(formed.map(function(v){ return v.t1; })).toFixed(2);
-  if (!ordered(side, entry, stop, t1)){
+  /* hg-v1389: the signal-bar fields of the plan whose entry sits nearest
+     the median ride onto base so recordConfluence can hand them to
+     hgFwdRecordScan. Nearest-median rather than median-of-barTs because
+     each plan is one setup, and the plan the ledger needs to date on is
+     the one that LED the card -- not an average across different mint
+     instants. A desk whose plan carried neither leaves both absent;
+     hg-forward's barOf then falls back to flooring the scan clock to the
+     15m grid (unchanged from current behaviour). */
+  var midE = median(formed.map(function(v){ return v.entry; }));
+  var leader = formed[0], bestD = Infinity;
+  formed.forEach(function(v){
+    var d = Math.abs(v.entry - midE);
+    if (d < bestD){ bestD = d; leader = v; }
+  });
+  var entry = leader ? +(+leader.entry).toFixed(2) : NaN;
+  var stop = leader ? +(+leader.stop).toFixed(2) : NaN;
+  var t1 = leader ? +(+leader.t1).toFixed(2) : NaN;
+  var ratio = legR(side, entry, stop, t1);
+  if (ratio == null){
     base.side = side;
-    base.reason = 'The median entry, stop, and target are not in order, so no setup is formed.';
+    base.reason = 'The nearest desk plan does not have the stop beyond the entry and the target beyond it the other way, so no setup is formed.';
     return base;
   }
-  var risk = Math.abs(entry - stop);
-  var reward = Math.abs(t1 - entry);
+  var risk = side === 'long' ? (entry - stop) : (stop - entry);
+  var reward = side === 'long' ? (t1 - entry) : (entry - t1);
   var through = (side === 'long') ? (px - entry) / (t1 - entry) : (entry - px) / (entry - t1);
   base.side = side;
   base.entry = entry;
@@ -1121,20 +1174,8 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   base.deskCount = formed.length;
   base.offChart = off;
   base.desks = formed.map(function(v){ return v.desk; });
-  /* hg-v1389: the signal-bar fields of the plan whose entry sits nearest
-     the median ride onto base so recordConfluence can hand them to
-     hgFwdRecordScan. Nearest-median rather than median-of-barTs because
-     each plan is one setup, and the plan the ledger needs to date on is
-     the one that LED to the median -- not an average across different
-     mint instants. A desk whose plan carried neither leaves both absent;
-     hg-forward's barOf then falls back to flooring the scan clock to the
-     15m grid (unchanged from current behaviour). */
-  var midE = median(formed.map(function(v){ return v.entry; }));
-  var leader = formed[0], bestD = Infinity;
-  formed.forEach(function(v){
-    var d = Math.abs(v.entry - midE);
-    if (d < bestD){ bestD = d; leader = v; }
-  });
+  base.rr = +ratio.toFixed(2);
+  base.rr1 = base.rr;
   if (leader){
     if (typeof leader.barT === 'number' && isFinite(leader.barT) && leader.barT > 0) base.barT = leader.barT;
     if (typeof leader.signalT === 'number' && isFinite(leader.signalT) && leader.signalT > 0) base.signalT = leader.signalT;
@@ -1150,8 +1191,11 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     return base;
   }
   var costOk = applyCost(base, risk, reward);
+  base.rr1 = base.rr;
+  var whose = (leader && leader.desk) ? leader.desk : 'the nearest desk';
   base.reason = formed.length + ' desks agree ' + side.toUpperCase()
-    + '. Entry ' + fmt(entry) + ' is the median of their plans, not the live print ' + fmt(px) + '.'
+    + '. Entry ' + fmt(entry) + ', stop ' + fmt(stop) + ' and target ' + fmt(t1)
+    + ' are ' + whose + '\'s own plan (' + fmt(base.rr) + 'R). They are not an average of the other desks, and the entry is not the live print ' + fmt(px) + '.'
     + (base.costNote ? ' ' + base.costNote : '');
   if (priced.length > formed.length){
     base.reason += ' ' + (priced.length - formed.length) + ' uncrowned plan' + (priced.length - formed.length === 1 ? ' was' : 's were') + ' not counted.';
@@ -1163,9 +1207,9 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   // hg-v1391/hg-v1458: MOST-ACCURATE confluence scoring (named since hg-v1456, never gating)
   // 1) cluster tightness: entries must cluster within 0.8%
   // 2) netR after measured spread must survive 1.2R
-  // 3) risk shape (hg-v1458): every forming plan prices the trade with a
-  //    stop inside 0.5x-2x of the pack median risk, so the median stop is
-  //    a plan shape the desks actually measured
+  // 3) risk shape (hg-v1458): every forming plan prices its own stop
+  //    inside 0.5x-2x of the pack median stop distance. The card still
+  //    prints the nearest desk's own stop. It does not average them.
   var entries = formed.map(function(v){ return v.entry; });
   var maxE = Math.max.apply(null, entries), minE = Math.min.apply(null, entries);
   var spreadPct = (maxE - minE) / entry * 100;
@@ -1186,17 +1230,17 @@ function hgGoldConfluenceBuild(votes, iux, cost){
      printed "N/N crowned" with the same number twice — which read as a
      passed check even when the median carried uncrowned plans. The count
      is now printed honestly as crowned-of-formed. The crown still
-     prefers: two or more crowned plans move the median alone. */
+     prefers: two or more crowned plans, and the nearest of those leads. */
   base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk,
     crowned: crowned, crownTotal: formed.length, riskOk: riskOk };
   if (!tightOk){
-    base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — median held but accuracy is degraded.';
+    base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — the nearest desk plan is held and accuracy is degraded.';
     base.accuracyTier = 'WATCH';
   } else if (!netOk){
     base.reason += ' Net ' + fmt(base.netRr) + 'R after $' + fmt(base.spreadUsd) + ' spread is under 1.20R — cost degrades accuracy.';
     base.accuracyTier = 'WATCH';
   } else if (!riskOk){
-    base.reason += ' The desks agree ' + side.toUpperCase() + ' but do not agree where risk lives — stop distances run ' + fmt(Math.min.apply(null, risks)) + ' to ' + fmt(Math.max.apply(null, risks)) + ', and each plan sits outside 0.5x-2x of the median risk ' + fmt(medRisk) + '. The median stop is no desk measured plan, the card names it, it does not remove the setup.';
+    base.reason += ' The desks agree ' + side.toUpperCase() + ' but do not agree where risk lives — stop distances run ' + fmt(Math.min.apply(null, risks)) + ' to ' + fmt(Math.max.apply(null, risks)) + ', and each plan sits outside 0.5x-2x of the median risk ' + fmt(medRisk) + '. The card keeps the nearest desk\'s own stop and target. It does not average them and it does not remove the setup.';
     base.accuracyTier = 'WATCH';
   } else {
     base.accuracyTier = 'HIGH';
@@ -1245,16 +1289,16 @@ function recordConfluence(win, built){
        the scan clock to the 15m grid, which is the CURRENT FORMING BAR's
        open time. Settlement walks strictly after barT, so the first bar
        of the trade (the forming bar that closes) is SKIPPED. The vote model
-       propagated the median plan's own signal bar through from each gold
+       propagated the leading desk's own signal bar through from that gold
        desk's cand -- so the record now dates on the bar the plan was
        JUDGED on, exactly as hg-v978 fixed on the seven home desks.
 
      - mark (hg-v980): without it, hgFwdOrderType returns null and the
        fill-aware pass stands aside, so a limit the tape never reached is
-       settled as a market win. The CONFLUENCE entry is a MEDIAN that is
-       by construction OFF the live IUX price (which is what makes it a
-       resting plan), so this bite is specifically live on this desk. The
-       live IUX px is already on built.mark.
+       settled as a market win. The CONFLUENCE entry is one desk's own
+       plan, chosen as the entry nearest the median entry, and that
+       plan is off the live IUX price, so this bite is specifically
+       live on this desk. The live IUX px is already on built.mark.
 
      - goldShut (hg-v953): a CONFLUENCE scan can be run on cached snapshots
        during the gold weekend (Fri 22 UTC - Sun 22 UTC). hg-v953 wires this
@@ -1264,8 +1308,7 @@ function recordConfluence(win, built){
 
      WHAT THIS DOES NOT ADD, said rather than hidden:
 
-     - feed (hg-v979): CONFLUENCE's median plan is multi-feed by
-       construction (one XM, one Delta XAUT, one Yahoo), so naming any one
+     - feed (hg-v979): the desks that voted are not one feed, so naming any one
        feed on the record would HOLD it waiting for bars under that label
        forever (hg-v979's own rule). Fail-open (feed absent -> ledger
        settles on any gold bars) is the honest answer and the current
@@ -1432,9 +1475,9 @@ function cfReadNote(built){
   if (!src || !src.reads) return '';
   var bits = [];
   if (src.reads['cf:synthetic'] === true && src.leader){
-    bits.push('Median levels are not one desk plan. Nearest desk is ' + (src.leader.desk || 'a desk')
+    bits.push('The printed levels are not one desk plan. Nearest desk is ' + (src.leader.desk || 'a desk')
       + ' at ' + fmt(src.leader.entry) + ' / ' + fmt(src.leader.stop) + ' / ' + fmt(src.leader.t1)
-      + '. The trade stays the median. This read does not change the gate.');
+      + '. The trade on this card is that desk, not a blend. This read does not change the gate.');
   }
   if (src.reads['cf:familyShort'] === true){
     bits.push('Fewer than three independent families. Counted on the record, not gated.');
@@ -1443,7 +1486,7 @@ function cfReadNote(built){
     bits.push('Signal bars are not one session. Counted on the record, not gated.');
   }
   if (src.reads['cf:staleSignal'] === true){
-    bits.push('The plan that led the median was formed more than eight hours before this scan. Counted on the record, not gated.');
+    bits.push('The plan that led this card was formed more than eight hours before this scan. Counted on the record, not gated.');
   }
   if (!bits.length) return '';
   return '<div class="hg-note">' + esc(bits.join(' ')) + '</div>';
@@ -1501,9 +1544,9 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie shows both plans and does not blend them. A wide cluster and a spread under 1R are named and do not remove it. The entry is their median, or the median of the crowned ones when two or more are crowned. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup. When the forming plans disagree on where risk lives — a stop distance outside 0.5×–2× of the pack median — the card names it. It does not remove the setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie shows both plans and does not blend them. A wide cluster and a spread under 1R are named and do not remove it. The entry, the stop, and the target are the nearest desk\'s own plan. Other desks confirm the side. Stops and targets are not averaged. When two or more plans are crowned, that plan is chosen from the crowned ones. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup. When the forming plans disagree on where risk lives — a stop distance outside 0.5×–2× of the pack median — the card keeps the nearest desk\'s own stop and names the disagreement. It does not remove the setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
-    + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. The 100-point score is a label. It does not change ready.</div></div></div>';
+    + '<div class="hg-note">The levels on a setup are one desk\'s own plan, the plan whose entry sits nearest the median entry. A same-family count and a session split are written on the forward record and do not change ready. The 100-point score is a label. It does not change ready.</div></div></div>';
   var btn = root.querySelector('#gc-run');
   var stat = root.querySelector('#gc-stat');
   function go(doGather){

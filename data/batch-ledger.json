@@ -695,6 +695,11 @@
       "version": "hg-v1461",
       "built": "2026-10-29T16:59:12Z",
       "note": "GOLD SETUP GEOMETRY. A labelled long or short publishes R only when the stop sits beyond the entry and the target sits beyond the entry the other way. A stop or target on the wrong side clears that leg instead of printing the absolute ratio as a positive R. Unlabelled plans keep the absolute ratio. Desk ladders are unchanged. Not re-walked."
+    },
+    {
+      "version": "hg-v1462",
+      "built": "2026-10-29T17:20:00Z",
+      "note": "GOLD CONFLUENCE prints one desk plan. The median entry only chooses which desk: the plan nearest it, and a tie keeps the first. The stop and the target stay that desk own levels. They are not averaged. A desk with geometryOk false, or a stop or target on the wrong side, is not a vote. R is the directional ratio of that desk. Agreement, a tie, the cluster, the cost, and the risk shape stay named and do not gate. Not re-walked."
     }
   ]
 }

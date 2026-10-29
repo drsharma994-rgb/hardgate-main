@@ -31,8 +31,9 @@ const built = win.hgGoldConfluenceBuild(votes, { px: 2651.5, src: 'gold-api' }, 
 assert.equal(built.ready, true);
 assert.equal(built.side, 'long');
 assert.equal(built.entry, 2651);
-assert.equal(built.stop, 2640);
-assert.equal(built.t1, 2670);
+assert.equal(built.stop, 2642);
+assert.equal(built.t1, 2668);
+assert.equal(built.rr, 1.89);
 assert.equal(built.mark, 2651.5);
 assert.notEqual(built.entry, built.mark);
 assert.equal(built.longCount, 3);
@@ -83,8 +84,8 @@ delete win.goldDirectionScan;
 win.goldPineScan = () => ({ cands: [row(3000, 2900, 3200)] });
 /* hg-v1393: a far pine that is off-scale from IUX now paints an
    OFF-SCALE watch (hg-v1391 widening). Without a spread, netR cannot
-   compute, so ready remains false even on-scale — but the median entry
-   is still the median of the on-scale cluster, not the far outlier. */
+   compute, so ready remains false even on-scale — but the entry
+   is still the nearest on-scale desk, not the far outlier. */
 const far = win.hgGoldConfluenceBuild(win.hgGoldConfluenceRead(win), { px: 2651.5 }, { spreadUsd: 0.30 });
 assert.equal(far.ready, true, 'with cluster + spread, far pine is excluded from on-scale and ready stays true');
 assert.equal(far.entry, 2651);
@@ -96,15 +97,17 @@ const two = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2641, t1: 2671 }
 ], { px: 2650 });
 assert.equal(two.ready, true);
-assert.equal(two.entry, 2650.5);
-assert.notEqual(two.entry, 2650);
+assert.equal(two.entry, 2650);
+assert.equal(two.stop, 2640);
+assert.equal(two.t1, 2670);
+assert.equal(two.rr, 2);
 assert.equal(two.reads['cf:familyShort'], undefined);
-assert.equal(two.reads['cf:synthetic'], true);
+assert.equal(two.reads['cf:synthetic'], false);
 assert.equal(two.reads['cf:spreadUnread'], true);
 assert.equal(two.reads['cf:sessionSplit'], undefined);
 
 /* An armed candle forecast is not a desk. Two real plans on the live
-   price are a setup, and the forecast does not move their median. */
+   price are a setup, and the forecast does not move the leading plan. */
 win.hgCandleForecastAlertState = () => ({
   dir: 'short', entry: 2400, stop: 2500, t1: 2200, grade: 'A', ticket: true
 });
@@ -124,23 +127,25 @@ const forced = win.hgGoldConfluenceBuild([
 ], { px: 2651.5 }, { spreadUsd: 0.30 });
 assert.equal(forced.ready, true);
 assert.equal(forced.longCount, 2);
-assert.equal(forced.entry, 2650.5);
+assert.equal(forced.entry, 2650);
+assert.equal(forced.stop, 2640);
+assert.equal(forced.t1, 2670);
 assert.ok(forced.desks.indexOf('CANDLE FORECAST') < 0);
 assert.equal(forced.votes.filter(v => v.id === 'candle-forecast')[0].state, 'context');
 
 /* Two crowned plans on the live price are a setup once a third desk
-   has agreed. The off-scale plan does not move the median. */
+   has agreed. The off-scale plan does not move the leading plan. */
 const thin = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
   { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2640, t1: 2670, grade: 'A', lead: true },
   { desk: 'GOLD PINE', state: 'setup', side: 'long', entry: 3000, stop: 2900, t1: 3200, grade: 'A', lead: true }
 ], { px: 2651.5 }, { spreadUsd: 0.30 });
 assert.equal(thin.ready, true);
-assert.equal(thin.entry, 2650.5);
+assert.equal(thin.entry, 2650);
 assert.ok(thin.desks.indexOf('GOLD PINE') < 0);
 assert.ok(thin.offChart >= 1);
 
-/* An uncrowned plan does not move the median, and it does not erase
+/* An uncrowned plan does not choose the leader, and it does not erase
    the two crowned plans that sit on the live price. */
 const bareThird = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
@@ -148,7 +153,9 @@ const bareThird = win.hgGoldConfluenceBuild([
   { desk: 'NEW GOLD', state: 'setup', side: 'long', entry: 2660, stop: 2600, t1: 2800 }
 ], { px: 2651.5 }, { spreadUsd: 0.30 });
 assert.equal(bareThird.ready, true);
-assert.equal(bareThird.entry, 2651);
+assert.equal(bareThird.entry, 2650);
+assert.equal(bareThird.stop, 2640);
+assert.equal(bareThird.t1, 2670);
 assert.ok(bareThird.desks.indexOf('NEW GOLD') < 0);
 
 /* A price already through the stop is finished. A price still above the
@@ -230,7 +237,9 @@ const twoShort = win.hgGoldConfluenceBuild([
 ], { px: 4174 });
 assert.equal(twoShort.ready, true);
 assert.equal(twoShort.shortCount, 2);
-assert.equal(twoShort.entry, 4172.2);
+assert.equal(twoShort.entry, 4174.4);
+assert.equal(twoShort.stop, 4210.15);
+assert.equal(twoShort.t1, 4120.78);
 
 win.goldscalpScan = () => ({ cands: [], whySilent: 'no 15m setup' });
 const silent = win.hgGoldConfluenceRead(win).filter(v => v.id === 'goldscalp')[0];
@@ -482,5 +491,29 @@ const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 assert.match(index, /gold-confluence\.js\?v=/);
 assert.match(index, /tabs:\['gold-confluence'/);
 assert.match(sw, /\.\/gold-confluence\.js/);
+
+
+/* A stop or target on the wrong side is not a vote and is not a positive R. */
+const broken = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2660, t1: 2640 },
+  { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2661, t1: 2641 }
+], { px: 2651 }, { spreadUsd: 0.30 });
+assert.equal(broken.ready, false);
+assert.equal(broken.longCount, 0);
+assert.ok(!(broken.rr > 0));
+/* A desk that already sealed geometryOk false does not vote, even when the
+   printed numbers would otherwise order. The two desks that sealed clean
+   still form one plan, and that plan is one of theirs. */
+const sealedOut = win.hgGoldConfluenceBuild([
+  { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, geometryOk: false },
+  { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2642, t1: 2668 },
+  { desk: 'GANESH GOLD', state: 'setup', side: 'long', entry: 2652, stop: 2638, t1: 2672 }
+], { px: 2651.5 }, { spreadUsd: 0.30 });
+assert.equal(sealedOut.ready, true);
+assert.ok(sealedOut.desks.indexOf('GOLD SCALP') < 0);
+assert.equal(sealedOut.entry, 2651);
+assert.equal(sealedOut.stop, 2642);
+assert.equal(sealedOut.t1, 2668);
+assert.ok(sealedOut.rr > 0);
 
 console.log('GOLD CONFLUENCE TAB PASSED', built.entry, built.stop, built.t1);
