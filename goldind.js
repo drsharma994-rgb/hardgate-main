@@ -6162,9 +6162,26 @@ function goldRankSetups(cands, ctx){
                               reason: sideGate.why || 'plan sides invalid' });
           continue;
         }
-        /* The printed R is the geometry, |target − entry| / |entry − stop|.
-           A desk that advertised a different R was not describing this plan. */
-        if (isFinite(sideGate.rr)) c.rr = +sideGate.rr.toFixed(2);
+        /* hg-v1464: THE SEAL, not a partial overwrite. hg-v1459 pinned the
+           printed R to the geometry when a target exists — but a candidate
+           whose target is UNREAD kept whatever R the desk advertised, so a
+           card could print "R 2.5" on a plan with no target to pay it (an R
+           invented upstream of the ranker). hgSyncPlanRr (gold-best-levels)
+           is the house seal: every leg recomputed from the published levels,
+           a leg that is not beyond the entry CLEARED to null with a named
+           rrNote, never invented — the exact hg-v1459 rule the ranker was
+           not according to. The partial overwrite remains the fallback when
+           the seal is not loaded. */
+        if (typeof hgSyncPlanRr === 'function') hgSyncPlanRr(c);
+        else if (isFinite(sideGate.rr)) c.rr = +sideGate.rr.toFixed(2);
+        /* hg-v1464: the exact-pricing audit rides on every ranked setup —
+           NAMED, never gating (the house rule): tick alignment, published-rr
+           vs exact |TP1−entry|/|entry−stop|, published risk vs |entry−stop|,
+           TP2 beyond TP1. Attached only when it has something to say. */
+        if (typeof hgGoldPlanPricingOk === 'function'){
+          var __pa = hgGoldPlanPricingOk(c);
+          if (__pa && (!__pa.ok || (__pa.offTick && __pa.offTick.length))) c.pricingAudit = __pa;
+        }
       }
       var parts = [], tally = 0;
       /* hg-v1155: THE FREE-FEED LEGS, RECORDED. Every leg below that reads a
