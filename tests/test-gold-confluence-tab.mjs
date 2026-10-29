@@ -133,29 +133,28 @@ assert.equal(forced.watch.entry, 2650.5);
 assert.ok(forced.watch.desks.indexOf('CANDLE FORECAST') < 0);
 assert.equal(forced.votes.filter(v => v.id === 'candle-forecast')[0].state, 'context');
 
-/* Two on the live price do not become a setup because a third agreed
-   somewhere else. The off-scale plan does not move the median. */
+/* Two crowned plans on the live price are a setup once a third desk
+   has agreed. The off-scale plan does not move the median. */
 const thin = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
   { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2651, stop: 2640, t1: 2670, grade: 'A', lead: true },
   { desk: 'GOLD PINE', state: 'setup', side: 'long', entry: 3000, stop: 2900, t1: 3200, grade: 'A', lead: true }
 ], { px: 2651.5 }, { spreadUsd: 0.30 });
-assert.equal(thin.ready, false);
-assert.equal(thin.watch.count, 2);
-assert.equal(thin.watch.entry, 2650.5);
-assert.match(thin.watch.label, /ON THE LIVE PRICE/);
-assert.ok(thin.watch.desks.indexOf('GOLD PINE') < 0);
+assert.equal(thin.ready, true);
+assert.equal(thin.entry, 2650.5);
+assert.ok(thin.desks.indexOf('GOLD PINE') < 0);
+assert.ok(thin.offChart >= 1);
 
-/* An uncrowned plan does not complete three and does not move the median. */
+/* An uncrowned plan does not move the median, and it does not erase
+   the two crowned plans that sit on the live price. */
 const bareThird = win.hgGoldConfluenceBuild([
   { desk: 'GOLD SCALP', state: 'setup', side: 'long', entry: 2650, stop: 2640, t1: 2670, grade: 'A', lead: true },
   { desk: 'GOLD SWING', state: 'setup', side: 'long', entry: 2652, stop: 2640, t1: 2670, grade: 'A', lead: true },
   { desk: 'NEW GOLD', state: 'setup', side: 'long', entry: 2660, stop: 2600, t1: 2800 }
 ], { px: 2651.5 }, { spreadUsd: 0.30 });
-assert.equal(bareThird.ready, false);
-assert.equal(bareThird.watch.entry, 2651);
-assert.match(bareThird.watch.label, /CROWNED/);
-assert.ok(bareThird.watch.desks.indexOf('NEW GOLD') < 0);
+assert.equal(bareThird.ready, true);
+assert.equal(bareThird.entry, 2651);
+assert.ok(bareThird.desks.indexOf('NEW GOLD') < 0);
 
 /* A price already through the stop is finished. A price still above the
    stop, even if it has not reached the entry, is still a setup. */

@@ -4,9 +4,11 @@
    is opened here. The live price is the IUX anchor (gold-iux.js,
    gold-api XAU). The entry is the median of the crowned plans that
    sit on that price. It is not moved to the live print. No anchor, no
-   setup. Fewer than three crowned plans on that price is a watch, not
-   a setup. A live price that has already reached the stop is not a
-   setup. SUPER GOLD reads GOLD SCALP and GOLD SWING. MILLI GOLD reads
+   setup. Three desks on the same side are required. At least two of
+   those plans must be crowned or grade A and sit on the live price.
+   A third plan that is off the price, or not crowned, does not erase
+   the setup and does not move it. A live price that has already
+   reached the stop is not a setup. SUPER GOLD reads GOLD SCALP and GOLD SWING. MILLI GOLD reads
    OMNIGOLD. Neither is a second vote. A plan counts toward a setup only
    when the desk crowned it or graded it A. A measured spot-versus-XM spread is
    subtracted. An unread spread is named and not invented. A formed
@@ -980,26 +982,19 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     });
     return base;
   }
-  /* The plans that form the trade are the crowned ones on the live price.
-     An off-scale plan and an uncrowned plan stay in the vote list. Neither
-     completes three, and neither moves the median. */
+  /* The trade is the crowned plans on the live price. Two are enough
+     once three desks have agreed. An off-scale plan and an uncrowned
+     plan stay on the card. Neither erases the setup, and neither moves
+     the median. Fewer than two crowned plans on the price is a watch. */
   var formed = priced.filter(crownedVote);
-  if (formed.length < 3){
+  if (formed.length < 2){
     base.side = side;
     base.offChart = off;
-    if (priced.length < 3){
-      base.reason = priced.length + ' of ' + pack.length + ' plans sit within 2.5% of the live IUX price (' + fmt(px) + '). Three crowned plans on the live price are required.';
-      attachWatch(base, priced, votes, px, {
-        reason: 'fewer than three on the live price',
-        label: priced.length + ' OF ' + pack.length + ' ON THE LIVE PRICE'
-      });
-    } else {
-      base.reason = 'Only ' + formed.length + ' of ' + priced.length + ' plans on the live price are crowned or grade A. An uncrowned plan does not form the setup.';
-      attachWatch(base, formed.length ? formed : priced, votes, px, {
-        reason: 'uncrowned plan',
-        label: formed.length + ' OF 3 CROWNED'
-      });
-    }
+    base.reason = 'Only ' + formed.length + ' crowned plan' + (formed.length === 1 ? '' : 's') + ' sit on the live IUX price (' + fmt(px) + '). Two are required, and a third desk must have agreed.';
+    attachWatch(base, formed.length ? formed : priced, votes, px, {
+      reason: 'fewer than two crowned on the live price',
+      label: formed.length + ' OF 2 CROWNED ON THE LIVE PRICE'
+    });
     return base;
   }
   var entry = +median(formed.map(function(v){ return v.entry; })).toFixed(2);
@@ -1069,7 +1064,7 @@ function hgGoldConfluenceBuild(votes, iux, cost){
      A measured spread still has to leave at least 1.20R. */
   var netOk = base.spreadUsd == null ? true : (isFinite(base.netRr) && base.netRr >= 1.20);
   var crowned = formed.length;
-  var crownOk = crowned >= 3;
+  var crownOk = crowned >= 2;
   base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk, crowned: crowned, crownOk: crownOk };
   if (!tightOk){
     base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — median held but accuracy is degraded.';
@@ -1078,7 +1073,7 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     base.reason += ' Net ' + fmt(base.netRr) + 'R after $' + fmt(base.spreadUsd) + ' spread is under 1.20R — cost degrades accuracy.';
     base.accuracyTier = 'WATCH';
   } else if (!crownOk){
-    base.reason += ' Only ' + crowned + ' crowned plans sit on the live price. Three are required.';
+    base.reason += ' Only ' + crowned + ' crowned plans sit on the live price. Two are required.';
     base.accuracyTier = 'WATCH';
   } else {
     base.accuracyTier = 'HIGH';
@@ -1348,7 +1343,7 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three crowned plans on the live price are a setup. Fewer than three is a watch, and the entry stays their median, not the live IUX print. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Three desks on the same side, with two crowned plans on the live price, are a setup. The entry is the median of those crowned plans, not the live IUX print. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
     + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. Three desks are still required.</div></div></div>';
   var btn = root.querySelector('#gc-run');

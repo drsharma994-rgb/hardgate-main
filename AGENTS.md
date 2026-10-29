@@ -1,3 +1,6 @@
+### GOLD CONFLUENCE — two crowned plans on the live price are a setup — hg-v1451
+- The tab was empty of setups because every plan had to be crowned and on the live price. The book that paid did not work that way. Three desks still have to agree. Two crowned or grade-A plans on the live IUX price are enough. The entry, stop, and target are the median of those crowned plans. A third plan off the price, or not crowned, stays on the card and does not move the median. A live price already through the stop is stood aside. CANDLE FORECAST is still not a vote. The hg-v1441 READY census was the looser gate and is not replaced.
+
 ### GOLD PINE — the lane uses the FTS tier, not the pillar letters — hg-v1450
 - A setup is shown when solidity is PRIME, SOLID or GOOD and the FTS tier is near or OK. Forming and aside stay off the swing lane, the scalp lane, and the lead. The previous pillar-letter bar hid a card the desk already called near. Recording is unchanged. The 0.3% scalp floor is unchanged. If solidity or the FTS reader is not loaded, the lanes are not emptied.
 

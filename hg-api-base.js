@@ -48,7 +48,7 @@
     if (old && old.parentNode) old.parentNode.removeChild(old);   /* hg-v1154: a detached or stubbed node has no parent */
     var s = document.createElement('script');
     s.id = id;
-    s.setAttribute('data-v', '1450');
+    s.setAttribute('data-v', '1451');
     s.src = src;
     s.async = false;
     (document.head || document.documentElement).appendChild(s);
@@ -62,6 +62,6 @@
      Both files are in sw.js HG_SHELL for real now, 'shivagold' sits in the
      GOLD group statically, and this injection stays as belt-and-braces.
      The cache-bump check scans runtime literals here. */
-  add('hgShivaDesk', 'shivagold.js?v=1450');
-  add('hgShivaNav', 'shiva-nav.js?v=1450');
+  add('hgShivaDesk', 'shivagold.js?v=1451');
+  add('hgShivaNav', 'shiva-nav.js?v=1451');
 })();
