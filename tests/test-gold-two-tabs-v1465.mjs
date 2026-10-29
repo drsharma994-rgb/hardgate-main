@@ -147,20 +147,20 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 /* ============ 3. the shipped build is stamped hg-v1465 ============ */
 {
   const stamp = read('build-stamp.js');
-  ok(/version: 'hg-v1469'/.test(stamp), 'build-stamp version');
+  ok(/version: 'hg-v1470'/.test(stamp), 'build-stamp version');
   ok(/built: '2026-10-30T/.test(stamp), 'build-stamp built (fresh date)');
   ok(/hg-v1467: GOLD FOUNDATION/.test(stamp), 'the pack string names the foundation round');
   ok(/hg-v1466: PINE GOLD and GOLD SCALP/.test(stamp), 'the failed-sweep round stays in the chain');
   ok(/hg-v1465: PINE GOLD and GOLD SCALP/.test(stamp), 'the prior unit-seal round stays in the chain');
   ok(/hg-v1464: GOLD TAB MATH/.test(stamp), 'and the pack history chain is intact');
-  ok(/HG_CACHE = 'hg-v1469'/.test(read('sw.js')), 'sw.js cache id');
+  ok(/HG_CACHE = 'hg-v1470'/.test(read('sw.js')), 'sw.js cache id');
   const idx = read('index.html');
-  ok(idx.indexOf('?v=1465') < 0 && idx.indexOf('?v=1469') >= 0, 'index.html cache-busters all at 1466');
+  ok(idx.indexOf('?v=1465') < 0 && idx.indexOf('?v=1470') >= 0, 'index.html cache-busters all at 1466');
   ok(read('hg-api-base.js').indexOf('1464') < 0, 'hg-api-base at 1465');
   ok(read('trendtable.js').indexOf('1464') < 0, 'trendtable loader at 1465');
   const ledger = JSON.parse(read('data/batch-ledger.json'));
   const entries = (Array.isArray(ledger) ? ledger : Object.values(ledger).find(Array.isArray));
-  ok(entries[entries.length - 1].version === 'hg-v1469', 'the batch ledger last entry is hg-v1469');
+  ok(entries[entries.length - 1].version === 'hg-v1470', 'the batch ledger last entry is hg-v1470');
 }
 
 /* ============ mutations ============ */

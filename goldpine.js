@@ -425,7 +425,15 @@ function probScore(s){
      Small weights: confluence reads dominate, this just breaks ties honestly. */
   var sent = (s.freeReads && s.freeReads['free:fearGreed'] === true) ? 3 : 0;
   var tilt = (s.freeReads && s.freeReads['free:macroTilt'] === true) ? 2 : 0;
-  return base + form + gradeRank(s.grade) * 3 + rr + fam + sent + tilt;
+  /* hg-v1470: THE MEASURED PREFER. hg-v1439 killed the baked prefer because
+     it was measured net-negative; THIS one is the forward ledger's own
+     verdict on the port — a row the ledger has RELEASED carries a measured
+     expectancy, and it rides the rank capped where the rr leg tops out.
+     The ledger is the measurement source, so the prefer is measured by
+     construction — the exact opposite of the unmeasured prefer that died. */
+  var measured = (s.recordReleased && s.recordJudge && fin(+s.recordJudge.expR))
+    ? Math.max(-4, Math.min(4, +s.recordJudge.expR)) * 2 : 0;
+  return base + form + gradeRank(s.grade) * 3 + rr + fam + sent + tilt + measured;
 }
 
 function topProbSetups(list, limit){
@@ -2040,7 +2048,8 @@ W.gpR2MarkReads = gpR2MarkReads;
    pin suite can drive them as units. */
 W.gpHoldMarks = gpHoldMarks;
 W.gpHoldMarkReads = gpHoldMarkReads;
-W.hgPineSetupFromNative = setupFromNative; /* hg-v1465: exported read-only for the two-tab exactness suite */
+W.hgPineSetupFromNative = setupFromNative;
+W.sortSetups = sortSetups; /* hg-v1470: exported read-only for the unified win-rate suite */ /* hg-v1465: exported read-only for the two-tab exactness suite */
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh,
                  fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml,

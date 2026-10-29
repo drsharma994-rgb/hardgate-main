@@ -735,6 +735,11 @@
       "version": "hg-v1469",
       "built": "2026-10-30T08:05:00Z",
       "note": "WIN-RATE LEDGER and FOUNDATION PANEL — the ask taken literally, on the measured book. THE WIN-RATE LEDGER (HG_GOLD_STRAT_WIN): the literal per-strategy win rates baked from the replay books (aggregates.byStrategy.winRate, 17 scalp rows; the swing book carries no per-strategy win rates so its rows keep win absent, three-state). The leaderboard rows carry win beside the shrunk expectancy; the card mark prints win NN.N% when the book has it. At the pinned planned R:R the two order identically — the ranking stays shrunk expectancy, the win rate is displayed beside it. THE MEASURED FOUNDATION PANEL (hgGoldStrategyLeaderboardHtml(desk)): every strategy with its rank, n, win rate, net expectancy and the in-force action tier — the leaderboard as HTML; named, never gating; an unknown desk renders nothing. THE CONFLUENCE TAB mounts the foundation panels for both books and stays silent when the goldind module is not in scope. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1470",
+      "built": "2026-10-30T08:35:00Z",
+      "note": "OMNIGOLD LEADERBOARD and PINE MEASURED PREFER — the unified win-rate standard reaches its last two tabs. OMNIGOLD: hgOgStrategyLeaderboard ranks the 54-mechanic replay book by the measured-edge significance the gate itself computes (hgOgReplayZ at the 2R breakeven), each mechanic with its n, its literal hit rate and the gate verdict (PROMOTED at the family-corrected bar, VETOED at EDGE_VETO_Z, UNJUDGED between — the top of the book is honestly UNJUDGED: the no-tickets state, named not inflated); hgOgFoundationPanelHtml renders it beside the edge-proof panel; named, never gating. GOLD PINE: the measured prefer — a row the forward ledger has RELEASED rides its measured expectancy in the board rank, capped where the rr leg tops out; the ledger is the measurement source, so the prefer is measured by construction. Not re-walked; the forward ledger decides."
     }
   ]
 }

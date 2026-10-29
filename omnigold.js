@@ -9347,6 +9347,7 @@ terse status, and never launches a first-time scan on a global refresh.
       /* then why there are no tickets to read at all, before the numbers a
          reader would otherwise scan looking for one */
       + hgOgEdgeProofPanelHtml()
+      + hgOgFoundationPanelHtml()
       /* then what the forward log says about the desk's OWN judgement —
          its ranking, its direction, its grades, its gate stack. Below the
          edge panel because that one explains why the ticket column is
@@ -10128,6 +10129,60 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (e) { return ''; }
   }
 
+  /* hg-v1470: THE OMNIGOLD FOUNDATION PANEL — the 54-mechanic replay book
+     ranked by its own measured-edge significance (hgOgReplayZ at the 2R
+     breakeven), each mechanic with its n, its literal hit rate and the
+     verdict the gate itself uses (PROMOTED at the family-corrected bar,
+     VETOED at EDGE_VETO_Z, UNJUDGED between). Named, never gating: it
+     renders the book the gate already reads — it gates nothing. Never
+     throws, never depends on the proof-panel visibility flag. */
+  function hgOgStrategyLeaderboard(){
+    var out = { total: 0, rows: [], byKey: {} };
+    try{
+      var kinds = (HG_OG_REPLAY_EVIDENCE && HG_OG_REPLAY_EVIDENCE.kinds) || null;
+      if (!kinds) return out;
+      var be = 1 / 3;
+      var famZ = hgOgFamilyZ();
+      var rows = [];
+      var keys = Object.keys(kinds);
+      for (var i = 0; i < keys.length; i++){
+        var row = kinds[keys[i]];
+        var n = fin(row && row[0]), hit = fin(row && row[1]);
+        if (!isFinite(n) || !isFinite(hit) || !(n > 0)) continue;
+        var z = hgOgReplayZ(row, be);
+        if (!isFinite(z)) continue;
+        var tier = (z >= famZ) ? 'PROMOTED' : (z <= EDGE_VETO_Z ? 'VETOED' : 'UNJUDGED');
+        rows.push({ key: keys[i], n: n, win: hit, z: z, tier: tier });
+      }
+      rows.sort(function(a, b){ return (b.z - a.z) || (b.n - a.n); });
+      for (var j = 0; j < rows.length; j++){ rows[j].rank = j + 1; out.byKey[rows[j].key] = rows[j]; }
+      out.rows = rows;
+      out.total = rows.length;
+      return out;
+    }catch(e){ out.rows = []; out.total = 0; out.byKey = {}; return out; }
+  }
+  function hgOgFoundationPanelHtml(){
+    try{
+      var lb = hgOgStrategyLeaderboard();
+      if (!lb || !lb.total) return '';
+      var body = '', i, r;
+      for (i = 0; i < lb.rows.length; i++){
+        r = lb.rows[i];
+        body += '<div class="hg-fnd-row">'
+          + '<span class="hg-fnd-rank">' + r.rank + '/' + lb.total + '</span>'
+          + ' <b>' + esc(String(r.key)) + '</b>'
+          + ' <span class="hg-fnd-nums">n=' + hgOgFmtCount(r.n)
+          + ' · win ' + (r.win * 100).toFixed(1) + '%'
+          + ' · z ' + (r.z >= 0 ? '+' : '') + r.z.toFixed(2) + 'σ</span>'
+          + ' <span class="hg-fnd-tier">' + r.tier + '</span></div>';
+      }
+      return '<div class="hg-fnd-panel" data-hg-foundation="omnigold">'
+        + '<b>MEASURED FOUNDATION · OMNIGOLD</b> — the 54-mechanic replay book, ranked by the measured-edge '
+        + 'significance the gate itself computes (hgOgReplayZ at the 2R breakeven). '
+        + 'The tier is the gate own verdict. Named, never gating.'
+        + body + '</div>';
+    }catch(e){ return ''; }
+  }
   function hgOgEdgeProofPanelHtml(){
     try {
       if (!OG_EDGE_PROOF_REQUIRED) return '';
@@ -17198,6 +17253,8 @@ terse status, and never launches a first-time scan on a global refresh.
        be tested without a mount */
     window.hgOgLaneCooldownMs = hgOgLaneCooldownMs;
     window.hgOgEdgeProofPanelHtml = hgOgEdgeProofPanelHtml;
+    window.hgOgStrategyLeaderboard = hgOgStrategyLeaderboard; /* hg-v1470 the omnigold win-rate ranking */
+    window.hgOgFoundationPanelHtml = hgOgFoundationPanelHtml; /* hg-v1470 the omnigold foundation panel */
     /* pure Bonferroni bar — exported so a test can check the ledger against
        the same number the gate and the panel use, not a copy of it */
     window.hgOgFamilyZ = hgOgFamilyZ;
