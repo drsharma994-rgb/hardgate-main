@@ -5485,12 +5485,12 @@ function gdRr(v){
    GOLD CONFLUENCE SCORE (hg-v559) — 100-pt core stack, not an indicator pile.
    HTF structure 25 · Location 20 · Momentum 15 · Vol regime 10 ·
    Volume/OF 10 · Macro 10 · Entry trigger 10.
-   Tiers: A 85–100 · GOOD 75–84 · WATCH 65–74 · NO TRADE <65.
+   Tiers: A 85–100 · GOOD 78–84 · WATCH 68–77 · NO TRADE <68.
    COT is weekly sentiment only (lagged) — never a live entry trigger.
 ========================================================================= */
 var HG_GOLD_CONF_A = 85;
-var HG_GOLD_CONF_GOOD = 75;
-var HG_GOLD_CONF_WATCH = 65;
+var HG_GOLD_CONF_GOOD = 78;
+var HG_GOLD_CONF_WATCH = 68;
 
 function hgGoldConfluenceTier(score){
   if (!(isFinite(score))) return 'NO_TRADE';

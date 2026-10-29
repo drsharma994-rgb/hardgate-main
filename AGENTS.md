@@ -1,3 +1,6 @@
+### GOLD CONFLUENCE SCORE — GOOD 78, WATCH 68 — hg-v1453
+- The 100-point stack is unchanged: HTF 25, location 20, momentum 15, vol regime 10, volume 10, macro 10, entry trigger 10. The cuts moved. A is still 85. GOOD is 78, so 75–77 is a watch, not an alert. WATCH is 68, so 65–67 is no trade and still demotes. An alert still needs the GOOD bar and no news lock. COT stays weekly and lagged. This was not re-walked.
+
 ### GOLD CONFLUENCE — two plans on the live price are a setup — hg-v1452
 - The third desk and the crown were what kept the card empty. Two plans on the same side, both within 2.5% of the live IUX price, are a setup. A published plan counts even when the desk did not crown it. A demoted plan still does not. When two or more of the plans are crowned, the median uses only those. Otherwise the median uses every plan on the price. One desk is a watch. A price through the stop is stood aside. CANDLE FORECAST is still not a vote. The 0.80% cluster and the 1.20R cost check stay. The hg-v1441 three-desk census is not replaced.
 

@@ -650,6 +650,11 @@
       "version": "hg-v1452",
       "built": "2026-10-29T04:26:26Z",
       "note": "GOLD CONFLUENCE loosened one step. Two plans on the same side, both within 2.5% of the live IUX price, are a setup. A crown is not required for a published plan to count. When two or more are crowned, the median uses only those. Otherwise the median uses every plan on the price. One desk stays a watch. A price through the stop stays stood aside. CANDLE FORECAST stays out. Cluster and cost checks stay."
+    },
+    {
+      "version": "hg-v1453",
+      "built": "2026-10-29T07:08:44Z",
+      "note": "GOLD CONFLUENCE SCORE bar raised. A stays 85. GOOD is 78 (was 75). WATCH is 68 (was 65). Below 68 is NO TRADE and still demotes. An alert still needs GOOD and no news lock. COT stays a weekly caution, not an entry. Not re-walked."
     }
   ]
 }
