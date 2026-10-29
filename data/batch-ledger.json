@@ -715,6 +715,11 @@
       "version": "hg-v1465",
       "built": "2026-10-30T05:20:00Z",
       "note": "PINE GOLD and GOLD SCALP exactness. GOLD SCALP spot realignment scaled the plan levels but not the price-denominated fields riding the candidate: the live print (mark) and the detector mark (pxNow) stayed in drifted-feed units beside a spot-realigned entry, and the zone check compared spot-scaled bounds against an unscaled pxNow; both realignment paths now scale mark and pxNow with the levels, so the realignment is provably a pure change of units (R ratios scale-invariant, the seal re-run lands on the same numbers). GOLD PINE mint sealed: setupFromNative quoted whatever R the borrowed mint or native detector advertised — the house seal recomputes every leg from the row own published levels and clears an unread or wrong-side leg to null with a named rrNote; named, never gating. THE LOOKUP RULE, found by the harness: both tabs resolved the seal through a bare identifier that only works while the browser classic scripts share one global — in any context where window is not the global object the lookup silently dropped to the absolute-ratio fallback, which quotes a positive R for a plan whose stop sits on the wrong side; both tabs now look the seal up through the window explicitly and the no-module fallback in each is directional. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1466",
+      "built": "2026-10-30T06:15:00Z",
+      "note": "PINE GOLD and GOLD SCALP fill at the next open. A failed-sweep reclaim is the setup. The entry is the next open plus or minus cost, not the signal close. The stop sits 0.25xATR and the cost beyond the swept wick. Scalp targets exactly 1.5R and 2.5R and drops a stop wider than 3.5xATR. Pine targets exactly 2R and drops a stop wider than 3xATR. A gap through the stop is not a trade. Same-bar stop wins over the target. A pine scalp stop under 0.3% of entry still fails the admission floor and does not lead. Asian, opening-range and BOS cards stay demoted. Off-session names the killzone and does not erase a valid failed-sweep. Not re-walked; the forward ledger decides."
     }
   ]
 }

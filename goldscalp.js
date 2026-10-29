@@ -1436,15 +1436,111 @@ function bannerHTML(best, ranked){
 /* The lead is its own column. The other candidates stay in the grid beside it.
    When nothing is eligible to lead, the column says so and does not invent a
    MOST PROBABLE SETUP banner. */
-function gsxBoardHtml(best, ranked, cardsHtml){
+function gsxBoardHtml(best, ranked, cardsHtml, why){
   var lead = bannerHTML(best, ranked);
+  var whyLine = 'Nothing on this scan is eligible to lead. A demoted or vetoed card stays on the board and is not promoted.';
+  if (why) whyLine += ' ' + why;
   var col = lead
     ? ('<aside class="gsx-mp-col" aria-label="Most probable setup">' + lead + '</aside>')
     : ('<aside class="gsx-mp-col" aria-label="No lead">'
       + '<div class="gsx-nolead"><div class="gsx-eye">NO LEAD</div>'
-      + '<div class="gsx-why">Nothing on this scan is eligible to lead. A demoted or vetoed card stays on the board and is not promoted.</div>'
+      + '<div class="gsx-why">' + esc(whyLine) + '</div>'
       + '</div></aside>');
   return '<div class="gsx-board">' + col + '<div class="gsx-rest">' + (cardsHtml || '') + '</div></div>';
+}
+
+/* The one structure plan this desk may lead with. Failed-sweep reclaim on
+   the last four closed 15m bars. Entry is the next open ± 0.30, stop is
+   0.25×ATR and the cost beyond the wick, TP1 is exactly 1.5R, TP2 2.5R.
+   Asian / opening-range / BOS cards are not promoted. A locked conviction
+   keeps the banner. An against-tape plan prints and does not lead. */
+function gsApplyAccurateLead(gold, display, displayBest, deskTape, barNow){
+  var out = { display: display || [], displayBest: displayBest, reason: null, led: false };
+  try{
+    var fn = gfn('hgGoldAccuratePlan');
+    if (typeof fn !== 'function'){
+      out.reason = 'accuracy structure is not loaded';
+      return out;
+    }
+    if (!gold || !gold.rows15m || gold.rows15m.length < 24){
+      out.reason = 'not enough closed 15m bars for a structure plan';
+      return out;
+    }
+    var tape = gold.rows15m.slice();
+    if (gold.forming && gold.forming['15m']) tape.push(gold.forming['15m']);
+    var plan = fn(tape, {
+      cost: 0.30, swingBars: 8, securityAtr: 0.25, triggerLookback: 4,
+      minRiskAtr: 0.5, maxRiskAtr: 3.5, rewardR: 1.5, rewardR2: 2.5,
+      minRr: 1.2, chaseFrac: 0.85, nowMs: Date.now()
+    });
+    if (!plan || plan.ok !== true){
+      out.reason = (plan && plan.reason) ? plan.reason : 'no sweep-reclaim on the last 4 closed bars';
+      return out;
+    }
+    var kz = null;
+    try{ var kzFn = gfn('goldKillzone'); if (kzFn) kz = kzFn(barNow); }catch(eKz){ kz = null; }
+    var kzLabel = (kz && kz.label) ? kz.label : 'OFF-HOURS';
+    var off = !(kz && +kz.weight > 0);
+    var side = String(deskTape || '').toLowerCase();
+    var against = (side === 'long' || side === 'short') && side !== plan.dir;
+    var card = {
+      id: 'accurate|' + plan.dir + '|' + (plan.signalT || ''),
+      stratKey: 'accurate',
+      strategy: 'ACCURACY STRUCTURE',
+      dir: plan.dir,
+      entry: plan.entry,
+      stop: plan.stop,
+      t1: plan.t1,
+      t2: plan.t2,
+      rr: plan.rr,
+      rr1: plan.rr,
+      rr2: plan.rr2,
+      atr: plan.atr,
+      grade: 'A',
+      tally: 1,
+      demoted: false,
+      vetoed: false,
+      geometryOk: true,
+      planSrc: 'max-accuracy structure',
+      entryType: 'next open',
+      venue: (gold && gold.source) ? gold.source : 'XAU',
+      sym: 'XAUUSD',
+      killzone: kzLabel,
+      reads: { long: plan.dir === 'long' ? 1 : 0, short: plan.dir === 'short' ? 1 : 0 },
+      confluence: ['failed-sweep reclaim'],
+      notes: [plan.why, off
+        ? ('Off-session (' + kzLabel + '). The killzone is named. It does not erase a valid failed-sweep.')
+        : ('Session ' + kzLabel + '.')],
+      why: plan.why + (off ? ' Off-session (' + kzLabel + ') — named, not a reason to hide the structure.' : ''),
+      stamps: ['ACCURACY STRUCTURE'],
+      pxNow: plan.mark,
+      mark: plan.mark,
+      asOf: new Date().toISOString().slice(11, 16) + ' UTC',
+      invalidates: 'a 15m close beyond the stop, or a gap through it',
+      locked: false
+    };
+    out.display = out.display.slice();
+    out.display.unshift(card);
+    if (against){
+      card.demoted = true;
+      card.stamps = ['AGAINST GOLD TAPE'];
+      card.gateNotes = ['ACCURACY — the failed-sweep is valid and the gold tape points the other way, so it does not lead.'];
+      card.reason = card.gateNotes[0];
+      out.reason = card.gateNotes[0];
+      return out;
+    }
+    if (out.displayBest && out.displayBest.locked){
+      out.reason = null;
+      return out;
+    }
+    out.displayBest = card;
+    out.led = true;
+    out.reason = null;
+    return out;
+  }catch(eAcc){
+    out.reason = 'accuracy structure could not be read';
+    return out;
+  }
 }
 
 /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — see gswGeoLine in
@@ -2700,12 +2796,20 @@ async function fetchGoldKlines(){
     if (!iuxFn || !rows || !rows.length) return rows;
     try{ var o = await iuxFn(rows, 'binance-paxg'); return (o && o.length) ? o : rows; }catch(eIx){ return rows; }
   }
-  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null };
+  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null, forming: {} };
   var srcSet = function(tf, source, rowsKey, rows){
     /* The XM route already applies dropForming server-side. The free macro /
        proxy chain can return Binance's active candle, so close those rows
-       here before scoring and level formation. */
-    if (source !== 'xm-xauusd') rows = gsClosedRows(rows, tf);
+       here before scoring and level formation. The forming bar is kept:
+       its open is the only honest fill for the accuracy plan. The signal
+       close is not an entry. */
+    if (source !== 'xm-xauusd'){
+      var rawRows = rows;
+      rows = gsClosedRows(rows, tf);
+      if (Array.isArray(rawRows) && Array.isArray(rows) && rawRows.length === rows.length + 1){
+        out.forming[tf] = rawRows[rawRows.length - 1];
+      }
+    }
     if (!Array.isArray(rows) || !rows.length || !source) return;
     if (typeof hgGoldSrcAssign === 'function'){ hgGoldSrcAssign(out, tf, source, rowsKey, rows); return; }
     out[rowsKey] = rows;
@@ -3763,6 +3867,14 @@ async function runScan(ui, scanSt){
        return its demoted fallback) — a demoted or vetoed card can never be
        MOST PROBABLE. goldRankSetups holds this rule; the desk holds it too. */
     if (displayBest && (displayBest.demoted || displayBest.vetoed)) displayBest = null;
+    var accWhy = null;
+    try{
+      var accLead = gsApplyAccurateLead(gold, display, displayBest, deskTape, barNow);
+      display = accLead.display;
+      displayBest = accLead.displayBest;
+      if (!accLead.led && !displayBest) accWhy = accLead.reason;
+      if (accLead.led) legs.push('ACCURACY STRUCTURE — failed-sweep, entry is the next open ± cost, target is 1.5R');
+    }catch(eAccLead){ accWhy = 'accuracy structure could not be read'; }
     goldStampTape(display, deskTape);
     /* hg-v731: Smart Money Concepts context on the finished cards — DISPLAY ONLY
        at this point. Runs after every level engine, the spot alignment, the
@@ -3813,6 +3925,7 @@ async function runScan(ui, scanSt){
         kzWeight: kzW, kzLabel: kzL,
         liveN: liveN, armed: armedAll, watchMeta: watchMeta
       });
+      if (accWhy) whySilent = whySilent + ' · ' + accWhy;
     }
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
@@ -3880,7 +3993,7 @@ async function runScan(ui, scanSt){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = instHtml + basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
           + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml()
-          + gsxBoardHtml(displayBest, display, display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join(''))
+          + gsxBoardHtml(displayBest, display, display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join(''), accWhy)
           + formingLayersHtml(displayBest || display[0])
           + formingNowHTML(armedAll)
           + gsRejectFunnelHTML(rejectedAll, preGateAll)

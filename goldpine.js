@@ -837,6 +837,90 @@ function gpRecordLayerSetups(rows, mode, source){
 function gpMayLead(s){
   return !!(s && !s.recordOnly && !s.pineBlock && !gpHandoffBlock(s) && gpAdmissionFloor(s).ok !== false);
 }
+
+/* Failed-sweep plan for this desk. Scalp and swing both target exactly 2R.
+   Max risk is 3×ATR — wider than that is dropped, not clamped. A scalp stop
+   under 0.3% of entry still fails gpAdmissionFloor and does not lead. */
+function gpAccuratePack(bars, nowMs){
+  var out = { scalp: null, swing: null, lead: null, notes: [] };
+  var fn = gfn('hgGoldAccuratePlan');
+  if (typeof fn !== 'function'){
+    out.notes.push('accuracy structure is not loaded');
+    return out;
+  }
+  function one(rows, mode){
+    var label = mode === 'swing' ? '4h' : '15m';
+    if (!rows || rows.length < 30){
+      out.notes.push(label + ': not enough bars');
+      return null;
+    }
+    var plan = null;
+    try{
+      plan = fn(rows, {
+        cost: 0.30, swingBars: 8, securityAtr: 0.25, triggerLookback: 4,
+        minRiskAtr: 0.5, maxRiskAtr: 3, rewardR: 2, minRr: mode === 'swing' ? 1.5 : 1.2,
+        chaseFrac: 0.85, nowMs: nowMs
+      });
+    }catch(eP){ plan = null; }
+    if (!plan || plan.ok !== true){
+      out.notes.push(label + ': ' + ((plan && plan.reason) || 'no sweep-reclaim'));
+      return null;
+    }
+    var s = {
+      id: 'accurate|' + mode + '|' + plan.dir + '|' + (plan.signalT || ''),
+      mode: mode,
+      dir: plan.dir,
+      sym: 'XAUUSD',
+      entry: plan.entry,
+      stop: plan.stop,
+      t1: plan.t1,
+      t2: plan.t2,
+      rr: plan.rr,
+      price: plan.mark,
+      grade: 'A',
+      score: 24,
+      maxScore: 24,
+      tier: 'native',
+      kind: 'native',
+      strategy: 'ACCURACY STRUCTURE',
+      nativeStrategy: 'ACCURACY STRUCTURE',
+      planSrc: 'max-accuracy structure',
+      geometryOk: true,
+      recordOnly: false,
+      demoted: false,
+      pineBlock: null,
+      why: plan.why,
+      factors: [{ cat: 'Accuracy', ok: true, pts: 24, note: plan.why }],
+      atr: plan.atr
+    };
+    var floor = gpAdmissionFloor(s);
+    if (floor && floor.ok === false){
+      s.demoted = true;
+      s.pineBlock = floor.why;
+      s.demotedWhy = floor.why;
+      out.notes.push(label + ': ' + floor.why);
+    }
+    var tape = gpTapeOf(rows);
+    s.goldTape = tape;
+    if ((tape === 'long' || tape === 'short') && tape !== s.dir){
+      s.tapeHeld = true;
+      s.demoted = true;
+      s.demotedWhy = 'AGAINST GOLD TAPE';
+      out.notes.push(label + ': structure is ' + s.dir + ' and the tape is ' + tape);
+    }
+    return s;
+  }
+  if (bars){
+    out.scalp = one(bars.rows15m, 'scalp');
+    out.swing = one(bars.rows4h, 'swing');
+  }
+  var cand = [out.scalp, out.swing], i;
+  for (i = 0; i < cand.length; i++){
+    if (cand[i] && !cand[i].tapeHeld && gpMayLead(cand[i])){ out.lead = cand[i]; break; }
+  }
+  return out;
+}
+
 function gpSgnR(v){ return (isFinite(v) ? ((v >= 0 ? '+' : '\u2212') + Math.abs(v).toFixed(3)) : '?') + 'R'; }
 function gpRecordTwinLine(s){
   if (!s || !s.recordTwin) return '';
@@ -1700,6 +1784,15 @@ function mount(el){
          a silent desk is the thing this family keeps having to fix. */
       /* hg-v1164: a record-only layer never leads; it is counted and named */
       var mpList = gpTapeAligned(swingTop.concat(scalpTop).filter(gpMayLead));
+      var accPack = gpAccuratePack(bars, t0);
+      if (accPack.scalp) scalpTop = [accPack.scalp].concat(scalpTop.filter(function(s){ return !(s && accPack.scalp && s.id === accPack.scalp.id); }));
+      if (accPack.swing) swingTop = [accPack.swing].concat(swingTop.filter(function(s){ return !(s && accPack.swing && s.id === accPack.swing.id); }));
+      if (accPack.lead && gpMayLead(accPack.lead) && !accPack.lead.tapeHeld){
+        mpList = [accPack.lead].concat(mpList.filter(function(s){ return !(s && s.id === accPack.lead.id); }));
+      }
+      var accNote = (accPack.notes && accPack.notes.length)
+        ? ('<div class="note">' + esc(accPack.notes.join(' · ')) + '</div>')
+        : '';
       var ranked = swingTop.filter(gpMayLead).length + scalpTop.filter(gpMayLead).length;
       var recordRows = result.swing.concat(result.scalp).filter(function(s){ return s && s.recordOnly; });
       var releasedRows = result.swing.concat(result.scalp).filter(function(s){ return s && s.recordReleased; });
@@ -1789,6 +1882,7 @@ function mount(el){
               ? 'No setup is both good solidity and near or OK on FTS, so nothing leads.'
               : 'Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.')
             + '</div>'))
+        + accNote
         + '</aside><div class="gp-rest">'
         + fitNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
