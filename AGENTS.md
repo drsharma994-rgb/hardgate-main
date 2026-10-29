@@ -1,3 +1,6 @@
+### GOLD CONFLUENCE — a tie shows both plans — hg-v1457
+- The live board was one long and one short: GANESH GOLD 4026.64 / 3990.41 / 4068.68 and GOLD PRO 4027.10 / 4086.17 / 3908.96. That is a tie, so it is not one direction, and the card was empty. Both plans now sit on the card, unblended. The status is TWO SETUPS. A larger side is still one setup. This was not re-walked.
+
 ### GOLD CONFLUENCE — a smaller side does not erase the setup — hg-v1456
 - The card was empty because one desk on the other side, a cluster wider than 0.80%, or the spot-versus-XM spread under 1R stood the plan aside. Two or more plans on the larger side, both within 2.5% of the live IUX price, are a setup. The smaller side is named. A tie is not a setup. The cluster and the spread stay on the card and do not change ready. A price through the stop is still stood aside. The entry, stop, and target stay the median. This was not re-walked.
 

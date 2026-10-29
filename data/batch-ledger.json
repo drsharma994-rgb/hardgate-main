@@ -670,6 +670,11 @@
       "version": "hg-v1456",
       "built": "2026-10-29T13:37:50Z",
       "note": "GOLD CONFLUENCE shows a setup when two or more plans on the larger side sit on the live price. A smaller opposite side, a cluster wider than 0.80%, and a spread that leaves under 1R are named and do not remove it. A tie, one desk, a price through the stop, and a plan more than 2.5% from the live price still do not. Not re-walked."
+    },
+    {
+      "version": "hg-v1457",
+      "built": "2026-10-29T13:49:46Z",
+      "note": "GOLD CONFLUENCE on a tie paints both plans. The live board was GANESH GOLD long 4026.64/3990.41/4068.68 against GOLD PRO short 4027.10/4086.17/3908.96. Those stay unblended. The status is TWO SETUPS, not an empty stand-aside. A larger side is still one setup. Not re-walked."
     }
   ]
 }

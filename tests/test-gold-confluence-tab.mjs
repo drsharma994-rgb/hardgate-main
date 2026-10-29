@@ -278,6 +278,22 @@ const milliVote = milli.votes.filter(v => v.id === 'milligold')[0];
 assert.equal(milliVote.derived, true);
 assert.equal(milliVote.sameAs, 'OMNIGOLD');
 
+const liveTie = win.hgGoldConfluenceBuild([
+  { desk: 'GANESH GOLD', state: 'setup', side: 'long', entry: 4026.64, stop: 3990.41, t1: 4068.68 },
+  { desk: 'GOLD PRO', state: 'setup', side: 'short', entry: 4027.10, stop: 4086.17, t1: 3908.96 }
+], { px: 4033 });
+assert.equal(liveTie.ready, false);
+assert.equal(liveTie.pair.length, 2);
+assert.equal(liveTie.pair[0].desk, 'GANESH GOLD');
+assert.equal(liveTie.pair[0].entry, 4026.64);
+assert.equal(liveTie.pair[0].stop, 3990.41);
+assert.equal(liveTie.pair[0].t1, 4068.68);
+assert.equal(liveTie.pair[1].desk, 'GOLD PRO');
+assert.equal(liveTie.pair[1].entry, 4027.10);
+assert.equal(liveTie.pair[1].stop, 4086.17);
+assert.equal(liveTie.pair[1].t1, 3908.96);
+assert.match(liveTie.reason, /Both plans are on the card/);
+
 /* The 100-point score is a label. A low score does not take the setup off the card. */
 const tapeRows = [{ t: 1, o: 2650, h: 2652, l: 2648, c: 2651 }];
 function scored(tier, score, alertOk){

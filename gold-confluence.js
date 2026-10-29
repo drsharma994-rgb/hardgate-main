@@ -6,7 +6,8 @@
    sit on that price. It is not moved to the live print. No anchor, no
    setup. Three desks are not required. Two plans on the same side,
    both within 2.5% of the live price, are a setup. A smaller number
-   of plans on the other side does not remove it. A tie does. A wide
+   of plans on the other side does not remove it. A tie shows both
+   plans and does not blend them into one direction. A wide
    cluster and a spread that leaves under 1R are named. They do not
    remove the setup. A crown is not
    required for those two to count. When two or more are crowned, the
@@ -889,6 +890,24 @@ function attachWatch(base, pack, votes, px, opts){
   if (ann){ watch.reads = ann.reads; watch.leader = ann.leader; }
   base.watch = watch;
 }
+function sideCard(pack, px){
+  if (!pack || !pack.length) return null;
+  var side = pack[0].side;
+  var entry = +median(pack.map(function(v){ return v.entry; })).toFixed(2);
+  var stop = +median(pack.map(function(v){ return v.stop; })).toFixed(2);
+  var t1 = +median(pack.map(function(v){ return v.t1; })).toFixed(2);
+  if (!ordered(side, entry, stop, t1)) return null;
+  var risk = Math.abs(entry - stop);
+  var reward = Math.abs(t1 - entry);
+  return {
+    desk: pack.map(function(v){ return v.desk; }).join(' + '),
+    side: side, entry: entry, stop: stop, t1: t1,
+    mark: (px > 0) ? px : null,
+    rr: risk > 0 ? +(reward / risk).toFixed(2) : NaN,
+    spreadUsd: null,
+    count: pack.length
+  };
+}
 
 function forecastDesk(v){
   if (!v) return false;
@@ -994,13 +1013,8 @@ function hgGoldConfluenceBuild(votes, iux, cost){
       if (dom === longs) shorts = [];
       else longs = [];
     } else {
-      base.reason = longs.length + ' gold desk' + (longs.length === 1 ? '' : 's') + ' published long and ' + shorts.length + ' published short. Neither side has two more plans than a tie, so no setup is formed.';
-      if (dom){
-        attachWatch(base, dom, votes, px, {
-          reason: 'desks disagree',
-          label: 'DESKS DISAGREE · ' + dom.length + ' ' + dom[0].side.toUpperCase() + ' vs ' + (dom === longs ? shorts.length : longs.length) + ' ' + (dom === longs ? 'SHORT' : 'LONG')
-        });
-      }
+      base.reason = longs.length + ' gold desk' + (longs.length === 1 ? '' : 's') + ' published long and ' + shorts.length + ' published short. The sides are tied, so this is not one direction. Both plans are on the card.';
+      base.pair = [sideCard(longs, px), sideCard(shorts, px)].filter(function(c){ return c; });
       return base;
     }
   }
@@ -1377,13 +1391,17 @@ function paint(root, built){
   var desk = root.querySelector('#gc-desk');
   var stat = root.querySelector('#gc-stat');
   if (!desk || !built) return;
-  if (stat) stat.textContent = built.ready ? 'ONE SETUP' : (built.watch ? 'WATCH' : 'STAND ASIDE');
+  if (stat) stat.textContent = built.ready ? 'ONE SETUP' : (built.pair && built.pair.length ? 'TWO SETUPS' : (built.watch ? 'WATCH' : 'STAND ASIDE'));
   var voteHtml = (built.votes || []).map(function(v){
     return '<div class="hg-note">' + esc(v.desk) + ' — ' + esc(bitOf(v)) + '</div>';
   }).join('');
   var plan = '';
   if (built.ready){
     plan = levelCard('XAUUSD · ' + built.side.toUpperCase(), built);
+  } else if (built.pair && built.pair.length){
+    plan = built.pair.map(function(c){
+      return levelCard(c.desk + ' · ' + String(c.side || '').toUpperCase(), c);
+    }).join('');
   } else if (built.watch){
     var w = built.watch;
     /* hg-v1391: a watch now carries three distinct reasons -- "awaiting
@@ -1411,7 +1429,7 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie does. A wide cluster and a spread under 1R are named and do not remove it. The entry is their median, or the median of the crowned ones when two or more are crowned. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie shows both plans and does not blend them. A wide cluster and a spread under 1R are named and do not remove it. The entry is their median, or the median of the crowned ones when two or more are crowned. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
     + '<div class="hg-note">The levels on a setup stay the median of the desks. The nearest desk own plan, a same-family count, and a session split are written on the forward record and do not change ready. The 100-point score is a label. It does not change ready.</div></div></div>';
   var btn = root.querySelector('#gc-run');

@@ -99,7 +99,10 @@ function makeVote(desk, side, entry, stop, t1, barT){
   ];
   const bTie = build(votesTie, { px: 4001 }, null);
   eq('1.l tie ready false', bTie.ready, false);
-  ok('1.m tie has NO watch (true tie)', !bTie.watch);
+  ok('1.m tie has NO single watch', !bTie.watch);
+  eq('1.m2 tie shows both plans', bTie.pair && bTie.pair.length, 2);
+  eq('1.m3 tie keeps both sides', bTie.pair && bTie.pair[0].side, 'long');
+  eq('1.m4 tie keeps the short', bTie.pair && bTie.pair[1].side, 'short');
 
   // Case B: OFF-SCALE -- 3 longs agree, but entries sit >2.5% from IUX
   const votesB = [
@@ -245,15 +248,13 @@ function makeVote(desk, side, entry, stop, t1, barT){
       let caught = false;
       try{
         // M1-5 each change behaviour the guard asserts.
-        if (name === 'M1_drop_dominant_watch'){
+        if (name === 'M1_drop_tie_pair'){
           const votes = [
-            makeVote('GOLD SCALP', 'long', 4000, 3980, 4040),
-            makeVote('GOLD SWING', 'long', 4005, 3985, 4045),
-            makeVote('OMNIGOLD', 'long', 3998, 3978, 4038),
-            makeVote('GOLD DIRECTION', 'short', 4020, 4040, 3980)
+            makeVote('GANESH GOLD', 'long', 4026.64, 3990.41, 4068.68),
+            makeVote('GOLD PRO', 'short', 4027.10, 4086.17, 3908.96)
           ];
-          const b = build(votes, { px: 4001 }, null);
-          if (!b.watch) caught = true;
+          const b = build(votes, { px: 4033 }, null);
+          if (!b.pair || b.pair.length !== 2) caught = true;
         } else if (name === 'M2_drop_offscale_watch'){
           const votes = [
             makeVote('GOLD SCALP', 'long', 5000, 4950, 5100),
@@ -314,8 +315,9 @@ function makeVote(desk, side, entry, stop, t1, barT){
   ], { px: 4001 }, null);
   ok('8.baseline dominant side is a setup', bA.ready === true && bA.side === 'long' && !bA.watch);
 
-  runMutation('M1_drop_dominant_watch', s =>
-    s.replace(/if \(dom\)\{[\s\S]*?attachWatch\(base, dom, votes, px, \{[\s\S]*?\}\);\s*\}/, 'if (dom){ /* dropped */ }'));
+  runMutation('M1_drop_tie_pair', s =>
+    s.replace(/base\.pair = \[sideCard\(longs, px\), sideCard\(shorts, px\)\]\.filter\(function\(c\)\{ return c; \}\);/,
+              'base.pair = [];'));
 
   runMutation('M2_drop_offscale_watch', s =>
     s.replace(/attachWatch\(base, pack, votes, px, \{\s*reason:\s*'off-scale from IUX'[\s\S]*?\}\);/, '/* dropped */'));
