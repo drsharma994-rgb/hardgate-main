@@ -117,6 +117,8 @@ console.log('== a closed bar where both prints agree is a long setup ==');
   ok(html.indexOf('ENTRY') >= 0 && html.indexOf('STOP LOSS') >= 0 && html.indexOf('TAKE PROFIT') >= 0, 'the card names entry, stop loss and take profit');
   ok(html.indexOf(sig.entry.toFixed(2)) >= 0 && html.indexOf(sig.stop.toFixed(2)) >= 0 && html.indexOf(sig.tp.toFixed(2)) >= 0, 'and prints those three prices');
   ok(!/\bNaN\b|\bundefined\b|\[object Object\]/.test(html), 'the card does not print an unread value');
+  ok(html.indexOf('1×ATR') >= 0 && html.indexOf('2.5×ATR') >= 0, 'the card names the 1.0–2.5×ATR band the engine uses');
+  ok(html.indexOf('3.5×ATR') < 0 && html.indexOf('17:00') < 0, 'the card does not still describe the old 1.5–3.5 band or 17:00');
 
   const forming = ctx.hgSonaEval(rows, signalMs + 60 * 1000, { tf: '15m', sessOnly: false });
   ok(!forming.signals.some(s => s.ms === signalMs), 'the same bar, still forming, is not a setup');

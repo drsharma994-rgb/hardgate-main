@@ -770,6 +770,11 @@
       "version": "hg-v1476",
       "built": "2026-10-31T04:30:00Z",
       "note": "SONA VARIATION STUDY — 24 months of PAXG 15m, in-sample and out-of-sample. scripts/sona-study.mjs sweeps the SONA decision space (prints, body floor, slope leg, session windows, RSI14/VR20/ENTROPY20/volume/hour/direction filters, stop band, reward-R ladder) and confirms finalists on a second window never studied. THE FINDING: the shipped default was net-negative out of sample (win 31.9%, net -33.5R n=166); ONE configuration is net-positive in BOTH windows — London 07-13 UTC + 1.0-2.5xATR band + volume>MA20 at 1.5R (in n=44 win 61.4% +23.5R; OOS n=86 win 40.7% +1.5R). Every other in-sample winner failed OOS and is NOT shipped. Shipped in sona.js: sessEnd 13, stop band 1.0-2.5, the volume>MA20 gate (fail-open), session default ON with the studied window; test-sona re-pinned (87 green). The edge is a leak-remover, not a money printer."
+    },
+    {
+      "version": "hg-v1477",
+      "built": "2026-10-31T05:00:00Z",
+      "note": "SONA CARD. The card names the rule it runs: studied window 07:00-13:00 UTC, stop band 1.0-2.5xATR, volume above its 20-bar average. The leftover 1.5-3.5xATR and 07:00-17:00 sentences are gone. Not re-walked; the forward ledger decides."
     }
   ]
 }

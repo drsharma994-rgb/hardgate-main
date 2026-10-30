@@ -11,9 +11,10 @@
    Entry is that close, on the 0.01 tick. The stop is one tick beyond
    the pullback wick: the low on a long, the high on a short. That is
    where the idea is wrong. The trade is refused when that risk is
-   under 1.5×ATR, under 4× the 0.02% XM round trip, or wider than
-   3.5×ATR. The target is 1.5R of the published risk. A coin-flip path
-   between those two barriers no longer needs a 74% hit rate.
+   under 1.0×ATR, under 4× the 0.02% XM round trip, or wider than
+   2.5×ATR, and when the bar's volume is not above its 20-bar average.
+   The studied window is 07:00–13:00 UTC. The target is 1.5R of the
+   published risk.
    One plan is open at a time and runs until the stop or the target.
    A later agreement is not a second setup. Both in one bar stays
    unresolved. 5m is not a book: there the ATR sits inside the cost.
@@ -153,6 +154,14 @@ function utcDay(ms){
 function utcHm(ms){
   var d = new Date(ms);
   return d.getUTCHours() + d.getUTCMinutes() / 60;
+}
+
+function pad2(n){ return n < 10 ? '0' + n : String(n); }
+
+/* The hours and the stop band the engine actually uses. The card must
+   print these, not a leftover sentence from an older band. */
+function sessSpan(){
+  return pad2(SPEC.sessStart) + ':00–' + pad2(SPEC.sessEnd) + ':00 UTC';
 }
 
 function utcLabel(ms){
@@ -489,7 +498,6 @@ function hgSonaEval(rows, nowMs, opts){
       var vb = r.v;
       if (isNum(vma) && vma > 0 && isNum(vb)) volOk = vb > vma;
     }
-    if (!volOk) continue;
     var body = (r.c - r.o) * agreed;
     var bodyOk = agreed !== 0 && (SPEC.bodyMin <= 0 || (isNum(atr) && body >= SPEC.bodyMin * atr));
     var slowI = i - SPEC.slopeLen;
@@ -498,13 +506,14 @@ function hgSonaEval(rows, nowMs, opts){
     var slopeSpan = isSpan(slowMs, ms, SPEC.slopeLen, step);
     var slopeOk = agreed !== 0 && slopeSpan && isNum(slowPrev) && isNum(emaS) && (emaS - slowPrev) * agreed > 0;
     var slopeGap = agreed !== 0 && !slopeSpan;
-    var dir = (bodyOk && slopeOk) ? agreed : 0;
+    var dir = (bodyOk && slopeOk && volOk) ? agreed : 0;
     var hm = utcHm(ms);
     var inSess = hm >= SPEC.sessStart && hm < SPEC.sessEnd;
     var sessionOk = !sessOnly || inSess;
     var geometry = null;
     var block = null;
-    if (dir !== 0 && sessionOk && isNum(atr) && atr > 0){
+    if (agreed !== 0 && !volOk) block = 'volume light';
+    else if (dir !== 0 && sessionOk && isNum(atr) && atr > 0){
       if (open != null) block = 'position open';
       else {
         geometry = planOf(r, dir, atr);
@@ -564,6 +573,7 @@ function failReason(d, sessOnly){
   if (!d.slopeOk) return 'slope flat';
   if (sessOnly && !d.inSess) return 'outside session';
   if (d.block === 'position open') return 'position open';
+  if (d.block === 'volume light') return 'volume light';
   if (d.block === 'stop under floor') return 'stop under floor';
   if (d.block === 'stop wide') return 'stop wide';
   return 'target unread';
@@ -612,10 +622,11 @@ function whyLine(read){
   if (read.reason === 'body small') return 'Both prints agreed, and the body was under 0.15×ATR. No setup.';
   if (read.reason === 'ema gap') return 'Both prints agreed, but EMA 120 does not have four contiguous bars to measure a slope. No setup.';
   if (read.reason === 'slope flat') return 'Both prints agreed, and EMA 120 was not sloping with the trade over 4 bars. No setup.';
-  if (read.reason === 'outside session') return 'The print is outside 07:00–17:00 UTC, and that filter is on. No setup.';
+  if (read.reason === 'outside session') return 'The print is outside ' + sessSpan() + ', and that filter is on. No setup.';
   if (read.reason === 'position open') return 'Both prints agreed, and a plan is already open. It runs to its stop or its target. No second setup.';
-  if (read.reason === 'stop under floor') return 'The wick stop is under 1.5×ATR or under 4× the 0.02% round trip. That risk is the spread. No setup.';
-  if (read.reason === 'stop wide') return 'The wick stop is wider than 3.5×ATR. The pullback is not the risk. No setup.';
+  if (read.reason === 'volume light') return 'Both prints agreed, and the bar volume was not above its 20-bar average. No setup.';
+  if (read.reason === 'stop under floor') return 'The wick stop is under ' + SPEC.stopAtrMin + '×ATR or under 4× the 0.02% round trip. That risk is the spread. No setup.';
+  if (read.reason === 'stop wide') return 'The wick stop is wider than ' + SPEC.stopAtrMax + '×ATR. The pullback is not the risk. No setup.';
   if (read.reason === 'target unread') return 'The stop or the 1.5R target does not land on a 0.01 tick of risk. No setup.';
   if (read.live) return 'Both prints agreed. The stop is one tick beyond the pullback wick. The target is 1.5R of that risk.';
   if (read.last && read.last.state === 'stopped') return 'No live setup. The last one was stopped.';
@@ -653,7 +664,8 @@ function diagHtml(read){
     + ' · VWAP reclaim ' + vw
     + ' · body ' + mark(d.bodyOk, agreed || d.bodyOk)
     + ' · EMA 120 slope ' + (d.slopeGap ? 'gap' : mark(d.slopeOk, agreed || d.slopeOk))
-    + (read.sessOnly ? ' · in 07:00–17:00 UTC ' + mark(d.inSess, true) : '')
+    + (d.block === 'volume light' ? ' · volume below its 20-bar average' : '')
+    + (read.sessOnly ? ' · in ' + sessSpan() + ' ' + mark(d.inSess, true) : '')
     + '</div>';
 }
 
@@ -661,10 +673,11 @@ function sonaHtml(read, meta){
   meta = meta || {};
   var head = '<div class="card">';
   var feed = meta.feed ? (' · ' + esc(meta.feed)) : '';
-  var sess = read.sessOnly ? ' · 07:00–17:00 UTC only' : ' · session filter off';
+  var sess = read.sessOnly ? (' · ' + sessSpan() + ' only') : ' · session filter off';
   var rule = '<div class="note" style="margin-top:8px">HG Gold 81 prints · ' + esc(read.tf || '15m') + feed + sess
     + ' · ' + (read.bars || 0) + ' closed bars. Entry is the signal close on the 0.01 tick. Stop is one tick beyond the pullback wick. '
-    + 'Refused under 1.5×ATR, under 4× the 0.02% round trip, or wider than 3.5×ATR. Target is 1.5R of that risk. '
+    + 'Refused under ' + SPEC.stopAtrMin + '×ATR, under 4× the 0.02% round trip, or wider than ' + SPEC.stopAtrMax + '×ATR. '
+    + 'Volume must be above its 20-bar average. Target is 1.5R of that risk. '
     + 'One plan, held to the stop or the target. 5m is not a book.</div>';
   var tape = meta.tape || '';
   if (!read || !read.ok){
@@ -757,7 +770,7 @@ function mount(el){
   if (!el) return;
   __el = el;
   el.innerHTML = '<div class="panel"><h2>SONA <span>HG Gold 81 · wick stop · 1.5R · one plan</span></h2>'
-    + '<div class="note">A setup prints only when an EMA 24 pullback and a UTC VWAP reclaim agree on the same closed bar. The stop is one tick beyond that wick, and only when the risk is between 1.5×ATR and 3.5×ATR and at least 4× the 0.02% round trip. The target is 1.5R. A live plan is held. The hour is shown and does not filter.</div>'
+    + '<div class="note">A setup prints only when an EMA 24 pullback and a UTC VWAP reclaim agree on the same closed bar, and that bar\'s volume is above its 20-bar average. The stop is one tick beyond that wick, and only when the risk is between ' + SPEC.stopAtrMin + '×ATR and ' + SPEC.stopAtrMax + '×ATR and at least 4× the 0.02% round trip. The target is 1.5R. A live plan is held. The hour is shown and does not filter unless the studied window is checked.</div>'
     + '<div class="row" style="margin-top:8px;gap:8px;align-items:center">'
     + '<select id="sonaTf" aria-label="SONA timeframe">'
     + '<option value="15m" selected>15m</option><option value="1h">1h</option><option value="4h">4h</option>'
