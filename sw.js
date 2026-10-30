@@ -40,7 +40,7 @@ const HG_SHELL = [
   './portfolio-allocation.js', './inc567-data-core.js', './inc567-config-loader.js', './inc567-regime-panels.js',
   './inc34-data-core.js', './backtest-tab-params.js', './data/param-drift.json', './data/desk-tab-params.json', './data/symbol-tier.json', './data/alert-precision.json',
   './recon-tab.js', './setup-activation.js', './rotation.js', './goldspot.js',
-  './gold-session.js', './goldind.js', './gold-ai-review.js', './gold-catalog.js', './gold-seven-step.js', './gold-core-engine.js', './gold-titan-engine.js', './gold-scalp.js', './ganesh-gold.js', './pinegold.js', './goldscalp.js', './ganeshgold.js', './gold-free-evidence.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './puregold.js', './gold-suite-unified.js', './signallog.js',
+  './gold-session.js', './goldind.js', './gold-ai-review.js', './gold-catalog.js', './gold-seven-step.js', './gold-core-engine.js', './gold-titan-engine.js', './gold-scalp.js', './ganesh-gold.js', './pinegold.js', './goldscalp.js', './ganeshgold.js', './gold-free-evidence.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './puregold.js', './sona.js', './gold-suite-unified.js', './signallog.js',
   './candle-confluence.js', './gold-candle-forecast.js', './candle-forecast-intel.js', './candlestick_patterns.js', './gold_confluence_engine.js',
   './data/setup-profile.json', './data/regime-profile.json',
   './data/strategy-weights.json', './data/strategy-regime-state.json', './data/fund-config.json',

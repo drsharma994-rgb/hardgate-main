@@ -30,7 +30,7 @@
     rotation: 'rotationDay', execute: 'executeDay', startrader: 'starDay',
     'super-gold': 'sgDay', omnigold: 'ogDay', newgold: 'ngDay', goldswing: 'gswDay', goldscalp: 'gscDay',
     gold: 'goldDay', goldpro: 'gproDay', goldspot: 'gspotDay', goldcoint: 'gcointDay',
-    goldpine: 'gpineDay', signallog: 'slogDay',
+    goldpine: 'gpineDay', sona: 'sonaDay', signallog: 'slogDay',
     risk: 'riskDay', basis: 'basisDay', search: 'searchDay', finder: 'finderDay',
     tradeos: 'tosDay', hey: 'heyDay', aiagent: 'aiDay'
   };
@@ -44,7 +44,7 @@
     'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability',
     'brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx',
     'rotation', 'execute', 'startrader',
-    'super-gold', 'omnigold', 'newgold', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'signallog',
+    'super-gold', 'omnigold', 'newgold', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'sona', 'signallog',
     'risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent'
   ];
 
@@ -58,7 +58,7 @@
      now reads the gold lane like the other nine. */
   var HG_GOLD_TAB_IDS = {
     'super-gold': 1, omnigold: 1, omnigold1: 1, newgold: 1, goldswing: 1, goldscalp: 1, gold: 1,
-    goldpro: 1, goldspot: 1, goldcoint: 1, goldpine: 1, signallog: 1
+    goldpro: 1, goldspot: 1, goldcoint: 1, goldpine: 1, sona: 1, signallog: 1
   };
 
   function fin(x){ var n = +x; return isFinite(n) ? n : NaN; }

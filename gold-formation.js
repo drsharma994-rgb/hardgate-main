@@ -949,7 +949,13 @@
        and no ledger to contaminate. It is a non-minter on the GOLD SPOT
        precedent, not a minter needing a weekend calendar. */
     { desk: 'CANDLE FORECAST', tab: 'candle-forecast',
-      why: 'predictive forecast renderer: forecasts the next candle range and direction from ATR and momentum, prices no entry, stop or target and writes no forward record' }
+      why: 'predictive forecast renderer: forecasts the next candle range and direction from ATR and momentum, prices no entry, stop or target and writes no forward record' },
+    /* SONA is a live reading of one Pine script (HG Gold 81). The card
+       prices entry, stop and target from the closed bar. It writes no
+       forward record and no ticket, so there is no ledger to contaminate
+       and no weekend ticket to withhold. */
+    { desk: 'SONA', tab: 'sona',
+      why: 'live reading of one Pine script: prices entry, stop and target on the card and writes no forward record and no ticket' }
   ];
 
   /* Reads the shell's own nav registry when it is reachable and names any

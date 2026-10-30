@@ -1183,6 +1183,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="goldpine.js?v=1472"></script>
 <!-- puregold.js: PURE GOLD tab — IST 17:30–21:30 EMA 21/55 cross. Stop and target from the signal close, entry at the next bar open. A standing stack is not a cross. -->
 <script src="puregold.js?v=1472"></script>
+<!-- sona.js: SONA tab — HG Gold 81 every bar. EMA 24 pullback and UTC VWAP reclaim must agree. Entry is the signal close, stop 2.5×ATR, target 0.35R. -->
+<script src="sona.js?v=1472"></script>
 <script src="pinegate.js?v=1472"></script>
 <script src="pine.js?v=1472"></script>
 <script src="pine-sub.js?v=1472"></script>
@@ -3716,7 +3718,7 @@ const HG_NAV_GROUPS = [
      hg-api-base.js runtime injection + shiva-nav.js splice, and missing from
      the 92-tab static inventory. The shim stays as belt-and-braces (its
      presence check no-ops against this entry). */
-  { id:'gold',       label:'GOLD',     tabs:['gold-confluence','super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','shivagold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','puregold','tauric','80percent','candle-forecast'] },
+  { id:'gold',       label:'GOLD',     tabs:['gold-confluence','super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','shivagold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','puregold','sona','tauric','80percent','candle-forecast'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','recon','basis','search','finder','tradeos','hey','aiagent'] },
 ];

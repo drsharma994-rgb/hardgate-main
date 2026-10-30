@@ -314,7 +314,7 @@ const EXPECTED_GROUPS = {
   /* hg-v1435 re-pin: 'shivagold' joins the gold spec — it was registered but
      missing from HG_NAV_GROUPS (runtime-injection-only reachability); now it
      sits statically beside ganeshgold. */
-  gold:       ['gold-confluence', 'super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'shivagold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'puregold', 'tauric', '80percent', 'candle-forecast'],
+  gold:       ['gold-confluence', 'super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'shivagold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'puregold', 'sona', 'tauric', '80percent', 'candle-forecast'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };

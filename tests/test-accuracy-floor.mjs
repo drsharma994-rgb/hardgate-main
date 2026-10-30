@@ -452,7 +452,8 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
      cause rather than a silent consequence of a module file being absent (hg-v1329). */
   const NO_FORWARD_RECORD = {
     'gold': 'the inline scan, which records under CARD:<scanId> rather than a tab pool',
-    'puregold': 'a live reading of one Pine script (IST EMA cross, stop and target from that close). It mints no ticket and writes no forward row — the strategy has no settled book to grade'
+    'puregold': 'a live reading of one Pine script (IST EMA cross, stop and target from that close). It mints no ticket and writes no forward row — the strategy has no settled book to grade',
+    'sona': 'a live reading of one Pine script (HG Gold 81, EMA 24 pullback plus UTC VWAP). It prices entry, stop and target on the card and writes no forward record'
   };
   /* hg-v1417 self-guard: the stale exemption claimed CANDLE FORECAST "mints no
      ticket and writes no forward row" — false since hg-v1358 (hgCfForwardMark
