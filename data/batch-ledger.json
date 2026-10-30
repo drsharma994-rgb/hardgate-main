@@ -750,6 +750,11 @@
       "version": "hg-v1472",
       "built": "2026-10-30T09:35:00Z",
       "note": "TRADINGVIEW PORT and KILLZONE BOOK. exports/tradingview/goldscalp-sweep-reclaim.pine — the Pine v6 port of the sweep+reclaim core with the shipped gates baked in (25-bar pool, 1.5xATR stop floor, min R:R 1.2, the 1.5R/2.5R ladder, the 0.16% cost-toxicity reject, UTC killzones, the gold weekend, close-confirmed fills, an in-script metrics table) and the killzone filter as INPUTS defaulting to the measured book: London and NY AM on (46% each), overlap OFF (the book loser cohort, win 37.4% net -48.3R, negative in both halves, attributed to opening-range n=71 win 28.2% net -24.2R and asian n=32 win 25.0% net -11.9R entries firing there; hours 14-16 GMT the worst). HG_GOLD_KZ_BOOK — the measured per-session standing (n=1384 live trades, split at the window midpoint, both halves checked) baked in goldind, one home, stamped on every mint as kzBook and rendered on the GOLD SCALP card. Named, never gating: turning the killzone filter into a repo gate is a census decision. The honest limits are written into the script: TradingView fills on bar-close/OHLC assumptions; the repo harness remains the arbiter. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1473",
+      "built": "2026-10-30T10:05:00Z",
+      "note": "SONA — a gold-group tab reading one Pine script, HG Gold 81 every bar. Long or short only when an EMA 24 pullback inside the EMA 120 stack and a UTC-session VWAP reclaim agree on the same closed bar. Entry is that close. Stop is 2.5xATR, target is 0.35R, both on the 0.01 tick. The card prices entry, stop and target and writes no forward record and no ticket. Not re-walked; the forward ledger decides."
     }
   ]
 }
