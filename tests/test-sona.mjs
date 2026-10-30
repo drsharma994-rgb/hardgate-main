@@ -102,9 +102,9 @@ console.log('== a closed bar where both prints agree is a long setup ==');
   const beyond = lowC >= rows[rows.length - 1].l / SPEC.mintick - 1e-6 ? lowC - 1 : lowC;
   ok(stopC === beyond, 'stop is one tick beyond the pullback low');
   ok(entryC - stopC === riskC && riskC >= 1, 'risk is the ticked distance from entry to that stop');
-  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.stopAtrMin * sig.atr, 'risk clears 1.5×ATR');
+  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.stopAtrMin * sig.atr, 'risk clears the 1.0×ATR floor (the studied band)');
   ok(riskC * SPEC.mintick + 1e-9 >= SPEC.rtFrac * SPEC.rtMult * sig.entry, 'risk clears 4× the 0.02% round trip');
-  ok(riskC * SPEC.mintick <= SPEC.stopAtrMax * sig.atr + 1e-9, 'risk is not wider than 3.5×ATR');
+  ok(riskC * SPEC.mintick <= SPEC.stopAtrMax * sig.atr + 1e-9, 'risk is not wider than the 2.5×ATR ceiling (the studied band)');
   ok(tpC - entryC === divRound(riskC * 3, 2) && tpC > entryC, 'take profit is 1.5 of that risk, rounded to the 0.01 tick');
   ok(Math.abs(sig.realizedR - (tpC - entryC) / riskC) < 1e-12, 'booked R is the ratio of the three published prices');
   ok(Math.abs(sig.realizedR - 1.5) <= 0.5 / riskC + 1e-12, 'the tick round moves R by at most half a cent of risk');
@@ -249,21 +249,36 @@ console.log('\n== a later agreement that does not trade the stop is not a second
   ok(held.diag && held.diag.block === 'position open', 'the bar is named position open');
 }
 
-console.log('\n== a wick under the floor or wider than 3.5×ATR is not a setup ==');
+console.log('\n== a wick under the floor or wider than the ceiling is not a setup ==');
 {
   function shallow(hour){
     const signalMs = Date.UTC(2026, 0, 7, hour, 0, 0);
     const rows = baseRows(200, signalMs);
+    /* hg-v1476: flatten the last 24 bars so the day VWAP rides the price at
+       ANY hour — the fixture pins the FLOOR, not the distance to a VWAP */
+    /* hg-v1476: 54 flat bars then a 6-bar rise — the EMA(24) and the day
+       VWAP both hug the price at ANY hour (so the prints can agree), while
+       the VWAP still slopes up over the six-bar lookback */
+    const pf = rows[rows.length - 1].c;
+    for (let k = rows.length - 60; k < rows.length; k++){
+      const from6 = rows.length - 7;
+      const q = k <= from6 ? (pf - 0.10) : (pf - 0.10) + 0.10 * (k - from6) / 6;
+      rows[k] = { t: rows[k].t, o: q, h: q + 0.3, l: q - 0.3, c: q, v: 1000 };
+    }
     const ser = ctx.hgSonaSeries(rows);
     const i = rows.length - 1;
-    const close = ctx.hgSonaTick(Math.max(ser.emaFast[i], ser.vwap[i]) + 0.6);
-    const open = ctx.hgSonaTick(close - 1.5);
-    const low = floorPx(Math.min(ser.emaFast[i], ser.vwap[i]) - 0.02);
+    /* hg-v1476: the flat tail puts every line at the price, and the crafted
+       bar sits just above it with a 0.3-wide body and a wick hugging the
+       lines — a sub-1.0xATR risk that still touches both prints at ANY hour */
+    const p0 = rows[i].c;
+    const close = ctx.hgSonaTick(p0 + 0.1);
+    const open = ctx.hgSonaTick(close - 0.3);
+    const low = floorPx(Math.min(open - 0.02, ser.emaFast[i] - 0.02, ser.vwap[i] - 0.02));
     rows.push({ t: Math.floor(signalMs / 1000), o: open, h: close + 0.3, l: low, c: close, v: 1 });
     return ctx.hgSonaEval(rows, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
   }
   const under = shallow(3);
-  ok(!under.signals.length && under.reason === 'stop under floor', 'a wick inside 1.5×ATR is the spread, not a stop (' + under.reason + ')');
+  ok(!under.signals.length && under.reason === 'stop under floor', 'a wick inside the 1.0xATR floor is the spread, not a stop (' + under.reason + ')');
   const underNoon = shallow(12);
   ok(!underNoon.signals.length && underNoon.reason === 'stop under floor', 'noon is the same floor (' + underNoon.reason + ')');
 
@@ -273,10 +288,10 @@ console.log('\n== a wick under the floor or wider than 3.5×ATR is not a setup =
   const i = wideRows.length - 1;
   const close = ctx.hgSonaTick(Math.max(ser.emaFast[i], ser.vwap[i]) + 0.6);
   const open = ctx.hgSonaTick(close - 1.5);
-  const low = floorPx(close - 40);
+  const low = floorPx(close - 3.2 * ser.atr[i]);
   wideRows.push({ t: Math.floor(signalMs / 1000), o: open, h: close + 0.3, l: low, c: close, v: 1 });
   const wide = ctx.hgSonaEval(wideRows, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
-  ok(!wide.signals.length && wide.reason === 'stop wide', 'a wick wider than 3.5×ATR is not the pullback (' + wide.reason + ')');
+  ok(!wide.signals.length && wide.reason === 'stop wide', 'a wick wider than the 2.5xATR ceiling is not the pullback (' + wide.reason + ')');
 }
 
 console.log('\n== the same prices on a short, and 5m is not a book ==');

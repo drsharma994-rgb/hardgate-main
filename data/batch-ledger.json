@@ -765,6 +765,11 @@
       "version": "hg-v1475",
       "built": "2026-10-30T12:10:00Z",
       "note": "SONA RISK. The stop is one tick beyond the pullback wick, not 2.5xATR. Refused under 1.5xATR, under 4x the 0.02% XM round trip, or wider than 3.5xATR. The target is 1.5R of that published risk, so breakeven before cost is under 45% instead of 74%. One plan is held until the stop or the target. 5m is not a book. The UTC hour is recorded and is not a filter. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1476",
+      "built": "2026-10-31T04:30:00Z",
+      "note": "SONA VARIATION STUDY — 24 months of PAXG 15m, in-sample and out-of-sample. scripts/sona-study.mjs sweeps the SONA decision space (prints, body floor, slope leg, session windows, RSI14/VR20/ENTROPY20/volume/hour/direction filters, stop band, reward-R ladder) and confirms finalists on a second window never studied. THE FINDING: the shipped default was net-negative out of sample (win 31.9%, net -33.5R n=166); ONE configuration is net-positive in BOTH windows — London 07-13 UTC + 1.0-2.5xATR band + volume>MA20 at 1.5R (in n=44 win 61.4% +23.5R; OOS n=86 win 40.7% +1.5R). Every other in-sample winner failed OOS and is NOT shipped. Shipped in sona.js: sessEnd 13, stop band 1.0-2.5, the volume>MA20 gate (fail-open), session default ON with the studied window; test-sona re-pinned (87 green). The edge is a leak-remover, not a money printer."
     }
   ]
 }

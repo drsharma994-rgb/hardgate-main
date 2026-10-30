@@ -33,9 +33,20 @@ var SPEC = {
   slopeLen: 4,
   mintick: 0.01,
   sessStart: 7,
-  sessEnd: 17,
-  stopAtrMin: 1.5,
-  stopAtrMax: 3.5,
+  /* hg-v1476 — THE VARIATION STUDY (scripts/sona-study.mjs, 24 months of
+     PAXG 15m, in-sample 12m + out-of-sample 12m, both halves each):
+     the London window 07:00-13:00 UTC with the 1.0-2.5xATR stop band and
+     the volume>MA20 gate is the ONE configuration that is net-positive in
+     BOTH windows (in-sample n=44 win 61.4% net +23.5R; out-of-sample n=86
+     win 40.7% net +1.5R) against a baseline that is 39.6%/31.9% and
+     -1.0R/-33.5R. Every other winner-in-sample (the 2.0R+ ladder, the
+     overlap-only window, EMA-only prints) FAILED out of sample and is NOT
+     shipped. The edge is a leak-remover, not a money printer, and it is
+     stated as such. */
+  sessEnd: 13,
+  stopAtrMin: 1.0,
+  stopAtrMax: 2.5,
+  volLook: 20,
   /* XM gold round trip. Four times that is the smallest risk that is
      not just the spread. 5m is absent because its ATR falls inside it. */
   rtFrac: 0.0002,
@@ -325,6 +336,16 @@ function vwapSeries(rows){
   return { vwap: vwap, pv: pvA, vv: vvA };
 }
 
+function volMaSeries(rows, len){
+  var n = rows.length, out = new Array(n), i, k, sum, okc;
+  for (i = 0; i < n; i++){
+    if (i + 1 < len){ out[i] = NaN; continue; }
+    sum = 0; okc = true;
+    for (k = i - len + 1; k <= i; k++){ var v = rows[k] && rows[k].v; if (!(isNum(v) && v >= 0)){ okc = false; break; } sum += v; }
+    out[i] = okc ? sum / len : NaN;
+  }
+  return out;
+}
 function hgSonaSeries(rows){
   var n = rows ? rows.length : 0;
   var closes = new Array(n);
@@ -337,7 +358,8 @@ function hgSonaSeries(rows){
     atr: rmaSeries(trSeries(rows || []), SPEC.atrLen),
     vwap: vw.vwap,
     pv: vw.pv,
-    vv: vw.vv
+    vv: vw.vv,
+    volMa: volMaSeries(rows || [], SPEC.volLook)
   };
 }
 
@@ -458,6 +480,16 @@ function hgSonaEval(rows, nowMs, opts){
       }
     }
     var agreed = (pull !== 0 && pull === vw) ? pull : 0;
+    /* hg-v1476: the VOLUME gate — the signal bar's volume above its 20-bar
+       mean. Enabled by the tab (opts.volGate); FAIL-OPEN when volume is
+       unreadable on either side (a deaf feed is not a light tape). */
+    var volOk = true;
+    if (opts.volGate && agreed !== 0){
+      var vma = series.volMa ? series.volMa[i] : NaN;
+      var vb = r.v;
+      if (isNum(vma) && vma > 0 && isNum(vb)) volOk = vb > vma;
+    }
+    if (!volOk) continue;
     var body = (r.c - r.o) * agreed;
     var bodyOk = agreed !== 0 && (SPEC.bodyMin <= 0 || (isNum(atr) && body >= SPEC.bodyMin * atr));
     var slowI = i - SPEC.slopeLen;
@@ -670,7 +702,8 @@ function readTf(el){
 
 function readSess(el){
   var s = el && el.querySelector('#sonaSess');
-  return !!(s && s.checked);
+  /* hg-v1476: the studied window is the DEFAULT — the checkbox opts OUT */
+  return s ? !!s.checked : true;
 }
 
 async function loadTape(tf){
@@ -703,7 +736,7 @@ async function run(el){
   if (!tape || !tape.rows){
     read = { ok: false, reason: 'tape unread', tf: tf, sessOnly: sessOnly, bars: 0, signals: [], live: null, last: null, recent: [], diag: null };
   } else {
-    try { read = hgSonaEval(tape.rows, Date.now(), { tf: tf, sessOnly: sessOnly }); }
+    try { read = hgSonaEval(tape.rows, Date.now(), { tf: tf, sessOnly: sessOnly, volGate: true }); }
     catch (e2) {
       read = { ok: false, reason: 'tape unread', tf: tf, sessOnly: sessOnly, bars: 0, signals: [], live: null, last: null, recent: [], diag: null };
     }
@@ -729,7 +762,7 @@ function mount(el){
     + '<select id="sonaTf" aria-label="SONA timeframe">'
     + '<option value="15m" selected>15m</option><option value="1h">1h</option><option value="4h">4h</option>'
     + '</select>'
-    + '<label class="note"><input id="sonaSess" type="checkbox"> 07:00–17:00 UTC only</label>'
+    + '<label class="note"><input id="sonaSess" type="checkbox" checked> 07:00–13:00 UTC only (the studied window; uncheck for all hours)</label>'
     + '<button class="btn" id="sonaScan" type="button">SCAN SONA</button>'
     + '<span class="note" id="sonaStat">idle</span></div></div>'
     + '<div id="sonaOut"></div>';
