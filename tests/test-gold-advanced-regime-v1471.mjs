@@ -127,18 +127,18 @@ const LCG = (seed) => { let s = seed; return () => { s = (s * 1103515245 + 12345
 /* ============ 4. the shipped build is stamped hg-v1471 ============ */
 {
   const stamp = read('build-stamp.js');
-  ok(/version: 'hg-v1475'/.test(stamp), 'build-stamp version');
-  ok(/built: '2026-10-30T/.test(stamp), 'build-stamp built (fresh)');
+  ok(/version: 'hg-v1479'/.test(stamp), 'build-stamp version');
+  ok(/built: '2026-11-01T/.test(stamp), 'build-stamp built (fresh)');
   ok(/hg-v1471: ADVANCED REGIME READS/.test(stamp), 'the pack string names the round');
   ok(/hg-v1470: OMNIGOLD LEADERBOARD/.test(stamp), 'and the pack history chain is intact');
-  ok(/HG_CACHE = 'hg-v1475'/.test(read('sw.js')), 'sw.js cache id');
+  ok(/HG_CACHE = 'hg-v1479'/.test(read('sw.js')), 'sw.js cache id');
   const idx = read('index.html');
-  ok(idx.indexOf('?v=1470') < 0 && idx.indexOf('?v=1475') >= 0, 'index.html cache-busters all at 1472');
+  ok(idx.indexOf('?v=1470') < 0 && idx.indexOf('?v=1479') >= 0, 'index.html cache-busters all at 1472');
   ok(read('hg-api-base.js').indexOf('1470') < 0, 'hg-api-base at 1471');
   ok(read('trendtable.js').indexOf('1470') < 0, 'trendtable loader at 1471');
   const ledger = JSON.parse(read('data/batch-ledger.json'));
   const entries = (Array.isArray(ledger) ? ledger : Object.values(ledger).find(Array.isArray));
-  ok(entries[entries.length - 1].version === 'hg-v1475', 'the batch ledger last entry is hg-v1475');
+  ok(entries[entries.length - 1].version === 'hg-v1479', 'the batch ledger last entry is hg-v1479');
 }
 
 /* ============ mutations ============ */

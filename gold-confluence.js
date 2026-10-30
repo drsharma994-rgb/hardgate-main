@@ -30,6 +30,16 @@
    The crown count is printed as crowned-of-formed, honestly. A
    two-plan pack from one mechanic family and a signal more than eight
    hours stale are record-only marks, counted, never gated.
+   hg-v1479: the measured plan cut is 48 — below 48 mints no ticket
+   (the 78/68 desk-alert cuts are unreachable for a desk plan and
+   are not the plan gate — hg-v1479 census). A member card over 48
+   hours old stands the plan aside (measured, thin). The ORDER with the
+   v1456/v1457 keeps: their keep-logic governs whether a candidate plan
+   SURVIVES formation (a smaller other side is kept, a tie shows both
+   plans); the hg-v1479 cut applies after, to the FORMED plan's ticket
+   minting. A kept-but-sub-48 plan still paints on the card with its
+   score and its keeps — it mints no ticket and records nothing.
+   No tape, no score, and the desk plan is not erased.
    GOLD DIRECTION is not given
    a side. CANDLE FORECAST is not a vote and is not opened to form one. */
 (function(){
@@ -1079,7 +1089,36 @@ function cfApplyCore(base, cost){
   base.confAlertOk = sc.alertOk === true;
   base.confWhy = sc.why || '';
   base.confParts = sc.parts || null;
-  base.reason += ' Core score ' + sc.score + '/100 ' + (sc.tier || '') + '. The score is on the card. It does not remove this setup.';
+  /* hg-v1479: the desk-wide 78 GOOD / 68 WATCH cuts are unreachable for a
+     desk plan — stratKey 'confluence' matches no location/trigger
+     leg and fires no sweep/volume leg, so the analytic ceiling is ~66 and
+     the taped tab stood aside on 100% of formed plans (measured: READY 0 of
+     2,349 four-hour scans, 14.3-month census). The stack DOES rank formed
+     plans (corr +0.54): below 48 settled -0.452R after XM costs in both
+     halves (n=15); 48 and up settled +0.802R in both halves (n=21), the
+     widest cut that is also both-halves positive at PAXG taker. So the PLAN
+     gate is the measured 48 cut, plan-local: the desk-side stack in
+     goldind.js (A/GOOD/WATCH letters, the 78 alert bar, hg-v700 demotion)
+     is untouched. The 78-based alertOk is not a plan-quality read and no
+     longer gates the plan. Fail-open unchanged: no tape, no scorer, or a
+     scorer error leaves the desk plan exactly as the desks formed it.
+     ORDER vs the v1456/v1457 keeps: those keeps decide whether a candidate
+     plan SURVIVES FORMATION (a smaller other side no longer erases the
+     larger, a tie shows both plans). This cut runs AFTER formation and
+     governs TICKET MINTING only — a kept-but-sub-48 plan still paints on
+     the card with its score (confScore/confTier above, cfScoreNote below)
+     but sets ready=false, so recordConfluence mints nothing for it. The
+     keeps govern survival and display; this cut governs the ticket. */
+  var planCut = (typeof W.HG_GOLD_CONF_PLAN_CUT === 'number') ? W.HG_GOLD_CONF_PLAN_CUT : 48;
+  if (sc.score < planCut){
+    base.ready = false;
+    base.watch = undefined;
+    base.reason += ' Core score ' + sc.score + '/100 is below the measured plan cut ' + planCut
+      + ' (14.3-month census: below ' + planCut + ' settled -0.45R after XM costs, both halves). The plan stays on the card; no ticket is minted.';
+    return;
+  }
+  base.reason += ' Core score ' + sc.score + '/100 ' + sc.tier + ' — at or over the measured plan cut ' + planCut
+    + ' (the 78 desk-alert bar is unreachable for a desk plan and is not the plan gate).';
 }
 function cfScoreNote(built){
   if (!built || !isFinite(built.confScore)) return '';
@@ -1295,7 +1334,32 @@ function hgGoldConfluenceBuild(votes, iux, cost){
      prefers: two or more crowned plans, and the nearest of those leads. */
   base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk,
     crowned: crowned, crownTotal: formed.length, riskOk: riskOk };
-  if (!tightOk){
+  /* hg-v1479: member-card freshness. A formed plan whose OLDEST pack
+     member's card is over 48h old at the anchor instant measured -0.350R
+     after XM costs in both halves (n=7, thin — named) and -0.719R at PAXG
+     taker, both halves (14.3-month census). Signal times ride the votes
+     since hg-v1389; cfVoteSec normalizes signalT (ms) and barT (s).
+     Three-state (hg-v989): any member missing a signal time leaves the
+     check UNREAD and it fails open — a desk that stamps no time is not
+     gated on a time it never gave. This tier joins the hg-v1456/hg-v1458
+     named caveats: it names, it does not gate — the hg-v1479 GATE is the
+     measured plan cut 48 in cfApplyCore, nothing here. */
+  var staleOk = true, staleSawT = true, staleMaxH = 0;
+  if (iux && num(iux.at) > 0){
+    for (var fi = 0; fi < formed.length; fi++){
+      var fsec = cfVoteSec(formed[fi]);
+      if (fsec == null){ staleSawT = false; break; }
+      var fageH = (num(iux.at) / 1000 - fsec) / 3600;
+      if (fageH > staleMaxH) staleMaxH = fageH;
+    }
+    if (staleSawT && staleMaxH > 48) staleOk = false;
+  } else staleSawT = false;
+  base.accuracy.memberAgeH = staleSawT ? +staleMaxH.toFixed(1) : null;
+  base.accuracy.staleOk = staleOk;
+  if (!staleOk){
+    base.reason += ' A member card is ' + staleMaxH.toFixed(0) + 'h old (over 48h). Stale-member plans measured -0.35R after XM costs, both halves (n=7, thin).';
+    base.accuracyTier = 'WATCH';
+  } else if (!tightOk){
     base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — the nearest desk plan is held and accuracy is degraded.';
     base.accuracyTier = 'WATCH';
   } else if (!netOk){
@@ -1311,6 +1375,22 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     } else {
       base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + formed.length + ' crowned — MOST ACCURATE.';
     }
+  }
+  /* hg-v1479: the member-freshness clause is a MEASURED stand-aside
+     (-0.350R XM both halves), not one of the hg-v1456 named caveats.
+     Semantic order with the upstream round: the v1456/v1457 keeps and the
+     v1456 demotion-removal govern a plan's SURVIVAL and display — the
+     named caveats below stay on the card and never gate. This clause and
+     the measured plan cut in cfApplyCore govern TICKET MINTING: a
+     stale-member plan paints as a WATCH with its levels and the named
+     reason (the hg-v1391 watch path, kept for this clause only) and
+     records nothing. */
+  if (!staleOk){
+    base.ready = false;
+    base.watch = { side: side, entry: entry, stop: stop, t1: t1, count: formed.length, need: 3, rr: +(reward/risk).toFixed(2), mark: px, desks: base.desks, spreadUsd: base.spreadUsd, netRr: base.netRr, costNote: base.costNote, accuracy: base.accuracy };
+    if (base.reads) base.watch.reads = base.reads;
+    if (base.leader) base.watch.leader = base.leader;
+    return base;
   }
   /* hg-v1456/hg-v1458: a loose cluster, a thin net R or an incoherent risk
      shape is NAMED. It does not take the setup off the card — the hg-v1391
@@ -1585,6 +1665,33 @@ function levelCard(title, card){
     + '<div><div class="k">RR</div><div class="v">' + rrText(card) + '</div></div>'
     + '</div></div>';
 }
+/* hg-v1479: the WATCH tier's own measurement, printed beside the card it
+   describes (demote-not-hide; the hg-v1423/v1441 disclosure precedent).
+   The 14.3-month aggregation census walked the watch book: -0.735R each
+   after XM costs, negative in BOTH halves (n=78; DESKS DISAGREE -0.94R,
+   OFF-SCALE -1.02R, both classes both-halves negative); -1.15R at PAXG
+   taker. A watch feeds no downstream path (recordConfluence records only
+   built.ready === true) and no sub-cohort met the promotion bar — the only
+   XM-both-halves-positive slice (stack>=48 & 3+ desks, n=4) was PAXG-mixed.
+   Paint only: gates nothing, records nothing. Fail-open when the literal
+   is absent; HG_GOLD_CONF_WATCH_MEASURED_NOTE = false restores silence. */
+var HG_GOLD_CONF_WATCH_MEASURED = {
+  measured: true, census: 'hg-v1479', span: '14.3 months, 2,349 four-hour scans',
+  n: 78, xm: -0.74, xmH1: -0.54, xmH2: -0.93, paxg: -1.15
+  /* full precision in desks/confluence-r2/current-state.json: -0.7353 / -0.5447 / -0.9258 / -1.1520 */
+};
+function cfWatchMeasuredNoteHtml(){
+  try{
+    if (typeof W.HG_GOLD_CONF_WATCH_MEASURED_NOTE !== 'undefined' && W.HG_GOLD_CONF_WATCH_MEASURED_NOTE === false) return '';
+    var M = (typeof HG_GOLD_CONF_WATCH_MEASURED !== 'undefined') ? HG_GOLD_CONF_WATCH_MEASURED : null;
+    if (!M || M.measured !== true || !isFinite(M.n)) return '';
+    var r2 = function(v){ return (v >= 0 ? '+' : '') + Number(v).toFixed(2); };
+    return '<div class="hg-note" data-gc-watch-measured="1"><b>MEASURED ' + esc(String(M.span)) + ' — a watch is not a ticket.</b> '
+      + 'The walked watch book settled ' + r2(M.xm) + 'R each after XM costs, negative in BOTH halves ('
+      + r2(M.xmH1) + ' / ' + r2(M.xmH2) + ', n=' + M.n + '); ' + r2(M.paxg) + 'R at PAXG taker. '
+      + 'It is never recorded and feeds no handoff. No sub-cohort measured a rescue (' + esc(M.census) + ' census).</div>';
+  }catch(e){ return ''; }
+}
 function paint(root, built){
   var desk = root.querySelector('#gc-desk');
   var stat = root.querySelector('#gc-stat');
@@ -1609,6 +1716,7 @@ function paint(root, built){
        names which case the user is reading, and no reader has to look
        up the reason in prose. */
     plan = levelCard('WATCH · ' + (w.label || (w.count + ' OF ' + w.need)), w);
+    plan += cfWatchMeasuredNoteHtml();
     if (w.aside && w.aside.length) plan += '<div class="hg-note">Stood aside: ' + esc(w.aside.join(', ')) + '</div>';
   } else if (isFinite(built.entry) && isFinite(built.stop) && isFinite(built.t1)){
     plan = levelCard('STOOD ASIDE · ' + String(built.side || '').toUpperCase(), built);
@@ -1627,9 +1735,9 @@ function mount(root){
   root.innerHTML = '<div class="panel"><h2>CONFLUENCE <span>one setup from the gold desks, priced on the live IUX gold quote</span></h2>'
     + '<button type="button" class="btn" id="gc-run">SCAN GOLD DESKS</button>'
     + '<div class="hg-note" id="gc-stat">No scan yet.</div>'
-    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie shows both plans and does not blend them. A wide cluster and a spread under 1R are named and do not remove it. The entry, the stop, and the target are the nearest desk\'s own plan. Other desks confirm the side. Stops and targets are not averaged. When two or more plans are crowned, that plan is chosen from the crowned ones. The 100-point score is printed when the gold tape is in hand. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup. When the forming plans disagree on where risk lives — a stop distance outside 0.5×–2× of the pack median — the card keeps the nearest desk\'s own stop and names the disagreement. It does not remove the setup.</div>'
+    + '<div id="gc-desk"><div class="hg-note">Unread means that desk has not published a plan. Opening this tab scans the gold desks and waits until each scan finishes. Two plans on the same side, both on the live price, are a setup. One or more plans on the other side do not remove it when this side is larger. A tie shows both plans and does not blend them. A wide cluster and a spread under 1R are named and do not remove it. The entry, the stop, and the target are the nearest desk\'s own plan. Other desks confirm the side. Stops and targets are not averaged. When two or more plans are crowned, that plan is chosen from the crowned ones. The 100-point score is printed when the gold tape is in hand. hg-v1479: the formed plan is then measured against the plan cut of 48 — below 48 the plan stays on the card but mints no ticket (that cohort settled -0.45R after XM costs, both halves, over 14.3 months); 48 or better can stay a setup. The desk-wide 78 alert bar is unreachable for the desk plan and is not the plan gate. A member card older than 48 hours stands the plan aside (measured -0.35R, both halves, thin). No tape means the score is unread and the desk plan stays. It does not remove a setup. It is not the live IUX print. One desk is a watch. A price that has already reached the stop is stood aside. SUPER GOLD and MILLI GOLD are not a second vote when the desk they read already published. GOLD DIRECTION still needs your own LONG or SHORT. CANDLE FORECAST is not a vote and does not form a setup. When the forming plans disagree on where risk lives — a stop distance outside 0.5×–2× of the pack median — the card keeps the nearest desk\'s own stop and names the disagreement. It does not remove the setup.</div>'
     + '<div class="hg-note">MEASURED (hg-v1445, this gate, 360 four-hour closes 29 Aug-28 Oct 2026, IUX anchor = the PAXG close, spread unread): GOLD SCALP, GOLD SWING and SUPER GOLD cast no vote. Every ranked plan was already demoted. GOLD PINE crowned 35 times, which is one desk. Ready stayed 0 in both halves. Three independent crowns are still required. Omnigold, newgold, ganesh, goldultra and the other gold desks were not re-walked on this tape, so this does not replace the longer READY census. No gate change. The second half is the forward window.</div>'
-    + '<div class="hg-note">The levels on a setup are one desk\'s own plan, the plan whose entry sits nearest the median entry. A same-family count and a session split are written on the forward record and do not change ready. The 100-point score is a label. It does not change ready.</div>'
+    + '<div class="hg-note">The levels on a setup are one desk\'s own plan, the plan whose entry sits nearest the median entry. A same-family count and a session split are written on the forward record and do not change ready. The 100-point score is a label; it changes the ticket only through the measured 48 plan cut, and only when the tape was read (hg-v1479).</div>'
     + (typeof hgGoldStrategyLeaderboardHtml === 'function'
         ? (hgGoldStrategyLeaderboardHtml('scalp') + hgGoldStrategyLeaderboardHtml('swing'))
         : '')

@@ -303,11 +303,23 @@ assert.equal(liveTie.pair[1].stop, 4086.17);
 assert.equal(liveTie.pair[1].t1, 3908.96);
 assert.match(liveTie.reason, /Both plans are on the card/);
 
-/* The 100-point score is a label. A low score does not take the setup off the card. */
+/* The 100-point score changes the card only when the tape is in hand.
+   No scorer, or no rows, leaves the desk plan.
+   hg-v1465 RE-AUTHORIZED PINS (renumbered twice — upstream took
+   v1455-v1462): the plan gate is the MEASURED plan
+   cut 48 (14.3-month census: below 48 settled -0.452R @XM both halves
+   n=15; 48+ +0.802R both halves n=21; the desk-wide 78/68 cuts are
+   unreachable for a desk plan — analytic ceiling ~66, READY was 0
+   of 2,349 taped scans). The 78-based alertOk no longer gates the plan.
+   The desk-side stack in goldind.js keeps its own 78/68 letters (pinned in
+   test-gold-confluence.mjs) — these pins still catch a dead scorer: a
+   scorer whose scores collapse below 48 stands every taped plan aside.
+   ORDER vs upstream's keep round: the v1456/v1457 keeps decide whether a
+   plan SURVIVES formation (the tie pair above); the measured cut decides
+   whether the FORMED plan mints a ticket — a kept-but-sub-48 plan keeps
+   its score on the card and mints nothing. */
 const tapeRows = [{ t: 1, o: 2650, h: 2652, l: 2648, c: 2651 }];
 function scored(tier, score, alertOk){
-  win.HG_GOLD_CONF_GOOD = 78;
-  win.HG_GOLD_CONF_WATCH = 68;
   win.hgGoldConfluenceScore = () => ({
     ok: true, score: score, tier: tier, alertOk: alertOk, why: 'stub',
     parts: { htf: 20, location: 14, momentum: 10, volRegime: 8, volume: 6, macro: 8, trigger: 8 }
@@ -318,18 +330,33 @@ const hi = scored('A', 90, true);
 assert.equal(hi.ready, true);
 assert.equal(hi.confScore, 90);
 assert.equal(hi.confTier, 'A');
-assert.equal(hi.entry, 2651);
-const watchScore = scored('WATCH', 70, false);
-assert.equal(watchScore.ready, true);
-assert.equal(watchScore.watch, undefined);
-assert.equal(watchScore.confScore, 70);
-assert.equal(watchScore.entry, 2651);
-const low = scored('NO_TRADE', 50, false);
-assert.equal(low.ready, true);
-assert.equal(low.watch, undefined);
-assert.equal(low.confTier, 'NO_TRADE');
-assert.equal(low.entry, 2651);
-assert.match(low.reason, /does not remove this setup/);
+assert.equal(hi.confAlertOk, true);
+/* score 70 used to be a 78-cut watch; under the measured plan cut it is a
+   setup. alertOk false (the unreachable 78 alert bar) does not gate. */
+const wasWatch = scored('NO_TRADE', 70, false);
+assert.equal(wasWatch.ready, true);
+assert.equal(wasWatch.confScore, 70);
+assert.equal(wasWatch.watch, undefined);
+assert.match(wasWatch.reason, /measured plan cut 48/);
+/* the cut itself: 47 stands aside, 48 is a setup */
+const under = scored('NO_TRADE', 47, false);
+assert.equal(under.ready, false);
+assert.equal(under.watch, undefined);
+assert.equal(under.entry, 2651);
+/* upstream's score-print intent survives the cut: the kept-but-sub-48 plan
+   still carries its score on the card — it mints no ticket. */
+assert.equal(under.confScore, 47);
+assert.match(under.reason, /below the measured plan cut 48/);
+const atCut = scored('NO_TRADE', 48, false);
+assert.equal(atCut.ready, true);
+assert.equal(atCut.confScore, 48);
+/* the plan-cut lever moves the gate */
+win.HG_GOLD_CONF_PLAN_CUT = 75;
+const levered = scored('A', 70, true);
+assert.equal(levered.ready, false);
+assert.equal(levered.watch, undefined);
+assert.match(levered.reason, /below the measured plan cut 75/);
+delete win.HG_GOLD_CONF_PLAN_CUT;
 delete win.hgGoldConfluenceScore;
 const unread = win.hgGoldConfluenceBuild(votes, { px: 2651.5 }, { spreadUsd: 0.30, rows15m: tapeRows });
 assert.equal(unread.ready, true);
