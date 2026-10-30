@@ -755,6 +755,11 @@
       "version": "hg-v1473",
       "built": "2026-10-30T10:05:00Z",
       "note": "SONA — a gold-group tab reading one Pine script, HG Gold 81 every bar. Long or short only when an EMA 24 pullback inside the EMA 120 stack and a UTC-session VWAP reclaim agree on the same closed bar. Entry is that close. Stop is 2.5xATR, target is 0.35R, both on the 0.01 tick. The card prices entry, stop and target and writes no forward record and no ticket. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1474",
+      "built": "2026-10-30T11:20:00Z",
+      "note": "SONA PRICES. Entry, stop and target are the integer cents of the 0.01 tick, measured from the ticked close, and the booked R is the ratio of those three prices. A VWAP slope is six contiguous bars of the same UTC day. A missing volume does not take weight 1 beside a real volume. A later signal stops the open trade when that bar already traded the stop or the target. Not re-walked; the forward ledger decides."
     }
   ]
 }

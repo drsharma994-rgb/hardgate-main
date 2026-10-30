@@ -24,8 +24,8 @@ vm.runInContext(fs.readFileSync(path.join(ROOT, 'sona.js'), 'utf8'), ctx, { file
 const SPEC = ctx.HG_SONA_SPEC;
 const STEP = 15 * 60 * 1000;
 
-function tick(x){ return Math.round(x / SPEC.mintick) * SPEC.mintick; }
-function near(a, b){ return Math.abs(a - b) < 1e-6; }
+function cents(x){ return Math.round(x / SPEC.mintick); }
+function divRound(n, d){ return Math.floor((n + Math.floor(d / 2)) / d); }
 
 function baseRows(n, signalMs){
   const t0 = signalMs - n * STEP;
@@ -72,9 +72,14 @@ console.log('== a closed bar where both prints agree is a long setup ==');
   const sig = read.signals.filter(s => s.ms === signalMs)[0];
   ok(!!sig && sig.dir === 1 && sig.side === 'LONG', 'both prints on a closed bar arm a LONG');
   ok(read.live && read.live.ms === signalMs, 'that setup is live — nothing after it has resolved it');
-  const risk = tick(SPEC.atrMult * sig.atr);
-  ok(near(sig.stop, tick(sig.entry - risk)), 'stop is the close minus 2.5×ATR, on the 0.01 tick');
-  ok(near(sig.tp, tick(sig.entry + SPEC.rewardR * risk)), 'take profit is 0.35R from the close, on the 0.01 tick');
+  const riskC = cents(sig.risk);
+  const entryC = cents(sig.entry);
+  const stopC = cents(sig.stop);
+  const tpC = cents(sig.tp);
+  ok(entryC - stopC === riskC && riskC >= 1, 'stop is exactly the ticked 2.5×ATR risk under the entry');
+  ok(tpC - entryC === divRound(riskC * 35, 100) && tpC > entryC, 'take profit is 0.35 of that risk, rounded to the 0.01 tick');
+  ok(Math.abs(sig.realizedR - (tpC - entryC) / riskC) < 1e-12, 'booked R is the ratio of the three published prices');
+  ok(Math.abs(sig.realizedR - 0.35) <= 0.5 / riskC + 1e-12, 'the tick round moves R by at most half a cent of risk');
   ok(sig.stop < sig.entry && sig.tp > sig.entry, 'long stop is below entry and take profit is above');
   const html = ctx.hgSonaHtml(read, { feed: 'binance-xau' });
   ok(html.indexOf('ENTRY') >= 0 && html.indexOf('STOP LOSS') >= 0 && html.indexOf('TAKE PROFIT') >= 0, 'the card names entry, stop loss and take profit');
@@ -123,7 +128,72 @@ console.log('\n== a bar that trades both stop and target is not called a winner 
   ok(!done.live || done.live.ms !== signalMs, 'that setup is not still live');
 }
 
-console.log('\n== the tab is wired into the gold group and writes no forward row ==');
+console.log('\n== the prices are the trade, and a slope is a real span of bars ==');
+{
+  ok(Math.round(ctx.hgSonaTick(1.005) * 100) === 101, '1.005 rounds to 1.01, not down through the binary 0.01 error');
+  ok(Math.round(ctx.hgSonaTick(2400.004) * 100) === 240000, 'a sub-tick close publishes the nearest 0.01');
+  ok(Math.round(ctx.hgSonaTick(2400.006) * 100) === 240001, '2400.006 rounds up to the next tick');
+
+  const weighted = [
+    { t: Math.floor(Date.UTC(2026, 0, 8, 12, 0, 0) / 1000), o: 100, h: 100, l: 100, c: 100, v: 1000 },
+    { t: Math.floor(Date.UTC(2026, 0, 8, 12, 15, 0) / 1000), o: 110, h: 110, l: 110, c: 110, v: 1 }
+  ];
+  const wSer = ctx.hgSonaSeries(weighted);
+  const wExpect = (100 * 1000 + 110 * 1) / 1001;
+  ok(Math.abs(wSer.vwap[1] - wExpect) < 1e-9, 'two positive volumes stay volume-weighted');
+
+  const mixed = [
+    { t: weighted[0].t, o: 100, h: 100, l: 100, c: 100, v: 1000 },
+    { t: weighted[1].t, o: 110, h: 110, l: 110, c: 110, v: 0 }
+  ];
+  const mSer = ctx.hgSonaSeries(mixed);
+  ok(Math.abs(mSer.vwap[1] - 105) < 1e-9, 'a zero-volume bar does not keep a weight of 1 beside a real volume');
+
+  const signalMs = Date.UTC(2026, 0, 7, 12, 0, 0);
+  const gapped = baseRows(200, signalMs);
+  craftLong(gapped);
+  gapped[gapped.length - 1].t = Math.floor((signalMs + 4 * STEP) / 1000);
+  const hole = ctx.hgSonaEval(gapped, signalMs + 4 * STEP + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  ok(!hole.signals.some(s => s.ms === signalMs + 4 * STEP), 'a missing bar is not a six-bar VWAP slope');
+  ok(hole.reason === 'vwap gap' || hole.reason === 'ema gap' || !hole.live || hole.live.ms !== signalMs + 4 * STEP,
+    'the gapped bar is not the live setup');
+
+  const dirty = baseRows(200, signalMs);
+  craftLong(dirty);
+  dirty.splice(10, 0, { t: dirty[10].t - 1, o: 1, h: 1, l: 2, c: 1, v: 1 });
+  const cleaned = ctx.hgSonaEval(dirty, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  ok(!!cleaned.signals.some(s => s.ms === signalMs), 'one impossible bar is dropped; the closed print still stands');
+
+  const signal2 = Date.UTC(2026, 0, 7, 12, 15, 0);
+  const repl = baseRows(200, signalMs);
+  craftLong(repl);
+  const armed = ctx.hgSonaEval(repl, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  const first = armed.signals.filter(s => s.ms === signalMs)[0];
+  ok(!!first, 'the first setup exists before the replacement bar');
+  const emaNow = ctx.hgSonaSeries(repl);
+  const i = repl.length - 1;
+  const cap = first.tp - 0.02;
+  const close2 = Math.min(Math.max(emaNow.emaFast[i], emaNow.vwap[i]) + 0.4, cap);
+  const open2 = close2 - Math.max(SPEC.bodyMin * emaNow.atr[i], 0.2) - 0.3;
+  repl.push({
+    t: Math.floor(signal2 / 1000),
+    o: open2,
+    h: close2,
+    l: Math.min(first.stop, emaNow.vwap[i]) - 0.5,
+    c: close2,
+    v: 1
+  });
+  const after = ctx.hgSonaEval(repl, signal2 + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  const was = after.signals.filter(s => s.ms === signalMs)[0];
+  const nxt = after.signals.filter(s => s.ms === signal2)[0];
+  ok(!!nxt && nxt.dir === 1, 'the bar that trades the old stop is itself a long setup');
+  ok(was && was.state === 'stopped', 'that bar stops the open setup; it does not call it replaced');
+
+  const html = ctx.hgSonaHtml(armed, { feed: '<script>' });
+  const escaped = '&' + 'lt;script&' + 'gt;';
+  ok(html.indexOf('<script>') < 0 && html.indexOf(escaped) >= 0, 'a feed name is escaped');
+  ok(!/\bNaN\b|\bundefined\b|\[object Object\]/.test(html), 'the card still prints no unread value');
+}
 {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');

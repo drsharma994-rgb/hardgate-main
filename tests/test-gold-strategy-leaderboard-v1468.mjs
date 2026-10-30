@@ -147,20 +147,20 @@ function bootCtx(files){
 /* ============ 4. the shipped build is stamped hg-v1468 ============ */
 {
   const stamp = read('build-stamp.js');
-  ok(/version: 'hg-v1473'/.test(stamp), 'build-stamp version');
+  ok(/version: 'hg-v1474'/.test(stamp), 'build-stamp version');
   ok(/built: '2026-10-30T/.test(stamp), 'build-stamp built (fresh)');
   ok(/hg-v1468: GOLD STRATEGY LEADERBOARD/.test(stamp), 'the pack string names the round');
   ok(/hg-v1467: GOLD FOUNDATION/.test(stamp), 'the upstream hg-v1467 round stays in the chain');
   ok(/hg-v1466: PINE GOLD and GOLD SCALP — a failed-sweep reclaim fills at the next open/.test(stamp), 'and the upstream hg-v1466 round stays in the chain');
   ok(/hg-v1465: PINE GOLD and GOLD SCALP/.test(stamp), 'and the older chain is intact');
-  ok(/HG_CACHE = 'hg-v1473'/.test(read('sw.js')), 'sw.js cache id');
+  ok(/HG_CACHE = 'hg-v1474'/.test(read('sw.js')), 'sw.js cache id');
   const idx = read('index.html');
-  ok(idx.indexOf('?v=1465') < 0 && idx.indexOf('?v=1473') >= 0, 'index.html cache-busters all at 1472');
+  ok(idx.indexOf('?v=1465') < 0 && idx.indexOf('?v=1474') >= 0, 'index.html cache-busters all at 1472');
   ok(read('hg-api-base.js').indexOf('1465') < 0, 'hg-api-base at 1468');
   ok(read('trendtable.js').indexOf('1465') < 0, 'trendtable loader at 1468');
   const ledger = JSON.parse(read('data/batch-ledger.json'));
   const entries = (Array.isArray(ledger) ? ledger : Object.values(ledger).find(Array.isArray));
-  ok(entries[entries.length - 1].version === 'hg-v1473', 'the batch ledger last entry is hg-v1473');
+  ok(entries[entries.length - 1].version === 'hg-v1474', 'the batch ledger last entry is hg-v1474');
 }
 
 /* ============ mutations ============ */
