@@ -760,6 +760,11 @@
       "version": "hg-v1474",
       "built": "2026-10-30T11:20:00Z",
       "note": "SONA PRICES. Entry, stop and target are the integer cents of the 0.01 tick, measured from the ticked close, and the booked R is the ratio of those three prices. A VWAP slope is six contiguous bars of the same UTC day. A missing volume does not take weight 1 beside a real volume. A later signal stops the open trade when that bar already traded the stop or the target. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1475",
+      "built": "2026-10-30T12:10:00Z",
+      "note": "SONA RISK. The stop is one tick beyond the pullback wick, not 2.5xATR. Refused under 1.5xATR, under 4x the 0.02% XM round trip, or wider than 3.5xATR. The target is 1.5R of that published risk, so breakeven before cost is under 45% instead of 74%. One plan is held until the stop or the target. 5m is not a book. The UTC hour is recorded and is not a filter. Not re-walked; the forward ledger decides."
     }
   ]
 }

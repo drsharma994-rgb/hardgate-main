@@ -1,5 +1,5 @@
 /* HARDGATE — sona.js
-   SONA. One Pine strategy, nothing added: "HG Gold 81 every bar".
+   SONA. The prints are still HG Gold 81. The prices are not.
 
    Long or short only when both prints land on the same closed bar:
    an EMA 24 pullback inside the EMA 120 stack, and a UTC-session VWAP
@@ -7,17 +7,18 @@
    this UTC day with no missing bar — yesterday's VWAP and a hole are
    not a slope. The candle body must be at least 0.15×ATR(14), and
    EMA 120 must slope with the trade over four contiguous bars.
-   Optional session gate is 07:00–17:00 UTC, off by default.
 
-   The published prices are the trade. The close, the 2.5×ATR risk and
-   the 0.35R target are rounded to the 0.01 gold tick in integer cents,
-   and the stop and the target are measured from that ticked entry.
-   Booked R is |target−entry| / |entry−stop| of those three prices.
-   A target that rounds to zero cents is not a setup. A new signal
-   replaces the open one only when the replacement bar did not already
-   trade the stop or the target. Both in one bar stays unresolved:
-   this tape has no lower timeframe, so the script's bar magnifier is
-   not called. This desk writes no forward row and no ticket. */
+   Entry is that close, on the 0.01 tick. The stop is one tick beyond
+   the pullback wick: the low on a long, the high on a short. That is
+   where the idea is wrong. The trade is refused when that risk is
+   under 1.5×ATR, under 4× the 0.02% XM round trip, or wider than
+   3.5×ATR. The target is 1.5R of the published risk. A coin-flip path
+   between those two barriers no longer needs a 74% hit rate.
+   One plan is open at a time and runs until the stop or the target.
+   A later agreement is not a second setup. Both in one bar stays
+   unresolved. 5m is not a book: there the ATR sits inside the cost.
+   The UTC hour is printed and is not a filter.
+   This desk writes no forward row and no ticket. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
@@ -26,22 +27,26 @@ var SPEC = {
   fastLen: 24,
   slowLen: 120,
   vwLook: 6,
-  cool: 1,
   atrLen: 14,
-  atrMult: 2.5,
-  rewardR: 0.35,
+  rewardR: 1.5,
   bodyMin: 0.15,
   slopeLen: 4,
   mintick: 0.01,
   sessStart: 7,
   sessEnd: 17,
+  stopAtrMin: 1.5,
+  stopAtrMax: 3.5,
+  /* XM gold round trip. Four times that is the smallest risk that is
+     not just the spread. 5m is absent because its ATR falls inside it. */
+  rtFrac: 0.0002,
+  rtMult: 4,
   /* 500 is the script's max_bars_back. The extra bars are warmup so
      EMA 120 at the right edge is not still the SMA seed of a short window. */
   count: 1500
 };
 
-var TF_MS = { '5m': 5 * 60 * 1000, '15m': 15 * 60 * 1000, '1h': 60 * 60 * 1000, '4h': 4 * 60 * 60 * 1000 };
-var TF_OK = { '5m': 1, '15m': 1, '1h': 1, '4h': 1 };
+var TF_MS = { '15m': 15 * 60 * 1000, '1h': 60 * 60 * 1000, '4h': 4 * 60 * 60 * 1000 };
+var TF_OK = { '15m': 1, '1h': 1, '4h': 1 };
 
 function isNum(x){ return typeof x === 'number' && isFinite(x); }
 
@@ -60,6 +65,64 @@ function pxFromCents(c){ return c * SPEC.mintick; }
 /* Round n/d to the nearest integer, half away from zero. n and d > 0. */
 function divRound(n, d){
   return Math.floor((n + Math.floor(d / 2)) / d);
+}
+
+/* First tick strictly past the wick. A long stop sits below the low.
+   A short stop sits above the high. A wick already on a tick steps one
+   tick further, so the stop is not a price the signal bar traded. */
+function beyondWickCents(price, dir){
+  if (!isNum(price)) return NaN;
+  var scaled = price / SPEC.mintick;
+  var c;
+  if (dir === 1){
+    c = Math.floor(scaled + 1e-8);
+    if (c >= scaled - 1e-6) c -= 1;
+  } else {
+    c = Math.ceil(scaled - 1e-8);
+    if (c <= scaled + 1e-6) c += 1;
+  }
+  return c;
+}
+
+function centsAtLeast(x){
+  if (!isNum(x) || !(x > 0)) return NaN;
+  return Math.ceil(x / SPEC.mintick - 1e-8);
+}
+
+function centsAtMost(x){
+  if (!isNum(x) || !(x > 0)) return NaN;
+  return Math.floor(x / SPEC.mintick + 1e-8);
+}
+
+/* Stop beyond the wick. Refuse a risk the spread would eat, and a risk
+   so wide the 1.5R target is no longer the pullback. Target is 1.5R of
+   the published risk, rounded half away from zero. */
+function planOf(row, dir, atr){
+  var entryC = centsOf(row.c);
+  var wick = dir === 1 ? row.l : row.h;
+  var stopC = beyondWickCents(wick, dir);
+  if (!isNum(entryC) || !isNum(stopC)) return { block: 'stop unread' };
+  var riskC = dir === 1 ? (entryC - stopC) : (stopC - entryC);
+  if (!(riskC >= 1)) return { block: 'stop unread' };
+  var entryPx = pxFromCents(entryC);
+  var floorAtr = centsAtLeast(SPEC.stopAtrMin * atr);
+  var floorCost = centsAtLeast(SPEC.rtFrac * SPEC.rtMult * entryPx);
+  var floorC = Math.max(isNum(floorAtr) ? floorAtr : 0, isNum(floorCost) ? floorCost : 0);
+  var ceilC = centsAtMost(SPEC.stopAtrMax * atr);
+  if (riskC < floorC) return { block: 'stop under floor' };
+  if (!isNum(ceilC) || riskC > ceilC) return { block: 'stop wide' };
+  var rewardC = divRound(riskC * 3, 2);
+  if (!(rewardC >= 1)) return { block: 'target unread' };
+  return {
+    block: null,
+    entry: entryPx,
+    stop: pxFromCents(stopC),
+    tp: pxFromCents(entryC + dir * rewardC),
+    risk: pxFromCents(riskC),
+    realizedR: rewardC / riskC,
+    breakeven: riskC / (riskC + rewardC),
+    costR: (SPEC.rtFrac * entryPx) / (riskC * SPEC.mintick)
+  };
 }
 
 function barMs(row){
@@ -355,13 +418,21 @@ function hgSonaEval(rows, nowMs, opts){
     return blank;
   }
   var series = hgSonaSeries(closed);
-  var lastTaken = null;
   var signals = [];
   var decisions = new Array(closed.length);
+  var open = null;
   var i;
   for (i = 0; i < closed.length; i++){
     var r = closed[i];
     var ms = barMs(r);
+    if (open != null){
+      var held = hitOf(r, signals[open]);
+      if (held){
+        signals[open].state = held;
+        signals[open].resolveMs = ms;
+        open = null;
+      }
+    }
     var emaF = series.emaFast[i];
     var emaS = series.emaSlow[i];
     var atr = series.atr[i];
@@ -399,27 +470,21 @@ function hgSonaEval(rows, nowMs, opts){
     var hm = utcHm(ms);
     var inSess = hm >= SPEC.sessStart && hm < SPEC.sessEnd;
     var sessionOk = !sessOnly || inSess;
-    var cooled = lastTaken == null || (i - lastTaken) >= SPEC.cool;
     var geometry = null;
-    if (dir !== 0 && sessionOk && cooled && isNum(atr) && atr > 0){
-      var entryC = centsOf(r.c);
-      var riskC = centsOf(SPEC.atrMult * atr);
-      var rewardC = (isNum(riskC) && riskC >= 1) ? divRound(riskC * 35, 100) : 0;
-      if (isNum(entryC) && riskC >= 1 && rewardC >= 1){
-        var stopC = entryC - dir * riskC;
-        var tpC = entryC + dir * rewardC;
-        geometry = {
-          entry: pxFromCents(entryC),
-          stop: pxFromCents(stopC),
-          tp: pxFromCents(tpC),
-          risk: pxFromCents(riskC),
-          realizedR: rewardC / riskC
-        };
+    var block = null;
+    if (dir !== 0 && sessionOk && isNum(atr) && atr > 0){
+      if (open != null) block = 'position open';
+      else {
+        geometry = planOf(r, dir, atr);
+        if (geometry.block){
+          block = geometry.block;
+          geometry = null;
+        }
       }
     }
     var d = {
       ms: ms, close: r.c, pull: pull, vw: vw, vwGap: vwGap, slopeGap: slopeGap,
-      bodyOk: bodyOk, slopeOk: slopeOk, inSess: inSess, cooled: cooled,
+      bodyOk: bodyOk, slopeOk: slopeOk, inSess: inSess, block: block,
       emaFast: emaF, emaSlow: emaS, atr: atr, vwap: vwap, take: false
     };
     if (geometry){
@@ -428,27 +493,14 @@ function hgSonaEval(rows, nowMs, opts){
         i: i, dir: dir, side: dir === 1 ? 'LONG' : 'SHORT',
         entry: geometry.entry, stop: geometry.stop, tp: geometry.tp,
         atr: atr, risk: geometry.risk, realizedR: geometry.realizedR,
+        breakeven: geometry.breakeven, costR: geometry.costR,
+        hour: new Date(ms).getUTCHours(),
         ms: ms, emaFast: emaF, emaSlow: emaS, vwap: vwap,
         state: 'live', resolveMs: null
       });
-      lastTaken = i;
+      open = signals.length - 1;
     }
     decisions[i] = d;
-  }
-  for (i = 0; i < signals.length; i++){
-    var sig = signals[i];
-    var nextI = (i + 1 < signals.length) ? signals[i + 1].i : null;
-    var lastJ = nextI == null ? closed.length - 1 : nextI;
-    var state = 'live';
-    var at = null;
-    var j;
-    for (j = sig.i + 1; j <= lastJ; j++){
-      var hit = hitOf(closed[j], sig);
-      if (hit){ state = hit; at = j; break; }
-    }
-    if (state === 'live' && nextI != null) state = 'replaced';
-    sig.state = state;
-    sig.resolveMs = at == null ? null : barMs(closed[at]);
   }
   var last = signals.length ? signals[signals.length - 1] : null;
   var live = (last && last.state === 'live') ? last : null;
@@ -462,7 +514,8 @@ function hgSonaEval(rows, nowMs, opts){
       ms: tail.ms, close: tail.close, pull: tail.pull, vw: tail.vw,
       vwGap: tail.vwGap, slopeGap: tail.slopeGap,
       bodyOk: tail.bodyOk, slopeOk: tail.slopeOk, inSess: tail.inSess,
-      emaFast: tail.emaFast, emaSlow: tail.emaSlow, atr: tail.atr, vwap: tail.vwap
+      emaFast: tail.emaFast, emaSlow: tail.emaSlow, atr: tail.atr, vwap: tail.vwap,
+      block: tail.block
     }
   };
 }
@@ -478,7 +531,9 @@ function failReason(d, sessOnly){
   if (d.slopeGap) return 'ema gap';
   if (!d.slopeOk) return 'slope flat';
   if (sessOnly && !d.inSess) return 'outside session';
-  if (!d.cooled) return 'cooldown';
+  if (d.block === 'position open') return 'position open';
+  if (d.block === 'stop under floor') return 'stop under floor';
+  if (d.block === 'stop wide') return 'stop wide';
   return 'target unread';
 }
 
@@ -487,15 +542,15 @@ function stateWord(st){
   if (st === 'stopped') return 'STOPPED';
   if (st === 'target') return 'TARGET';
   if (st === 'both') return 'BOTH IN BAR';
-  if (st === 'replaced') return 'REPLACED';
   return '—';
 }
 
 function rWord(s){
   if (!isNum(s.realizedR)) return 'target unread';
-  var booked = fmtR(s.realizedR);
-  if (booked === '0.35') return 'booked 0.35R';
-  return 'booked ' + booked + 'R after the 0.35R tick round';
+  var line = 'booked ' + fmtR(s.realizedR) + 'R';
+  if (isNum(s.breakeven)) line += ' · breakeven ' + (Math.round(s.breakeven * 1000) / 10).toFixed(1) + '% before cost';
+  if (isNum(s.costR)) line += ' · XM 0.02% round trip is ' + fmtR(s.costR) + 'R of this risk';
+  return line;
 }
 
 function levelsHtml(s){
@@ -507,6 +562,7 @@ function levelsHtml(s){
     + '<div style="border:1px solid var(--line);border-radius:6px;padding:8px 10px"><div class="note">TAKE PROFIT</div><div class="pos" style="font-size:22px">' + fmt(s.tp) + '</div></div>'
     + '</div>'
     + '<div class="note">Signal close on the 0.01 tick ' + fmt(s.entry) + ' · ' + esc(utcLabel(s.ms))
+    + ' · hour ' + (isNum(s.hour) ? (s.hour < 10 ? '0' : '') + s.hour : '—') + ' UTC, recorded not filtered'
     + ' · ATR ' + fmt(s.atr) + ' · risk ' + fmt(s.risk) + ' · ' + esc(rWord(s))
     + ' · EMA 24 ' + fmt(s.emaFast) + ' · EMA 120 ' + fmt(s.emaSlow) + ' · VWAP ' + fmt(s.vwap) + '</div>';
 }
@@ -525,13 +581,14 @@ function whyLine(read){
   if (read.reason === 'ema gap') return 'Both prints agreed, but EMA 120 does not have four contiguous bars to measure a slope. No setup.';
   if (read.reason === 'slope flat') return 'Both prints agreed, and EMA 120 was not sloping with the trade over 4 bars. No setup.';
   if (read.reason === 'outside session') return 'The print is outside 07:00–17:00 UTC, and that filter is on. No setup.';
-  if (read.reason === 'cooldown') return 'Both prints agreed inside the cooldown. No second setup.';
-  if (read.reason === 'target unread') return 'The 0.35R target rounds to nothing on the 0.01 tick. No setup.';
-  if (read.live) return 'Both prints agreed on the last open setup. Entry, stop and target are on the 0.01 tick, and the booked R is the ratio of those prices.';
+  if (read.reason === 'position open') return 'Both prints agreed, and a plan is already open. It runs to its stop or its target. No second setup.';
+  if (read.reason === 'stop under floor') return 'The wick stop is under 1.5×ATR or under 4× the 0.02% round trip. That risk is the spread. No setup.';
+  if (read.reason === 'stop wide') return 'The wick stop is wider than 3.5×ATR. The pullback is not the risk. No setup.';
+  if (read.reason === 'target unread') return 'The stop or the 1.5R target does not land on a 0.01 tick of risk. No setup.';
+  if (read.live) return 'Both prints agreed. The stop is one tick beyond the pullback wick. The target is 1.5R of that risk.';
   if (read.last && read.last.state === 'stopped') return 'No live setup. The last one was stopped.';
   if (read.last && read.last.state === 'target') return 'No live setup. The last one reached its target.';
   if (read.last && read.last.state === 'both') return 'No live setup. The last one traded both the stop and the target on one bar. This tape has no lower timeframe, so that bar is not called a win.';
-  if (read.last && read.last.state === 'replaced') return 'No live setup. A later bar replaced the previous one without trading its stop or target, and that later one has already resolved.';
   return 'No setup on the last closed bar.';
 }
 
@@ -542,12 +599,12 @@ function recentHtml(recent){
   for (i = 0; i < recent.length; i++){
     s = recent[i];
     cls = s.dir === 1 ? 'pos' : 'neg';
-    rows += '<tr><td>' + esc(utcLabel(s.ms)) + '</td><td class="' + cls + '">' + esc(s.side) + '</td><td>'
+    rows += '<tr><td>' + esc(utcLabel(s.ms)) + '</td><td>' + (isNum(s.hour) ? (s.hour < 10 ? '0' : '') + s.hour : '—') + '</td><td class="' + cls + '">' + esc(s.side) + '</td><td>'
       + fmt(s.entry) + '</td><td>' + fmt(s.stop) + '</td><td>' + fmt(s.tp) + '</td><td>' + esc(fmtR(s.realizedR)) + 'R</td><td>' + esc(stateWord(s.state)) + '</td></tr>';
   }
-  return '<div class="note" style="margin-top:12px">RECENT SETUPS — newest first. A later signal replaces the one before it only if that bar did not already trade the stop or the target.</div>'
+  return '<div class="note" style="margin-top:12px">RECENT SETUPS — newest first. One plan runs until the stop or the target. The hour is recorded and is not a filter.</div>'
     + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">'
-    + '<thead><tr class="note"><th align="left">TIME</th><th align="left">SIDE</th><th align="left">ENTRY</th><th align="left">STOP</th><th align="left">TAKE PROFIT</th><th align="left">R</th><th align="left">STATE</th></tr></thead>'
+    + '<thead><tr class="note"><th align="left">TIME</th><th align="left">HOUR</th><th align="left">SIDE</th><th align="left">ENTRY</th><th align="left">STOP</th><th align="left">TAKE PROFIT</th><th align="left">R</th><th align="left">STATE</th></tr></thead>'
     + '<tbody>' + rows + '</tbody></table></div>';
 }
 
@@ -573,10 +630,10 @@ function sonaHtml(read, meta){
   var head = '<div class="card">';
   var feed = meta.feed ? (' · ' + esc(meta.feed)) : '';
   var sess = read.sessOnly ? ' · 07:00–17:00 UTC only' : ' · session filter off';
-  var rule = '<div class="note" style="margin-top:8px">HG Gold 81 every bar · ' + esc(read.tf || '15m') + feed + sess
-    + ' · ' + (read.bars || 0) + ' closed bars. Entry is the signal close on the 0.01 tick. Stop is 2.5×ATR(14) from that entry. '
-    + 'Target is 0.35R of that stop, on the same tick, and the booked R is the ratio of the three prices. '
-    + 'EMA 24 pullback and UTC VWAP reclaim must agree inside one session, body at least 0.15×ATR, EMA 120 sloping with the trade.</div>';
+  var rule = '<div class="note" style="margin-top:8px">HG Gold 81 prints · ' + esc(read.tf || '15m') + feed + sess
+    + ' · ' + (read.bars || 0) + ' closed bars. Entry is the signal close on the 0.01 tick. Stop is one tick beyond the pullback wick. '
+    + 'Refused under 1.5×ATR, under 4× the 0.02% round trip, or wider than 3.5×ATR. Target is 1.5R of that risk. '
+    + 'One plan, held to the stop or the target. 5m is not a book.</div>';
   var tape = meta.tape || '';
   if (!read || !read.ok){
     var line = read && read.reason === 'no closed bar' ? 'The last bar is still forming. No setup.'
@@ -666,11 +723,11 @@ async function run(el){
 function mount(el){
   if (!el) return;
   __el = el;
-  el.innerHTML = '<div class="panel"><h2>SONA <span>HG Gold 81 · EMA 24/120 · UTC VWAP · every bar</span></h2>'
-    + '<div class="note">A setup prints only when an EMA 24 pullback and a UTC VWAP reclaim agree on the same closed bar, the body is at least 0.15×ATR, and EMA 120 slopes with the trade over four contiguous bars of the same session. Entry, stop and take profit are on the 0.01 tick. The booked R is the ratio of those three prices.</div>'
+  el.innerHTML = '<div class="panel"><h2>SONA <span>HG Gold 81 · wick stop · 1.5R · one plan</span></h2>'
+    + '<div class="note">A setup prints only when an EMA 24 pullback and a UTC VWAP reclaim agree on the same closed bar. The stop is one tick beyond that wick, and only when the risk is between 1.5×ATR and 3.5×ATR and at least 4× the 0.02% round trip. The target is 1.5R. A live plan is held. The hour is shown and does not filter.</div>'
     + '<div class="row" style="margin-top:8px;gap:8px;align-items:center">'
     + '<select id="sonaTf" aria-label="SONA timeframe">'
-    + '<option value="5m">5m</option><option value="15m" selected>15m</option><option value="1h">1h</option><option value="4h">4h</option>'
+    + '<option value="15m" selected>15m</option><option value="1h">1h</option><option value="4h">4h</option>'
     + '</select>'
     + '<label class="note"><input id="sonaSess" type="checkbox"> 07:00–17:00 UTC only</label>'
     + '<button class="btn" id="sonaScan" type="button">SCAN SONA</button>'

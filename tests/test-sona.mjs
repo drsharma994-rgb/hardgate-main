@@ -1,7 +1,7 @@
-/* HARDGATE — SONA / HG Gold 81 every bar.
-   The desk is the Pine script: both prints, the body, the slope, the
-   tick-rounded stop and 0.35R target, the forming-bar rule, the session
-   filter. It writes no forward row.
+/* HARDGATE — SONA / HG Gold 81 prints.
+   Both prints still arm the bar. The stop is one tick beyond the wick,
+   inside 1.5×ATR and 3.5×ATR and at least 4× the 0.02% round trip.
+   The target is 1.5R. A live plan is held. It writes no forward row.
    Run: node tests/test-sona.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -33,15 +33,22 @@ function baseRows(n, signalMs){
   let p = 2300;
   for (let i = 0; i < n; i++){
     p += 0.45;
-    const o = p - 0.2;
+    const o = p - 0.8;
     const c = p;
-    const h = c + 0.25;
-    const l = o - 0.2;
+    const h = c + 1.2;
+    const l = o - 2.2;
     rows.push({ t: Math.floor((t0 + i * STEP) / 1000), o: o, h: h, l: l, c: c, v: 1000 });
   }
   return rows;
 }
 
+function floorPx(x){ return Math.floor(x / SPEC.mintick + 1e-8) * SPEC.mintick; }
+function ceilPx(x){ return Math.ceil(x / SPEC.mintick - 1e-8) * SPEC.mintick; }
+
+/* The wick has to clear 1.5× the ATR this bar itself prints, and stay
+   inside 3.5× that ATR. A fixed poke under the line is the spread when
+   the line sits near the close. Solve the wick so the risk lands near
+   2× the ATR the bar will print, then keep it past both lines. */
 function craftLong(rows){
   const ser = ctx.hgSonaSeries(rows);
   const i = rows.length - 1;
@@ -53,12 +60,27 @@ function craftLong(rows){
   ok(isFinite(atr) && atr > 0, 'ATR is ready');
   const look = ser.vwap[i - (SPEC.vwLook - 1)];
   ok(vwap > look, 'UTC VWAP is rising into the touch bar');
-  const close = Math.max(emaF, vwap) + Math.max(atr, 1);
-  const open = close - Math.max(SPEC.bodyMin * atr, 0.05) - 0.2;
-  const low = Math.min(emaF, vwap) - 0.5;
-  const high = close + 0.1;
+  const prevC = rows[i].c;
+  const close = ctx.hgSonaTick(Math.max(emaF, vwap) + Math.max(0.5, 0.12 * atr));
+  const k = 2 / SPEC.atrLen;
+  const anchor = Math.max(prevC, close);
+  let low = (close + SPEC.mintick - k * ((SPEC.atrLen - 1) * atr + anchor)) / (1 - k);
+  low = floorPx(low);
+  const tag = floorPx(Math.min(emaF, vwap) - SPEC.mintick);
+  if (low > tag) low = tag;
+  const body = ceilPx(Math.max(0.25 * atr, 1.2));
+  let open = ctx.hgSonaTick(close - body);
+  if (!(open > low)) open = floorPx(low + body);
+  const high = ceilPx(close + 0.3);
   const ms = rows[i].t * 1000 + STEP;
-  rows.push({ t: Math.floor(ms / 1000), o: open, h: high, l: low, c: close, v: 1 });
+  rows.push({
+    t: Math.floor(ms / 1000),
+    o: open,
+    h: Math.max(high, open, close),
+    l: Math.min(low, open, close),
+    c: close,
+    v: 1
+  });
   return { ms: ms, emaF: emaF, atr: atr };
 }
 
@@ -76,10 +98,20 @@ console.log('== a closed bar where both prints agree is a long setup ==');
   const entryC = cents(sig.entry);
   const stopC = cents(sig.stop);
   const tpC = cents(sig.tp);
-  ok(entryC - stopC === riskC && riskC >= 1, 'stop is exactly the ticked 2.5×ATR risk under the entry');
-  ok(tpC - entryC === divRound(riskC * 35, 100) && tpC > entryC, 'take profit is 0.35 of that risk, rounded to the 0.01 tick');
+  const lowC = Math.floor(rows[rows.length - 1].l / SPEC.mintick + 1e-8);
+  const beyond = lowC >= rows[rows.length - 1].l / SPEC.mintick - 1e-6 ? lowC - 1 : lowC;
+  ok(stopC === beyond, 'stop is one tick beyond the pullback low');
+  ok(entryC - stopC === riskC && riskC >= 1, 'risk is the ticked distance from entry to that stop');
+  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.stopAtrMin * sig.atr, 'risk clears 1.5×ATR');
+  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.rtFrac * SPEC.rtMult * sig.entry, 'risk clears 4× the 0.02% round trip');
+  ok(riskC * SPEC.mintick <= SPEC.stopAtrMax * sig.atr + 1e-9, 'risk is not wider than 3.5×ATR');
+  ok(tpC - entryC === divRound(riskC * 3, 2) && tpC > entryC, 'take profit is 1.5 of that risk, rounded to the 0.01 tick');
   ok(Math.abs(sig.realizedR - (tpC - entryC) / riskC) < 1e-12, 'booked R is the ratio of the three published prices');
-  ok(Math.abs(sig.realizedR - 0.35) <= 0.5 / riskC + 1e-12, 'the tick round moves R by at most half a cent of risk');
+  ok(Math.abs(sig.realizedR - 1.5) <= 0.5 / riskC + 1e-12, 'the tick round moves R by at most half a cent of risk');
+  ok(sig.breakeven < 0.45, 'breakeven before cost is under 45%, not the old 74%');
+  ok(Math.abs(sig.breakeven - riskC / (riskC + (tpC - entryC))) < 1e-12, 'breakeven is the barrier share of this risk');
+  ok(Math.abs(sig.costR - (SPEC.rtFrac * sig.entry) / sig.risk) < 1e-9, 'the 0.02% round trip is priced as a fraction of this risk');
+  ok(sig.hour === 3, '03:00 UTC is recorded and is not a filter');
   ok(sig.stop < sig.entry && sig.tp > sig.entry, 'long stop is below entry and take profit is above');
   const html = ctx.hgSonaHtml(read, { feed: 'binance-xau' });
   ok(html.indexOf('ENTRY') >= 0 && html.indexOf('STOP LOSS') >= 0 && html.indexOf('TAKE PROFIT') >= 0, 'the card names entry, stop loss and take profit');
@@ -173,26 +205,134 @@ console.log('\n== the prices are the trade, and a slope is a real span of bars =
   const emaNow = ctx.hgSonaSeries(repl);
   const i = repl.length - 1;
   const cap = first.tp - 0.02;
-  const close2 = Math.min(Math.max(emaNow.emaFast[i], emaNow.vwap[i]) + 0.4, cap);
-  const open2 = close2 - Math.max(SPEC.bodyMin * emaNow.atr[i], 0.2) - 0.3;
+  const close2 = Math.min(Math.max(emaNow.emaFast[i], emaNow.vwap[i]) + 0.6, cap);
+  const open2 = close2 - Math.max(SPEC.bodyMin * emaNow.atr[i] * 3, 1.5);
   repl.push({
     t: Math.floor(signal2 / 1000),
     o: open2,
-    h: close2,
-    l: Math.min(first.stop, emaNow.vwap[i]) - 0.5,
+    h: close2 + 0.2,
+    l: Math.min(first.stop, emaNow.vwap[i]) - 0.15,
     c: close2,
     v: 1
   });
   const after = ctx.hgSonaEval(repl, signal2 + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
   const was = after.signals.filter(s => s.ms === signalMs)[0];
   const nxt = after.signals.filter(s => s.ms === signal2)[0];
-  ok(!!nxt && nxt.dir === 1, 'the bar that trades the old stop is itself a long setup');
+  ok(!!nxt && nxt.dir === 1, 'the bar that trades the old stop is itself a long setup (' + after.reason + (after.diag && after.diag.block ? ', ' + after.diag.block : '') + ')');
   ok(was && was.state === 'stopped', 'that bar stops the open setup; it does not call it replaced');
 
   const html = ctx.hgSonaHtml(armed, { feed: '<script>' });
   const escaped = '&' + 'lt;script&' + 'gt;';
   ok(html.indexOf('<script>') < 0 && html.indexOf(escaped) >= 0, 'a feed name is escaped');
   ok(!/\bNaN\b|\bundefined\b|\[object Object\]/.test(html), 'the card still prints no unread value');
+}
+
+console.log('\n== a later agreement that does not trade the stop is not a second plan ==');
+{
+  const signalMs = Date.UTC(2026, 0, 7, 12, 0, 0);
+  const rows = baseRows(200, signalMs);
+  craftLong(rows);
+  const armed = ctx.hgSonaEval(rows, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  const first = armed.signals.filter(s => s.ms === signalMs)[0];
+  ok(!!first && first.state === 'live', 'one plan is live before the later bar');
+  const ser = ctx.hgSonaSeries(rows);
+  const i = rows.length - 1;
+  const close2 = ctx.hgSonaTick(Math.max(ser.emaFast[i], ser.vwap[i]) + 0.8);
+  const open2 = ctx.hgSonaTick(close2 - Math.max(1.5, SPEC.bodyMin * ser.atr[i] * 3));
+  const low2 = floorPx(Math.min(ser.emaFast[i], ser.vwap[i]) - 0.05);
+  ok(low2 > first.stop, 'this wick tags the lines and stays above the open stop');
+  const next = signalMs + STEP;
+  rows.push({ t: Math.floor(next / 1000), o: open2, h: close2 + 0.2, l: low2, c: close2, v: 1 });
+  const held = ctx.hgSonaEval(rows, next + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  ok(held.signals.length === 1, 'the agreement does not arm a second setup');
+  ok(held.live && held.live.ms === signalMs && held.live.state === 'live', 'the first plan is still the live one');
+  ok(held.diag && held.diag.block === 'position open', 'the bar is named position open');
+}
+
+console.log('\n== a wick under the floor or wider than 3.5×ATR is not a setup ==');
+{
+  function shallow(hour){
+    const signalMs = Date.UTC(2026, 0, 7, hour, 0, 0);
+    const rows = baseRows(200, signalMs);
+    const ser = ctx.hgSonaSeries(rows);
+    const i = rows.length - 1;
+    const close = ctx.hgSonaTick(Math.max(ser.emaFast[i], ser.vwap[i]) + 0.6);
+    const open = ctx.hgSonaTick(close - 1.5);
+    const low = floorPx(Math.min(ser.emaFast[i], ser.vwap[i]) - 0.02);
+    rows.push({ t: Math.floor(signalMs / 1000), o: open, h: close + 0.3, l: low, c: close, v: 1 });
+    return ctx.hgSonaEval(rows, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  }
+  const under = shallow(3);
+  ok(!under.signals.length && under.reason === 'stop under floor', 'a wick inside 1.5×ATR is the spread, not a stop (' + under.reason + ')');
+  const underNoon = shallow(12);
+  ok(!underNoon.signals.length && underNoon.reason === 'stop under floor', 'noon is the same floor (' + underNoon.reason + ')');
+
+  const signalMs = Date.UTC(2026, 0, 7, 12, 0, 0);
+  const wideRows = baseRows(200, signalMs);
+  const ser = ctx.hgSonaSeries(wideRows);
+  const i = wideRows.length - 1;
+  const close = ctx.hgSonaTick(Math.max(ser.emaFast[i], ser.vwap[i]) + 0.6);
+  const open = ctx.hgSonaTick(close - 1.5);
+  const low = floorPx(close - 40);
+  wideRows.push({ t: Math.floor(signalMs / 1000), o: open, h: close + 0.3, l: low, c: close, v: 1 });
+  const wide = ctx.hgSonaEval(wideRows, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  ok(!wide.signals.length && wide.reason === 'stop wide', 'a wick wider than 3.5×ATR is not the pullback (' + wide.reason + ')');
+}
+
+console.log('\n== the same prices on a short, and 5m is not a book ==');
+{
+  const signalMs = Date.UTC(2026, 0, 7, 3, 0, 0);
+  const t0 = signalMs - 200 * STEP;
+  const rows = [];
+  let p = 2500;
+  for (let n = 0; n < 200; n++){
+    p -= 0.45;
+    const c = p;
+    const o = p + 0.8;
+    const l = c - 1.2;
+    const h = o + 2.2;
+    rows.push({ t: Math.floor((t0 + n * STEP) / 1000), o: o, h: h, l: l, c: c, v: 1000 });
+  }
+  const ser = ctx.hgSonaSeries(rows);
+  const i = rows.length - 1;
+  ok(ser.emaFast[i] < ser.emaSlow[i], 'the downtrend stacks EMA 24 under EMA 120');
+  ok(ser.vwap[i] < ser.vwap[i - (SPEC.vwLook - 1)], 'UTC VWAP is falling into the touch bar');
+  const prevC = rows[i].c;
+  const atr = ser.atr[i];
+  const close = ctx.hgSonaTick(Math.min(ser.emaFast[i], ser.vwap[i]) - Math.max(0.5, 0.12 * atr));
+  const k = 2 / SPEC.atrLen;
+  const anchor = Math.min(prevC, close);
+  let high = (close - SPEC.mintick + k * ((SPEC.atrLen - 1) * atr - anchor)) / (1 - k);
+  high = ceilPx(high);
+  const tag = ceilPx(Math.max(ser.emaFast[i], ser.vwap[i]) + SPEC.mintick);
+  if (high < tag) high = tag;
+  const body = ceilPx(Math.max(0.25 * atr, 1.2));
+  let open = ctx.hgSonaTick(close + body);
+  if (!(open < high)) open = ceilPx(high - body);
+  const low = floorPx(close - 0.3);
+  rows.push({
+    t: Math.floor(signalMs / 1000),
+    o: open,
+    h: Math.max(high, open, close),
+    l: Math.min(low, open, close),
+    c: close,
+    v: 1
+  });
+  const read = ctx.hgSonaEval(rows, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  const sig = read.signals.filter(s => s.ms === signalMs)[0];
+  ok(!!sig && sig.dir === -1 && sig.side === 'SHORT', 'both prints on a closed bar arm a SHORT (' + read.reason + (read.diag && read.diag.block ? ', ' + read.diag.block : '') + ')');
+  const riskC = cents(sig.risk);
+  const entryC = cents(sig.entry);
+  const stopC = cents(sig.stop);
+  const tpC = cents(sig.tp);
+  ok(stopC > entryC && tpC < entryC, 'short stop is above entry and take profit is below');
+  ok(stopC - entryC === riskC, 'short risk is the ticked distance from entry to that stop');
+  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.stopAtrMin * sig.atr, 'short risk clears 1.5×ATR');
+  ok(riskC * SPEC.mintick <= SPEC.stopAtrMax * sig.atr + 1e-9, 'short risk is not wider than 3.5×ATR');
+  ok(entryC - tpC === divRound(riskC * 3, 2), 'short take profit is 1.5 of that risk');
+  ok(sig.breakeven < 0.45, 'short breakeven before cost is under 45%');
+  const as5 = ctx.hgSonaEval(rows, signalMs + 16 * 60 * 1000, { tf: '5m', sessOnly: false });
+  ok(as5.tf === '15m' && !!as5.signals.filter(s => s.ms === signalMs)[0], '5m is not a book; the read stays 15m');
 }
 {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -206,6 +346,7 @@ console.log('\n== the prices are the trade, and a slope is a real span of bars =
   ok(typeof tab.mount === 'function' && typeof tab.refresh === 'function', 'mount and refresh are both there');
   ok(!/hgFwdRecord|hgFwdRecordScan|recordForward/.test(src), 'it writes no forward row');
   ok(!/\bt1\b/.test(src), 'the card does not speak in the other desks\' target field');
+  ok(!/value="5m"/.test(src) && /value="15m"/.test(src) && /value="4h"/.test(src), 'the book is 15m, 1h and 4h');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');
