@@ -1,7 +1,12 @@
+/* hg-v1478: re-pinned the band pin 1×ATR → 0.75×ATR (the v1478 stop floor moved the band's floor; upstream's v1477 pins merged above, content unchanged).
 /* HARDGATE — SONA / HG Gold 81 prints.
    Both prints still arm the bar. The stop is one tick beyond the wick,
-   inside 1.5×ATR and 3.5×ATR and at least 4× the 0.02% round trip.
+   inside 0.75×ATR and 2.5×ATR and at least 4× the 0.02% round trip.
    The target is 1.5R. A live plan is held. It writes no forward row.
+   hg-v1478: Friday UTC stands down (the measured worst day in both studied
+   years of the successor study) and the floor loosens 1.0→0.75×ATR —
+   measured IS n=42 win 66.7% net +28.0R, OOS n=82 win 47.6% net +15.5R,
+   24M n=124 win 54.0% net +43.5R, net-positive in all four half-windows.
    Run: node tests/test-sona.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -102,7 +107,7 @@ console.log('== a closed bar where both prints agree is a long setup ==');
   const beyond = lowC >= rows[rows.length - 1].l / SPEC.mintick - 1e-6 ? lowC - 1 : lowC;
   ok(stopC === beyond, 'stop is one tick beyond the pullback low');
   ok(entryC - stopC === riskC && riskC >= 1, 'risk is the ticked distance from entry to that stop');
-  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.stopAtrMin * sig.atr, 'risk clears the 1.0×ATR floor (the studied band)');
+  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.stopAtrMin * sig.atr, 'risk clears the 0.75×ATR floor (the studied band)');
   ok(riskC * SPEC.mintick + 1e-9 >= SPEC.rtFrac * SPEC.rtMult * sig.entry, 'risk clears 4× the 0.02% round trip');
   ok(riskC * SPEC.mintick <= SPEC.stopAtrMax * sig.atr + 1e-9, 'risk is not wider than the 2.5×ATR ceiling (the studied band)');
   ok(tpC - entryC === divRound(riskC * 3, 2) && tpC > entryC, 'take profit is 1.5 of that risk, rounded to the 0.01 tick');
@@ -117,18 +122,18 @@ console.log('== a closed bar where both prints agree is a long setup ==');
   ok(html.indexOf('ENTRY') >= 0 && html.indexOf('STOP LOSS') >= 0 && html.indexOf('TAKE PROFIT') >= 0, 'the card names entry, stop loss and take profit');
   ok(html.indexOf(sig.entry.toFixed(2)) >= 0 && html.indexOf(sig.stop.toFixed(2)) >= 0 && html.indexOf(sig.tp.toFixed(2)) >= 0, 'and prints those three prices');
   ok(!/\bNaN\b|\bundefined\b|\[object Object\]/.test(html), 'the card does not print an unread value');
-  ok(html.indexOf('1×ATR') >= 0 && html.indexOf('2.5×ATR') >= 0, 'the card names the 1.0–2.5×ATR band the engine uses');
+  ok(html.indexOf('0.75×ATR') >= 0 && html.indexOf('2.5×ATR') >= 0, 'the card names the 0.75–2.5×ATR band the engine uses');
   ok(html.indexOf('3.5×ATR') < 0 && html.indexOf('17:00') < 0, 'the card does not still describe the old 1.5–3.5 band or 17:00');
 
   const forming = ctx.hgSonaEval(rows, signalMs + 60 * 1000, { tf: '15m', sessOnly: false });
   ok(!forming.signals.some(s => s.ms === signalMs), 'the same bar, still forming, is not a setup');
 
   const shut = ctx.hgSonaEval(rows, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: true });
-  ok(!shut.signals.some(s => s.ms === signalMs), '03:00 UTC is outside 07:00–17:00, so the session filter stands aside');
+  ok(!shut.signals.some(s => s.ms === signalMs), '03:00 UTC is outside 07:00–13:00, so the session filter stands aside');
   ok(shut.reason === 'outside session' || (shut.last && shut.last.ms !== signalMs), 'the 03:00 print is not the live setup');
 }
 
-console.log('\n== the same print inside 07:00–17:00 UTC is allowed when the filter is on ==');
+console.log('\n== the same print inside 07:00–13:00 UTC is allowed when the filter is on ==');
 {
   const signalMs = Date.UTC(2026, 0, 7, 12, 0, 0);
   const rows = baseRows(200, signalMs);
@@ -280,7 +285,7 @@ console.log('\n== a wick under the floor or wider than the ceiling is not a setu
     return ctx.hgSonaEval(rows, signalMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
   }
   const under = shallow(3);
-  ok(!under.signals.length && under.reason === 'stop under floor', 'a wick inside the 1.0xATR floor is the spread, not a stop (' + under.reason + ')');
+  ok(!under.signals.length && under.reason === 'stop under floor', 'a wick inside the 0.75xATR floor is the spread, not a stop (' + under.reason + ')');
   const underNoon = shallow(12);
   ok(!underNoon.signals.length && underNoon.reason === 'stop under floor', 'noon is the same floor (' + underNoon.reason + ')');
 
@@ -344,8 +349,8 @@ console.log('\n== the same prices on a short, and 5m is not a book ==');
   const tpC = cents(sig.tp);
   ok(stopC > entryC && tpC < entryC, 'short stop is above entry and take profit is below');
   ok(stopC - entryC === riskC, 'short risk is the ticked distance from entry to that stop');
-  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.stopAtrMin * sig.atr, 'short risk clears 1.5×ATR');
-  ok(riskC * SPEC.mintick <= SPEC.stopAtrMax * sig.atr + 1e-9, 'short risk is not wider than 3.5×ATR');
+  ok(riskC * SPEC.mintick + 1e-9 >= SPEC.stopAtrMin * sig.atr, 'short risk clears 0.75×ATR');
+  ok(riskC * SPEC.mintick <= SPEC.stopAtrMax * sig.atr + 1e-9, 'short risk is not wider than 2.5×ATR');
   ok(entryC - tpC === divRound(riskC * 3, 2), 'short take profit is 1.5 of that risk');
   ok(sig.breakeven < 0.45, 'short breakeven before cost is under 45%');
   const as5 = ctx.hgSonaEval(rows, signalMs + 16 * 60 * 1000, { tf: '5m', sessOnly: false });
@@ -364,6 +369,61 @@ console.log('\n== the same prices on a short, and 5m is not a book ==');
   ok(!/hgFwdRecord|hgFwdRecordScan|recordForward/.test(src), 'it writes no forward row');
   ok(!/\bt1\b/.test(src), 'the card does not speak in the other desks\' target field');
   ok(!/value="5m"/.test(src) && /value="15m"/.test(src) && /value="4h"/.test(src), 'the book is 15m, 1h and 4h');
+}
+
+console.log('\n== hg-v1478: Friday UTC stands down, and the floor is 0.75×ATR ==');
+{
+  ok(SPEC.stopAtrMin === 0.75 && SPEC.stopAtrMax === 2.5 && SPEC.sessStart === 7 && SPEC.sessEnd === 13,
+    'the shipped band is the studied one (hg-v1478: IS n=42 win 66.7% net +28.0R, OOS n=82 win 47.6% net +15.5R, 24M n=124 win 54.0% net +43.5R)');
+
+  /* Friday fires the stand-down. 2026-01-09 is a Friday. */
+  const friMs = Date.UTC(2026, 0, 9, 12, 0, 0);
+  ok(new Date(friMs).getUTCDay() === 5, 'the fixture day is a Friday');
+  const friRows = baseRows(200, friMs);
+  craftLong(friRows);
+  const friRead = ctx.hgSonaEval(friRows, friMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  ok(!friRead.signals.some(s => s.ms === friMs), 'both prints on a Friday arm nothing, session filter off');
+  ok(friRead.reason === 'friday stood down', 'the refusal is named friday stood down (' + friRead.reason + ')');
+  ok(friRead.diag && friRead.diag.friday === true, 'the diag carries the Friday mark');
+  const friReadS = ctx.hgSonaEval(friRows, friMs + 16 * 60 * 1000, { tf: '15m', sessOnly: true });
+  ok(!friReadS.signals.some(s => s.ms === friMs) && friReadS.reason === 'friday stood down',
+    'the stand-down is not the session checkbox — it holds with the filter on too');
+  const friHtml = ctx.hgSonaHtml(friRead, { feed: 'binance-xau' });
+  ok(friHtml.indexOf('Friday') >= 0 && friHtml.indexOf('STAND ASIDE') >= 0, 'the skipped Friday row paints with the named reason');
+
+  /* and it abstains the rest of the week: Wednesday 2026-01-07 still arms (also
+     the fail-open direction — a readable non-Friday day is never skipped) */
+  const wedMs = Date.UTC(2026, 0, 7, 12, 0, 0);
+  ok(new Date(wedMs).getUTCDay() === 3, 'the control day is a Wednesday');
+  const wedRows = baseRows(200, wedMs);
+  craftLong(wedRows);
+  const wedRead = ctx.hgSonaEval(wedRows, wedMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  ok(wedRows.length && wedRead.signals.some(s => s.ms === wedMs) && wedRead.diag.friday === false,
+    'the same print on a Wednesday arms — the stand-down abstains');
+
+  /* the 0.75×ATR floor boundary: a wick between 0.75 and 1.0 ATR now arms —
+     under the hg-v1476 1.0×ATR floor this exact bar was refused (mutation pin).
+     The flat tail is 3.2 wide so the ATR floor (≈2.4) outranks the cost floor
+     (4×0.02% of ~2300 ≈ 1.84) and the ATR leg is the one under test. */
+  const flatRows = baseRows(200, wedMs);
+  const pf = flatRows[flatRows.length - 1].c;
+  for (let k = flatRows.length - 60; k < flatRows.length; k++){
+    const from6 = flatRows.length - 7;
+    const q = k <= from6 ? (pf - 0.10) : (pf - 0.10) + 0.10 * (k - from6) / 6;
+    flatRows[k] = { t: flatRows[k].t, o: q, h: q + 1.6, l: q - 1.6, c: q, v: 1000 };
+  }
+  const serF = ctx.hgSonaSeries(flatRows);
+  const iF = flatRows.length - 1;
+  const closeF = ctx.hgSonaTick(flatRows[iF].c + 0.1);
+  const openF = ctx.hgSonaTick(closeF - 0.6);
+  const lowF = floorPx(Math.min(closeF - 0.85 * serF.atr[iF], serF.emaFast[iF] - 0.02, serF.vwap[iF] - 0.02));
+  flatRows.push({ t: Math.floor(wedMs / 1000), o: openF, h: closeF + 0.3, l: lowF, c: closeF, v: 1 });
+  const bandRead = ctx.hgSonaEval(flatRows, wedMs + 16 * 60 * 1000, { tf: '15m', sessOnly: false });
+  const bandSig = bandRead.signals.filter(s => s.ms === wedMs)[0];
+  ok(!!bandSig, 'a wick at 0.75–1.0×ATR arms under the new floor (' + bandRead.reason + ')');
+  ok(bandSig && bandSig.risk >= 0.75 * bandSig.atr - 1e-9 && bandSig.risk < 1.0 * bandSig.atr,
+    'its risk sits inside the band the old 1.0×ATR floor refused (risk '
+    + (bandSig && bandSig.risk.toFixed(3)) + ', atr ' + (bandSig && bandSig.atr.toFixed(3)) + ')');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

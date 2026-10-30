@@ -11,14 +11,16 @@
    Entry is that close, on the 0.01 tick. The stop is one tick beyond
    the pullback wick: the low on a long, the high on a short. That is
    where the idea is wrong. The trade is refused when that risk is
-   under 1.0×ATR, under 4× the 0.02% XM round trip, or wider than
+   under 0.75×ATR, under 4× the 0.02% XM round trip, or wider than
    2.5×ATR, and when the bar's volume is not above its 20-bar average.
    The studied window is 07:00–13:00 UTC. The target is 1.5R of the
-   published risk.
+   published risk. A coin-flip path between those two barriers no longer
+   needs a 74% hit rate.
    One plan is open at a time and runs until the stop or the target.
    A later agreement is not a second setup. Both in one bar stays
    unresolved. 5m is not a book: there the ATR sits inside the cost.
-   The UTC hour is printed and is not a filter.
+   Friday UTC stands down — the measured worst day in both studied
+   years. The UTC hour is printed and is not a filter.
    This desk writes no forward row and no ticket. */
 (function(){
 'use strict';
@@ -45,7 +47,22 @@ var SPEC = {
      shipped. The edge is a leak-remover, not a money printer, and it is
      stated as such. */
   sessEnd: 13,
-  stopAtrMin: 1.0,
+  /* hg-v1478 — THE SUCCESSOR STUDY (desks/sona-study, ~2,700 variants on the
+     same two windows, greedy staged sweep plus a refinement pass ON this
+     incumbent): ONE new leg survived out-of-sample. Friday is the worst
+     weekday in BOTH years (combined 18 settled, win 16.7%, net -10.5R —
+     weekend position-squaring, not a trend day), so Friday UTC stands down.
+     The stop floor loosens 1.0 -> 0.75xATR, admitting the tighter-wick
+     prints the old floor refused (that notch alone was all-window-positive:
+     OOS win 43.0% net +7.0R). Together, against the incumbent's
+     61.4%/+23.5R IS and 40.5%/+1.0R OOS: IS n=42 win 66.7% net +28.0R,
+     OOS n=82 win 47.6% net +15.5R, 24M n=124 win 54.0% net +43.5R,
+     net-positive in ALL FOUR half-windows — the bar v1476 itself misses
+     (OOS-H2 -0.5R). Honesty: the pair does not clear a naive Bonferroni
+     over all ~2,700 runs; it clears the defensible bar — the Friday
+     question is a 5-member family answered in an independent year, and
+     every in-sample winner OUTSIDE this family failed out of sample. */
+  stopAtrMin: 0.75,
   stopAtrMax: 2.5,
   volLook: 20,
   /* XM gold round trip. Four times that is the smallest risk that is
@@ -509,7 +526,11 @@ function hgSonaEval(rows, nowMs, opts){
     var dir = (bodyOk && slopeOk && volOk) ? agreed : 0;
     var hm = utcHm(ms);
     var inSess = hm >= SPEC.sessStart && hm < SPEC.sessEnd;
-    var sessionOk = !sessOnly || inSess;
+    /* hg-v1478: FRIDAY STAND-DOWN — unconditional, like the risk band, not
+       tied to the session checkbox. Fail-open: a bar whose time does not
+       read is not called a Friday. The hour is still printed, not filtered. */
+    var friday = ms != null && new Date(ms).getUTCDay() === 5;
+    var sessionOk = (!sessOnly || inSess) && !friday;
     var geometry = null;
     var block = null;
     if (agreed !== 0 && !volOk) block = 'volume light';
@@ -525,7 +546,7 @@ function hgSonaEval(rows, nowMs, opts){
     }
     var d = {
       ms: ms, close: r.c, pull: pull, vw: vw, vwGap: vwGap, slopeGap: slopeGap,
-      bodyOk: bodyOk, slopeOk: slopeOk, inSess: inSess, block: block,
+      bodyOk: bodyOk, slopeOk: slopeOk, inSess: inSess, friday: friday, block: block,
       emaFast: emaF, emaSlow: emaS, atr: atr, vwap: vwap, take: false
     };
     if (geometry){
@@ -555,6 +576,7 @@ function hgSonaEval(rows, nowMs, opts){
       ms: tail.ms, close: tail.close, pull: tail.pull, vw: tail.vw,
       vwGap: tail.vwGap, slopeGap: tail.slopeGap,
       bodyOk: tail.bodyOk, slopeOk: tail.slopeOk, inSess: tail.inSess,
+      friday: tail.friday,
       emaFast: tail.emaFast, emaSlow: tail.emaSlow, atr: tail.atr, vwap: tail.vwap,
       block: tail.block
     }
@@ -571,6 +593,7 @@ function failReason(d, sessOnly){
   if (!d.bodyOk) return 'body small';
   if (d.slopeGap) return 'ema gap';
   if (!d.slopeOk) return 'slope flat';
+  if (d.friday) return 'friday stood down';
   if (sessOnly && !d.inSess) return 'outside session';
   if (d.block === 'position open') return 'position open';
   if (d.block === 'volume light') return 'volume light';
@@ -622,6 +645,7 @@ function whyLine(read){
   if (read.reason === 'body small') return 'Both prints agreed, and the body was under 0.15×ATR. No setup.';
   if (read.reason === 'ema gap') return 'Both prints agreed, but EMA 120 does not have four contiguous bars to measure a slope. No setup.';
   if (read.reason === 'slope flat') return 'Both prints agreed, and EMA 120 was not sloping with the trade over 4 bars. No setup.';
+  if (read.reason === 'friday stood down') return 'Both prints agreed, and it is Friday UTC. Friday is the measured worst day in both studied years (16.7% win, net -10.5R), so the desk stands down. No setup.';
   if (read.reason === 'outside session') return 'The print is outside ' + sessSpan() + ', and that filter is on. No setup.';
   if (read.reason === 'position open') return 'Both prints agreed, and a plan is already open. It runs to its stop or its target. No second setup.';
   if (read.reason === 'volume light') return 'Both prints agreed, and the bar volume was not above its 20-bar average. No setup.';
@@ -678,6 +702,7 @@ function sonaHtml(read, meta){
     + ' · ' + (read.bars || 0) + ' closed bars. Entry is the signal close on the 0.01 tick. Stop is one tick beyond the pullback wick. '
     + 'Refused under ' + SPEC.stopAtrMin + '×ATR, under 4× the 0.02% round trip, or wider than ' + SPEC.stopAtrMax + '×ATR. '
     + 'Volume must be above its 20-bar average. Target is 1.5R of that risk. '
+    + 'Friday UTC stands down (the measured worst day, both studied years). '
     + 'One plan, held to the stop or the target. 5m is not a book.</div>';
   var tape = meta.tape || '';
   if (!read || !read.ok){
@@ -770,7 +795,7 @@ function mount(el){
   if (!el) return;
   __el = el;
   el.innerHTML = '<div class="panel"><h2>SONA <span>HG Gold 81 · wick stop · 1.5R · one plan</span></h2>'
-    + '<div class="note">A setup prints only when an EMA 24 pullback and a UTC VWAP reclaim agree on the same closed bar, and that bar\'s volume is above its 20-bar average. The stop is one tick beyond that wick, and only when the risk is between ' + SPEC.stopAtrMin + '×ATR and ' + SPEC.stopAtrMax + '×ATR and at least 4× the 0.02% round trip. The target is 1.5R. A live plan is held. The hour is shown and does not filter unless the studied window is checked.</div>'
+    + '<div class="note">A setup prints only when an EMA 24 pullback and a UTC VWAP reclaim agree on the same closed bar, and that bar\'s volume is above its 20-bar average. The stop is one tick beyond that wick, and only when the risk is between ' + SPEC.stopAtrMin + '×ATR and ' + SPEC.stopAtrMax + '×ATR and at least 4× the 0.02% round trip. The target is 1.5R. A live plan is held. Friday UTC stands down — the measured worst day in both studied years. The hour is shown and does not filter unless the studied window is checked.</div>'
     + '<div class="row" style="margin-top:8px;gap:8px;align-items:center">'
     + '<select id="sonaTf" aria-label="SONA timeframe">'
     + '<option value="15m" selected>15m</option><option value="1h">1h</option><option value="4h">4h</option>'
