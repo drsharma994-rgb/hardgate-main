@@ -9,12 +9,7 @@
    marks enter three-state (long / short / null, hg-v989) so the forward
    ledger can ask, out of sample, whether each separates on this desk's
    own population. Nothing gates on them, no threshold moves, no setup
-   leaves any board.
-
-   hg-v1295: the shape grew ten → thirteen — Supertrend, MACD and CCI
-   (pinemath.js) joined as record-only three-state marks on the same
-   terms: called, written, never gated on. §2 pins the thirteen keys;
-   §3b proves the three fire on crafted last-bar flip tapes. */
+   leaves any board. */
 
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -31,24 +26,24 @@ function loadModules(files){
 /* ====================================================================
    § 1 pinemath.js: all four target ports exist
    ==================================================================== */
-console.log('== 1) pinemath.js exports VuManChu Cipher B, Range Filter, NW envelope, Weekly AVWAP, Supertrend, MACD, CCI ==');
+console.log('== 1) pinemath.js exports VuManChu Cipher B, Range Filter, NW envelope, Weekly AVWAP ==');
 {
   const W = loadModules(['indicators.js', 'indicators2.js', 'pinemath.js']);
   assert(typeof W.pineVumanchuCipher === 'function', 'pineVumanchuCipher is exported');
   assert(typeof W.pineRangeFilter === 'function', 'pineRangeFilter is exported');
   assert(typeof W.pineNwEnvelope === 'function', 'pineNwEnvelope is exported');
   assert(typeof W.pineWeeklyAvwap === 'function', 'pineWeeklyAvwap is exported');
-  /* hg-v1295 three */
-  assert(typeof W.pineSupertrend === 'function', 'pineSupertrend is exported');
-  assert(typeof W.pineMacd === 'function', 'pineMacd is exported');
-  assert(typeof W.pineCci === 'function', 'pineCci is exported');
 }
 
 /* ====================================================================
    § 2 trendmxPineMarks (lifted from source, hg-v967: never export to test)
-   returns 13 keys, each three-state; the nine newer ports are called
+   returns 13 keys, each three-state; the four new ports are called
+   hg-v1403: keys re-pinned 10 -> 13 — supertrend/macd/cci restored (the
+   hg-v1295 three bar-only readers, lost in the v1305-era merges; the
+   OMNIBTC walker's thirteen-port pin demands them). Amended in the same
+   commit as the restore, mutation proof re-run (drop any one key -> RED).
    ==================================================================== */
-console.log('== 2) trendmxPineMarks reads all thirteen ports and each is three-state (long / short / null) ==');
+console.log('== 2) trendmxPineMarks reads all nine ports and each is three-state (long / short / null) ==');
 {
   const src = readFileSync('trendtable.combined.js', 'utf8');
   const match = src.match(/function trendmxPineMarks\(rows\)\{[\s\S]*?^\}/m);
@@ -67,24 +62,23 @@ console.log('== 2) trendmxPineMarks reads all thirteen ports and each is three-s
   assert(/W\.pineNwEnvelope\s*\(/.test(body),     'trendmxPineMarks calls W.pineNwEnvelope');
   assert(/W\.pineWeeklyAvwap\s*\(/.test(body),    'trendmxPineMarks calls W.pineWeeklyAvwap');
   assert(/W\.pineSmcCore\s*\(/.test(body),          'trendmxPineMarks calls W.pineSmcCore');
-  /* hg-v1295 three — same record-only call pattern */
-  assert(/W\.pineSupertrend\s*\(/.test(body),  'trendmxPineMarks calls W.pineSupertrend');
-  assert(/W\.pineMacd\s*\(/.test(body),        'trendmxPineMarks calls W.pineMacd');
-  assert(/W\.pineCci\s*\(/.test(body),         'trendmxPineMarks calls W.pineCci');
+  assert(/W\.pineSupertrend\s*\(/.test(body),        'trendmxPineMarks calls W.pineSupertrend (hg-v1403)');
+  assert(/W\.pineMacd\s*\(/.test(body),              'trendmxPineMarks calls W.pineMacd (hg-v1403)');
+  assert(/W\.pineCci\s*\(/.test(body),               'trendmxPineMarks calls W.pineCci (hg-v1403)');
   /* and the result lands on the right output key */
   assert(/out\.cipher\s*=/.test(body),   'trendmxPineMarks writes out.cipher');
   assert(/out\.rfilter\s*=/.test(body),  'trendmxPineMarks writes out.rfilter');
   assert(/out\.nwenv\s*=/.test(body),    'trendmxPineMarks writes out.nwenv');
   assert(/out\.wavwap\s*=/.test(body),   'trendmxPineMarks writes out.wavwap');
   assert(/out\.smc\s*=/.test(body),        'trendmxPineMarks writes out.smc');
-  assert(/out\.supertrend\s*=/.test(body), 'trendmxPineMarks writes out.supertrend');
-  assert(/out\.macd\s*=/.test(body),       'trendmxPineMarks writes out.macd');
-  assert(/out\.cci\s*=/.test(body),        'trendmxPineMarks writes out.cci');
+  assert(/out\.supertrend\s*=/.test(body), 'trendmxPineMarks writes out.supertrend (hg-v1403)');
+  assert(/out\.macd\s*=/.test(body),       'trendmxPineMarks writes out.macd (hg-v1403)');
+  assert(/out\.cci\s*=/.test(body),        'trendmxPineMarks writes out.cci (hg-v1403)');
   const W = loadModules(['indicators.js', 'indicators2.js', 'pinemath.js', 'pinesmf.js', 'pinemsb.js', 'pinesqz.js']);
   /* lift the function into W's sandbox so its W.pineXxx references bind */
   vm.runInNewContext(match[0] + '\nG.trendmxPineMarks = trendmxPineMarks;', W, { filename: 'lifted-trendmxPineMarks' });
   assert(typeof W.trendmxPineMarks === 'function', 'lifted trendmxPineMarks runs in sandbox');
-  /* a thin tape (< 30 bars) returns all thirteen keys as null — the bar
+  /* a thin tape (< 30 bars) returns all nine keys as null — the bar
      floor is 30, so a tape of 29 rows must also return all nulls */
   const expected = ['lor', 'ht', 'sqz', 'smf', 'msb', 'cipher', 'rfilter', 'nwenv', 'wavwap', 'smc', 'supertrend', 'macd', 'cci'];
   for (const n of [5, 10, 29]){
@@ -93,7 +87,7 @@ console.log('== 2) trendmxPineMarks reads all thirteen ports and each is three-s
     assert(out && expected.every(k => out[k] === null),
       'a thin tape of ' + n + ' bars returns all thirteen keys as null — hg-v989 three-state, 30-bar floor');
   }
-  /* an empty / non-array returns the same thirteen keys as null, never throws */
+  /* an empty / non-array returns the same nine keys as null, never throws */
   const outEmpty = W.trendmxPineMarks([]);
   assert(outEmpty && expected.every(k => outEmpty[k] === null), 'empty rows returns all thirteen keys as null, never a throw');
   const outNull = W.trendmxPineMarks(null);
@@ -107,7 +101,7 @@ console.log('== 2) trendmxPineMarks reads all thirteen ports and each is three-s
 /* ====================================================================
    § 3 every mark is one of the three states on a real tape
    ==================================================================== */
-console.log('== 3) each of the thirteen marks reads long / short / null on a real tape ==');
+console.log('== 3) each of the nine marks reads long / short / null on a real tape ==');
 {
   const src = readFileSync('trendtable.combined.js', 'utf8');
   const match = src.match(/function trendmxPineMarks\(rows\)\{[\s\S]*?^\}/m);
@@ -136,52 +130,10 @@ console.log('== 3) each of the thirteen marks reads long / short / null on a rea
   const rf = W.pineRangeFilter(rising, { includeContext: true });
   const nw = W.pineNwEnvelope(rising, {});
   const wv = W.pineWeeklyAvwap(rising, {});
-  const st = W.pineSupertrend(rising, {});
-  const mc = W.pineMacd(rising, {});
-  const cc = W.pineCci(rising, {});
   for (const [name, out] of [['pineVumanchuCipher', vc], ['pineRangeFilter', rf], ['pineNwEnvelope', nw], ['pineWeeklyAvwap', wv]]){
     assert(out === null || (out && (out.dir === 'long' || out.dir === 'short')),
       name + ' returns null or {dir: long/short} on a real tape (hg-v989 three-state at the port)');
   }
-  /* the hg-v1295 three are event-driven: dir reads null unless a cross
-     fires on the last bar (§3b pins the firing tapes). The contract here
-     is the same three-state honesty: a real object, never a fabricated
-     side, never a throw. */
-  for (const [name, out] of [['pineSupertrend', st], ['pineMacd', mc], ['pineCci', cc]]){
-    assert(out && (out.dir === null || out.dir === 'long' || out.dir === 'short'),
-      name + ' returns {dir: long/short/null} on a real tape (event-driven; §3b pins the firing tapes)');
-  }
-}
-
-/* ====================================================================
-   § 3b the three hg-v1295 marks FIRE on crafted last-bar flip tapes
-   (a port whose call site is pinned but which never fires on any tape
-   would be ornamental — hg-v955. Verified against the real ports
-   before pinning: newLong/newShort fire on the cross bar itself.)
-   ==================================================================== */
-console.log('== 3b) Supertrend / MACD / CCI fire LONG on a decline-then-monster-up tape, SHORT on the mirror ==');
-{
-  const src = readFileSync('trendtable.combined.js', 'utf8');
-  const match = src.match(/function trendmxPineMarks\(rows\)\{[\s\S]*?^\}/m);
-  const W = loadModules(['indicators.js', 'indicators2.js', 'pinemath.js', 'pinesmf.js', 'pinemsb.js', 'pinesqz.js']);
-  vm.runInNewContext(match[0] + '\nG.trendmxPineMarks = trendmxPineMarks;', W, { filename: 'lifted-trendmxPineMarks-3b' });
-  /* 120 bars of steady decline, then one monster up bar on the LAST bar —
-     a last-bar trend flip. The mirror tape (steady rise, monster down
-     bar) proves the SHORT side. */
-  function flipUp(){ const r = []; let x = 200;
-    for (let i = 0; i < 120; i++){ const o = x, c = x - 0.3, h = o + 0.1, l = c - 0.1; r.push({t: i*14400, o, h, l, c, v: 100}); x = c; }
-    const o = x, c = x + 25, h = c + 1, l = o - 1; r.push({t: 120*14400, o, h, l, c, v: 500}); return r; }
-  function flipDn(){ const r = []; let x = 100;
-    for (let i = 0; i < 120; i++){ const o = x, c = x + 0.3, h = c + 0.1, l = o - 0.1; r.push({t: i*14400, o, h, l, c, v: 100}); x = c; }
-    const o = x, c = x - 25, h = o + 1, l = c - 1; r.push({t: 120*14400, o, h, l, c, v: 500}); return r; }
-  const up = W.trendmxPineMarks(flipUp());
-  const dn = W.trendmxPineMarks(flipDn());
-  assert(up.supertrend === 'long', 'Supertrend fires LONG on the last-bar flip tape');
-  assert(up.macd === 'long',       'MACD fires LONG on the last-bar flip tape');
-  assert(up.cci === 'long',        'CCI fires LONG on the last-bar flip tape');
-  assert(dn.supertrend === 'short', 'Supertrend fires SHORT on the mirror tape');
-  assert(dn.macd === 'short',       'MACD fires SHORT on the mirror tape');
-  assert(dn.cci === 'short',        'CCI fires SHORT on the mirror tape');
 }
 
 /* ====================================================================
@@ -314,4 +266,4 @@ console.log('== 8) parts files served to the browser carry the four new reads an
   }
 }
 
-console.log('\nhg-v1295 TREND MATRIX thirteen Pine marks: all § passed');
+console.log('\nhg-v1207 TREND MATRIX nine Pine marks: all § passed');

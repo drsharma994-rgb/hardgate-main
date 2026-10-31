@@ -132,9 +132,9 @@ console.log('\n4. the panel reports the desk it is asked about, with the bar');
      matters. The rate and the bar must appear in the SAME sentence. */
   ok(/Planned R:R 1\.50 needs 40\.0% to break even\. Measured 43\.4%/.test(s),
      'the scalp rate is printed in the same breath as the 40.0% its R:R demands');
-  ok(/Planned R:R 2\.00 needs 33\.3% to break even\. Measured 30\.4%/.test(o),
+  ok(/Planned R:R 2\.00 needs 33\.3% to break even\. Measured 31\.1%/.test(o),
      'and OMNIGOLD the same, so neither number can be read without the other');
-  ok(/43\.4%/.test(s) && /30\.4%/.test(o), 'each desk prints its own measured rate');
+  ok(/43\.4%/.test(s) && /31\.1%/.test(o), 'each desk prints its own measured rate (hg-v1404: OMNIGOLD 31.1%)');
   ok(/rises for free if the target shrinks/.test(s), 'and says why a bare win rate is not evidence');
 
   /* the comparison is the point: each panel names the OTHER desk */
@@ -144,17 +144,20 @@ console.log('\n4. the panel reports the desk it is asked about, with the bar');
   /* THE SIGN IS THE WHOLE CLAIM. A negative edge rendered with a '+' turns
      the one desk whose edge is unproven into the one that clears — so the
      glyph is asserted, not just the digits. */
-  ok(/\u22123\.0 pts to \+5\.3 pts/.test(o),
-     'OMNIGOLD prints its lower edge as MINUS 3.0, not +3.0');
+  /* hg-v1404 recalibration: re-derived on the hg-v1402 walk — the sign
+     structure (negative at the lower bound, positive at the upper) is
+     unchanged; the digits moved to -2.3 / +6.1. */
+  ok(/\u22122\.3 pts to \+6\.1 pts/.test(o),
+     'OMNIGOLD prints its lower edge as MINUS 2.3, not +2.3');
   ok(/\+3\.4 pts to \+4\.4 pts/.test(s), 'and GOLD SCALP prints both of its as positive');
-  ok(/\u22123\.0 pts to \+5\.3 pts/.test(s),
+  ok(/\u22122\.3 pts to \+6\.1 pts/.test(s),
      'the scalp panel quotes OMNIGOLD\'s negative edge with its sign intact too');
 
-  ok(/672/.test(o) && /8\.3%/.test(o), 'OMNIGOLD counts the trades its bounds disagree about');
+  ok(/716/.test(o) && /8\.4%/.test(o), 'OMNIGOLD counts the trades its bounds disagree about (hg-v1404: 716, 8.4%)');
   ok(/resolution artifact, not a difference in edge/.test(o),
      'and attributes the gap to bar length rather than to edge');
-  ok(/1765 of 9897 published plans \(17\.8%\) never filled/.test(o),
-     'the unfill rate is stated — 1 in 6 published plans never triggers');
+  ok(/1742 of 10306 published plans \(16\.9%\) never filled/.test(o),
+     'the unfill rate is stated — 1 in 6 published plans never triggers (hg-v1404: 1742/10306, 16.9%)');
   ok(/Nothing on this desk is gated on any of it/.test(s) && /Nothing on this desk is gated/.test(o),
      'and both say plainly that no threshold moved');
   ok(/node scripts\/desk-breakeven\.mjs/.test(o), 'with the command that re-derives it');

@@ -73,7 +73,7 @@ function literalFromData(artPath, data){
     forwardOnly: ['postgate:accuracy','flow','netflow','basis','liq','fundAgainst','venueAgreeCount','macroBlocked'],
     rules: [
       'hg-v1291 PINE CONFIRM: ≥2 independent fresh Pine cores on the pick\'s direction, none against',
-      'hg-v1292 PINE + CORE / PINE + INDICATOR tiebreak: 1 family + 2nd house strategy or EMA/MACD/Donchian fresh cross',
+      'hg-v1403 TWO-FAMILY MINIMUM: the hg-v1292 PINE + CORE / PINE + INDICATOR tiebreaks are watches (measured -0.076R on the walk); MACD histogram is veto-only (-0.234R as a confirm)',
       'hg-v1293 ten pine* three-state marks on every record for the hg-v1065 PERFECT COHORT SPLIT and hg-v989 read-split'
     ],
     note: noteFor(artPath, data),

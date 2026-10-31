@@ -155,5 +155,21 @@ for (const f of ['goldswing.js', 'goldscalp.js']){
   ok(/\+ rrNoteLine/.test(src), f + ' actually emits it into the card');
 }
 
+console.log('\n== a labelled side cannot publish a positive R for a broken stop or target ==');
+{
+  ok(typeof W.hgGoldLegR === 'function', 'hgGoldLegR exported');
+  const brokenStop = { dir: 'long', entry: 100, stop: 103, t1: 106, rr: 9, rr2: 9, rr3: 9 };
+  W.hgSyncPlanRr(brokenStop);
+  ok(brokenStop.rr === null && brokenStop.rr2 === null && brokenStop.rr3 === null, 'long stop above entry clears every ratio');
+  ok(/stop is not beyond/.test(brokenStop.rrNote || ''), 'the note names the stop');
+  const brokenTarget = { dir: 'short', entry: 100, stop: 103, t1: 106, t2: 94, rr: 4, rr2: 4 };
+  W.hgSyncPlanRr(brokenTarget);
+  ok(brokenTarget.rr === null, 'short target above entry is not a reward');
+  ok(near(brokenTarget.rr2, 2), 'a target on the correct side still pays its real R');
+  const sound = { dir: 'long', entry: 100, stop: 98, t1: 104 };
+  W.hgSealGoldSetup(sound);
+  ok(sound.geometryOk === true && near(sound.rr, 2) && near(sound.rr1, 2), 'a real long is sealed at 2R');
+}
+
 console.log('\n' + passed + ' passed, 0 failed');
 console.log('ALL R:R CONSISTENCY TESTS PASSED');

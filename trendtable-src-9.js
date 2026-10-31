@@ -278,6 +278,16 @@ function trendmxCrownPanelHTML(state){
         }
       }
     }catch(eMe){ }
+    /* hg-v1430: advisory AI review on the crown, mirrors the gold tabs */
+    try{
+      if (crown && plan && typeof W.hgGoldAiReviewRun === 'function'){
+        var _tmSetup = { strategy: 'TrendMatrix', dir: dir, sym: (crown.sym || crown.symbol || 'CRYPTO'),
+          entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2, rr: plan.rr,
+          grade: crown.grade || crown.tier || '—', score: crown.score, maxScore: 5,
+          freeReads: crown.perfectReads || null };
+        setTimeout(function(){ try { var c = document.querySelector('[data-r="crown"]'); if (c) W.hgGoldAiReviewRun(_tmSetup, {}, c); } catch(e){} }, 0);
+      }
+    }catch(e){}
     return html;
   }catch(e){ return ''; }
 }
@@ -315,9 +325,6 @@ function tmStructureDir(rows){
    five). All four already exist in pinemath.js and were read by nothing on
    this desk. Record-only like the five; nothing scores on them. */
 function trendmxPineMarks(rows){
-  /* hg-v1295: thirteen ports — the ten hg-v1293 plus Supertrend, MACD and
-     CCI (pinemath.js). Record-only three-state: 'long' / 'short' / null.
-     The ONE HOME (hg-v949) OMNIBTC's hgObtcPineMarks delegates to. */
   var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null, supertrend: null, macd: null, cci: null };
   try{
     if (!Array.isArray(rows) || rows.length < 30) return out;
@@ -331,10 +338,14 @@ function trendmxPineMarks(rows){
     if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
     if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
     if (typeof W.pineSmcCore === 'function'){ var sc = W.pineSmcCore(rows, { includeContext: true }); if (sc && sc.dir) out.smc = String(sc.dir).toLowerCase(); }
-    /* hg-v1295: the three added ports — a port that does not fire, is not
-       loaded, or throws reads null (NOT MEASURED), never a guessed side. */
+    /* hg-v1295 (restored hg-v1403): three more bar-only Pine state readers.
+       Record-only like the ten above; the forward ledger measures each
+       separation out of sample. Supertrend/MACD/CCI are distinct from
+       HalfTrend/Squeeze/Cipher respectively (ATR-band flip vs
+       amplitude-pivot flip, signal-line cross vs BB-in-KC release,
+       extreme re-entry vs WaveTrend). */
     if (typeof W.pineSupertrend === 'function'){ var st = W.pineSupertrend(rows, {}); if (st && st.dir) out.supertrend = String(st.dir).toLowerCase(); }
-    if (typeof W.pineMacd === 'function'){ var mc = W.pineMacd(rows, {}); if (mc && mc.dir) out.macd = String(mc.dir).toLowerCase(); }
+    if (typeof W.pineMacd === 'function'){ var md = W.pineMacd(rows, {}); if (md && md.dir) out.macd = String(md.dir).toLowerCase(); }
     if (typeof W.pineCci === 'function'){ var cc = W.pineCci(rows, {}); if (cc && cc.dir) out.cci = String(cc.dir).toLowerCase(); }
   }catch(e){ }
   return out;

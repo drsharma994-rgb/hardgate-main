@@ -801,19 +801,40 @@ function mount(el){
             return sg && sg.isNew && sg.sym && sg.dir
                 && fin(+sg.entry) && fin(+sg.stop) && fin(+sg.t1) && +sg.entry !== +sg.stop;
           }).map(function(sg){
+            /* hg-v1435: demoted to evidence — the composite book measured
+               -0.101R taker / -0.038R maker, negative both halves (n=16,690,
+               desks/pinemeta census). Mints keep recording (ticket:false) so
+               the ledger keeps measuring; edgeTicket provenance preserved.
+               Lever HG_PINE_MIRROR_EVIDENCE=false restores the old flags. */
+            var ev = (W.HG_PINE_MIRROR_EVIDENCE !== false);
             return { sym: sg.sym, dir: sg.dir, entry: +sg.entry, stop: +sg.stop, t1: +sg.t1,
                      /* hg-v981: the signal's own close and its last closed bar */
                      mark: (isFinite(+sg.price) && +sg.price > 0) ? +sg.price : undefined,
                      barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(sg.rows).barT : undefined,
                      mechanic: String(sg.scriptId || 'PINE').toUpperCase().slice(0, 24),
-                     ticket: !!sg.edgeTicket };
+                     ticket: ev ? false : !!sg.edgeTicket,
+                     edgeTicket: !!sg.edgeTicket,
+                     evidence: ev ? 'hg-v1435: composite pine book -0.101R taker / -0.038R maker, negative both halves (n=16,690) — evidence, not a call' : undefined };
           });
           if (pFwd.length) W.hgFwdRecordScan('PINE', TF, pFwd, { horizonBars: 20 });
         }
       } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("pine", eFwd); } catch (eW) {} }
       __pineSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
 
-      if (out) out.innerHTML = renderPineOut(signals, gate);
+      /* hg-v1435: measured evidence banner above the composite's signals
+         (the composite pooled book: -0.101R taker / -0.038R maker, both
+         halves negative, n=16,690 — desks/pinemeta census). */
+      var evBanner = '';
+      try{
+        if (W.HG_PINE_MIRROR_EVIDENCE !== false){
+          evBanner = '<div class="note warn" style="font-size:11.5px"><b>MEASURED — EVIDENCE, NOT CALLS (hg-v1435):</b> '
+            + 'the composite pine book settled <b>-0.101R taker / -0.038R maker, negative in both halves</b> '
+            + '(n=16,690 · 12 majors · 4h · 14.2 months · desks/pinemeta census). Signals print as evidence and '
+            + 'record ticket:false; they are not entries. lorentzian-kernel (composite-only) settled -0.137R taker; '
+            + 'vumanchu-cipher fired 0 times — divergence-only by design.</div>';
+        }
+      }catch(eEv){ evBanner = ''; }
+      if (out) out.innerHTML = evBanner + renderPineOut(signals, gate);
       try { if (typeof W.hgMpPin === 'function') W.hgMpPin('pine', signals, null, out); } catch (eMp) {}
 
       var visibleN = signals.filter(pineSignalVisible).length;

@@ -75,7 +75,11 @@ function ok(label, pass, detail){
    other way, exactly the mechanics named in the pack. */
 (() => {
   const artifact = JSON.parse(readFileSync(resolve(ROOT, 'scripts/omnigold-replay-evidence.json'), 'utf8'));
-  const RATIO = 0.406;
+  /* hg-v1404: the overlap ratio follows the bake — 0.303 on the hg-v1402
+     walk (2442.4/8053 week-clustered), was 0.406. The stronger deflation
+     shrinks every z, which is why two of the six flips below no longer
+     reach -2σ. */
+  const RATIO = 0.303;
   const effN = n => Math.max(1, n * RATIO);
   const BE = 1 / 3;
   const whole = artifact.perKind || {};
@@ -94,12 +98,19 @@ function ok(label, pass, detail){
     if (fV && !wV) flipsIn.push(k);
     if (wV && !fV) flipsOut.push(k);
   }
-  ok('S1.11 exactly 6 ticket->VETO flips on committed JSON',
-    flipsIn.length === 6, `got ${flipsIn.length}: ${flipsIn.join(',')}`);
+  /* hg-v1404 recalibration: with the 0.303 ratio the flip set is FIVE —
+     ADR-FADE and SPRING no longer reach -2σ on the gate-clear read (pinned
+     OUT below), and P8-RANGE flips IN (its whole-walk z moved to -1.75σ
+     while the gate-clear read still fails) — measured, not silent. */
+  ok('S1.11 exactly 5 ticket->VETO flips on committed JSON',
+    flipsIn.length === 5, `got ${flipsIn.length}: ${flipsIn.join(',')}`);
   ok('S1.12 zero VETO->ticket flips',
     flipsOut.length === 0, `got ${flipsOut.length}: ${flipsOut.join(',')}`);
-  for (const m of ['THREE-BAR','P9-VOLBAR','PD-EQUILIBRIUM','ADR-FADE','PIN-REJECT','SPRING']){
+  for (const m of ['THREE-BAR','P8-RANGE','P9-VOLBAR','PD-EQUILIBRIUM','PIN-REJECT']){
     ok(`S1.10 ${m} would flip ticket->VETO under hgOgReplayZOnFormed`, flipsIn.includes(m));
+  }
+  for (const m of ['ADR-FADE','SPRING']){
+    ok(`S1.10b ${m} no longer flips under the 0.303 ratio (hg-v1404)`, !flipsIn.includes(m));
   }
 })();
 
@@ -200,10 +211,16 @@ function ok(label, pass, detail){
   const endIdx = ganesh.indexOf('/* --- END GENERATED HG_GANESH_WALK');
   ok('S7.1 BEGIN marker present', beginIdx > 0);
   ok('S7.2 END marker present', endIdx > beginIdx);
-  ok('S7.3 literal contains measured:false (null-pointing until bake)',
-    ganesh.slice(beginIdx, endIdx).includes('measured: false'));
-  ok('S7.4 literal names scripts/backtest-ganeshgold.mjs',
-    ganesh.slice(beginIdx, endIdx).includes('scripts/backtest-ganeshgold.mjs'));
+  /* hg-v1435 re-pin: the Wave D bake LANDED (desks/pinemeta census — the
+     engine boot the hg-v1298 walker deferred), so the literal now points at
+     measured:true with the bake's headline facts. The null-pointing shape is
+     still covered by S7.5/S7.6 (writer behavior on missing markers) and by
+     the writer's own measured:false branch when the artifact is absent. */
+  ok('S7.3 literal contains measured:true (hg-v1435 bake landed)',
+    ganesh.slice(beginIdx, endIdx).includes('measured: true'));
+  ok('S7.4 literal names the hg-v1435 first-bake honesty stamp',
+    ganesh.slice(beginIdx, endIdx).includes('hg-v1435 FIRST BAKE')
+      && ganesh.slice(beginIdx, endIdx).includes('ZERO tickets'));
 
   /* FATAL on missing markers (hg-v959 trap): point the writer at a file
      without markers and verify it exits 1. */

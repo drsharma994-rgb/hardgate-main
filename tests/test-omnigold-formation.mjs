@@ -211,3 +211,58 @@ console.log('\n== 6. SHORT clip + never-tighten ==');
 }
 
 console.log('\n' + passed + ' assertions passed');
+
+/* ---- 7. hg-v1402 STACK-3 SIGNAL FLOOR at hgOgFormation ----
+   >=3 of {regime-fit, htf-confirm, hurst-regime} must PASS on the gate ledger
+   the caller carries, or the setup does not form. Measured on the hg-v752
+   walk's fresh window (8,562 settled, split 2026-07-29): kept +0.047/+0.040R
+   XM both halves, dropped -0.115/-0.175R XM / -1.321/-1.726R PAXG.
+   Fail-open: no gates array or <3 of the three evaluated -> no verdict.
+   Fixture note: no plan is attached, so the venue stop floor has nothing to
+   judge (no measurable stop -> no stop-floor verdict), and MMOVE's baked row
+   (grossR +0.088 at n=206) is not demoted at either venue — the stack-3
+   clause is the only thing that can move `formed` here. */
+console.log('\n== 7. hg-v1402 stack-3 signal floor ==');
+{
+  const g = (key, pass) => ({ key, hard: false, pass, why: 'fixture' });
+  const base = { kind: 'MMOVE', horizon: 'SCALP' };
+
+  const allPass = W.hgOgFormation(Object.assign({}, base, { gates: [
+    g('regime-fit', true), g('htf-confirm', true), g('hurst-regime', true) ] }));
+  ok(allPass.formed === true, 'all three measured-positive gates PASS -> forms');
+  ok(!allPass.stack3Floor, 'and no stack3Floor stamp is left on a forming card');
+
+  const oneAgainst = W.hgOgFormation(Object.assign({}, base, { gates: [
+    g('regime-fit', true), g('htf-confirm', true), g('hurst-regime', false) ] }));
+  ok(oneAgainst.formed === false, 'one of the three against -> does NOT form');
+  ok(oneAgainst.stack3Floor && oneAgainst.stack3Floor.passed === 2
+     && oneAgainst.stack3Floor.evaluated === 3,
+     'the stamp says 2/3 evaluated-positive');
+  ok(oneAgainst.reasons.some(r => /weak-signal floor/.test(r)
+     && /regime-fit\/htf-confirm\/hurst-regime/.test(r)),
+     'the reason names the floor and the three gates');
+
+  const nonePass = W.hgOgFormation(Object.assign({}, base, { gates: [
+    g('regime-fit', false), g('htf-confirm', false), g('hurst-regime', false) ] }));
+  ok(nonePass.formed === false && nonePass.stack3Floor.passed === 0,
+     'zero of three -> floored, stamped 0/3');
+
+  const abstainNoGates = W.hgOgFormation(base);
+  ok(abstainNoGates.formed === true && !abstainNoGates.stack3Floor,
+     'no gates array -> NO VERDICT (engine-side callers abstain, hg-v989 third state)');
+
+  const abstainUnchecked = W.hgOgFormation(Object.assign({}, base, { gates: [
+    g('regime-fit', true), g('htf-confirm', null), g('hurst-regime', null) ] }));
+  ok(abstainUnchecked.formed === true && !abstainUnchecked.stack3Floor,
+     'fewer than three EVALUATED (UNCHECKED is not a fail) -> abstains');
+
+  const otherGatesOnly = W.hgOgFormation(Object.assign({}, base, { gates: [
+    g('vol-alive', false), g('trend', false) ] }));
+  ok(otherGatesOnly.formed === true && !otherGatesOnly.stack3Floor,
+     'unrelated vetoes on the ledger are not this clause (they grade, they do not form)');
+
+  const poisoned = new Proxy([], { get(){ throw new Error('poisoned ledger'); } });
+  const threw = W.hgOgFormation(Object.assign({}, base, { gates: poisoned }));
+  ok(threw.formed === true && !threw.stack3Floor,
+     'a ledger that throws on read -> abstain; formation verdict itself never throws');
+}

@@ -5,6 +5,15 @@ only — no fetch. Used by SMART $ after both legs are loaded.
 ========================================================================= */
 'use strict';
 
+/* hg-v1421 — retail-L/S contrarian and funding-FADE reads are DEMOTED from
+   directional evidence votes to CONTEXT strings. wide02 measured: retail
+   account-ratio contrarian failed 5 of 5 out-of-sample (holdout Sharpe 0.009);
+   funding-contrarian-as-trigger is the worst bucket (+2.8%/53% vs +14.2%/73%
+   for funding-x-price confirmation, p=0.002). The desks carry no internal rows
+   that contradict (positioning legs are live-feed only), so the measured class
+   is the default. window.HG_POS_CONTRARIAN_VOTES = true restores the pre-v1421
+   votes (lever for the forward-ledger comparison). Funding-extreme keeps its
+   confirmation-shaped half: trend-fuel votes stay suppressed while crowded. */
 var FUNDING_EXTREME = 0.05;
 var RETAIL_EXTREME_HI = 65;
 var RETAIL_EXTREME_LO = 35;
@@ -108,6 +117,8 @@ function escPos(s){
 function hgPositioningClassify(d, opts){
   opts = opts || {};
   d = d || {};
+  var contraVotes = ((typeof window !== 'undefined' && window.HG_POS_CONTRARIAN_VOTES === true)
+    || (typeof globalThis !== 'undefined' && globalThis.HG_POS_CONTRARIAN_VOTES === true));   /* hg-v1421: contrarian/fade votes off by default */
   function num(x){ return (typeof x === 'number' && isFinite(x)) ? x : null; }
   var pxDead = (opts.pxDeadzone !== undefined) ? +opts.pxDeadzone : 0.25;
   var oiDead = (opts.oiDeadzone !== undefined) ? +opts.oiDeadzone : 1;
@@ -143,57 +154,65 @@ function hgPositioningClassify(d, opts){
   }
 
   if (fundingZ !== null){
-    if (fundingZ >= fundZExt) shortEv.push('CROWDED LONG (squeeze-down risk) · funding z +' + fundingZ.toFixed(2));
-    else if (fundingZ <= -fundZExt) longEv.push('CROWDED SHORT (squeeze-up risk) · funding z ' + fundingZ.toFixed(2));
+    if (fundingZ >= fundZExt){
+      regime.push('crowded long (funding z +' + fundingZ.toFixed(2) + ') — fresh same-direction adds stand down');
+      if (contraVotes) shortEv.push('CROWDED LONG (squeeze-down risk) · funding z +' + fundingZ.toFixed(2));
+    } else if (fundingZ <= -fundZExt){
+      regime.push('crowded short (funding z ' + fundingZ.toFixed(2) + ') — fresh same-direction adds stand down');
+      if (contraVotes) longEv.push('CROWDED SHORT (squeeze-up risk) · funding z ' + fundingZ.toFixed(2));
+    }
   }
   if (fundExtreme){
     if (fundingPct > 0){
-      regime.push('longs crowded (funding)');
-      shortEv.push('funding extreme +' + fundingPct.toFixed(4) + '%/8h — longs pay');
+      regime.push('longs crowded (funding) — fresh same-direction adds stand down');
+      if (contraVotes) shortEv.push('funding extreme +' + fundingPct.toFixed(4) + '%/8h — longs pay');
     } else {
-      regime.push('shorts crowded (funding)');
-      longEv.push('funding extreme ' + fundingPct.toFixed(4) + '%/8h — shorts pay');
+      regime.push('shorts crowded (funding) — fresh same-direction adds stand down');
+      if (contraVotes) longEv.push('funding extreme ' + fundingPct.toFixed(4) + '%/8h — shorts pay');
     }
   }
 
   if (oiChg !== null && fundingPct !== null){
     if (oiUp && fundExtreme && fundingPct > 0){
       regime.push('rising OI + crowded long funding');
-      shortEv.push('OI+funding: new longs crowded — fade/squeeze-down risk');
+      if (contraVotes) shortEv.push('OI+funding: new longs crowded — fade/squeeze-down risk');
     } else if (oiUp && fundExtreme && fundingPct < 0){
       regime.push('rising OI + shorts paying');
-      longEv.push('OI+funding: fresh shorts building while shorts pay');
+      if (contraVotes) longEv.push('OI+funding: fresh shorts building while shorts pay');
     } else if (oiDn && fundExtreme && fundingPct < 0){
       regime.push('falling OI + crowded shorts');
-      longEv.push('OI+funding: short flush / squeeze-up watch');
+      if (contraVotes) longEv.push('OI+funding: short flush / squeeze-up watch');
     } else if (oiDn && fundExtreme && fundingPct > 0){
       regime.push('falling OI + longs paying');
-      shortEv.push('OI+funding: long liquidation with longs still paying');
+      if (contraVotes) shortEv.push('OI+funding: long liquidation with longs still paying');
     }
   }
 
   if (retailLongPct !== null){
     if (retailLongPct >= RETAIL_EXTREME_HI){
-      regime.push(opts.style === 'oiflow' ? 'retail extremely long' : 'retail extremely long');
-      if (opts.style === 'oiflow'){
-        shortEv.push('RETAIL MAX LONG (fade) · ' + retailLongPct.toFixed(1) + '% long');
-      } else {
-        shortEv.push('retail ' + retailLongPct.toFixed(1) + '% long (≥65) — contrarian');
+      regime.push('retail extremely long — context only (contrarian read: 5 measured OOS failures, hg-v1421)');
+      if (contraVotes){
+        if (opts.style === 'oiflow') shortEv.push('RETAIL MAX LONG (fade) · ' + retailLongPct.toFixed(1) + '% long');
+        else shortEv.push('retail ' + retailLongPct.toFixed(1) + '% long (≥65) — contrarian');
       }
     } else if (retailLongPct <= RETAIL_EXTREME_LO){
-      regime.push('retail extremely short');
-      if (opts.style === 'oiflow'){
-        longEv.push('RETAIL MAX SHORT (fade) · ' + retailLongPct.toFixed(1) + '% long');
-      } else {
-        longEv.push('retail ' + retailLongPct.toFixed(1) + '% long (≤35) — contrarian');
+      regime.push('retail extremely short — context only (contrarian read: 5 measured OOS failures, hg-v1421)');
+      if (contraVotes){
+        if (opts.style === 'oiflow') longEv.push('RETAIL MAX SHORT (fade) · ' + retailLongPct.toFixed(1) + '% long');
+        else longEv.push('retail ' + retailLongPct.toFixed(1) + '% long (≤35) — contrarian');
       }
     }
   }
 
   if (topLongPct !== null && retailLongPct !== null){
     var diff = topLongPct - retailLongPct;
-    if (diff >= 15){ regime.push('top traders long vs retail'); longEv.push('smart $: top−retail +' + diff.toFixed(1) + 'pp — follow top traders'); }
-    else if (diff <= -15){ regime.push('top traders short vs retail'); shortEv.push('smart $: top−retail ' + diff.toFixed(1) + 'pp — follow top traders'); }
+    if (diff >= 15){
+      regime.push('top traders long vs retail — context only (account-ratio read, hg-v1421)');
+      if (contraVotes) longEv.push('smart $: top−retail +' + diff.toFixed(1) + 'pp — follow top traders');
+    } else if (diff <= -15){
+      regime.push('top traders short vs retail — context only (account-ratio read, hg-v1421)');
+      if (contraVotes) shortEv.push('smart $: top−retail ' + diff.toFixed(1) + 'pp — follow top traders');
+    }
   }
 
   if (takerRatio !== null){

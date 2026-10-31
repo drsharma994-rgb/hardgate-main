@@ -1309,6 +1309,44 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     return extra;
   }
 
+  function hgObtcSignSplit(fund, dir, takerWith){
+    var sentKeys = { fng: 1, retail: 1, toptrader: 1, funding: 1, rr25d: 1, oidiv: 1 };
+    var fundKeys = { onchain: 1, term: 1, realrate: 1, hashrate: 1, nvt: 1, cot: 1 };
+    function tally(keys){
+      var withN = 0, against = 0, names = [];
+      var legs = fund && Array.isArray(fund.legs) ? fund.legs : [];
+      var i, leg, side, want;
+      for (i = 0; i < legs.length; i++){
+        leg = legs[i];
+        if (!leg || !keys[leg.key] || leg.info || leg.state !== 'checked') continue;
+        if (leg.vote !== 'bull' && leg.vote !== 'bear') continue;
+        want = dir === 'long' ? 'bull' : 'bear';
+        side = leg.vote === want ? 'with' : 'against';
+        if (side === 'with') withN++; else against++;
+        names.push(leg.label);
+      }
+      return { withN: withN, against: against, names: names };
+    }
+    function state(t, extraAgainst, extraWith){
+      var against = t.against + (extraAgainst ? 1 : 0);
+      var withN = t.withN + (extraWith ? 1 : 0);
+      if (against > 0) return 'against';
+      if (withN > 0) return 'with';
+      return 'unread';
+    }
+    var sent = tally(sentKeys);
+    var fundT = tally(fundKeys);
+    var takerAgainst = takerWith === false;
+    var takerWithDir = takerWith === true;
+    if (takerAgainst || takerWithDir) sent.names = sent.names.concat(['taker flow']);
+    return {
+      sentiment: (dir === 'long' || dir === 'short') ? state(sent, takerAgainst, takerWithDir) : 'unread',
+      fundamental: (dir === 'long' || dir === 'short') ? state(fundT, false, false) : 'unread',
+      sentimentNames: sent.names,
+      fundamentalNames: fundT.names
+    };
+  }
+
   function hgObtcApplyEvidence(row, extra, evOverride){
     if (!row) return { ok: true, row: row, ev: null };
     var ctx = evOverride || evidenceFromExtra(extra || {});
@@ -1355,6 +1393,16 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
         if ((fundR.checked || 0) >= 2 && vWith >= 2 && vAg === 0) row.fundamentalAligned = true;
       }
     }catch(eFa){}
+    /* hg-v1481: split the stack the card already holds into the two
+       non-technical signs. A neutral print is checked and silent. An
+       info prior never votes. Unread stays unread — it is not agreement. */
+    try{
+      var signs = hgObtcSignSplit(ctx.fundamental, dirOf(row.dir), row.takerFlowWith);
+      row.signSentiment = signs.sentiment;
+      row.signFundamental = signs.fundamental;
+      row.signSentimentNames = signs.sentimentNames;
+      row.signFundamentalNames = signs.fundamentalNames;
+    }catch(eSg){}
     return { ok: true, row: row, ev: ev };
   }
 

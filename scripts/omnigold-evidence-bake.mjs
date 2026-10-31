@@ -233,7 +233,7 @@ function fillRates(pool){
    numbers quoted on the card describe the code that is running. Kept in one
    place and named after the constants they mirror, so a future change to
    either has one obvious place to follow. */
-const GOLD_STOP_MIN_PCT = 0.005;                 /* omnigold.js */
+const GOLD_STOP_MIN_PCT = 0.01;                  /* omnigold.js (hg-v1402: 0.005 -> 0.01, moves in lockstep) */
 const COST_VETO_R = 0.30, COST_VETO_R_SCALP = 0.15;
 
 function passesCurrentGates(r, frac){
@@ -440,8 +440,12 @@ const bake = {
     /* THE GATE SET THIS ARTIFACT WAS WALKED WITH IS NOT THE ONE SHIPPING.
 
        r.ticket in a walk artifact is whatever hgOgGates said on the day it
-       ran. This one ran 2026-09-12; the stop floor (GOLD_STOP_MIN_PCT) and
-       the HARD venue-priced cost-drag gate landed 2026-09-16. Quoting the
+       ran. This one ran 2026-10-18 (hg-v1404 note: the narrative below was
+       written when the walk was the 2026-09-12 one; the warning it carries —
+       the walk's ticket flags predate the shipping gate set — applied then.
+       On the current walk the ticket flag is EMPTY offline because the
+       hg-v1003 macro lock fails closed without live feeds, which is a
+       different caveat and is named where the book is published). Quoting the
        raw ticket book as "what this desk does" therefore describes a system
        the tab no longer runs — it overstates the drawdown 2.2x at XM and
        8.5x at PAXG.
@@ -453,7 +457,7 @@ const bake = {
     sequentialTicketsCurrentGates: {
       xm: drawdown(sequential(formed.filter(r => r.ticket && passesCurrentGates(r, XM))), XM),
       paxg: drawdown(sequential(formed.filter(r => r.ticket && passesCurrentGates(r, PAXG))), PAXG),
-      note: 'PROXY — v752 gates applied to a 2026-09-12 walk, not a re-walk'
+      note: 'PROXY — v752+v1402 gate predicate applied to the current walk rows, not a formation re-run'
     }
   },
   fills: fillRates(walk.trades || []),
@@ -470,8 +474,20 @@ const bake = {
     })()
   },
   formedByKind: groupBy(formed, r => r.kind, WIDTH, 40),
-  /* the other side of that 40: which mechanics fired and were left out */
-  kindBelowThreshold: { minN: 40, kinds: belowThreshold(formed, r => r.kind, 40) },
+  /* the other side of that 40: which mechanics fired and were left out.
+     hg-v1402: keyed off the SEEN set, not the formed pool — a kind the walk
+     saw but the filters zeroed out entirely (DONCHIAN-DRIVE fired twice on
+     the 2026-10-18 walk and survived zero) otherwise sat in NEITHER map and
+     a card would have read "never observed" about a mechanic that fired.
+     Count 0 is the honest entry for that case, not an omission. */
+  kindBelowThreshold: { minN: 40, kinds: (() => {
+    const measured = new Set(Object.keys(groupBy(formed, r => r.kind, WIDTH, 40)));
+    const surviving = belowThreshold(formed, r => r.kind, 40);
+    const out = {};
+    for (const [k, n] of Object.entries(seenRaw(walk.trades || [], r => r.kind)))
+      if (!measured.has(k)) out[k] = surviving[k] || 0;
+    return out;
+  })() },
   /* and the raw set, so "never observed" is distinguishable from "thin" */
   kindSeenRaw: seenRaw(walk.trades || [], r => r.kind),
   sequentialByCell: groupBy(seq, r => r.horizon + '/' + r.tier, WIDTH, 10),

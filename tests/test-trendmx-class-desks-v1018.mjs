@@ -26,6 +26,13 @@
      7) the paint routing fills both containers; the venue filter applies
         upstream of both
      8) the mixed board is gone; the desks stand in order
+   hg-v1399: tape recalibrated for the admission floor — the wicks widen
+   (x0.5 -> x4 of step, closes untouched) so the house stop prices >=2% of
+   entry; every prior assertion unchanged, plus a new floor-coverage block (§9).
+   hg-v1419: the floor's fifth clause (1D EMA(150) against the majority) gets
+   its own fixtures (§9b) — a veto row carrying a downtrend rows1d, its
+   fail-open twin without one, and the unit-level clause fires/symmetry/
+   abstain pins. Every pre-hg-v1419 assertion unchanged.
    Run: node tests/test-trendmx-class-desks-v1018.mjs */
 
 import fs from 'node:fs';
@@ -69,8 +76,8 @@ function tape(n, tfSec, start, step){
   const rows = []; let c = start;
   for (let i = 0; i < n; i++){
     const o = c; c = c + step;
-    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 0.5,
-                l: Math.min(o, c) - Math.abs(step) * 0.5, c, v: 1000 });
+    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 4,   /* hg-v1399: wider wicks so the house stop prices >=2% of entry (the admission floor) — closes, and every read off closes, are byte-identical */
+                l: Math.min(o, c) - Math.abs(step) * 4, c, v: 1000 });
   }
   return rows;
 }
@@ -105,10 +112,10 @@ console.log('== 1) the classes separate on their own criteria ==');
          'the conviction item carries its conviction verdict; the clean item does not pretend one');
   /* every exclusion the old board had, per row */
   const vetoed = mkRow(w, 'VETUSDT', 'long', { gate: { gatesPassed: 7, gatesTotal: 7, clean7: true, veto: 'regime', label: 'regime veto' } });
-  const noDir = mkRow(w, 'NODUSDT', 'long', { score: 0, gate: gate7() });
+  const noDir = mkRow(w, 'NODUSDT', 'long', { score: 0, comps: { d1Trend: 0, d1Cross: 0, h4Cascade: 0, cloud: 0, adxPt: 0 }, gate: gate7() });
   const noPlan = mkRow(w, 'NPLUSDT', 'long', { rows4h: [], gate: gate7() });
   const noGate = mkRow(w, 'NGTUSDT', 'long', { gate: null });
-  const weak = mkRow(w, 'WEKUSDT', 'long', { score: 1 });   /* majority bar is |2| — no dir either */
+  const weak = mkRow(w, 'WEKUSDT', 'long', { score: 1, comps: { d1Trend: 1, d1Cross: 0, h4Cascade: 0, cloud: 0, adxPt: 0 } });   /* one leg is not a side */
   const out2 = w.trendmxLimitClasses([vetoed, noDir, noPlan, noGate, weak]);
   assert(out2.clean.length === 0 && out2.conv.length === 0 && out2.heldClean === 0 && out2.heldConv === 0,
          'veto / no-majority / no-plan / no-gate / sub-majority rows qualify for NEITHER class — the old board\'s bars, per row');
@@ -253,6 +260,80 @@ console.log('== 8) the mixed board is gone; the desks stand in order ==');
      L867) is a different feature this pack never touched. */
   assert(/var TM_MAJORITY = 2;/.test(src) && /cands = cands\.slice\(0, 8\)/.test(src) === false,
          'no threshold moved — the majority bar is still |2|, and the old top-8 slice is gone with the mixed board');
+}
+
+console.log('== 9) hg-v1399: the admission floor holds, fails open, and names itself ==');
+{
+  const w = boot();
+  let rec = null;
+  w.hgFwdRecordScan = (tab, tf, list, opts) => { rec = { tab, tf, list, opts }; return list.length; };
+  /* a tight tape (the pre-v1399 calibration): the house stop prices ~1% of entry */
+  const tight4 = tape(120, 14400, 100, 0.6).map(b => ({ t: b.t, o: b.o, h: b.o + Math.abs(0.6) * 0.5, l: b.o - Math.abs(0.6) * 0.5, c: b.c, v: b.v }));
+  const floored = mkRow(w, 'FLRUSDT', 'long', { gate: gate7(), rows4h: tight4, rows1h: tight4.slice(-60) });
+  const okRow = mkRow(w, 'OKFUSDT', 'long', { gate: gate7() });
+  const out = w.trendmxLimitClasses([floored, okRow]);
+  assert(out.clean.length === 1 && out.clean[0].row.sym === 'OKFUSDT' && out.heldClean === 1 && out.heldWhy.clean.floor === 1,
+         'a clean7 row whose stop prices under 2% of entry is held off under the floor reason; a >=2% row paints');
+  assert(out.heldWitness.length === 1 && out.heldWitness[0].heldBy === 'floor' && out.heldWitness[0].plan && isFinite(out.heldWitness[0].plan.stop),
+         'the floored row is KEPT with its priced plan, named under the floor — the desk shows its veto');
+  assert(rec && rec.list.length === 2 && rec.list.filter(r => r.ticket === false).length === 1,
+         'the floored row records ticket:false beside the admitted row — the veto stays measurable (hg-v1159)');
+  /* fail-open: no plan/stop in hand and absent marks never veto */
+  const bare = { sym: 'BRBUSDT', score: 5, comps: { d1Trend: 1, d1Cross: 1, h4Cascade: 1, cloud: 1, adxPt: 1 }, gate: gate7() };
+  const fOpen = w.tmAdmissionFloor(bare, null);
+  assert(fOpen.ok === true && fOpen.why.length === 0,
+         'fail-open: no plan priced and no marks landed -> the floor vetoes NOTHING (hg-v989 third state)');
+  /* each clause fires alone */
+  const fStop = w.tmAdmissionFloor(bare, { entry: 100, stop: 99 });
+  assert(fStop.ok === false && fStop.why.indexOf('stop<2%') >= 0, 'a 1% stop vetoes on its own');
+  const fCross = w.tmAdmissionFloor(Object.assign({}, bare, { freshCross: 'GOLDEN' }), null);
+  assert(fCross.ok === false && fCross.why.indexOf('freshCross') >= 0, 'a fresh cross with the majority vetoes on its own');
+  const fCloud = w.tmAdmissionFloor(Object.assign({}, bare, { comps: { d1Trend: 1, d1Cross: 1, h4Cascade: 1, cloud: -1, adxPt: 1 } }), null);
+  assert(fCloud.ok === false && fCloud.why.indexOf('cloudAgainst') >= 0, 'the cloud against the majority vetoes on its own');
+  const fMaj = w.tmAdmissionFloor({ sym: 'M', score: 2, comps: { d1Trend: 1, d1Cross: 1, h4Cascade: 0, cloud: 0, adxPt: 0 }, gate: { gatesPassed: 2, clean7: false } }, null);
+  const fMajOk = w.tmAdmissionFloor({ sym: 'M', score: 2, comps: { d1Trend: 1, d1Cross: 1, h4Cascade: 0, cloud: 0, adxPt: 0 }, gate: { gatesPassed: 3, clean7: false } }, null);
+  assert(fMaj.ok === false && fMajOk.ok === true, 'a bare |2| majority needs 3 gates behind it; |2| with 3 gates passes');
+  /* the ticket claim inherits the floor (the crown alert reads this tier) */
+  assert(w.tmTicketClaim(floored, w.trendmxPlan(Object.assign({}, floored, { dir: 'long' }))) === false,
+         'tmTicketClaim refuses the floored row even at a 7/7 clean tier');
+}
+
+console.log('== 9b) hg-v1419: the 1D EMA(150) clause vetoes, names itself, and fails open ==');
+{
+  const w = boot();
+  let rec = null;
+  w.hgFwdRecordScan = (tab, tf, list, opts) => { rec = { tab, tf, list, opts }; return list.length; };
+  /* a clean7 long whose stop prices >=2% of entry but whose 1D series sits
+     BELOW its EMA(150): the fifth clause alone must hold it off */
+  const emaVetoed = mkRow(w, 'EMVUSDT', 'long', { gate: gate7(), rows1d: DN1 });
+  const emaOpen = mkRow(w, 'EMOUSDT', 'long', { gate: gate7() });   /* no rows1d: the clause abstains */
+  const out = w.trendmxLimitClasses([emaVetoed, emaOpen]);
+  assert(out.clean.length === 1 && out.clean[0].row.sym === 'EMOUSDT' && out.heldClean === 1 && out.heldWhy.clean.floor === 1,
+         'a clean7 row priced against its 1D EMA(150) is held off under the floor reason; the row without a 1d series paints');
+  assert(out.heldWitness.length === 1 && out.heldWitness[0].heldBy === 'floor'
+         && Array.isArray(out.heldWitness[0].floorWhy) && out.heldWitness[0].floorWhy.indexOf('ema150Against') >= 0
+         && out.heldWitness[0].floorWhy.length === 1,
+         'the held row names ema150Against and nothing else — the fifth clause fired alone (its stop clears 2%)');
+  assert(rec && rec.list.length === 2 && rec.list.filter(r => r.ticket === false).length === 1
+         && rec.list.filter(r => r.ticket === false)[0].sym === 'EMVUSDT',
+         'the EMA(150)-floored row records ticket:false beside the admitted row — the veto stays measurable (hg-v1159)');
+  /* unit level: the clause fires alone, respects direction symmetry, and abstains on the hg-v989 third state */
+  const bareL = { sym: 'BRBUSDT', score: 5, comps: { d1Trend: 1, d1Cross: 1, h4Cascade: 1, cloud: 1, adxPt: 1 }, gate: gate7() };
+  const fEma = w.tmAdmissionFloor(Object.assign({}, bareL, { rows1d: DN1 }), null);
+  assert(fEma.ok === false && fEma.why.indexOf('ema150Against') >= 0 && fEma.why.length === 1,
+         'a long under its 1D EMA(150) vetoes on its own');
+  const bareS = { sym: 'BRBUSDT', score: -5, comps: { d1Trend: -1, d1Cross: -1, h4Cascade: -1, cloud: -1, adxPt: -1 }, gate: gate7() };
+  const fEmaShortOk = w.tmAdmissionFloor(Object.assign({}, bareS, { rows1d: DN1 }), null);
+  const fEmaShortVeto = w.tmAdmissionFloor(Object.assign({}, bareS, { rows1d: UP1 }), null);
+  assert(fEmaShortOk.ok === true && fEmaShortVeto.ok === false && fEmaShortVeto.why.indexOf('ema150Against') >= 0,
+         'direction symmetry: a short agrees with a downtrend EMA(150) and is vetoed by an uptrend one');
+  const fEmaOpen1 = w.tmAdmissionFloor(bareL, null);
+  const fEmaOpen2 = w.tmAdmissionFloor(Object.assign({}, bareL, { rows1d: DN1.slice(-149) }), null);
+  assert(fEmaOpen1.ok === true && fEmaOpen2.ok === true,
+         'fail-open: no 1d series, or fewer than 150 daily closes, vetoes NOTHING (hg-v989 third state)');
+  /* the ticket claim inherits the fifth clause exactly like the other four */
+  assert(w.tmTicketClaim(emaVetoed, w.trendmxPlan(Object.assign({}, emaVetoed, { dir: 'long' }))) === false,
+         'tmTicketClaim refuses the EMA(150)-floored row even at a 7/7 clean tier');
 }
 
 console.log('\n' + (fail === 0

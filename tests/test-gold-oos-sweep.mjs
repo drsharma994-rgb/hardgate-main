@@ -140,16 +140,18 @@ const OG_RULES = {
 console.log('== the two books this sweep runs on ==');
 {
   ok(SCALP.length === 1522, `GOLD SCALP: ${SCALP.length} live trades past the shipped cost bar`);
-  ok(OG.length === 8132, `OMNIGOLD: ${OG.length} filled trades`);
+  ok(OG.length === 8564, `OMNIGOLD: ${OG.length} filled trades (hg-v1404: 8,564 on the hg-v1402 walk, was 8,132)`);
   ok(Math.abs(XM - 0.02) < 1e-9, `re-priced at the XM preset, ${XM.toFixed(3)}% round trip`);
 }
 
 console.log('\n== the OMNIGOLD venue question, answered ==');
 {
   const paxg = OG.map(t => t.netR), xm = OG.map(t => t.xmR);
-  ok(Math.abs(mean(paxg) + 1.241) < 0.002 && tstat(paxg) < -40,
+  /* hg-v1404 recalibration on the hg-v1402 walk: -1.241 -> -1.372R at PAXG,
+   -0.116 -> -0.114R at XM. The finding is unchanged. */
+  ok(Math.abs(mean(paxg) + 1.372) < 0.002 && tstat(paxg) < -40,
      `at the baked PAXG ${RRT}% the book is ${mean(paxg).toFixed(3)}R (t=${tstat(paxg).toFixed(2)})`);
-  ok(Math.abs(mean(xm) + 0.116) < 0.002,
+  ok(Math.abs(mean(xm) + 0.114) < 0.002,
      `at the XM round trip it is ${mean(xm).toFixed(3)}R — an enormous improvement`);
   ok(tstat(xm) < -1.96,
      `and STILL significantly negative at t=${tstat(xm).toFixed(2)} — switching venue is not a fix`);

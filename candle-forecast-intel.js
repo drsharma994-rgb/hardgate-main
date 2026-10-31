@@ -28,6 +28,20 @@ Surface (window.hgCfIntel):
 
   var CF_INTEL_MIN_BARS = 30;
 
+  /* hg-v1417: the MEASURED scalp cost floor. This module loads before the tab,
+     so it cannot read the tab's constants — the floor is a percent of entry.
+     The desk census (38.5k 15m PAXG bars, 13+ months, both chronological
+     halves, independently re-run): scalp formed brackets with a stop UNDER
+     0.25% of entry (81.4% of them, median stop ~0.13%) settled -0.279R per
+     trade at XM costs (H1 -0.216 / H2 -0.336) and -3.431R at Binance
+     (H1 -2.880 / H2 -3.924) — negative in both halves at both cost models.
+     At or past the floor the cohort settled +0.040R at XM in BOTH halves
+     (H1 +0.055 / H2 +0.016) and still -0.476R at Binance. So the floor gates
+     the EXECUTABLE card and the alert only; the scalp bracket still paints,
+     already labelled "not a published setup", and still records to the
+     ledger. */
+  var CF_MIN_SCALP_STOP_PCT = 0.25;
+
   function _f(x) { x = +x; return isFinite(x) ? x : NaN; }
   function _arr(x) { return Array.isArray(x) ? x : []; }
 
@@ -479,7 +493,7 @@ Surface (window.hgCfIntel):
   function executionCard(forecast) {
     var out = { state: 'NO-TRADE', horizon: '', dir: '', entry: NaN, stop: NaN, tp1: NaN, tp2: NaN, rr: null, why: '' };
     forecast = forecast || {};
-    var cands = [];
+    var cands = [], subFloorScalp = null;
     ['scalp', 'swing'].forEach(function (h) {
       var b = forecast[h];
       if (!b || b.ok === false) return;
@@ -487,10 +501,25 @@ Surface (window.hgCfIntel):
       var e = _f(b.entry), s = _f(b.stop), t1 = _f(b.tp1);
       if (!(isFinite(e) && isFinite(s) && isFinite(t1))) return;
       if (!(Math.abs(e - s) > 0)) return;
+      /* hg-v1417: a bracket withheld from publication (the higher timeframe did
+         not confirm it) never reaches the executable card. The read still
+         prints on the swing card; the ledger still records it. */
+      if (b.published === false) return;
+      /* hg-v1417: the measured scalp cost floor. Sub-floor scalp brackets are
+         not executable — the census settled them at -0.279R XM / -3.431R
+         Binance per trade, negative in both halves at both cost models.
+         Disclosure, not silence, when one was present and nothing else named
+         a side. */
+      if (h === 'scalp' && (Math.abs(e - s) / e * 100) < CF_MIN_SCALP_STOP_PCT) {
+        subFloorScalp = { pct: +(Math.abs(e - s) / e * 100).toFixed(3) };
+        return;
+      }
       cands.push({ h: h, b: b, entry: e, stop: s, tp1: t1, tp2: _f(b.tp2), formed: b.formed === true, ticket: b.ticket === true });
     });
     if (!cands.length) {
-      out.why = 'neither horizon named a settleable side';
+      out.why = subFloorScalp
+        ? ('the 15m scalp bracket\'s stop is ' + subFloorScalp.pct + '% of entry — under the ' + CF_MIN_SCALP_STOP_PCT + '% cost floor. In the desk census sub-floor scalp brackets settled -0.28R per trade at XM costs and -3.43R at Binance, negative in both halves at both; stops at or past the floor are the only executable scalps, and the 4h swing outranks them.')
+        : 'neither horizon named a settleable side';
       return out;
     }
     /* the ticketed swing outranks the ticketed scalp; a ticketed read

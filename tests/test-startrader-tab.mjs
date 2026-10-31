@@ -1,5 +1,12 @@
 /* HARDGATE — STAR TRADER, 966 lines that no test had ever executed.
 
+   hg-v1434: sister-suite re-pin — the button byte-pins below follow the
+   CRYPTO SINGLES floor landing: the book/trade buttons are now gated on
+   stTicket (= !draft && !r.demote — a floored setup keeps its plan and names
+   the measured reason but stands the buttons down, demote-not-hide). The
+   levels requirement itself is unchanged; the pins assert BOTH halves of the
+   new expression. Behavior pins unchanged.
+
    v339 measured which modules no test NAMES. This measures the weaker form of
    the same gap: modules a test names but only ever reads as TEXT. A module
    "covered" by a source grep is not covered at all. Twenty-one of 116 modules
@@ -195,8 +202,9 @@ console.log('\n== the card refuses to offer a trade it has no levels for ==');
 {
   const src = fs.readFileSync(path.join(ROOT, 'startradertab.js'), 'utf8');
   ok(/var entry = p && isFinite\(p\.entry\) \? p\.entry : null;/.test(src), 'entry is null unless the plan supplies one');
-  ok(/bookBtn = \(!draft && entry != null && stop != null/.test(src), 'the BOOK button requires entry and stop');
-  ok(/tradeOnclick = \(!draft && entry != null && stop != null/.test(src), 'the SEND TO TRADE PLAN button requires them too');
+  ok(/var stTicket = !draft && !r\.demote;/.test(src), 'the ticket gate is !draft && !demote (hg-v1434 demote-not-hide)');
+  ok(/bookBtn = \(stTicket && entry != null && stop != null/.test(src), 'the BOOK button requires entry and stop');
+  ok(/tradeOnclick = \(stTicket && entry != null && stop != null/.test(src), 'the SEND TO TRADE PLAN button requires them too');
   ok(/if \(entry != null && stop != null && typeof W\.planBlock/.test(src), 'the levels block requires them as well');
 }
 

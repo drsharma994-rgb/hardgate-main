@@ -106,13 +106,23 @@ console.log('\n1. the roster is READ, not copied');
 console.log('\n2. coverage of the roster is EXHAUSTIVE');
 {
   const kinds = ALL().map(r => r.kind);
-  ok(kinds.length === 9, 'the shipped roster is nine mechanics');
+  /* hg-v1404 recalibration: the hg-v1402 re-walk rotated the roster —
+     eight mechanics now (STRUCT-BOS, SQUEEZE-FIRE, BOS-RETEST, P5-DRIVE and
+     EQH-SWEEP fell off; NY-OPEN-DRIVE, INSIDE-BREAK, ORB and P4-ADRX joined).
+     The three newcomers are ported (ognydrive/oginsidebreak/ogorb) and
+     P4-ADRX is homed (p4adrx, minted on both tabs). The HOME MAP keeps its
+     off-roster entries — the map is about the tabs, and the twin lookups
+     still need them — so the partition is counted against the ROSTER's
+     homed members, not the whole map. */
+  ok(kinds.length === 8, 'the shipped roster is eight mechanics (hg-v1404 rotation)');
   ok(UNMAP().length === 0,
      'every roster kind is either ported or has a named home — none is silently skipped');
   const ported = PORTS().map(p => p.kind);
   ok(ported.length === 6, 'six are ported: ' + ported.join(' '));
-  ok(Object.keys(HOME).length === 3, 'three have a home on the tabs: ' + Object.keys(HOME).join(' '));
-  ok(ported.length + Object.keys(HOME).length === kinds.length,
+  const homedOnRoster = kinds.filter(k => HOME[k]);
+  ok(homedOnRoster.length === 2, 'two roster kinds have a home on the tabs: ' + homedOnRoster.join(' '));
+  ok(Object.keys(HOME).length === 4, 'the home map carries four entries (two off-roster, kept for the twin lookups): ' + Object.keys(HOME).join(' '));
+  ok(ported.length + homedOnRoster.length === kinds.length,
      '  and the two sets PARTITION the roster');
   /* partition needs disjointness too: a kind in BOTH maps would be minted here
      AND already minted by the tab, which is two mechanics under one record */

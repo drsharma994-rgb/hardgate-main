@@ -162,6 +162,15 @@ unreadable stay silent — fewer than 40 daily bars or a volume-deaf feed
 pullback does NOT false-fire: divergence needs price at a NEW 20-bar
 extreme, which a pullback by definition is not. The 20-bar windows are
 stated PRIORS; the ledger earns them a measured verdict.
+
+THE ADMISSION FLOOR (hg-v1399) — one measured expectancy bar at every
+admission seam (the class desks, the ticket claim, the PERFECT badge):
+stop ≥ 2% of entry, no fresh cross riding with the majority, the 1D cloud
+not against it, and a bare |2| majority only with 3 gates behind it. Read
+off the hg-v1160 replay walk (n=1953 settled, +0.086R expectancy on the
+kept cohort, both halves agree); fail-open on absent marks (hg-v989);
+held rows stay visible and record ticket:false. The composite, tmDirOf,
+the 2/4 conviction bars and the gate tally internals are untouched.
 ========================================================================= */
 (function(){
 'use strict';
@@ -3970,6 +3979,9 @@ function trendScore(rows1d, rows4h){
       if (isFinite(out.adx) && out.adx >= 25) out.comps.adxPt = sgn(trendSum);
     }
 
+    /* hg-v1398: adxPt stays inside this number so a recorded tmScore is
+       still the same five-leg sum. It does not create the side. tmDirOf
+       reads the four legs above, which can oppose each other. */
     out.score = out.comps.d1Trend + out.comps.d1Cross + out.comps.h4Cascade +
                 out.comps.cloud + out.comps.adxPt;
   }catch(e){
@@ -4187,9 +4199,71 @@ function tmRecordReads(r, dir){
    one rule (trendmxRowTier) that already caps a row at NEAR under every
    witness and the post-gate veto. The crown recorder (hg-v1039) claimed
    ticket:true on every 7/7 row the board itself showed as NEAR; both sites
-   read this now. */
+   read this now. hg-v1399: the ticket ALSO clears the admission floor — a
+   7/7 clean on a sub-2% stop or a fresh-cross/cloud-against read is not a
+   ticket the desk would mint on its own boards. */
 function tmTicketClaim(r, plan){
-  return trendmxRowTier(r, plan) === 'clean';
+  return trendmxRowTier(r, plan) === 'clean' && tmAdmissionFloor(r, plan).ok;
+}
+/* hg-v1399: THE ADMISSION FLOOR — the measured expectancy bar every admission
+   seam now shares. Read off the hg-v1160 replay walk (n=1953 settled, both
+   halves of the median-tISO split agree): the cohorts these four clauses
+   veto resolved −0.19…−0.25R in BOTH halves while the kept cohort improved
+   in both (combo B: avg −0.0473R → +0.038R, ~36.5% of admissions filtered;
+   an expectancy filter, win rate flat by design). The four clauses:
+     ① stopPct ≥ 2% of entry — the plan-geometry floor; a tighter stop is a
+       noise-catcher. FAILS OPEN when the plan never priced (no plan, no
+       entry/stop): a mark that never spoke vetoes nothing.
+     ② reads['tm:freshCross'] !== true — a fresh GOLDEN/DEATH cross riding
+       WITH the majority measured toxic both halves (direction-agnostic).
+     ③ reads['tm:cloud'] !== false — the 1D Ichimoku cloud AGAINST the
+       majority was the worst cluster on the tape.
+     ④ the 1D EMA(150) regime bar (hg-v1419) — price on the wrong side of
+       the 150-day EMA for the row's own majority measured toxic in BOTH
+       halves on the same replay (dropped n=37 at −0.166R standalone, n=27
+       at −0.215R on the floor-kept book, H1 −0.560 / H2 −0.117; every
+       flagged row had the EMA200 leg WITH it, so this read is not the
+       composite restated). FAILS OPEN when the row carries no 1d series,
+       fewer than 150 closes, or no finite EMA (hg-v989) — a fresh listing
+       under 150 daily bars is vetoed by nothing here.
+     ⑤ |composite| = 2 (a bare 2-of-4 majority) admits only with
+       gatesPassed ≥ 3 standing behind it; |≥3| rows are unaffected.
+   ②③ read the hg-v1159 leg marks through tmLegReads and FAIL OPEN on the
+   hg-v989 third state: a live row whose reads bag carries no fresh-cross or
+   cloud mark yet is NOT vetoed by that clause — absent is absent, never a
+   guessed false. Nothing here re-weights the composite, moves a majority
+   bar or touches the conviction 2/4 bars; it is a veto at the admission
+   seams only (trendmxLimitClasses, tmTicketClaim, trendmxPerfectState),
+   and every vetoed row stays visible and is recorded ticket:false — the
+   desk shows its vetoes (the hg-v1159 measurability rule). */
+function tmAdmissionFloor(r, plan){
+  var why = [];
+  if (!r) return { ok: false, why: ['noRow'] };
+  var dir = tmDirOf(r);
+  /* ① the stop-geometry floor — fail-open when no priced stop is in hand */
+  var pe = plan ? +plan.entry : NaN, ps = plan ? +plan.stop : NaN;
+  if (isFinite(pe) && pe > 0 && isFinite(ps) && ps > 0){
+    if (Math.abs(pe - ps) / pe * 100 < 2) why.push('stop<2%');
+  }
+  /* ②③ the fresh-cross / cloud leg marks — fail-open on the absent third state */
+  var legs = tmLegReads(r, dir);
+  if (legs['tm:freshCross'] === true) why.push('freshCross');
+  if (legs['tm:cloud'] === false) why.push('cloudAgainst');
+  /* ④ the 1D EMA(150) regime bar (hg-v1419) — fail-open when the row carries
+     no readable 1d series or no finite EMA: absent is absent, never a guess */
+  if (dir && Array.isArray(r.rows1d) && r.rows1d.length >= 150 && typeof ema === 'function'){
+    try{
+      var c1 = r.rows1d.map(function(x){ return +(x && x.c); });
+      var e150 = ema(c1, 150)[c1.length - 1], px1 = c1[c1.length - 1];
+      if (isFinite(e150) && isFinite(px1)
+          && ((dir === 'long' && px1 < e150) || (dir === 'short' && px1 > e150))) why.push('ema150Against');
+    }catch(e){ /* an unreadable tape abstains — the clause vetoes nothing it cannot read */ }
+  }
+  /* ⑤ the bare-majority floor — a |2| composite needs 3 gates with it */
+  var sc = Math.abs(+r.score);
+  var gp = (r.gate && isFinite(+r.gate.gatesPassed)) ? +r.gate.gatesPassed : 0;
+  if (!(sc >= 3) && gp < 3) why.push('bare|2|<3gates');
+  return { ok: why.length === 0, why: why };
 }
 /* hg-v1160: WHICH READS SEPARATE, ON THIS DESK'S OWN REPLAY. HG_TM_FACTOR_SEP
    is written by scripts/trendmx-factor-separation.mjs off the walk that
@@ -4208,19 +4282,55 @@ function tmTicketClaim(r, plan){
      hand-edit — generated literals write themselves (hg-v921). Every figure is
      read off backtest-trendmx-results.json; the guard re-runs the generator and fails on drift. */
   var HG_TM_FACTOR_SEP = {
-    artifact: "backtest-trendmx-results.json", n: 0, windows: 4, minSide: 20,
-    span: null,
-    measured: false,
+    artifact: "backtest-trendmx-results.json", n: 1952, windows: 4, minSide: 20,
+    span: ["2025-11-20","2026-10-16"],
+    measured: true,
     tab: "TRENDMX",
     forwardOnly: ["takerFlowWith","fundWith","postgate:veto"],
-    reads: [],
-    bound: "no bound: nothing walked",
-    note: "scripts/backtest-trendmx-results.json does not exist: the TREND MATRIX replay (scripts/backtest-trendmx.mjs) has not run on a machine that can fetch bars. Every read this desk records (hg-v1159) is unmeasured against its complement until it does; the forward ledger is the only evidence this desk has.",
+    reads: ["momWith","tm:adx","tm:adxStrong","tm:cascade","tm:cloud","tm:cross","tm:d1Trend","tm:freshCross","trendQualityWith","volWith"],
+    bound: "stop-first on a both-touch bar (the lower bound, hg-v918): 13 of 1952 settled rows touched both levels on one 4h bar; the other bound is not read here",
+    note: null,
     verdicts: [],
-    leans: [],
+    leans: ["geom:stopGe2"],
     inSampleVerdicts: [],
     rows: [
-
+      { f: "pop:clean7", g: "population", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "pop:ticket", g: "population", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "pop:held", g: "population", n: 254, win: 0.28, gross: 0.015, net: -0.035, outWin: 0.263, outNet: -0.049, q: "3/3/3", verdict: null },
+      { f: "pop:perfect", g: "population", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "pop:score5", g: "population", n: 506, win: 0.281, gross: 0.038, net: 0, outWin: 0.26, outNet: -0.063, q: "3/3/2", verdict: null },
+      { f: "pop:gates6", g: "population", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "pop:long", g: "population", n: 346, win: 0.251, gross: -0.081, net: -0.14, outWin: 0.268, outNet: -0.027, q: "2/2/2", verdict: null, thin: 1 },
+      { f: "pop:strong", g: "population", n: 1145, win: 0.276, gross: -0.001, net: -0.026, outWin: 0.25, outNet: -0.076, q: "3/3/3", verdict: null },
+      { f: "read:momWith=with", g: "read", n: 1727, win: 0.272, gross: -0.017, net: -0.055, outWin: 0.218, outNet: 0.015, q: "4/3/2", verdict: null },
+      { f: "read:momWith=against", g: "read", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "read:tm:adx=with", g: "read", n: 1187, win: 0.275, gross: 0.007, net: -0.029, outWin: 0.25, outNet: -0.074, q: "3/4/3", verdict: null },
+      { f: "read:tm:adx=against", g: "read", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "read:tm:adxStrong=with", g: "read", n: 1187, win: 0.275, gross: 0.007, net: -0.029, outWin: 0.25, outNet: -0.074, q: "3/4/3", verdict: null },
+      { f: "read:tm:adxStrong=against", g: "read", n: 765, win: 0.25, gross: -0.068, net: -0.074, outWin: 0.275, outNet: -0.029, q: "1/0/1", verdict: null },
+      { f: "read:tm:cascade=with", g: "read", n: 1105, win: 0.256, gross: -0.033, net: -0.046, outWin: 0.277, outNet: -0.047, q: "1/2/2", verdict: null },
+      { f: "read:tm:cascade=against", g: "read", n: 191, win: 0.241, gross: -0.146, net: -0.226, outWin: 0.268, outNet: -0.027, q: "2/2/2", verdict: null },
+      { f: "read:tm:cloud=with", g: "read", n: 1603, win: 0.274, gross: -0.011, net: -0.047, outWin: 0.223, outNet: -0.044, q: "3/2/2", verdict: null },
+      { f: "read:tm:cloud=against", g: "read", n: 37, win: 0.135, gross: -0.403, net: -0.394, outWin: 0.268, outNet: -0.04, q: "0/0/0", verdict: null, thin: 4 },
+      { f: "read:tm:cross=with", g: "read", n: 1795, win: 0.265, gross: -0.026, net: -0.049, outWin: 0.268, outNet: -0.017, q: "1/1/1", verdict: null, thin: 2 },
+      { f: "read:tm:cross=against", g: "read", n: 157, win: 0.268, gross: 0.019, net: -0.017, outWin: 0.265, outNet: -0.049, q: "1/1/1", verdict: null, thin: 2 },
+      { f: "read:tm:d1Trend=with", g: "read", n: 1952, win: 0.265, gross: -0.022, net: -0.047, outWin: null, outNet: null, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "read:tm:d1Trend=against", g: "read", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "read:tm:freshCross=with", g: "read", n: 88, win: 0.205, gross: -0.205, net: -0.249, outWin: 0.268, outNet: -0.037, q: "0/0/0", verdict: null, thin: 2 },
+      { f: "read:tm:freshCross=against", g: "read", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "read:trendQualityWith=with", g: "read", n: 212, win: 0.311, gross: 0.076, net: 0.055, outWin: 0.26, outNet: -0.059, q: "3/3/3", verdict: null },
+      { f: "read:trendQualityWith=against", g: "read", n: 103, win: 0.262, gross: 0.037, net: -0.004, outWin: 0.266, outNet: -0.049, q: "1/2/3", verdict: null },
+      { f: "read:volWith=with", g: "read", n: 1146, win: 0.277, gross: 0.012, net: -0.015, outWin: 0.249, outNet: -0.092, q: "3/3/3", verdict: null },
+      { f: "read:volWith=against", g: "read", n: 155, win: 0.297, gross: 0.019, net: -0.037, outWin: 0.263, outNet: -0.048, q: "3/3/3", verdict: null },
+      { f: "geom:limit", g: "geometry", n: 34, win: 0.176, gross: -0.206, net: -0.275, outWin: 0.267, outNet: -0.043, q: "0/0/0", verdict: null, thin: 4 },
+      { f: "geom:stopLt1", g: "geometry", n: 149, win: 0.336, gross: 0.014, net: -0.256, outWin: 0.26, outNet: -0.03, q: "3/2/1", verdict: null },
+      { f: "geom:stopGe2", g: "geometry", n: 1431, win: 0.257, gross: 0.004, net: 0.028, outWin: 0.288, outNet: -0.254, q: "2/2/4", verdict: null, lean: "better" },
+      { f: "geom:bothTouch", g: "geometry", n: 13, win: 0, gross: -1, net: -1.226, outWin: 0.267, outNet: -0.039, q: "0/0/0", verdict: null, thin: 4 },
+      { f: "session:ASIA 00-08", g: "session", n: 683, win: 0.25, gross: -0.035, net: -0.037, outWin: 0.273, outNet: -0.052, q: "1/3/3", verdict: null },
+      { f: "session:LONDON 08-13", g: "session", n: 500, win: 0.264, gross: -0.046, net: -0.08, outWin: 0.266, outNet: -0.035, q: "3/2/2", verdict: null },
+      { f: "session:OVERLAP 13-17", g: "session", n: 461, win: 0.295, gross: 0.048, net: 0.01, outWin: 0.256, outNet: -0.064, q: "3/2/2", verdict: null },
+      { f: "session:NY PM 17-21", g: "session", n: 308, win: 0.256, gross: -0.061, net: -0.1, outWin: 0.267, outNet: -0.037, q: "2/2/2", verdict: null },
+      { f: "session:LATE 21-24", g: "session", n: 0, win: null, gross: null, net: null, outWin: 0.265, outNet: -0.047, q: "0/0/0", verdict: null, thin: 4, degenerate: true }
     ]
   };
   /* --- END GENERATED HG_TM_FACTOR_SEP --- */
@@ -4299,12 +4409,31 @@ var TM_STOP_ATR = 1.5, TM_T1_R = 2, TM_T2_R = 3.5, TM_ATR_LEN = 14;
 var TM_MAJORITY = 2;   // |composite| >= 2 = the row's own majority signal
 var TM_MIN_RR = (typeof W.CG_SWING_RR_MIN === 'number') ? W.CG_SWING_RR_MIN : 2.0;
 
-/* majority direction from the row's own composite score; an explicit
-   lowercase/uppercase dir always wins over the score. */
+/* majority direction. An explicit dir always wins.
+   hg-v1398: when all four independent legs are numbers, the side is their
+   sum, not the five-leg score. ADX cannot oppose; it only echoes that sum,
+   and one real leg plus the echo used to clear |score| >= 2. The stored
+   score still includes the echo. A row with no comps, or with a comps bag
+   that does not carry the four legs, still reads the score — that is the
+   number other desks already stored. */
+function tmIndependentSum(inp){
+  var c = inp && inp.comps;
+  if (!c || typeof c !== 'object') return null;
+  var keys = ['d1Trend', 'd1Cross', 'h4Cascade', 'cloud'];
+  var s = 0, i, v;
+  for (i = 0; i < 4; i++){
+    v = c[keys[i]];
+    if (typeof v !== 'number' || !isFinite(v)) return null;
+    s += v;
+  }
+  return s;
+}
 function tmDirOf(inp){
   var dir = (inp && typeof inp.dir === 'string') ? inp.dir.toLowerCase() : null;
   if (dir === 'long' || dir === 'short') return dir;
-  var sc = (inp && typeof inp.score === 'number' && isFinite(inp.score)) ? inp.score : 0;
+  var indep = tmIndependentSum(inp);
+  var sc = (indep !== null) ? indep
+    : ((inp && typeof inp.score === 'number' && isFinite(inp.score)) ? inp.score : 0);
   if (sc >= TM_MAJORITY) return 'long';
   if (sc <= -TM_MAJORITY) return 'short';
   return null;
@@ -4724,8 +4853,12 @@ function trendmxCardStack(r, dir){
 
 function trendmxPlanBlock(r){
   var dir = tmDirOf(r);
-  if (!dir)
+  if (!dir){
+    var indep = tmIndependentSum(r);
+    if (indep !== null && r && typeof r.score === 'number' && isFinite(r.score) && Math.abs(r.score) >= TM_MAJORITY)
+      return '<div class="plan">No majority direction on this row — one leg plus the ADX echo is not a side — no levels.</div>';
     return '<div class="plan">No majority direction on this row (|score| &lt; ' + TM_MAJORITY + ') — no levels.</div>';
+  }
   if (dir === 'long' && tmAltLongBlockedByBtc(r))
     return '<div class="plan">No long. BTC structure is down, so alt longs are stood down.</div>';
   var s = trendmxPlan(Object.assign({}, r, { dir: dir }));
@@ -7102,7 +7235,7 @@ function trendmxCrossCardHTML(g){
     + '<span class="stamp ' + (isDeath ? 'bad' : 'pass') + '">' + (isDeath ? 'SHORT' : 'LONG') + '</span>'
     + tmSmcChip(g)
     + '</div>'
-    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.note || '') + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#94a3b8">' + escH(g.note || '') + '</div>'
     + '<div style="font-size:22px;font-weight:800;color:' + col + ';margin-top:6px">' + pxFmt(g.entry) + '</div>'
     + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
     + tradeBtn + bookBtn
@@ -7171,13 +7304,13 @@ function trendmxCandleCardHTML(g){
     ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: 'trendmx-candle' })
     : '';
   var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
-  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(180,83,9,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:#fff">'
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(180,83,9,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:#1e293b">'
     + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
     + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + '</span>'
     + '<span class="stamp">CANDLE</span>'
     + '<span class="stamp ' + (isShort ? 'bad' : 'pass') + '">' + (isShort ? 'SHORT' : 'LONG') + '</span>'
     + '</div>'
-    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.candleNote || '') + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#94a3b8">' + escH(g.candleNote || '') + '</div>'
     + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
     + tradeBtn
     + '</div>';
@@ -7235,7 +7368,7 @@ function trendmxLimitCardHTML(item){
   var clsStamp = (r.gate && r.gate.clean7)
     ? '<span class="stamp" style="margin-left:6px">GATE-CLEAN 7/7</span>'
     : '<span class="stamp" style="margin-left:6px">CONVICTION ' + (r.score > 0 ? '+' : '') + r.score + '/5</span>';
-  return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
+  return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#1e293b">'
     + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + perfectStamp + clsStamp + stHtml + tmSmcChip(r)
     + trendmxFlowChipHtml(r)   /* hg-v1012: the flow verdict the scan stamped — reads the stamp, never recomputes */
     + trendmxMomChipHtml(r)    /* hg-v1019: the momentum witness's stamp — same read-the-stamp seam */
@@ -7457,6 +7590,16 @@ function trendmxPerfectState(r){
   if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
     try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
   }
+  /* hg-v1399: PERFECT never contradicts the admission floor — a fresh cross
+     riding with the majority or the 1D cloud against it disqualifies the
+     badge, and the stop-≥2% geometry bar applies when a priced plan is in
+     hand (r.plan); absent marks abstain (hg-v989), so a row the marks have
+     not landed on yet is never disqualified here. The |composite|/gates
+     clause of the floor is already implied (PERFECT is |5| + 7/7). Chop is
+     deliberately NOT added: the hg-v1160 replay measured chop-flagged rows
+     positive in H1 — a veto there would veto winners. Annotation-only, as
+     before: nothing here moves a tier, a plan or a desk. */
+  if (!tmAdmissionFloor(r, r.plan).ok) return false;
   return true;
 }
 
@@ -7550,7 +7693,7 @@ function trendmxLimitClasses(rows){
      witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
      · volume hg-v1020). */
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
-              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 } },
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0 } },
               /* hg-v1154: the post-gate-vetoed rows, kept so they are RECORDED (ticket:false) and never shown */
               heldPostGate: [],
               /* hg-v1159: the rows the four witnesses held off, kept for the same reason (heldBy names the witness) */
@@ -7629,6 +7772,22 @@ function trendmxLimitClasses(rows){
       if (isClean){ out.heldClean++; out.heldWhy.clean.postgate++; }
       else { out.heldConv++; out.heldWhy.conv.postgate++; }
       out.heldPostGate.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean });
+      continue;
+    }
+    /* hg-v1399: THE ADMISSION FLOOR — the measured expectancy bar (tmAdmissionFloor,
+       hg-v1160 replay, both halves agree): stop under 2% of entry, a fresh cross
+       riding with the majority, the 1D cloud against it, or a bare |2| majority
+       without 3 gates. A floored row is held off BOTH class desks exactly like a
+       witness-held row — counted and named under its own heldWhy key, kept with
+       its plan so the record below carries it ticket:false, still painting in the
+       matrix. Absent marks abstain (hg-v989): a live row the marks have not landed
+       on yet is never vetoed here. The composite, the majority bar and the
+       conviction 2/4 bars are untouched — this is a veto, not a re-weight. */
+    var tmFloor = tmAdmissionFloor(r, plan);
+    if (!tmFloor.ok){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.floor++; }
+      else { out.heldConv++; out.heldWhy.conv.floor++; }
+      out.heldWitness.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean, heldBy: 'floor', floorWhy: tmFloor.why });
       continue;
     }
     var item = { row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir) };
@@ -7711,6 +7870,7 @@ function trendmxHeldBits(held, why){
   if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
   if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
   if (w.postgate) bits.push('the SWING post-gate rule refused the row — flow trap, BTC relative strength or stale momentum on the free feeds (hg-v1154); recorded, not shown');
+  if (w.floor) bits.push('the admission floor refused the row — stop under 2% of entry, a fresh cross with the majority, the 1D cloud against it, or a bare |2| majority without 3 gates (hg-v1399); recorded, not shown');
   if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   return bits;
 }
@@ -7734,6 +7894,7 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     if (w2.vol) tags.push('volume trend against');
     if (w2.fund) tags.push('fundamental headwind');
     if (w2.postgate) tags.push('SWING post-gate rule refused the row (recorded, not shown; hg-v1154)');
+    if (w2.floor) tags.push('admission floor (stop ≥2% · no fresh cross · cloud with · |2| needs 3 gates; hg-v1399)');
     if (!tags.length) tags.push('taker flow against');
     heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }
@@ -8482,6 +8643,16 @@ function trendmxCrownPanelHTML(state){
         }
       }
     }catch(eMe){ }
+    /* hg-v1430: advisory AI review on the crown, mirrors the gold tabs */
+    try{
+      if (crown && plan && typeof W.hgGoldAiReviewRun === 'function'){
+        var _tmSetup = { strategy: 'TrendMatrix', dir: dir, sym: (crown.sym || crown.symbol || 'CRYPTO'),
+          entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2, rr: plan.rr,
+          grade: crown.grade || crown.tier || '—', score: crown.score, maxScore: 5,
+          freeReads: crown.perfectReads || null };
+        setTimeout(function(){ try { var c = document.querySelector('[data-r="crown"]'); if (c) W.hgGoldAiReviewRun(_tmSetup, {}, c); } catch(e){} }, 0);
+      }
+    }catch(e){}
     return html;
   }catch(e){ return ''; }
 }
@@ -8519,9 +8690,6 @@ function tmStructureDir(rows){
    five). All four already exist in pinemath.js and were read by nothing on
    this desk. Record-only like the five; nothing scores on them. */
 function trendmxPineMarks(rows){
-  /* hg-v1295: thirteen ports — the ten hg-v1293 plus Supertrend, MACD and
-     CCI (pinemath.js). Record-only three-state: 'long' / 'short' / null.
-     The ONE HOME (hg-v949) OMNIBTC's hgObtcPineMarks delegates to. */
   var out = { lor: null, ht: null, sqz: null, smf: null, msb: null, cipher: null, rfilter: null, nwenv: null, wavwap: null, smc: null, supertrend: null, macd: null, cci: null };
   try{
     if (!Array.isArray(rows) || rows.length < 30) return out;
@@ -8535,10 +8703,14 @@ function trendmxPineMarks(rows){
     if (typeof W.pineNwEnvelope === 'function'){ var nw = W.pineNwEnvelope(rows, {}); if (nw && nw.dir) out.nwenv = String(nw.dir).toLowerCase(); }
     if (typeof W.pineWeeklyAvwap === 'function'){ var wv = W.pineWeeklyAvwap(rows, {}); if (wv && wv.dir) out.wavwap = String(wv.dir).toLowerCase(); }
     if (typeof W.pineSmcCore === 'function'){ var sc = W.pineSmcCore(rows, { includeContext: true }); if (sc && sc.dir) out.smc = String(sc.dir).toLowerCase(); }
-    /* hg-v1295: the three added ports — a port that does not fire, is not
-       loaded, or throws reads null (NOT MEASURED), never a guessed side. */
+    /* hg-v1295 (restored hg-v1403): three more bar-only Pine state readers.
+       Record-only like the ten above; the forward ledger measures each
+       separation out of sample. Supertrend/MACD/CCI are distinct from
+       HalfTrend/Squeeze/Cipher respectively (ATR-band flip vs
+       amplitude-pivot flip, signal-line cross vs BB-in-KC release,
+       extreme re-entry vs WaveTrend). */
     if (typeof W.pineSupertrend === 'function'){ var st = W.pineSupertrend(rows, {}); if (st && st.dir) out.supertrend = String(st.dir).toLowerCase(); }
-    if (typeof W.pineMacd === 'function'){ var mc = W.pineMacd(rows, {}); if (mc && mc.dir) out.macd = String(mc.dir).toLowerCase(); }
+    if (typeof W.pineMacd === 'function'){ var md = W.pineMacd(rows, {}); if (md && md.dir) out.macd = String(md.dir).toLowerCase(); }
     if (typeof W.pineCci === 'function'){ var cc = W.pineCci(rows, {}); if (cc && cc.dir) out.cci = String(cc.dir).toLowerCase(); }
   }catch(e){ }
   return out;
@@ -9517,6 +9689,7 @@ W.tmCvdSlope = tmCvdSlope;
 W.tm15Confirm = tm15Confirm;
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
+W.tmIndependentSum = tmIndependentSum;
 W.trendmxGateEval = trendmxGateEval;
 W.trendmxClassify = trendmxClassify;
 W.hgTrendMatrixAlign = hgTrendMatrixAlign;   /* hg-v995 */
@@ -9566,6 +9739,7 @@ W.tmCandleRead = tmCandleRead;             /* hg-v1336: the one call into hgCfCa
 W.tmCandleMarks = tmCandleMarks;           /* hg-v1336: the three-state marks tmRecordReads folds into each record */
 W.tmCandleChipHtml = tmCandleChipHtml;     /* hg-v1336: the pattern chip the matrix row paints beside the gate chip */
 W.tmTicketClaim = tmTicketClaim;           /* hg-v1159: the ticket claim is the board's clean tier */
+W.tmAdmissionFloor = tmAdmissionFloor;     /* hg-v1399: the measured admission floor every seam shares */
 W.tmValidSetup = tmValidSetup;             /* hg-v1160: the replay harness asks the desk's own plan validity rule */
 W.HG_TM_FACTOR_SEP = HG_TM_FACTOR_SEP;     /* hg-v1160: read by the panel, the drift guard and nothing else */
 W.tmFactorSepHtml = tmFactorSepHtml;       /* hg-v1160: the replay panel, measured or not */
@@ -9588,6 +9762,7 @@ W.trendmxCandleDeskHTML = trendmxCandleDeskHTML; /* hg-v1337 */
 W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
+W.trendmxPineMarks = trendmxPineMarks;     /* hg-v1399: the 13 record-only Pine ports, exported (the pin was always the mark home; the export was missing) */
 W.trendmxCrossState = function(){
   try{
     if (!__tmScanSnap) return null;
@@ -9619,10 +9794,6 @@ W.trendmxState = function(){
 W.trendmxScanRows = function(){
   try{ return (__tmScanSnap && Array.isArray(__tmScanSnap.rows) && __tmScanSnap.rows.length) ? __tmScanSnap.rows : null; }catch(e){ return null; }
 };
-/* hg-v1293: export the one home for the crypto Pine marks (defined in the
-   src-9 part) so OMNIBTC's record-only mark helper can delegate (hg-v949)
-   instead of carrying a second port definition. */
-W.trendmxPineMarks = trendmxPineMarks;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'trendmx', label: 'TREND MATRIX', mount: mountTrendMatrix, refresh: refreshTrendMatrix });
 W.HG_warmups = W.HG_warmups || [];

@@ -76,30 +76,36 @@ const DAY = Date.UTC(2024, 0, 15, 0, 0, 0) / 1000;   // Monday 00:00 GMT
 /* the goldscalp test's own composite-long construction: bullish sweep +
    bullish RSI divergence -> LONG candidates (sweep edge-SUPPRESSED, rsidiv
    edge-DEMOTED on the current measured-edge bake) */
+/* hg-v1439: tape re-derived. The old tape's long plans (sweep / rsidiv off a
+   deep swept low) are ceiling-bound unsnapped — stop structure >> 3.5xATR
+   away — and the hg-v1439 R:R-unmeasured reject (measured -0.283R fresh, both
+   halves, three windows) drops them, so that tape mints NOTHING and the
+   section-3 premise (a demoted-only LONG board with the sweep kind withheld
+   in the rejected channel) could not be read off it. This tape is the
+   survivor shape: a real RSI-divergence long whose pivot structure sits
+   INSIDE the ceiling (rsidiv stopAtr ~2.1) — it mints demoted longs
+   (rsidiv FOLKLORE + EDGE DEMOTE, hvn EDGE DEMOTE) and its sweep plan is
+   rejected with a named V2-gate reason, so every premise leg still fires. */
+/* hg-v1439: tape re-derived. The old tape's long plans (sweep / rsidiv off a
+   deep swept low) are ceiling-bound unsnapped — stop structure >> 3.5xATR
+   away — and the hg-v1439 R:R-unmeasured reject (measured -0.283R fresh, both
+   halves, three windows) drops them, so that tape mints NOTHING and the
+   section-3 premise (a demoted-only LONG board with the sweep kind withheld
+   in the rejected channel) could not be read off it. This tape is the
+   survivor shape: a real RSI-divergence long whose pivot structure sits
+   INSIDE the ceiling and clear of the 0.16%-of-entry cost bar — it mints
+   demoted longs (rsidiv FOLKLORE + EDGE DEMOTE, p9volbar EDGE DEMOTE) and
+   its sweep plan is rejected with a named V2-gate reason, so every premise
+   leg still fires. Probe-verified at the PINNED clock. */
 function compLongRows(){
   const rows = [];
   const push = (i, o, h, l, c, v) => rows.push({ t: DAY + i * 900, o, h, l, c, v: (v === undefined ? 1000 : v) });
-  let c = 2320;
-  for (let i = 0; i < 60; i++){ const o = c; c -= 0.2; push(i, o, Math.max(o, c) + 0.5, Math.min(o, c) - 0.5, c); }
-  for (let i = 60; i < 96; i++){
-    const o = c; c = 2306 + ((i % 4) - 1.5) * 1.2;
-    push(i, o, Math.max(o, c) + 0.7, Math.min(o, c) - 0.9, c, 900);
-  }
-  for (let i = 96; i < 106; i++){ const o = c; c = o - 1.0; push(i, o, o + 0.4, c - 0.5, c, 1100); }
-  push(106, 2296, 2296.5, 2293, 2294, 1500);
-  push(107, 2294, 2298, 2293.8, 2297, 1200);
-  push(108, 2297, 2300, 2296.5, 2299, 1200);
-  push(109, 2299, 2299.6, 2288, 2297, 4000);
-  push(110, 2297, 2299.5, 2296.4, 2298.5, 1300);
-  push(111, 2298.5, 2300.6, 2298, 2300, 1300);
-  push(112, 2300, 2301.6, 2299.5, 2301, 1200);
-  push(113, 2301, 2302.6, 2300.5, 2302, 1200);
-  push(114, 2302, 2303, 2301.5, 2302.5, 1200);
-  push(115, 2302.5, 2305.5, 2302, 2305, 2600);
-  push(116, 2305, 2306.5, 2303.5, 2306, 1500);
-  push(117, 2306, 2306.6, 2304.6, 2305.5, 1100);
-  push(118, 2305.5, 2306.4, 2304.8, 2306, 1100);
-  push(119, 2306, 2306.5, 2305, 2305.8, 1100);
+  let c = 2300;
+  for (let i = 0; i < 70; i++){ const o = c; c = o + 0.6; push(i, o, Math.max(o, c) + 0.2, Math.min(o, c) - 0.2, c); }
+  for (let i = 70; i < 82; i++){ const o = c; c = o - 3.6; push(i, o, Math.max(o, c) + 0.25, Math.min(o, c) - 0.25, c, 3000); }
+  for (let i = 82; i < 89; i++){ const o = c; c = o + 2.2; push(i, o, Math.max(o, c) + 0.2, Math.min(o, c) - 0.2, c); }
+  for (let i = 89; i < 98; i++){ const o = c; c = o - 1.8; push(i, o, Math.max(o, c) + 0.18, Math.min(o, c) - 0.18, c, 2000); }
+  for (let i = 98; i < 106; i++){ const o = c; c = o + 0.6; push(i, o, Math.max(o, c) + 0.2, Math.min(o, c) - 0.2, c, 1500); }
   return rows;
 }
 function cloneRows(rows){ return rows.map(r => ({ t: r.t, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v })); }
@@ -316,9 +322,18 @@ console.log('== 3) seeded scans: demoted-only side, direction honesty, crowning 
 
   /* ---- 3c) crowning: lead-eligible first; vetoed/wrong-side/demoted never crowned;
               AGAINST DESK TAPE stamp; forward ledger = crowned picks only ---- */
+  /* hg-v1439: the 4h leg can no longer be the divergence tape itself — read
+     as a 4h stack it is flush-dominated (bearish), and the COUNTER-TREND
+     gate removes the tape's longs before the demoted-only SCALP header can
+     be exercised. A benign bullish 4h stack keeps the long board (probe:
+     rsidiv + p9volbar still paint demoted under a bull stack). */
+  const bull4h = (() => { const r = []; let px = 2100;
+    for (let i = 0; i < 220; i++){ const o = px; px = o + 0.6;
+      r.push({ t: DAY - 220 * 4 * 3600 + i * 4 * 3600, o, h: Math.max(o, px) + 0.3, l: Math.min(o, px) - 0.3, c: px, v: 1000 }); }
+    return r; })();
   C.getGoldCandles = async (tf) =>
     (tf === '15m') ? { rows: cloneRows(baseRows), source: 'binance-xau' }
-    : (tf === '4h') ? { rows: cloneRows(baseRows), source: 'binance-xau' }
+    : (tf === '4h') ? { rows: cloneRows(bull4h), source: 'binance-xau' }
     : { rows: [], source: 'binance-xau' };
   const goodSwing = { dir: 'long', strategy: 'WEEKLY RANGE BREAKOUT', stratKey: 'weekly', grade: 'A',
     entry: 2300, stop: 2280, t1: 2340, t2: 2360, rr: 2, rr2: 3, zone: { lo: 2290, hi: 2310 },

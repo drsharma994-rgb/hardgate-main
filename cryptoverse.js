@@ -538,6 +538,35 @@ function cvEvaluate(inp){
     mlScore: ml.smoothed, horizonBars: CV_HORIZON,
     orderType: dir === 'long' ? 'BUY' : 'SELL'
   };
+  /* hg-v1434: Wave B admission floor, evaluated on the same closed 15m tape
+     the kNN scored. All four clauses adopted (dropped cohorts negative in
+     BOTH halves: costR -0.385R/-0.289R, ER(20) -0.330R/-0.261R, 1h-EMA50
+     -0.664R/-0.302R, volZ -0.504R/-0.279R) — and the kept book stays red, so
+     the tab also carries the measured banner. Demote-not-hide: the card keeps
+     its levels, the ledger records ticket=false. */
+  try{
+    if (out.ok && out.setup && typeof W.hgCryptoSinglesFloor === 'function'){
+      var cvFl = W.hgCryptoSinglesFloor('cryptoverse', out.setup, rows15);
+      if (cvFl){
+        out.demote = !!cvFl.demote;
+        out.floorReasons = cvFl.reasons || [];
+        out.floorMarks = cvFl.marks || [];
+        out.floorAbstained = cvFl.abstained || [];
+      }
+    }
+  }catch(eFl){}
+  try{
+    if (out.setup && typeof W.hgCryptoSigns === 'function' && W.HG_CRYPTO_SIGNS !== false){
+      var cvSg = W.hgCryptoSigns(out.setup.dir, (inp && (inp.sym || inp.symbol)) || '', rows15);
+      if (cvSg){
+        out.signsLine = cvSg.line || '';
+        if (cvSg.why){
+          out.demote = true;
+          out.floorReasons = (out.floorReasons || []).concat([cvSg.why]);
+        }
+      }
+    }
+  }catch(eSg){}
   return out;
 }
 
@@ -663,8 +692,9 @@ function cvFwdRows(setups){
       barT: (s.bar && isFinite(+s.bar.t) && +s.bar.t > 0) ? +s.bar.t : undefined,
       mechanic: ('CVERSE-' + String(p.kind || 'SWEEP') + '@v' + CV_LABEL_V).toUpperCase().slice(0, 28),
       /* every card this tab shows cleared all three gates, so they are one
-         population; there is no weaker tier to split against yet */
-      ticket: true,
+         population; the hg-v1434 admission floor splits it -- a floored card
+         keeps its levels and records ticket=false (demote-not-hide) */
+      ticket: !s.demote,
       /* hg-v984: the macro read the card shows, or NOT RECORDED */
       macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined,
       /* hg-v985: the funding the card read, or NOT RECORDED. Only the RATE is
@@ -706,17 +736,17 @@ W.HG_CRYPTOVERSE_RULE = {
 var CV_CSS = ''
   + '.cv-wrap{padding:10px;font-family:system-ui,-apple-system,sans-serif}'
   + '.cv-hdr{font-size:15px;font-weight:800;letter-spacing:.04em;margin:0 0 4px}'
-  + '.cv-hdr span{font-weight:400;font-size:10px;color:#64748B;letter-spacing:0}'
-  + '.cv-stat{font-size:10px;color:#64748B;margin-left:6px}'
+  + '.cv-hdr span{font-weight:400;font-size:10px;color:#94a3b8;letter-spacing:0}'
+  + '.cv-stat{font-size:10px;color:#94a3b8;margin-left:6px}'
   + '.cv-bar{height:3px;background:#E2E8F0;border-radius:2px;overflow:hidden;margin:6px 0}'
   + '.cv-bar-fill{height:100%;background:#0EA5E9;width:0%;transition:width .2s}'
-  + '.cv-card{border:1px solid #E2E8F0;border-radius:8px;margin:8px 0;overflow:hidden;background:#fff}'
+  + '.cv-card{border:1px solid #E2E8F0;border-radius:8px;margin:8px 0;overflow:hidden;background:#1e293b}'
   + '.cv-long{border-left:3px solid #16A34A}.cv-short{border-left:3px solid #DC2626}'
   + '.cv-head{padding:8px 10px;cursor:pointer;display:flex;flex-wrap:wrap;gap:6px;align-items:center}'
   + '.cv-sym{font-weight:800;font-size:12px}'
   + '.cv-chip{font-size:9px;font-weight:700;letter-spacing:.06em;padding:2px 5px;border-radius:3px;background:#F1F5F9;color:#475569}'
   + '.cv-dir-long{background:#DCFCE7;color:#166534}.cv-dir-short{background:#FEE2E2;color:#991B1B}'
-  + '.cv-meta{flex-basis:100%;font-size:10px;color:#64748B}'
+  + '.cv-meta{flex-basis:100%;font-size:10px;color:#94a3b8}'
   + '.cv-body{display:none;padding:0 10px 10px}.cv-body.cv-show{display:block}'
   + '.cv-lv{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}'
   + '.cv-lv div{border:1px solid #E2E8F0;border-radius:5px;padding:5px;text-align:center}'
@@ -764,6 +794,7 @@ function cvCardHTML(row, idx){
     + s.dir.toUpperCase() + '</span>';
   h += '<span class="cv-chip">' + esc(s.kind) + '</span>';
   h += '<span class="cv-chip">RECORD ONLY</span>';
+  if (row.demote) h += '<span class="cv-chip" style="background:#FEE2E2;color:#991B1B">STANDS ASIDE</span>';   /* hg-v1434 */
   h += cvMacroChipHTML(row);   /* hg-v984 */
   h += cvFundingChipHTML(row);   /* hg-v985 */
   h += '<span class="cv-meta">entry ' + fmt(s.entry) + ' · SL ' + fmt(s.stop)
@@ -784,6 +815,11 @@ function cvCardHTML(row, idx){
   h += cvLedgerHTML(row.ledger);
   h += cvMacroNoteHTML(row);   /* hg-v984 */
   h += cvFundingNoteHTML(row);   /* hg-v985 */
+  if (row.signsLine) h += '<div class="cv-note"><b>SIGNS.</b> ' + esc(row.signsLine) + '</div>';
+  if ((row.floorReasons && row.floorReasons.length) || (row.floorMarks && row.floorMarks.length))
+    h += '<div class="cv-note"><b>' + (row.demote ? 'STANDS ASIDE — hg-v1434 admission floor.' : 'FLOOR MARK — hg-v1434.') + '</b> '
+      + esc((row.floorReasons || []).concat(row.floorMarks || []).join(' · '))
+      + ' The setup keeps its levels and records ticket=false so the forward ledger prices this cohort.</div>';   /* hg-v1434 */
   h += '<div class="cv-note"><b>WHAT THIS DOES AND DOES NOT CLAIM.</b> No win rate is asserted. '
     + 'At ' + s.rr1 + 'R the trade only has to be right '
     + Math.round(s.breakeven * 100) + '% of the time to break even before costs, '
@@ -843,6 +879,7 @@ function cvCoverageHTML(run){
 function renderCards(rows, run){
   if (!__ui || !__ui.cards) return;
   var h = '';
+  try{ if (typeof W.hgCryptoSinglesBannerHtml === 'function') h += W.hgCryptoSinglesBannerHtml('cryptoverse'); }catch(eB){}   /* hg-v1434 */
   h += cvCoverageHTML(run);
   if (!rows || !rows.length){
     __ui.cards.innerHTML = h + cvEmptyHTML(run);
@@ -901,7 +938,7 @@ async function runScan(ui){
           : { rows: (await fetchKl(item, '1h', KL_1H)) || [], ok: true, reason: null };
         var closed1h = cvClosedRows(got1h.rows || [], 3600, now);
 
-        var res = cvEvaluate({ rows15: closed15, rows1h: closed1h, venueCost: costFor(item) });
+        var res = cvEvaluate({ rows15: closed15, rows1h: closed1h, sym: item.sym, venueCost: costFor(item) });
         if (!res.ok){
           var stopped = 'other';
           for (var g = 0; g < res.ledger.length; g++){
@@ -914,6 +951,9 @@ async function runScan(ui){
         rows.push({ sym: item.sym, label: item.sym, exchange: item.exchange,
                     bar: res.bar, price: res.price, setup: res.setup,
                     ledger: res.ledger, webhook: cvWebhook(item, res),
+                    demote: !!res.demote, floorReasons: res.floorReasons || [],
+                    floorMarks: res.floorMarks || [], floorAbstained: res.floorAbstained || [],
+                    signsLine: res.signsLine || '',
                     macro: cvMacroMark(item.sym, res.setup.dir),
                     funding: cvFundingMark(item, res.setup.dir) });
         setStat('scanned ' + scanned + '/' + items.length + ' · ' + rows.length + ' setup(s) so far…');

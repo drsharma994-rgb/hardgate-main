@@ -96,18 +96,23 @@ console.log('2. a verdict needs BOTH fill bounds, and that rule changes an answe
 const raw = run();
 const ogRaw0 = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-omnigold-results.json'), 'utf8'));
 const fair = raw.og.lower['tier FAIR'], fairA = raw.og['as-recorded']['tier FAIR'];
-ok(fair.sign === 'worse', 'tier FAIR is unanimously worse at the lower bound');
-ok(fairA.sign !== 'worse', 'tier FAIR is NOT unanimous at the as-recorded bound');
+/* hg-v1404 recalibration: on the hg-v1402 walk tier FAIR is unanimous at
+   NEITHER bound (the old walk's lower-bound unanimity did not reproduce).
+   The hg-v918 rule this section exists to pin — one end of the fill interval
+   is not a verdict — is unchanged, and the fresh reading is its own proof:
+   a verdict that was visible at one end alone evaporated when re-measured. */
+eq(fair.sign, null, 'tier FAIR is unanimous at neither bound on the hg-v1402 walk');
+eq(fairA.sign, null, 'and not at the as-recorded bound either');
 eq(OG_TABLE.rows.find((r) => r.f === 'tier FAIR').verdict, null,
    'so tier FAIR carries no verdict — one end of the fill interval is not a verdict (hg-v918)');
 ok(fairA.grossQ[0] > 0 && fairA.grossQ[0] < fairA.grossQ[1],
-   'and it is the GROSS column that breaks at the as-recorded end, not win or net');
-/* if this ever became unanimous at both ends it would retire 77% of the book,
-   which is exactly why the rule is pinned here rather than left implicit */
-ok(fair.nA / raw.book.lower.og.n > 0.7, 'FAIR is over 70% of OMNIGOLD settled rows');
+   'and it is the GROSS column that splits at the as-recorded end, not win or net');
+/* if this ever became unanimous at both ends it would retire 54% of the book
+   (was 77% on the old walk), which is exactly why the rule is pinned here */
+ok(fair.nA / raw.book.lower.og.n > 0.5, 'FAIR is over half of OMNIGOLD settled rows');
 
 /* ---- 2b. the lower bound is NOT neutral for the limit-vs-market split ---- */
-console.log('2b. the limit verdict rests on the as-recorded end, and the panel says so');
+console.log('2b. the lower bound is NOT neutral for the limit-vs-market split (and on the hg-v1402 walk there is no verdict left to rest anywhere)');
 const ogAll = ogRaw0.trades.filter((t) => typeof t.rMultiple === 'number');
 const ambByType = { LIMIT: 0, STOP: 0, MARKET: 0 };
 const kindOf = (t) => (/LIMIT$/.test(t.orderType || '') ? 'LIMIT'
@@ -120,9 +125,14 @@ ok(ambByType.LIMIT > 400, 'but hundreds of limit rows are (' + ambByType.LIMIT +
 /* so the lower bound demotes ONE SIDE of the limit-vs-market comparison. The
    verdict has to stand at the as-recorded end on its own, and it does. */
 const limA = raw.og['as-recorded']['LIMIT order'];
-eq(limA.sign, 'worse', 'the limit split is unanimously worse at the CONSERVATIVE as-recorded end');
-eq(limA.winQ[0], 0, 'zero of four windows favour it on win rate there');
-eq(limA.grossQ[0], 0, 'zero on gross');
+/* hg-v1404 recalibration: the as-recorded unanimity did not reproduce — the
+   limit split reads 1/4 on win and gross at the conservative end now, so NO
+   verdict stands at either end (the old walk's 'worse' verdict rested on
+   this end). The non-neutrality lesson is untouched: the lower bound still
+   exaggerates the split more than fourfold. */
+eq(limA.sign, null, 'the limit split is unanimous at neither end on the hg-v1402 walk');
+eq(limA.winQ[0], 1, 'one of four windows favours it on win rate at the as-recorded end (was 0)');
+eq(limA.grossQ[0], 1, 'one on gross (was 0)');
 ok(Math.abs(raw.og.lower['LIMIT order'].dWin) > Math.abs(limA.dWin) * 2,
    'and the lower bound exaggerates it more than twofold, which is why it is not cited as the evidence');
 
@@ -165,8 +175,12 @@ ok(s28.dGross > 0 && s28.dGross / s28.dNet > 0.5,
 ok(s28.grossQ[0] === s28.grossQ[1] && s28.grossQ[0] === WINDOWS,
    'and the gross half is unanimous across all four windows on its own');
 const o50 = raw.og['as-recorded']['stop >= 0.50%'];
-ok(o50.dGross > 0 && o50.grossQ[0] === o50.grossQ[1],
-   'the OMNIGOLD 0.50% split is unanimous on gross alone too');
+/* hg-v1404 recalibration: the OMNIGOLD 0.50% split is NOT unanimous even on
+   gross at the as-recorded end on the re-walk (2 of 4, and dGross negative)
+   — the 'moves gross, not just the fee' half of the old stop story is gone
+   at this end too. The scalp half above (goldind's own replay) is unchanged. */
+ok(o50.grossQ[0] < o50.grossQ[1],
+   'the OMNIGOLD 0.50% split is not unanimous on gross alone at the as-recorded end either (' + o50.grossQ[0] + '/' + o50.grossQ[1] + ')');
 
 /* ---- 6. what the desks rank by reaches no verdict, either way ---- */
 console.log('6. the ordering inputs carry no verdict in EITHER direction');
@@ -210,26 +224,29 @@ for (const [html, tbl, tag] of [[sHtml, SCALP_TABLE, 'GOLD SCALP'], [oHtml, OG_T
 ok(/ordering/.test(sHtml) && /tally/.test(sHtml),
    'the GOLD SCALP panel says its own ordering carries no information');
 ok(/reaches no verdict/.test(oHtml), 'the OMNIGOLD panel says its own score reaches no verdict');
-ok(/tier FAIR is unanimous at the lower bound only/.test(oHtml),
-   'and names the FAIR one-end trap in those words, not just the label');
-ok(/77%/.test(oHtml), 'and says what reading one end alone would have cost');
-ok(/limit-order verdict rests on the as-recorded end alone/.test(oHtml),
-   'and says the limit verdict rests on one end because the other is not neutral for it');
-ok(/0 of 2,875 market rows/.test(oHtml), 'naming the asymmetry that makes it so');
+/* hg-v1404 recalibration: the FAIR one-end trap and the limit verdict both
+   evaporated on the re-walk, so the panel now names the NEW fact — no factor
+   carries a verdict at all — and still names the asymmetry that keeps the
+   lower bound from being neutral for order-type splits. */
+ok(/no factor carries a verdict at all/.test(oHtml),
+   'and states the hg-v1402 finding plainly — zero verdicts survive');
+ok(/0 of 3,117 market rows/.test(oHtml), 'naming the asymmetry on the fresh walk (was 0 of 2,875)');
 ok(/explanation offered, not a measured one/.test(oHtml),
    'and does not sell adverse selection as a measured cause');
 ok(oHtml.indexOf(OG_TABLE.bars.map((b) => b.bar.toFixed(2) + '% '
      + (b.holds[0] && b.holds[1] ? 'holds' : 'no')).join(', ')) >= 0,
    'and prints the whole sweep as one list, so a reader sees the non-monotonicity');
+/* hg-v1404: the only surviving verdicts anywhere are GOLD SCALP's two stop
+   rows (its own replay, unchanged); OMNIGOLD contributes none. */
 const holdRows = SCALP_TABLE.rows.filter((r) => r.verdict).length + OG_TABLE.rows.filter((r) => r.verdict).length;
-eq(holdRows, 4, 'four verdicts across twenty factors — three better, one worse');
+eq(holdRows, 2, 'two verdicts across twenty factors on the hg-v1402 walk — both scalp stop rows (was 4: three better, one worse)');
 eq(SCALP_TABLE.rows.filter((r) => r.verdict === 'better').length
-   + OG_TABLE.rows.filter((r) => r.verdict === 'better').length, 3, 'three of them favourable');
+   + OG_TABLE.rows.filter((r) => r.verdict === 'better').length, 2, 'both of them favourable');
 eq(SCALP_TABLE.rows.filter((r) => r.verdict === 'worse').length
-   + OG_TABLE.rows.filter((r) => r.verdict === 'worse').length, 1, 'and one unfavourable');
-eq(OG_TABLE.rows.find((r) => r.f === 'LIMIT order').verdict, 'worse',
-   'and the negative one is published as loudly as the positives');
-ok(/HOLDS \(WORSE\)/.test(oHtml), 'the OMNIGOLD panel marks the limit-order row as holding, worse');
+   + OG_TABLE.rows.filter((r) => r.verdict === 'worse').length, 0, 'and NONE unfavourable — the limit-order verdict did not reproduce');
+eq(OG_TABLE.rows.find((r) => r.f === 'LIMIT order').verdict, null,
+   'the old negative verdict is retired, not quietly kept');
+ok(!/HOLDS \(WORSE\)/.test(oHtml), 'and the OMNIGOLD panel no longer marks any row as holding, worse');
 
 /* ---- 8. the panels are actually wired into what a user sees ---- */
 console.log('8. wired into the panel chain and the WHY SILENT block');

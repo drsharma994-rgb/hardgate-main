@@ -56,52 +56,70 @@ const { ctx } = load();
 for (const n of ['hgOgSetOneAtATime', 'hgOgOneAtATimeInit', 'hgOgOpenGoldConvictions', 'hgOgOneAtATimeHtml'])
   ok(typeof ctx[n] === 'function', 'omnigold.js exports ' + n);
 
-/* ---- 1. the numbers are the committed bake's, not new ones ---- */
-console.log('1. the claim is the hg-v918 sequential ticket book, unchanged');
+/* ---- 1. hg-v1402: the gated ticket book is EMPTY — the panel must say so ----
+   The hg-v918 claim (SCALP tickets +0.1484R/+0.4155R at the two bounds) was
+   pinned here as "unchanged"; the hg-v1402 re-walk retired it — the walk's
+   own ticket flag is empty offline (the hg-v1003 macro lock fails closed
+   without live DXY/US10Y feeds) and the gate proxy agrees. A claim whose
+   population is gone must not keep rendering. The pins now freeze the
+   honest empty state AND prove the live claim branch still renders
+   dynamically when a populated map is present (fixture-injected). */
+console.log('1. the empty ticket book renders as the finding it is');
 {
   const T = ctx.HG_OG_REPLAY_EVIDENCE.sequentialTicketHorizon;
-  ok(T && T.SCALP && T.SWING, 'the bake carries the sequential ticket book');
-  near(T.SCALP.lo[2], 0.1484, 1e-9, 'SCALP lower bound is +0.1484R');
-  near(T.SCALP.hi[2], 0.4155, 1e-9, 'SCALP upper bound is +0.4155R');
-  ok(T.SCALP.lo[2] > 0 && T.SCALP.hi[2] > 0, 'SCALP is positive at BOTH bounds — the whole basis');
-  ok(T.SWING.lo[2] < 0 && T.SWING.hi[2] > 0, 'SWING disagrees between bounds');
-  /* and the panel quotes those, not numbers of its own */
+  ok(T && typeof T === 'object' && Object.keys(T).length === 0,
+     'the baked constant carries an honestly EMPTY ticket horizon map');
   const h = load({ hgGoldscalpConviction: live(1) }).ctx.hgOgOneAtATimeHtml();
-  ok(h.indexOf('+0.148R') >= 0, 'the panel prints the SCALP lower bound');
-  ok(h.indexOf('+0.416R') >= 0, 'and the upper');
-  ok(/positive at <b>both<\/b> bounds/.test(h),
-     'and states the both-bounds property that is the whole reason this ships');
-  ok(/0\.116R/.test(h), 'beside the all-at-once book it is being compared to');
+  ok(/empty on the hg-v1402 walk/.test(h), 'the panel states the gated book is empty on this walk');
+  ok(!/\+0\.148R|\+0\.416R|not significant/.test(h),
+     'and quotes none of the retired hg-v918 claim');
+}
+{
+  /* the live branch, exercised on a fixture map (mutation surface: if the
+     dynamic rendering were deleted or re-hardcoded, these fail) */
+  const c = load({ hgGoldscalpConviction: live(1) }).ctx;
+  const E = c.HG_OG_REPLAY_EVIDENCE;
+  const saved = E.sequentialTicketHorizon;
+  try {
+    E.sequentialTicketHorizon = {
+      SCALP: { lo: [50, 0.4, 0.2111], hi: [40, 0.45, 0.3222] },
+      SWING: { lo: [30, 0.3, -0.1111], hi: [25, 0.36, 0.1555] }
+    };
+    const h = c.hgOgOneAtATimeHtml();
+    ok(h.indexOf('+0.211R') >= 0 && h.indexOf('+0.322R') >= 0,
+       'a populated map renders its own numbers — nothing is written in');
+    ok(/positive at <b>both<\/b> bounds/.test(h), 'and states the both-bounds property when it holds');
+    ok(/SWING disagrees between the two bounds/.test(h), 'SWING is named as disagreeing when it does');
+    ok(/carries no verdict/.test(h), 'and explicitly carries no verdict');
+    ok(/n=50 at <b>\+1\.00&sigma;/.test(h),
+       'the sigma is computed from the map at render time (0.4 vs 1/3 at n=50 = +1.00)');
+    const z = (0.4 - 1 / 3) / Math.sqrt((1 / 3) * (2 / 3) / 50);
+    near(z, 1.00, 0.02, 'matching the raw-z arithmetic the panel prints');
+  } finally { E.sequentialTicketHorizon = saved; }
 }
 
 /* ---- 2. THE LIMIT IS PINNED AS HARD AS THE CLAIM ---- */
-console.log('2. it is positive, not significant, and says so');
+console.log('2. the retired claim stays on record, and nothing replaces it');
 {
-  const T = ctx.HG_OG_REPLAY_EVIDENCE.sequentialTicketHorizon;
-  const be = 1 / 3, n = T.SCALP.lo[0], hit = T.SCALP.lo[1];
-  const z = (hit - be) / Math.sqrt(be * (1 - be) / n);
-  near(z, 1.16, 0.02, 'the conservative-end z is +1.16');
-  ok(z < 1.96, 'which does not clear even an uncorrected single test');
-  ok(z < ctx.hgOgFamilyZ(78), 'let alone this desk family bar');
+  ok(/hg-v918/.test(OG_SRC), 'the module keeps the hg-v918 walk claim on record');
+  ok(/empty on the hg-v1402 walk/.test(OG_SRC),
+     'and states plainly that the hg-v1402 walk has no gated ticket book');
+  /* no verdict is silently upgraded: the empty book says nothing, in
+     particular nothing significant */
   const h = load({ hgGoldscalpConviction: live(1) }).ctx.hgOgOneAtATimeHtml();
-  ok(/not significant/.test(h), 'the panel says not significant');
-  ok(/n=73/.test(h) && /1\.16/.test(h), 'with the n and the sigma it failed at');
-  ok(/clears no bar this desk applies/.test(h), 'and that it clears no bar');
-  /* SWING must not be claimed */
-  ok(/SWING disagrees between the two bounds/.test(h), 'SWING is named as disagreeing');
-  ok(/carries no verdict/.test(h), 'and explicitly carries no verdict');
-  ok(!/SWING[^.]{0,40}\+0\.317R? (is|at) (the )?(measured|evidence)/.test(h),
-     'the SWING upper bound is never quoted as a result on its own');
+  ok(!/significant/.test(h.replace(/not significant/g, '')),
+     'the empty-book panel makes no significance claim at all');
 }
 
-/* ---- 3. the concentration argument stands without the statistics ---- */
-console.log('3. 57 at once is one bet at 57x, which needs no p-value');
+/* ---- 3. the concentration argument stands without the statistics ----
+   hg-v1402 re-walk numbers: 48.2 plans/day, 56 held at once. */
+console.log('3. 56 at once is one bet at 57x, which needs no p-value');
 {
   const h = load({ hgGoldscalpConviction: live(1) }).ctx.hgOgOneAtATimeHtml();
-  ok(/59\.4 plans a day/.test(h), 'it states the publication rate');
-  ok(/57 at once/.test(h), 'and the concurrency');
-  ok(/not 57 bets, it is one bet/.test(h), 'and names it as one bet, not a portfolio');
-  ok(/stands without either/.test(h), 'and says that argument does not lean on the numbers above');
+  ok(/48\.2 plans a day/.test(h), 'it states the publication rate');
+  ok(/56 at once/.test(h), 'and the concurrency');
+  ok(/not 56 bets, it is one bet/.test(h), 'and names it as one bet, not a portfolio');
+  ok(/stands without/.test(h), 'and says that argument does not lean on the numbers above');
 }
 
 /* ---- 4. the gate: held while something is live, open when flat ---- */

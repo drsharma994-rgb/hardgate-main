@@ -25,12 +25,18 @@ ok(typeof W.hgGoldConfluenceScore === 'function', 'hgGoldConfluenceScore');
 ok(typeof W.hgGoldConfluenceHtml === 'function', 'hgGoldConfluenceHtml');
 ok(typeof W.hgGoldApplyConfluence === 'function', 'hgGoldApplyConfluence');
 ok(typeof W.hgGoldConfluenceTier === 'function', 'hgGoldConfluenceTier');
-ok(W.HG_GOLD_CONF_A === 85 && W.HG_GOLD_CONF_GOOD === 75 && W.HG_GOLD_CONF_WATCH === 65, 'tier thresholds');
+ok(W.HG_GOLD_CONF_A === 85 && W.HG_GOLD_CONF_GOOD === 78 && W.HG_GOLD_CONF_WATCH === 68, 'tier thresholds');
 
 console.log('\n== tiers ==');
 ok(W.hgGoldConfluenceTier(90) === 'A', '90 → A');
+ok(W.hgGoldConfluenceTier(85) === 'A', '85 → A');
+ok(W.hgGoldConfluenceTier(84) === 'GOOD', '84 → GOOD');
 ok(W.hgGoldConfluenceTier(80) === 'GOOD', '80 → GOOD');
+ok(W.hgGoldConfluenceTier(78) === 'GOOD', '78 → GOOD');
+ok(W.hgGoldConfluenceTier(77) === 'WATCH', '77 → WATCH');
 ok(W.hgGoldConfluenceTier(70) === 'WATCH', '70 → WATCH');
+ok(W.hgGoldConfluenceTier(68) === 'WATCH', '68 → WATCH');
+ok(W.hgGoldConfluenceTier(67) === 'NO_TRADE', '67 → NO_TRADE');
 ok(W.hgGoldConfluenceTier(50) === 'NO_TRADE', '50 → NO_TRADE');
 
 function trendRows(){
@@ -92,7 +98,7 @@ console.log('\n== apply stamps NO_TRADE and DEMOTES (hg-v700) ==');
   const weak = { dir: 'short', stratKey: 'rsidiv', entry: 2310, agree: 0, demoted: false, stamps: [] };
   W.hgGoldApplyConfluence(weak, { newsGate: { lock: true }, rows15m: trendRows() });
   ok(isFinite(weak.confScore), 'confScore stamped');
-  ok(weak.confTier === 'NO_TRADE' || weak.confScore < 65, 'weak → low tier (got ' + weak.confTier + '/' + weak.confScore + ')');
+  ok(weak.confTier === 'NO_TRADE' || weak.confScore < 68, 'weak → low tier (got ' + weak.confTier + '/' + weak.confScore + ')');
   ok(weak.stamps.some((s) => /CONF/.test(s)), 'CONF stamp');
   ok(weak.demoted === true, 'data-backed NO_TRADE hard-demotes — paints, never leads (hg-v700, measured MP cohort −0.209R/trade)');
   ok(Array.isArray(weak.gateNotes) && /no-trade — paints, never leads/.test(weak.gateNotes.join(' ')),

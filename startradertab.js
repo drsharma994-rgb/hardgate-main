@@ -642,7 +642,7 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
       }catch(eOm){}
     }
 
-    return {
+    var stOut = {
       sym: contract.sym,
       label: contract.label || contract.sym,
       klass: contract.klass || 'crypto',
@@ -662,6 +662,24 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
       rows1h: rows1h,
       mark: (ticker && isFinite(ticker.mark)) ? ticker.mark : (rows4h.length ? rows4h[rows4h.length - 1].c : null)
     };
+    /* hg-v1434: Wave B admission floor (crypto lane). costR / ER(20) / 1d-EMA50
+       / volZ clauses, each adopted only where its dropped cohort settled
+       negative in BOTH halves (n=185 -0.655R/-0.644R costR; n=440 -0.148R/
+       -0.296R ER; n=209 -0.386R/-0.468R HTF; n=391 -0.106R/-0.358R volZ).
+       Demote-not-hide: the setup keeps its plan, the card names the reason,
+       the ledger records ticket=false. */
+    try{
+      if (stOut.klass === 'crypto' && stOut.plan && typeof W.hgCryptoSinglesFloor === 'function'){
+        var stFl = W.hgCryptoSinglesFloor('startrader', { dir: stOut.dir, entry: stOut.plan.entry, stop: stOut.plan.stop }, rows4h);
+        if (stFl){
+          stOut.demote = !!stFl.demote;
+          stOut.floorReasons = stFl.reasons || [];
+          stOut.floorMarks = stFl.marks || [];
+          stOut.floorAbstained = stFl.abstained || [];
+        }
+      }
+    }catch(eFl){}
+    return stOut;
   }catch(e){ return null; }
 }
 
@@ -727,8 +745,9 @@ function stFwdRows(found){
       sym: r.sym, dir: r.dir,
       entry: +p.entry, stop: +p.stop, t1: +p.t1,
       mechanic: 'ST-' + (r.planFamily || 'PLAN'),
-      /* crowned and bookable: PRIME or HIGH with a real plan, never a draft */
-      ticket: !r.planDraft && (r.tier === 'PRIME' || r.tier === 'HIGH'),
+      /* crowned and bookable: PRIME or HIGH with a real plan, never a draft,
+         and never a floored setup (hg-v1434 demote-not-hide) */
+      ticket: !r.planDraft && !r.demote && (r.tier === 'PRIME' || r.tier === 'HIGH'),
       /* the price when the plan fired -- the fill model's one field (hg-v981) */
       mark: (isFinite(+r.mark) && +r.mark > 0) ? +r.mark : undefined,
       /* the last CLOSED 4h bar (stDropForming at the fetch site), never the clock */
@@ -814,7 +833,13 @@ function cardHTML(r){
   })();
   var stStack = stCardStack(r);
   var stackHtml = (stStack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(stStack) : '';
-  var bookBtn = (!draft && entry != null && stop != null && typeof W.bookBtnHTML === 'function')
+  /* hg-v1434: demote-not-hide — floored setups keep their plan and name the
+     reason but lose the buttons, mirroring the ledger ticket=false. */
+  var stTicket = !draft && !r.demote;
+  var stFloorBlock = ((r.floorReasons && r.floorReasons.length) || (r.floorMarks && r.floorMarks.length))
+    ? '<div class="note warn" style="margin:6px 0;font-size:11px"><b>' + (r.demote ? 'STANDS ASIDE' : 'FLOOR MARK') + '</b> — '
+      + esc((r.floorReasons || []).concat(r.floorMarks || []).join(' · ')) + '</div>' : '';
+  var bookBtn = (stTicket && entry != null && stop != null && typeof W.bookBtnHTML === 'function')
     ? W.bookBtnHTML(r.sym, r.dir, entry, stop, t1, {
       scanner: 'startrader',
       fund: stFund,
@@ -823,7 +848,7 @@ function cardHTML(r){
       t2: p && isFinite(p.t2) ? p.t2 : null,
       stack: stStack
     }) : '';
-  var tradeOnclick = (!draft && entry != null && stop != null && (typeof W.hgToTradePlanOnclickAttr === 'function' || typeof W.toTrade === 'function'))
+  var tradeOnclick = (stTicket && entry != null && stop != null && (typeof W.hgToTradePlanOnclickAttr === 'function' || typeof W.toTrade === 'function'))
     ? ((typeof W.hgToTradePlanOnclickAttr === 'function')
       ? W.hgToTradePlanOnclickAttr(r.sym, r.dir, entry, stop, t1, { t2: p && isFinite(p.t2) ? p.t2 : null, stack: stStack, scanner: 'startrader', strategy: 'startrader' })
       : ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(r.dir) + ',' + entry + ',' + stop + ',' + (t1 != null ? t1 : 'null') + ')'))
@@ -848,7 +873,7 @@ function cardHTML(r){
     + '<span class="k">mark</span><span>' + pxF(r.mark) + '</span>'
   + '</div>' + planBlk
     + ((p && typeof W.hgStrategyTradeDetailHtml === 'function') ? W.hgStrategyTradeDetailHtml(p) : '')
-    + visionHtml + stackHtml + tradeBtn + bookBtn + '</div>';
+    + visionHtml + stackHtml + stFloorBlock + tradeBtn + bookBtn + '</div>';
 }
 
 var __st = { busy: false, ranOnce: false, run: null };

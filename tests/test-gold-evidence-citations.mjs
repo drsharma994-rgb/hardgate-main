@@ -156,7 +156,7 @@ console.log('\n== the session table is re-derived from the file it cites ==');
   const d = J('scripts/backtest-omnigold-results.json');
   const rows = d.trades.filter(t => t && t.rMultiple !== null && t.rMultiple !== undefined
                                      && t.netR !== null && t.netR !== undefined);
-  ok(rows.length === 8132, `${rows.length} filled rows in the cited bake (rMultiple and netR both present)`);
+  ok(rows.length === 8564, `${rows.length} filled rows in the cited bake (rMultiple and netR both present — hg-v1404: 8,564 on the hg-v1402 walk, was 8,132)`);
 
   const src = S('gold-formation.js');
   const tbl = [...src.matchAll(/\{ from: (\d+),\s+to: (\d+),\s+key: '([A-Z-]+)',[^}]*?n:\s+(\d+), grossR:\s*(-?[\d.]+), medCostR:\s+([\d.]+)/g)]
@@ -213,8 +213,9 @@ console.log('\n== the PROSE copy of the session table matches the live one ==');
      'and every figure in it matches the array the desk actually reads'
      + (mismatch.length ? ('\n      ' + mismatch.join('\n      ')) : ''));
   /* The sentence that turns the table into the rule quotes two of them. */
-  ok(/ASIA \(\+0\.064 at n=2,320\) and NY-PM \(\+0\.109 at n=1,044\)/.test(gf),
-     'and the rule sentence beneath it quotes the same two confirming windows');
+  /* hg-v1404: the sentence quotes the fresh walk's two confirming windows */
+  ok(/ASIA \(\+0\.069 at n=2,437\) and NY-PM \(\+0\.038 at n=1,087\)/.test(gf),
+     'and the rule sentence beneath it quotes the same two confirming windows (hg-v1404 re-walk numbers)');
 }
 
 console.log('\n== the corrected windows and spans are the files\' own ==');

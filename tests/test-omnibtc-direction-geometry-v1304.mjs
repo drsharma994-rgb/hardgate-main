@@ -1,4 +1,43 @@
 #!/usr/bin/env node
+/* hg-v1434 note: the §version pins ride the current tree stamp again
+   (hg-v1433 -> hg-v1434, riding the CRYPTO SINGLES bump the same way it rode
+   hg-v1432 -> hg-v1433 with GOLD SINGLES). Earlier:
+   hg-v1438 note: same move again (hg-v1436 -> hg-v1438, riding the PINE GOLD r3
+   bump).
+   build-stamp/sw/trendtable — 'Sister suites re-pinned'
+   convention. Behavior pins unchanged. */
+/* hg-v1421 note: the §version pins ride the current tree stamp again
+   (hg-v1421 -> hg-v1432, riding the INLINE SCANNERS floor bump the same way it rode
+   build-stamp/sw/trendtable — 'Sister suites re-pinned'
+   convention. Behavior pins unchanged. */
+/* hg-v1420 note: the §version pins ride the current tree stamp again
+   (hg-v1419 -> hg-v1420) after the hg-v1420 PINE GOLD r2 marks bump re-stamped
+   build-stamp/sw/trendtable — 'Sister suites re-pinned'
+   convention. Behavior pins unchanged. */
+/* hg-v1419 note: the §version pins ride the current tree stamp again
+   (hg-v1418 -> hg-v1419) after the hg-v1419 TREND MATRIX admission-floor bump re-stamped
+   build-stamp/sw/trendtable — 'Sister suites re-pinned'
+   convention. Behavior pins unchanged. */
+/* hg-v1418 note: the §version pins ride the current tree stamp again
+   (hg-v1417 -> hg-v1418) after the hg-v1418 OMNIBTC cost-floor bump re-stamped
+   build-stamp/sw/trendtable — 'Sister suites re-pinned'
+   convention. Behavior pins unchanged. */
+/* hg-v1417 note: the §version pins ride the current tree stamp again
+   (hg-v1416 -> hg-v1417) after the hg-v1417 CANDLE FORECAST admission-floor bump re-stamped
+   build-stamp/sw/trendtable — 'Sister suites re-pinned'
+   convention. Behavior pins unchanged. */
+/* hg-v1416 note: the §version pins ride the current tree stamp again
+   (hg-v1414 -> hg-v1416) after the hg-v1416 PURE GOLD admission-floor bump re-stamped
+   build-stamp/sw/trendtable — 'Sister suites re-pinned'
+   convention. Behavior pins unchanged. */
+/* hg-v1403 note: the §version pins were re-pinned hg-v1304 -> hg-v1403 at
+   the hg-v1403 restore (the pack lands at hg-v1403). All behavior pins
+   unchanged; mutation proof re-run at hg-v1403 (wrong-side plans still
+   fail all three sites). */
+/* hg-v1404 note: the §version pins ride the current tree stamp again
+   (hg-v1403 -> hg-v1404) after the hg-v1404 OMNIGOLD bump re-stamped
+   build-stamp/sw/trendtable — 'Sister suites re-pinned' convention.
+   Behavior pins unchanged. */
 /* hg-v1304 — direction geometry invariant at the three OMNIBTC engine
    ingest sites, closing the hg-v1303 medium-confidence defensive gap (a).
 
@@ -383,20 +422,23 @@ console.log('\n[§6] mutation pass on shipped source');
 /* ---------- §7: ship stamps align ---------- */
 console.log('\n[§7] ship stamps align');
 {
-  /* The pack shipped at hg-v1304 but the tree keeps moving — assert the
-     triad is aligned to whatever build-stamp.js declares (hg-v956 one home),
-     not to this pack's frozen number. */
   const bs = read('build-stamp.js');
   const sw = read('sw.js');
   const tt = read('trendtable.js');
-  const m = bs.match(/version:\s*'hg-v([0-9]+)'/);
-  const N = m ? m[1] : null;
-  ok(!!N, 'build-stamp.js carries an hg-v<digits> version');
-  if (N){
-    ok(new RegExp("HG_CACHE\\s*=\\s*'hg-v" + N + "'").test(sw), `sw.js HG_CACHE = 'hg-v${N}'`);
-    ok(new RegExp('hg-v' + N).test(tt), 'trendtable.js stamped hg-v' + N);
-    ok(new RegExp('\\?v=' + N).test(tt), 'trendtable.js uses ?v=' + N);
-  }
+
+  /* hg-v1404: version pins ride the current stamp (re-pinned hg-v1403 ->
+     hg-v1404 at the hg-v1404 bump; 'Sister suites re-pinned' convention).
+     hg-v1440 at the hg-v1440 bump (OMNIGOLD r3 disclosure);
+     hg-v1441 at the hg-v1441 bump (GOLD SWEEP disclosures);
+     hg-v1442 at the hg-v1442 bump (PINE GOLD re-walk).
+     hg-v1443 at the hg-v1443 bump (GOLD SCALP re-walk).
+     hg-v1444 at the hg-v1444 bump (GOLD SCALP tape refresh).
+     hg-v1445 at the hg-v1445 bump (SUPER GOLD and CONFLUENCE). Behavior pins
+     above unchanged. */
+  ok(/version:\s*'hg-v1482'/.test(bs), "build-stamp.js version: 'hg-v1482' (re-pinned hg-v1459 -> hg-v1482)");
+  ok(/HG_CACHE\s*=\s*'hg-v1482'/.test(sw), "sw.js HG_CACHE = 'hg-v1482' (re-pinned hg-v1459 -> hg-v1482)");
+  ok(/hg-v1482/.test(tt), 'trendtable.js stamped hg-v1482 (re-pinned hg-v1482 -> hg-v1482)');
+  ok(/\?v=1482/.test(tt), 'trendtable.js uses ?v=1482 (re-pinned hg-v1459 -> hg-v1482)');
 }
 
 /* ---------- summary ---------- */

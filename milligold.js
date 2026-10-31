@@ -6,9 +6,11 @@ WHAT THIS IS, AND WHAT IT IS NOT.
 
 Asked for: a tab that forms gold setups using only the indicators and
 strategies that have actually paid across the gold desks. That is a
-well-defined question with a derivable answer, and this is it — nine of
-OMNIGOLD's 54 measured mechanics are net-positive at XM on the gate-clear
-population, and this tab forms from those nine and nothing else.
+well-defined question with a derivable answer, and this is it — eight of
+OMNIGOLD's measured mechanics are net-positive at XM on the gate-clear
+population, and this tab forms from those eight and nothing else.
+(hg-v1404: nine became eight on the re-walked evidence — the roster follows
+the bake, not the other way round.)
 
 It is NOT a new engine, and as of hg-v938 it is not a new SCAN either.
 
@@ -42,15 +44,16 @@ AND THE HONEST PART, WHICH LEADS THE TAB RATHER THAN SITTING UNDER IT.
 hg-v935 tested this exact selection procedure out of sample: four disjoint
 windows, the mechanics ranked on the other three each time, the chosen set
 scored on the held-out one, at both fill bounds. "Keep the net-positive
-mechanics" scored 13-14 of 16. NEVER UNANIMOUS. The same pack found that
-even the best rule that IS unanimous lifts net expectancy by +0.03R and
-leaves the book negative.
+mechanics" scored 13-14 of 16. NEVER UNANIMOUS — and on the hg-v1402
+re-walk (hg-v1404) not even a flicker survived: no drop-bar is unanimous
+at any point of the sweep, and the strongest single-bar reading lifts net
+expectancy by +0.018R and leaves the book negative.
 
-So the cohort's +0.0565R is what these nine did IN THE BOOK THEY WERE
+So the cohort's +0.0454R is what these eight did IN THE BOOK THEY WERE
 CHOSEN FROM. It is an upper bound on what they should be expected to do,
-not a forecast, and the panel says so in those words. Each of the nine is
+not a forecast, and the panel says so in those words. Each of the eight is
 also inside the noise on its own — the largest cluster-robust t on the
-roster is about 1.55 against a family bar above 3.1 — so this is the best
+roster is about 1.29 against a family bar above 3.1 — so this is the best
 available reading of which mechanics have paid, not a demonstration that
 any of them pays.
 
@@ -124,19 +127,18 @@ function mgFundBlackout(){
    A roster is the last place a stale number should live, because it decides
    what this tab forms at all. */
   var HG_MILLI_ROSTER = {
-    window: '2026-03-27..2026-09-10', minN: 20, minRr: 2,
-    cohortN: 678, cohortGross: 0.0887, cohortNet: 0.0565,
-    maxAbsT: 1.55,
+    window: '2026-05-04..2026-10-18', minN: 20, minRr: 2,
+    cohortN: 824, cohortGross: 0.0837, cohortNet: 0.0454,
+    maxAbsT: 1.29,
     kinds: [
-    { kind: 'P5-DRIVE', n: 48, settled: 41, winRate: 0.3902, grossR: 0.2146, netXm: 0.1796, tCluster: 1.55 },
-    { kind: 'STRUCT-BOS', n: 103, settled: 87, winRate: 0.3448, grossR: 0.1085, netXm: 0.0816, tCluster: 1.22 },
-    { kind: 'SQUEEZE-FIRE', n: 50, settled: 45, winRate: 0.3556, grossR: 0.1082, netXm: 0.0746, tCluster: 0.55 },
-    { kind: 'CUSUM-SHIFT', n: 44, settled: 32, winRate: 0.3438, grossR: 0.0918, netXm: 0.0707, tCluster: 0.58 },
-    { kind: 'MMOVE', n: 204, settled: 177, winRate: 0.3559, grossR: 0.0836, netXm: 0.0587, tCluster: 1.54 },
-    { kind: 'TREND-RECLAIM', n: 106, settled: 99, winRate: 0.3636, grossR: 0.0923, netXm: 0.0549, tCluster: 0.83 },
-    { kind: 'P6-COMP', n: 98, settled: 82, winRate: 0.3293, grossR: 0.0421, netXm: 0.0186, tCluster: 0.32 },
-    { kind: 'EQH-SWEEP', n: 41, settled: 41, winRate: 0.3659, grossR: 0.0976, netXm: 0.0159, tCluster: 0.36 },
-    { kind: 'BOS-RETEST', n: 83, settled: 74, winRate: 0.3378, grossR: 0.0367, netXm: 0.0027, tCluster: 0.3 }
+    { kind: 'CUSUM-SHIFT', n: 47, settled: 35, winRate: 0.3429, grossR: 0.1214, netXm: 0.1002, tCluster: 0.85 },
+    { kind: 'TREND-RECLAIM', n: 111, settled: 106, winRate: 0.3774, grossR: 0.1405, netXm: 0.084, tCluster: 1.29 },
+    { kind: 'NY-OPEN-DRIVE', n: 52, settled: 42, winRate: 0.3333, grossR: 0.1049, netXm: 0.0699, tCluster: 0.65 },
+    { kind: 'INSIDE-BREAK', n: 120, settled: 109, winRate: 0.3486, grossR: 0.0999, netXm: 0.0621, tCluster: 0.82 },
+    { kind: 'MMOVE', n: 196, settled: 170, winRate: 0.3471, grossR: 0.0703, netXm: 0.0438, tCluster: 1.04 },
+    { kind: 'P6-COMP', n: 96, settled: 82, winRate: 0.3537, grossR: 0.077, netXm: 0.0393, tCluster: 0.6 },
+    { kind: 'ORB', n: 140, settled: 121, winRate: 0.3306, grossR: 0.0604, netXm: 0.0294, tCluster: 0.58 },
+    { kind: 'P4-ADRX', n: 159, settled: 159, winRate: 0.3522, grossR: 0.0566, netXm: 0.0069, tCluster: 0.46 }
     ]
   };
   /* --- END GENERATED HG_MILLI_ROSTER --- */
@@ -147,21 +149,21 @@ function mgFundBlackout(){
    the bound and it is NEGATIVE. Do not hand-edit — `npm run gold:milli-walk`
    is the drift check. */
   var HG_MILLI_FORWARD = {
-    trials: 6, beatsDesk: 6, pays: 0,
-    beatsDeskAll: true, paysAll: false,
-    shippedSize: 9, sharedMin: 6, sharedMax: 7,
-    inSampleNet: 0.0643, inSampleNetLower: 0.0527,
-    deskNet: -0.116, deskNetLower: -0.2864,
-    seqMilliNet: 0.0153, seqDeskNet: -0.0226,
-    worstForwardNet: -0.1673,
-    bestForwardNet: -0.039,
+    trials: 6, beatsDesk: 5, pays: 0,
+    beatsDeskAll: false, paysAll: false,
+    shippedSize: 8, sharedMin: 5, sharedMax: 6,
+    inSampleNet: 0.0505, inSampleNetLower: 0.044,
+    deskNet: -0.1138, deskNetLower: -0.2928,
+    seqMilliNet: -0.0242, seqDeskNet: 0.0809,
+    worstForwardNet: -0.1109,
+    bestForwardNet: -0.0764,
     splits: [
-      { end: 'as-recorded', split: 0.5, n: 962, milliNet: -0.039, deskNet: -0.1111, learned: 15, shared: 7 },
-      { end: 'as-recorded', split: 0.6, n: 1050, milliNet: -0.0912, deskNet: -0.1443, learned: 19, shared: 7 },
-      { end: 'as-recorded', split: 0.7, n: 832, milliNet: -0.1389, deskNet: -0.1894, learned: 18, shared: 7 },
-      { end: 'lower', split: 0.5, n: 416, milliNet: -0.1078, deskNet: -0.2778, learned: 10, shared: 6 },
-      { end: 'lower', split: 0.6, n: 491, milliNet: -0.0797, deskNet: -0.3011, learned: 12, shared: 7 },
-      { end: 'lower', split: 0.7, n: 452, milliNet: -0.1673, deskNet: -0.3517, learned: 12, shared: 7 }
+      { end: 'as-recorded', split: 0.5, n: 1275, milliNet: -0.1109, deskNet: -0.1396, learned: 19, shared: 5 },
+      { end: 'as-recorded', split: 0.6, n: 702, milliNet: -0.0857, deskNet: -0.1293, learned: 15, shared: 5 },
+      { end: 'as-recorded', split: 0.7, n: 487, milliNet: -0.0976, deskNet: -0.075, learned: 14, shared: 6 },
+      { end: 'lower', split: 0.5, n: 785, milliNet: -0.092, deskNet: -0.3196, learned: 12, shared: 5 },
+      { end: 'lower', split: 0.6, n: 454, milliNet: -0.0897, deskNet: -0.321, learned: 10, shared: 5 },
+      { end: 'lower', split: 0.7, n: 280, milliNet: -0.0764, deskNet: -0.2828, learned: 9, shared: 5 }
     ]
   };
   /* --- END GENERATED HG_MILLI_FORWARD --- */

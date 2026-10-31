@@ -48,6 +48,17 @@ const GOLD = groupMatch
   ? groupMatch[1].split(',').map(s => s.trim().replace(/^'|'$/g, '')).filter(Boolean)
   : [];
 const SCRIPTS = [...INDEX.matchAll(/<script src="([A-Za-z0-9._/-]+\.js)(?:\?v=\d+)?"/g)].map(m => m[1]);
+/* hg-v1435: SHIVA GOLD joined the GOLD nav group statically (20 -> 21 gold
+   registrations — its registration IS the intended behavior of the wave-D
+   repair). Its two files load through hg-api-base.js's runtime injection,
+   not a <script> tag, so this harness mirrors the app by loading whatever
+   hg-api-base injects — the list is derived from that file, not hand-written
+   here. Mutation path: un-register the desk (or drop the injection) and the
+   roster pin below goes RED; re-register and it is GREEN. */
+const APIBASE = fs.readFileSync(path.join(ROOT, 'hg-api-base.js'), 'utf8');
+const INJECTED = [...APIBASE.matchAll(/add\('hg\w+', '([A-Za-z0-9._/-]+\.js)\?v=\d+'\)/g)]
+  .map(m => m[1]).filter(f => SCRIPTS.indexOf(f) < 0);
+const LOADLIST = SCRIPTS.concat(INJECTED);
 
 /* gold is the legacy GOLD SETUP pane: a <section id="tab_gold"> and a
    <button id="tabB_gold"> written straight into index.html, driven by an
@@ -143,7 +154,7 @@ function boot(){
     text: () => Promise.resolve('{}') });
   vm.createContext(ctx);
   const loaded = [], failed = [];
-  for (const f of SCRIPTS){
+  for (const f of LOADLIST){   /* hg-v1435: script tags + hg-api-base runtime injections, the app's own load set */
     const p = path.join(ROOT, f);
     if (!fs.existsSync(p)){ failed.push(f + ' (missing)'); continue; }
     try { vm.runInContext(fs.readFileSync(p, 'utf8'), ctx, { filename: f }); loaded.push(f); }

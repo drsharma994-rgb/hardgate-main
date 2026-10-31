@@ -53,13 +53,16 @@ function tape(n, sec, seed, drift, px0){ let s = seed, p = px0 || 60000; const r
 const WALK_OVERRIDE = { minPct: 0, minAvail: 0, regimeGate: false };   /* verbatim from the three harnesses */
 const VC = { venue: 'Binance', rtFrac: 0.002 };
 
-console.log('1. the committed artifact measured nothing');
+console.log('1. the committed artifact is the hg-v1421 priced rebake');
 {
   const a = loadArtifact();
   ok(/backtest-cryptoultra-results\.json$/.test(ARTIFACT) && a.grid.length === 14, 'fourteen grid cells');
-  ok(a.grid.every(g => g.all.n === 0 && g.ins.n === 0 && g.oos.n === 0) && Math.max.apply(null, a.grid.map(g => g.fired)) === 1628, 'every cell settled ZERO trades while the loosest fired 1,628 times');
-  ok(a.chosen === null && a.evidence === null, 'no rule was chosen and the artifact carries no evidence block');
-  ok(a.meta.unpriced === undefined, 'the artifact predates the unpriced counter (nothing said how many plans had no geometry)');
+  ok(a.grid.every(g => g.all.n > 0 && g.ins.n > 0 && g.oos.n > 0) && Math.max.apply(null, a.grid.map(g => g.fired)) === 5340, 'every cell settles trades now (5,340 fired at the loosest; the hg-v714 zero-settle artifact is gone)');
+  ok(a.grid.every(g => g.ins.avgR_net < 0 && g.oos.avgR_net < 0), 'and every cell is NEGATIVE in-sample AND out-of-sample at Binance costs');
+  ok(a.chosen && a.chosen.minPct === 0.8 && a.chosen.regimeGate === true && a.evidence && a.evidence.tradable === false
+     && a.evidence.ins.n === 197 && a.evidence.oos.n === 77 && a.evidence.oos.avgR_net === -0.113,
+     'a rule was chosen on the in-sample half and judged NOT tradable out-of-sample (n=197/-0.077R in, n=77/-0.113R out)');
+  ok(a.meta.unpriced === 0 && a.meta.engineErrors === 0, 'the rebake recorded zero unpriced plans and zero engine errors (the hg-v990 seam held)');
 }
 
 console.log('\n2. the defect, reproduced on the real engine');
@@ -95,7 +98,7 @@ console.log('\n2. the defect, reproduced on the real engine');
   ok(nanL.plan === null && nanL.gates.some(g => /t1R null/.test(g)), 'a null target ladder is refused too (isFinite(null) is true; the check reads a positive number)');
   const nanT = T.cryptoUltraEngine({ rows15m: m15, rows1h: h1, now: nowMs, venueCost: VC, rule: { t1R: 'x' } });
   ok(nanT.plan === null && nanT.gates.some(g => /t1R x/.test(g)), 'an unreadable target ladder is refused the same way');
-  ok(a.recordOnly === true && a.fire === false && a.gates.some(g => /NOT YET MEASURED/.test(g)), 'and every priced plan is RECORD ONLY under the NOT YET MEASURED gate -- nothing loosens');
+  ok(a.recordOnly === true && a.fire === false && a.gates.some(g => /MEASURED NOT TRADABLE/.test(g)), 'and every priced plan is RECORD ONLY under the MEASURED NOT TRADABLE gate (the hg-v1421 rebake judges the rule) -- nothing loosens');
 }
 
 console.log('\n3. the walk, driven on synthetic bars through the real engine');
@@ -135,14 +138,15 @@ console.log('\n4. the evidence literal writes itself from the artifact');
   let threw = null; try { splice('x', 'y'); } catch (e) { threw = e; }
   ok(threw && /BEGIN marker not found in cryptoultra\.js/.test(threw.message), 'a missing marker is fatal and names the file');
   const ev = evidenceFrom(loadArtifact());
-  ok(ev.measured === false && ev.tradable === false && ev.isN === 0 && ev.oosN === 0 && ev.rule === null && ev.verdict === null, 'on the committed artifact: NOT measured, not tradable, no populations, no rule, no verdict');
-  ok(ev.walk.cells === 14 && ev.walk.fired === 1628 && ev.walk.settled === 0 && ev.walk.barsWithLead === 1768 && ev.walk.unpriced === undefined, 'the walk counts are the artifact\'s own (14 cells, 1,628 fired, 0 settled, 1,768 bars with a lead, unpriced not recorded)');
-  ok(/^NOT YET MEASURED/.test(ev.note) && /fired 1628 times at its loosest cell and settled 0 trades in every one of its 14 cells/.test(ev.note) && /defect of the walk, not a verdict on the strategy/.test(ev.note), 'the note is derived: the counts, and that a zero here is a defect of the walk');
+  ok(ev.measured === true && ev.tradable === false && ev.isN === 197 && ev.oosN === 77 && ev.isAvgR === -0.077 && ev.oosAvgR === -0.113 && ev.isWin === 0.076 && ev.oosWin === 0.026 && ev.note === null, 'on the committed artifact: measured, NOT tradable, with the rebake\'s own populations');
+  ok(ev.walk.cells === 14 && ev.walk.fired === 5340 && ev.walk.merged === 4948 && ev.walk.settled === 4539 && ev.walk.barsWithLead === 5746 && ev.walk.unpriced === 0, 'the walk counts are the artifact\'s own (14 cells, 5,340 fired, 4,539 settled, 5,746 bars with a lead, 0 unpriced)');
+  ok(/did NOT pay after Binance costs/.test(ev.verdict) && /n=77/.test(ev.verdict), 'the verdict is the artifact\'s own sentence, naming the OOS cost verdict and n');
   ok(!/architectural|canceling|correlated/i.test(ev.note) && !/architectural/i.test(JSON.stringify(ev.limitations)), 'no hand-typed diagnosis survives: the artifact never said "architectural failure" and neither does the literal');
   ok(ev.limitations.length === 6 && ev.limitations[0] === loadArtifact().meta.limitations[0], 'the limitations are the artifact\'s own six, verbatim');
   /* the branch a future bake takes: a rule chosen, evidence carried */
   const a2 = JSON.parse(JSON.stringify(loadArtifact()));
   a2.meta.unpriced = 0;
+  a2.grid.forEach(g => { g.all.n = 0; g.ins.n = 0; g.oos.n = 0; });
   a2.grid[3].all.n = 120; a2.grid[3].ins.n = 84; a2.grid[3].oos.n = 36;
   a2.evidence = { rule: { minPct: 0.7, minAvail: 25, regimeGate: true, stopAtr: 1.5, t1R: 1.5, t2R: 2.5, timeoutBars: 24, costFloorMult: 8 },
                   ins: { n: 84, winRate: 0.44, avgR_net: 0.11 }, oos: { n: 36, winRate: 0.39, avgR_net: -0.05 }, tradable: false, verdict: 'Out-of-sample n=36 is too thin to trust either way — fires are informational, not tickets.' };
@@ -153,11 +157,12 @@ console.log('\n4. the evidence literal writes itself from the artifact');
   ok(evidenceFrom(a3).tradable === false, 'tradable is the boolean true or it is false -- never a coerced string');
   const lit2 = literal(ev2);
   ok(/measured: true/.test(lit2) && /oosN: 36/.test(lit2) && splice(src, lit2) !== src && splice(splice(src, lit2), literal(ev)) === src, 'the measured literal splices in and the committed literal splices back byte for byte');
-  const a4 = JSON.parse(JSON.stringify(loadArtifact())); a4.grid.forEach(g => { g.fired = 0; g.merged = 0; });
-  ok(/fired nothing at any cell/.test(evidenceFrom(a4).note), 'a walk that fired nothing says so, a different sentence from one that fired and priced nothing');
-  const a5 = JSON.parse(JSON.stringify(loadArtifact())); a5.grid[0].all.n = 30;
+  const noChoice = () => { const a = JSON.parse(JSON.stringify(loadArtifact())); delete a.evidence; a.chosen = null; return a; };
+  const a4 = noChoice(); a4.grid.forEach(g => { g.fired = 0; g.merged = 0; g.all.n = 0; });
+  ok(/fired nothing at any cell/.test(evidenceFrom(a4).note), 'a walk that fired nothing says so (a bake with no chosen rule takes the note branch)');
+  const a5 = noChoice(); a5.grid.forEach(g => { g.all.n = 0; }); a5.grid[0].all.n = 30;
   ok(/settled 30 trades across 14 cells and no cell reached the in-sample floor \(80\)/.test(evidenceFrom(a5).note), 'a walk that settled too few for the floor says so, naming the floor');
-  const a6 = JSON.parse(JSON.stringify(loadArtifact())); a6.meta.unpriced = 1768;
+  const a6 = noChoice(); a6.meta.unpriced = 1768; a6.grid.forEach(g => { g.all.n = 0; });
   ok(/1768 of its plans carried no stop or target/.test(evidenceFrom(a6).note), 'a re-run that recorded its unpriced count quotes it instead of the hg-v990 account');
 }
 
@@ -165,11 +170,11 @@ console.log('\n5. the tab reads the generated literal, and nothing loosens');
 {
   const T = bootTab();
   const E = T.HG_CRYPTO_ULTRA_EVIDENCE;
-  ok(E && E.measured === false && E.walk && E.walk.settled === 0, 'the tab exports the generated literal');
+  ok(E && E.measured === true && E.tradable === false && E.walk && E.walk.settled === 4539, 'the tab exports the generated literal');
   const stubs = {}; const el = { innerHTML: '', querySelector: s => (stubs[s] = stubs[s] || { innerHTML: '', textContent: '', style: {}, disabled: false, addEventListener(){} }) };
   T.HG_tabs.find(t => t.id === 'cryptoultra').mount(el);
   const cards = stubs['#cuCards'].innerHTML;
-  ok(/VERIFIED/.test(cards) && /NOT YET MEASURED/.test(cards) && /settled 0 trades in every one of its 14 cells/.test(cards) && !/MEASURED NOT TRADABLE/.test(cards) && !/architectural/i.test(cards), 'the VERIFIED panel prints the derived note and no verdict the walk never reached');
+  ok(/VERIFIED/.test(cards) && /MEASURED NOT TRADABLE/.test(cards) && /Out-of-sample:/.test(cards) && /-0.11/.test(cards) && !/NOT YET MEASURED/.test(cards) && !/architectural/i.test(cards), 'the VERIFIED panel prints the rebake account (measured, not tradable, OOS -0.113R) and no story the walk never told');
   const code = stripComments(read('cryptoultra.js'));
   ok(/var rule = inp\.rule \? Object\.assign\(\{\}, RULE, inp\.rule\) : RULE;/.test(code) && !/rule = inp\.rule \|\| RULE/.test(code), 'the engine merges an override over RULE (the old `inp.rule || RULE` is gone)');
   for (const f of ['scripts/backtest-crypto-multisymbol.mjs', 'scripts/backtest-cryptoscan-improved.mjs', 'scripts/backtest-cryptoultra.mjs']){
@@ -177,7 +182,11 @@ console.log('\n5. the tab reads the generated literal, and nothing loosens');
   }
   ok(/assertPriced\(sigs\);/.test(read('scripts/backtest-cryptoultra.mjs')) && /unpriced: READS\.unpriced \|\| 0/.test(read('scripts/backtest-cryptoultra.mjs')), 'the ULTRA walk refuses before writing and records the unpriced count in meta (textual: main is gated behind isMain)');
   ok(/"cu:evidence": "node scripts\/cryptoultra-evidence-literal\.mjs"/.test(read('package.json')), 'npm run cu:evidence is the drift check');
-  ok(!/measured: true/.test(code.split('BEGIN GENERATED HG_CRYPTO_ULTRA_EVIDENCE')[0]) && (code.match(/HG_CRYPTO_ULTRA_EVIDENCE/g) || []).length === 5, 'the literal is declared once, read by the engine gate and the panel, exported (both sides) -- and typed nowhere');
+  const rawCu = read('cryptoultra.js');
+  ok(!/measured: true/.test(rawCu.split('BEGIN GENERATED HG_CRYPTO_ULTRA_EVIDENCE')[0])
+     && !/measured: true/.test(rawCu.split('END GENERATED HG_CRYPTO_ULTRA_EVIDENCE')[1] || '')
+     && (code.match(/HG_CRYPTO_ULTRA_EVIDENCE/g) || []).length === 5,
+     'the literal is declared once, read by the engine gate and the panel, exported (both sides) -- and no hand-typed measured:true survives outside the generated block');
 }
 
 console.log('\n6. version stamps');

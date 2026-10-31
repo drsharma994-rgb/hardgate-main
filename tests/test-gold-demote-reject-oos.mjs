@@ -66,22 +66,30 @@ const BOOK = ALL.filter(t => (riskPct(t) ?? 0) >= 0.16).sort((a, b) => String(a.
 
 console.log('== the in-sample number is real, and it is reproducible ==');
 {
-  ok(ALL.length === 2193 && BOOK.length === 1522,
-     `${ALL.length} live settled trades, ${BOOK.length} of them past the cost bar`);
+  /* hg-v1439 re-derivation: the artifact is now the hg-v1439 re-walk (Aug21-Oct22,
+     post ceiling-reject), whose walk already applies the hg-v912 cost reject — so
+     ALL === BOOK by construction here. The numbers moved but the FINDING got
+     STRONGER: the demote-reject cut is not even significant in sample any more
+     (t=+0.41), and out of sample it is worse at every split. Mutation: reverting
+     the artifact or the demote set reddens every pin in this section. */
+  ok(ALL.length === 1384 && BOOK.length === 1384,
+     `${ALL.length} live settled trades, ${BOOK.length} of them past the cost bar (the hg-v1439 walk applies the reject itself)`);
   const edge = J('scripts/gold-setup-edge.json').scalp;
   const SUP = Object.keys(edge).filter(k => edge[k].action === 'suppress');
   const DEM = Object.keys(edge).filter(k => edge[k].action === 'demote');
-  ok(DEM.length === 11, `the edge table demotes ${DEM.length} scalp kinds`);
+  ok(DEM.length === 13, `the edge table demotes ${DEM.length} scalp kinds`);
 
   const afterSup = BOOK.filter(t => SUP.indexOf(String(t.stratKey)) < 0);
   const afterDem = afterSup.filter(t => DEM.indexOf(String(t.stratKey)) < 0);
-  ok(Math.abs(mean(afterSup.map(t => t.netR)) + 0.020) < 0.002,
+  ok(Math.abs(mean(afterSup.map(t => t.netR)) + 0.027) < 0.002,
      `with today's suppressions the book is ${mean(afterSup.map(t => t.netR)).toFixed(3)}R`);
-  ok(afterDem.length === 264 && Math.abs(mean(afterDem.map(t => t.netR)) - 0.173) < 0.002,
+  ok(afterDem.length === 278 && Math.abs(mean(afterDem.map(t => t.netR)) - 0.030) < 0.002,
      `and rejecting the demoted kinds too gives ${mean(afterDem.map(t => t.netR)).toFixed(3)}R over n=${afterDem.length}`);
-  ok(tstat(afterDem.map(t => t.netR)) > 1.96,
-     `at t=+${tstat(afterDem.map(t => t.netR)).toFixed(2)} — significantly positive, in sample`);
-  ok(afterDem.length / BOOK.length < 0.2,
+  /* hg-v1439: the in-sample invitation is GONE — the cut book is not
+     significantly anything even before the walk-forward. */
+  ok(Math.abs(tstat(afterDem.map(t => t.netR))) < 1.96,
+     `at t=${tstat(afterDem.map(t => t.netR)).toFixed(2)} — no longer significant even IN sample (was t=+2.9 on the v699 walk)`);
+  ok(afterDem.length / BOOK.length < 0.25,
      `on ${(100 * afterDem.length / BOOK.length).toFixed(0)}% of the volume, which is what makes it worth testing rather than taking`);
 }
 
@@ -131,14 +139,16 @@ console.log('\n== out of sample it does not survive ==');
      'and no split leaves the cut book significantly anything: t = '
      + results.map(r => r.tCut.toFixed(2)).join(', '));
 
-  /* The contrast that makes the point: in-sample it cleared 95%, out of
-     sample not one split does. */
+  /* The contrast that makes the point: on the v699 walk the cut cleared t>1.96
+     in sample and not one split out of sample; on the hg-v1439 walk the cut is
+     not significant even in sample (t=+0.41) and is WORSE than the untouched
+     book at every out-of-sample split. Both eras refuse the cut. */
   const edge = J('scripts/gold-setup-edge.json').scalp;
   const DEM = Object.keys(edge).filter(k => edge[k].action === 'demote');
   const SUP = Object.keys(edge).filter(k => edge[k].action === 'suppress');
   const inSample = BOOK.filter(t => SUP.indexOf(String(t.stratKey)) < 0 && DEM.indexOf(String(t.stratKey)) < 0)
                        .map(t => t.netR);
-  ok(tstat(inSample) > 1.96 && results.every(r => r.tCut < 1.96),
+  ok(results.every(r => r.tCut < 1.96),
      `in sample t=+${tstat(inSample).toFixed(2)}, out of sample the best is t=`
      + Math.max(...results.map(r => r.tCut)).toFixed(2) + ' — the gap IS the selection');
 }

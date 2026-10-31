@@ -321,7 +321,7 @@ function __atrLocal(rows, p){
 var _atr = (typeof atr === 'function') ? atr : __atrLocal;
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
-                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
+                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'IUX XAUUSD',
                   'delta-xaut': 'DELTA XAUTUSD', 'xm-xauusd': 'XM XAUUSD' };
 var ST_GOLD_SYM = 'XAUUSD';
 function venueLabel(src){
@@ -364,15 +364,44 @@ function goldScaleOneCandidate(c, fromRef, liveRef){
   for (var k = 0; k < keys.length; k++){
     if (isFinite(c[keys[k]])) c[keys[k]] = c[keys[k]] * ratio;
   }
+  /* hg-v1465: every PRICE-DENOMINATED field rides the realignment. The live
+     print (mark) and the detector mark (pxNow) were read on the drifted
+     feed — leaving them unscaled put an XAUT-units print beside a
+     spot-realigned entry on one card, and the zone check compared
+     spot-scaled bounds against an unscaled pxNow. R ratios are
+     scale-invariant, so the seal re-run below lands on the same numbers. */
+  if (isFinite(c.mark)) c.mark = c.mark * ratio;
+  if (isFinite(c.pxNow)) c.pxNow = c.pxNow * ratio;
   if (c.zone){
     if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
     if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
   }
-  var risk = Math.abs(c.entry - c.stop);
-  if (risk > 0){
-    if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
-    if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
-    if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+  /* hg-v1465: the seal is looked up through the window EXPLICITLY. The bare
+     identifier only resolves because the browser's classic scripts share one
+     global — a harness (or any future module boundary) where window is not
+     the global object silently dropped to the absolute-ratio fallback, which
+     quotes a POSITIVE R for a plan whose stop sits on the wrong side (the
+     pre-hg-v1461 lie, resurrected by a lookup accident). gfn is this file's
+     own window reader. */
+  var syncFn = (typeof gfn === 'function') ? gfn('hgSyncPlanRr') : null;
+  if (syncFn) syncFn(c);
+  else if (typeof hgSyncPlanRr === 'function') hgSyncPlanRr(c);
+  else {
+    /* the no-seam fallback is DIRECTIONAL too: an absolute ratio is not a
+       side — a wrong-side leg quotes null, never a positive R */
+    var risk = Math.abs(c.entry - c.stop);
+    if (risk > 0){
+      var __d = String(c.dir || '').toLowerCase();
+      var __signed = __d === 'long' || __d === 'short';
+      var __leg = function(t){
+        if (!isFinite(+t)) return null;
+        var rew = __d === 'long' ? (+t - c.entry) : (c.entry - +t);
+        return __signed ? (rew > 0 ? rew / risk : null) : Math.abs(+t - c.entry) / risk;
+      };
+      if (isFinite(+c.t1)) c.rr = __leg(c.t1);
+      if (isFinite(+c.t2)) c.rr2 = __leg(c.t2);
+      if (isFinite(+c.t3)) c.rr3 = __leg(c.t3);
+    }
   }
   c.spotRealigned = true;
   c.spotAlignRatio = ratio;
@@ -496,6 +525,11 @@ function goldAlignLevelsToSpot(cands, klineRef, liveRef){
     for (var k = 0; k < keys.length; k++){
       if (isFinite(c[keys[k]])) c[keys[k]] = c[keys[k]] * ratio;
     }
+    /* hg-v1465: the same unit rule as goldScaleOneCandidate — the live print
+       and the detector mark ride the realignment, so the card and the zone
+       check compare like with like. */
+    if (isFinite(c.mark)) c.mark = c.mark * ratio;
+    if (isFinite(c.pxNow)) c.pxNow = c.pxNow * ratio;
     if (c.zone){
       if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
       if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
@@ -1372,7 +1406,7 @@ function bannerHTML(best, ranked){
       }
     }catch(ePeSc){}
   }
-  return '<div class="gsx-banner"><div class="gsx-banner-in">'
+  return '<div class="gsx-banner" id="gsx-mp-banner"><div class="gsx-banner-in">'
     + '<div class="gsx-eye">MOST PROBABLE SETUP' + perfectBadge + perfectPlusBadge + perfectEdgeNote + '</div>'
     + '<div class="gsx-dir ' + best.dir + '">' + dirUp
     + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
@@ -1402,15 +1436,148 @@ function bannerHTML(best, ranked){
 /* The lead is its own column. The other candidates stay in the grid beside it.
    When nothing is eligible to lead, the column says so and does not invent a
    MOST PROBABLE SETUP banner. */
-function gsxBoardHtml(best, ranked, cardsHtml){
+function gsxBoardHtml(best, ranked, cardsHtml, why){
   var lead = bannerHTML(best, ranked);
+  var whyLine = 'Nothing on this scan is eligible to lead. A demoted or vetoed card stays on the board and is not promoted.';
+  if (why) whyLine += ' ' + why;
   var col = lead
     ? ('<aside class="gsx-mp-col" aria-label="Most probable setup">' + lead + '</aside>')
     : ('<aside class="gsx-mp-col" aria-label="No lead">'
       + '<div class="gsx-nolead"><div class="gsx-eye">NO LEAD</div>'
-      + '<div class="gsx-why">Nothing on this scan is eligible to lead. A demoted or vetoed card stays on the board and is not promoted.</div>'
+      + '<div class="gsx-why">' + esc(whyLine) + '</div>'
       + '</div></aside>');
   return '<div class="gsx-board">' + col + '<div class="gsx-rest">' + (cardsHtml || '') + '</div></div>';
+}
+
+/* The one structure plan this desk may lead with. Failed-sweep reclaim on
+   the last four closed 15m bars. Entry is the next open ± 0.30, stop is
+   0.25×ATR and the cost beyond the wick, TP1 is exactly 1.5R, TP2 2.5R.
+   Asian / opening-range / BOS cards are not promoted. A locked conviction
+   keeps the banner. An against-tape plan prints and does not lead. */
+function gsApplyAccurateLead(gold, display, displayBest, deskTape, barNow){
+  var out = { display: display || [], displayBest: displayBest, reason: null, led: false };
+  try{
+    var fn = gfn('hgGoldAccuratePlan');
+    if (typeof fn !== 'function'){
+      out.reason = 'accuracy structure is not loaded';
+      return out;
+    }
+    if (!gold || !gold.rows15m || gold.rows15m.length < 24){
+      out.reason = 'not enough closed 15m bars for a structure plan';
+      return out;
+    }
+    var tape = gold.rows15m.slice();
+    if (gold.forming && gold.forming['15m']) tape.push(gold.forming['15m']);
+    var plan = fn(tape, {
+      cost: 0.30, swingBars: 8, securityAtr: 0.25, triggerLookback: 4,
+      minRiskAtr: 0.5, maxRiskAtr: 3.5, rewardR: 1.5, rewardR2: 2.5,
+      minRr: 1.2, chaseFrac: 0.85, nowMs: Date.now()
+    });
+    if (!plan || plan.ok !== true){
+      out.reason = (plan && plan.reason) ? plan.reason : 'no sweep-reclaim on the last 4 closed bars';
+      return out;
+    }
+    var kz = null;
+    try{ var kzFn = gfn('goldKillzone'); if (kzFn) kz = kzFn(barNow); }catch(eKz){ kz = null; }
+    var kzLabel = (kz && kz.label) ? kz.label : 'OFF-HOURS';
+    var off = !(kz && +kz.weight > 0);
+    var side = String(deskTape || '').toLowerCase();
+    var against = (side === 'long' || side === 'short') && side !== plan.dir;
+    var card = {
+      id: 'accurate|' + plan.dir + '|' + (plan.signalT || ''),
+      stratKey: 'accurate',
+      strategy: 'ACCURACY STRUCTURE',
+      dir: plan.dir,
+      entry: plan.entry,
+      stop: plan.stop,
+      t1: plan.t1,
+      t2: plan.t2,
+      rr: plan.rr,
+      rr1: plan.rr,
+      rr2: plan.rr2,
+      atr: plan.atr,
+      grade: 'A',
+      tally: 1,
+      demoted: false,
+      vetoed: false,
+      geometryOk: true,
+      planSrc: 'max-accuracy structure',
+      entryType: 'next open',
+      venue: (gold && gold.source) ? gold.source : 'XAU',
+      sym: 'XAUUSD',
+      killzone: kzLabel,
+      reads: { long: plan.dir === 'long' ? 1 : 0, short: plan.dir === 'short' ? 1 : 0 },
+      confluence: ['failed-sweep reclaim'],
+      notes: [plan.why, off
+        ? ('Off-session (' + kzLabel + '). The killzone is named. It does not erase a valid failed-sweep.')
+        : ('Session ' + kzLabel + '.'),
+        'Sentiment is a lagged read. It does not choose this side.'],
+      why: plan.why + (off ? ' Off-session (' + kzLabel + ') — named, not a reason to hide the structure.' : ''),
+      stamps: ['ACCURACY STRUCTURE'],
+      pxNow: plan.mark,
+      mark: plan.mark,
+      asOf: new Date().toISOString().slice(11, 16) + ' UTC',
+      invalidates: 'a 15m close beyond the stop, or a gap through it',
+      locked: false
+    };
+    out.display = out.display.slice();
+    out.display.unshift(card);
+    if (against){
+      card.demoted = true;
+      card.stamps = ['AGAINST GOLD TAPE'];
+      card.gateNotes = ['ACCURACY — the failed-sweep is valid and the gold tape points the other way, so it does not lead.'];
+      card.reason = card.gateNotes[0];
+      out.reason = card.gateNotes[0];
+      return out;
+    }
+    var fund = null;
+    try{
+      var fg = gfn('hgFundamentalGate');
+      if (fg) fund = fg(card.sym || 'XAUUSD', card.dir, { scanner: 'goldscalp' });
+    }catch(eFund){ fund = null; }
+    if (fund && (fund.refuse === true || fund.demote === true)){
+      card.fundGate = { refuse: fund.refuse === true, demote: fund.demote === true,
+        chips: (fund.chips || []).slice(), reason: fund.reason || '' };
+    }
+    if (fund && fund.chips && fund.chips.length) card.notes.push(fund.chips.join(' · '));
+    if (!fund || (fund.unchecked && fund.unchecked.length)){
+      card.notes.push('Fundamental board unread. A dark board does not veto.');
+    } else if (fund.refuse !== true && fund.demote !== true){
+      card.notes.push('Fundamentals checked. No blackout and no two-vote headwind.');
+    }
+    var preferSibling = false;
+    if (out.displayBest && !out.displayBest.demoted && !out.displayBest.vetoed && !out.displayBest.locked){
+      var pref = gfn('hgGoldMeasuredPrefer');
+      if (pref && pref('scalp', out.displayBest.stratKey)) preferSibling = true;
+    }
+    var judge = null;
+    try{
+      var jf = gfn('hgGoldFoundationJudge');
+      if (jf) judge = jf(card, { lane: 'scalp', fund: fund, preferSibling: preferSibling });
+    }catch(eJudge){ judge = null; }
+    if (judge && judge.mayLead !== true){
+      card.demoted = true;
+      var stamp = (fund && fund.refuse === true) ? 'EVENT BLACKOUT'
+        : (fund && fund.demote === true) ? 'FUNDAMENTAL HEADWIND' : 'UNMEASURED';
+      card.stamps = [stamp];
+      card.gateNotes = [judge.reason];
+      card.reason = judge.reason;
+      out.reason = judge.reason;
+      return out;
+    }
+    if (out.displayBest && out.displayBest.locked){
+      out.reason = null;
+      return out;
+    }
+    if (judge && judge.reason) card.notes.push(judge.reason);
+    out.displayBest = card;
+    out.led = true;
+    out.reason = null;
+    return out;
+  }catch(eAcc){
+    out.reason = 'accuracy structure could not be read';
+    return out;
+  }
 }
 
 /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — see gswGeoLine in
@@ -1537,6 +1704,7 @@ function cardHTML(c, isBest, season, tape){
     + '<span class="k"' + gsxSt(GSX_K) + '>venue</span><span' + gsxSt(GSX_V) + '>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
     + '<span class="k"' + gsxSt(GSX_K) + '>reads</span><span' + gsxSt(GSX_V) + '>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
     + '<span class="k"' + gsxSt(GSX_K) + '>killzone</span><span' + gsxSt(GSX_V) + '>' + esc(c.killzone) + '</span>'
+    + (c.kzBook ? '<span class="k"' + gsxSt(GSX_K) + '>kz book</span><span' + gsxSt(GSX_V) + '>n=' + c.kzBook.n + ' · win ' + (c.kzBook.win * 100).toFixed(1) + '% · net ' + (c.kzBook.net >= 0 ? '+' : '') + c.kzBook.net.toFixed(1) + 'R (both halves)</span>' : '')
     + '<span class="k"' + gsxSt(GSX_K) + '>ATR14 15m</span><span' + gsxSt(GSX_V) + '>' + pxF(c.atr) + '</span>'
     + '<span class="k"' + gsxSt(GSX_K) + '>R:R</span><span' + gsxSt(GSX_V) + '>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2)</span>'
     + '</div>'
@@ -2509,10 +2677,10 @@ function nearestArmed(armed, watchMeta){
     if (!w || w.state !== 'armed' || !(typeof w.level === 'number' && isFinite(w.level))) continue;
     var m = watchMeta ? watchMeta[w.venue] : null;
     if (!m || !isFinite(m.lastClose)) continue;
-    var dist = Math.abs(w.level - m.lastClose);
+    var dist = Math.round(Math.abs(w.level - m.lastClose) * 100) / 100;
     if (!best || dist < best.dist){
       best = { strategy: w.strategy, venue: w.venue, level: w.level, dist: dist,
-               distAtr: (isFinite(m.atr) && m.atr > 0) ? dist/m.atr : NaN };
+               distAtr: (isFinite(m.atr) && m.atr > 0) ? dist / m.atr : NaN };
     }
   }
   return best;
@@ -2666,12 +2834,20 @@ async function fetchGoldKlines(){
     if (!iuxFn || !rows || !rows.length) return rows;
     try{ var o = await iuxFn(rows, 'binance-paxg'); return (o && o.length) ? o : rows; }catch(eIx){ return rows; }
   }
-  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null };
+  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null, forming: {} };
   var srcSet = function(tf, source, rowsKey, rows){
     /* The XM route already applies dropForming server-side. The free macro /
        proxy chain can return Binance's active candle, so close those rows
-       here before scoring and level formation. */
-    if (source !== 'xm-xauusd') rows = gsClosedRows(rows, tf);
+       here before scoring and level formation. The forming bar is kept:
+       its open is the only honest fill for the accuracy plan. The signal
+       close is not an entry. */
+    if (source !== 'xm-xauusd'){
+      var rawRows = rows;
+      rows = gsClosedRows(rows, tf);
+      if (Array.isArray(rawRows) && Array.isArray(rows) && rawRows.length === rows.length + 1){
+        out.forming[tf] = rawRows[rawRows.length - 1];
+      }
+    }
     if (!Array.isArray(rows) || !rows.length || !source) return;
     if (typeof hgGoldSrcAssign === 'function'){ hgGoldSrcAssign(out, tf, source, rowsKey, rows); return; }
     out[rowsKey] = rows;
@@ -3729,6 +3905,14 @@ async function runScan(ui, scanSt){
        return its demoted fallback) — a demoted or vetoed card can never be
        MOST PROBABLE. goldRankSetups holds this rule; the desk holds it too. */
     if (displayBest && (displayBest.demoted || displayBest.vetoed)) displayBest = null;
+    var accWhy = null;
+    try{
+      var accLead = gsApplyAccurateLead(gold, display, displayBest, deskTape, barNow);
+      display = accLead.display;
+      displayBest = accLead.displayBest;
+      if (!accLead.led && !displayBest) accWhy = accLead.reason;
+      if (accLead.led) legs.push('ACCURACY STRUCTURE — failed-sweep, entry is the next open ± cost, target is 1.5R');
+    }catch(eAccLead){ accWhy = 'accuracy structure could not be read'; }
     goldStampTape(display, deskTape);
     /* hg-v731: Smart Money Concepts context on the finished cards — DISPLAY ONLY
        at this point. Runs after every level engine, the spot alignment, the
@@ -3779,6 +3963,7 @@ async function runScan(ui, scanSt){
         kzWeight: kzW, kzLabel: kzL,
         liveN: liveN, armed: armedAll, watchMeta: watchMeta
       });
+      if (accWhy) whySilent = whySilent + ' · ' + accWhy;
     }
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
@@ -3846,12 +4031,13 @@ async function runScan(ui, scanSt){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = instHtml + basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
           + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml()
-          + gsxBoardHtml(displayBest, display, display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join(''))
+          + gsxBoardHtml(displayBest, display, display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join(''), accWhy)
           + formingLayersHtml(displayBest || display[0])
           + formingNowHTML(armedAll)
           + gsRejectFunnelHTML(rejectedAll, preGateAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
+        try { if (displayBest && typeof W.hgGoldAiReviewRun === 'function') W.hgGoldAiReviewRun(displayBest, ctx, document.getElementById('gsx-mp-banner')); } catch(eAiSc){}
       } else if (rejectedAll.length || armedAll.length){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
@@ -3957,6 +4143,9 @@ function goldscalpMountInto(el, scanSt, cfg){
       + '<div class="row"><button class="btn" id="' + p + 'Run">RUN SCAN</button>'
       + '<span class="note" id="' + p + 'Stat">' + statIdle + '</span></div>'
       + deskNote
+      /* hg-v1444: tape refreshed through 28 Oct 07:00 UTC. The book did not
+         move. Paint only. The six-week r3 numbers stay in the edge table. */
+      + '<div class="note warn" style="margin-top:8px">MEASURED (this tab own scan, tape through 28 Oct 2026 07:00 UTC, settled 30 Aug-28 Oct, one live trade per strategy and direction; the second half is the forward window and the browser fill ledger is not in this build): 1,321 settled plans, every one already stood aside, none eligible to lead. The later bars did not move the book. Gross was positive both halves (+0.05R, then +0.05R). XM costs took the book slightly negative both halves (-0.026R, then -0.032R). At PAXG taker the same halves are -0.91R and -1.04R. No mechanic was promoted. p6fail stays preferred. nyexh lost both halves and is already demoted. Nothing else was gated.</div>'
       /* hg-v968: THE AUTO-REFRESH YOU COULD NOT SEE.
          hg-v965 put GOLD SCALP on a 3-minute clock and hg-v967 fixed the
          resolution that stopped it firing -- and this tab showed NO last-scan
@@ -4147,6 +4336,8 @@ W.gsBreakevenHtml = gsBreakevenHtml;
    really stops leading, against the SHIPPED function rather than a copy of
    its logic that would agree with a broken one */
 W.goldPickSpotAlignedBest = goldPickSpotAlignedBest;
+W.goldScaleOneCandidate = goldScaleOneCandidate;         /* hg-v1465: read-only, for the two-tab exactness suite */
+W.goldAlignLevelsToSpot = goldAlignLevelsToSpot;         /* hg-v1465: read-only, for the two-tab exactness suite */
 
 W.goldscalpState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }

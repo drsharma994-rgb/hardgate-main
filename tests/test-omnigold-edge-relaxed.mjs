@@ -75,7 +75,14 @@ console.log('2. unknown passes now; a measured failure still does not');
   ok(t, 'the tally comes back');
   eq(t.mechanics, 78, 'over the whole register');
   eq(t.clears, 0, 'nothing clears the family bar — the relaxation is not a promotion');
-  ok(t.fails >= 1, 'at least one mechanic fails outright (' + t.fails + ')');
+  /* hg-v1402 recalibration: the re-walk moved the measured overlap ratio
+     0.406 -> 0.303 (2442.4/8053 week-clustered). The stronger deflation
+     shrinks every whole-walk z, and the ONE measured failure the old record
+     carried — P8-RANGE at -2.02σ — now reads -1.75σ. So the fresh record
+     holds ZERO outright failures; the pin freezes that honestly. The veto
+     BRANCH (z <= EDGE_VETO_Z) is untouched and stays armed — it simply has
+     no member on this bake. */
+  eq(t.fails, 0, 'no mechanic fails outright on the re-walked record (' + t.fails + ') — P8-RANGE moved to -1.75σ with the 0.303 ratio');
   ok(t.unknown > 40, 'and the unknown cohort is what gets freed (' + t.unknown + ')');
   ok(t.unobserved > 0, 'as do the mechanics with no record at all (' + t.unobserved + ')');
 }
@@ -170,7 +177,10 @@ ok(/var COST_VETO_R = 0\.30;/.test(OG_SRC), 'the swing cost ceiling is unchanged
 ok(/var COST_VETO_R_SCALP = 0\.15;/.test(OG_SRC), 'and the scalp ceiling');
 ok(/var MIN_SAMPLES = 20;/.test(OG_SRC), 'the sample floor is unchanged');
 ok(/var FWD_MIN_JUDGE = 20;/.test(OG_SRC), 'and the forward-judgement floor');
-ok(/var OG_EFF_N_RATIO = 0\.406;/.test(OG_SRC), 'the overlap deflation is unchanged');
+/* hg-v1402: the constant DID move — it is a bake-derived number and the
+   re-walk measured 0.303 (2442.4/8053); pinning 0.406 here would pin a
+   stale bake. The pin is now that it matches the CURRENT bake ratio. */
+ok(/var OG_EFF_N_RATIO = 0\.303;/.test(OG_SRC), 'the overlap deflation follows the hg-v1402 bake (0.303)');
 ok(/function hgOgFamilyZ/.test(OG_SRC), 'the family-wise correction still exists');
 {
   const t = TALLY();

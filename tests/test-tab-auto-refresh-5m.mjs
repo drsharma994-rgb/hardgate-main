@@ -89,5 +89,17 @@ console.log('== each tab keeps its own button and its own state ==');
   assert(b2.textContent === 'AUTO-REFRESH 5m ON', 'goldswing stays ON — independent state');
 }
 
+console.log('== PINE GOLD button is 2 minutes; the others stay at 5 ==');
+{
+  const B = boot();
+  const { ctx } = B;
+  B.pane('goldpine');
+  const b = ctx.hgEnsureTabAutoBtn('goldpine');
+  assert(b.textContent === 'AUTO-REFRESH 2m OFF', 'PINE GOLD starts labeled 2m and OFF');
+  assert(ctx.hgTabAutoToggle('goldpine') === 'on', 'arming goldpine → on');
+  assert(B.timers.length === 1 && B.timers[0] === 120000, 'PINE GOLD installs a 2-minute timer (' + B.timers.join(',') + ')');
+  assert(b.textContent === 'AUTO-REFRESH 2m ON', 'PINE GOLD paints 2m ON');
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

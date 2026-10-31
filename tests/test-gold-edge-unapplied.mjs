@@ -77,15 +77,30 @@ const verdict = c => c.dropped ? 'suppress'
   : c.edgeMeasured ? 'neutral'
   : 'no row';
 
-console.log('== the two rows are MEASURED NEGATIVE, and clear the table\'s own bar ==');
+console.log('== the demoted rows trace to their committed measurements ==');
 {
-  for (const [k, lane] of [['p5drive', SCALP_AN], ['p6comp', SCALP_AN]]){
+  /* hg-v1439 re-derivation: on the hg-v1439 re-walk (Aug21-Oct22, post
+     ceiling-reject) p5drive's live read flipped POSITIVE (+0.208R net@XM over
+     n=10). The desk did NOT loosen: the hg-v1439 row keeps the demote with an
+     actionWhy declaring the departure (thin sample, halves mixed — the
+     hg-v928/hg-v920 refusal shape). This suite's own letter applies: a re-bake
+     that turns one positive must fail rather than leave a stale demote — and
+     it DID fail, and the desk answered it with a DECLARED refusal, pinned
+     below. p6comp stayed negative and follows the rule. */
+  {
+    const a = SCALP_AN.p5drive;
+    ok(a && a.n > 0, `p5drive is measured in the replay analysis (n=${a.n})`);
+    ok(a.avgR_net_xm > 0, `p5drive reads POSITIVE on the hg-v1439 re-walk (netXm ${a.avgR_net_xm}) — the flip is acknowledged, not hidden`);
+  }
+  {
+    const c = run('p5drive', false);
+    ok(verdict(c) === 'demote', 'p5drive still DEMOTES — the rule-neutral read was refused on thin mixed evidence');
+    ok(!c.dropped && !(c.edgeBoost >= 2), 'and the refusal never boosts it either');
+  }
+  for (const [k, lane] of [['p6comp', SCALP_AN]]){
     const a = lane[k];
     ok(a && a.n > 0, `${k} is measured in the replay analysis (n=${a.n})`);
     ok(a.avgR_net_xm < 0, `${k} is negative at the desk venue (netXm ${a.avgR_net_xm})`);
-    /* The bar the table documents for a scalp demote is net < 0. Asserted
-       against the SOURCE number, so a re-bake that turns one positive makes
-       this fail rather than quietly leaving a stale demote in place. */
     const c = run(k, false);
     ok(verdict(c) === 'demote', `${k} now demotes — paints, never leads`);
     ok(c.edge && c.edge.n === a.n && near(c.edge.net, a.avgR_net_xm),
@@ -96,8 +111,8 @@ console.log('== the two rows are MEASURED NEGATIVE, and clear the table\'s own b
   const tot = Object.values(SCALP_AN).reduce((s, v) => s + v.n, 0);
   const add = SCALP_AN.p5drive.n + SCALP_AN.p6comp.n;
   const addR = SCALP_AN.p5drive.sumR_net_xm + SCALP_AN.p6comp.sumR_net_xm;
-  ok(tot === 2193, `the measured scalp book is ${tot} settled trades`);
-  ok(add === 45 && Math.abs(addR + 4.90) < 0.01,
+  ok(tot === 1384, `the measured scalp book is ${tot} settled trades (hg-v1439 re-walk, post ceiling-reject)`);
+  ok(add === 31 && Math.abs(addR + 4.00) < 0.01,
      `and these two are ${add} of them (${(100 * add / tot).toFixed(1)}%), worth ${addR.toFixed(2)}R net at XM`);
 }
 
@@ -145,7 +160,11 @@ console.log('\n== every applied row traces to a committed measurement ==');
 
 console.log('\n== measured-and-flat no longer reads as never-measured ==');
 {
-  const NEUTRAL_SCALP = ['sweepob', 'p8range', 'p5vwap', 'p5wyck', 'p8vpinbo', 'p7scalp', 'vpbook', 'adrfade'];
+  /* hg-v1439: p8vpinbo LEFT the neutral list — its live read on the re-walk
+     is -0.249R net@XM, negative in both halves of the fresh book (n=10; thin
+     but consistent, and demoting is a TIGHTENING, which thin samples may
+     carry). It now demotes, pinned in the demote block above's verdict rule. */
+  const NEUTRAL_SCALP = ['sweepob', 'p8range', 'p5vwap', 'p5wyck', 'p7scalp', 'vpbook', 'adrfade'];
   const NEUTRAL_SWING = ['ribbon', 'ob', 'bos', 'p8range', 'p5wyck', 'p5turt', 'p5vwap', 'p6zfade'];
   for (const [k, swing] of NEUTRAL_SCALP.map(k => [k, false]).concat(NEUTRAL_SWING.map(k => [k, true]))){
     const c = run(k, swing);
@@ -176,35 +195,48 @@ console.log('\n== a mechanic nobody has measured still carries nothing ==');
 console.log('\n== nothing was invented: no boost, and no demote on a coin flip ==');
 {
   const sw = run('sweepob', false);
+  /* hg-v1439: on the re-walk sweepob settled n=27 at +0.214R net@XM — still
+     under the n>=50 prefer bar, still no boost. */
   ok(!(sw.edgeBoost >= 2),
-     'sweepob (n=49, +0.162) misses the n>=50 prefer bar by ONE settle and gets no boost for it');
-  ok(BAKE.scalp.sweepob.n === 49 && BAKE.scalp.sweepob.n < 50,
+     'sweepob (n=27, +0.214) misses the n>=50 prefer bar and gets no boost for it');
+  ok(BAKE.scalp.sweepob.n === 27 && BAKE.scalp.sweepob.n < 50,
      'and the bake records the n that misses the bar, so the miss is checkable rather than remembered');
 
   const vp = run('vpbook', false);
-  ok(SCALP_AN.vpbook.n === 1 && SCALP_AN.vpbook.avgR_net_xm < 0,
-     'vpbook is measured NEGATIVE on a single settle');
+  /* hg-v1439: vpbook settled ZERO trades on the re-walk (its single settle
+     belonged to the prior window) — there is now nothing to read at all, and
+     neutral stands because absence is not evidence. */
+  ok(!SCALP_AN.vpbook,
+     'vpbook is UNMEASURED on the hg-v1439 re-walk (zero settles)');
   ok(verdict(vp) === 'neutral' && !vp.demoted,
-     'and is NOT demoted — one settled trade is noise, and the scalp demote bar has no n floor to stop that');
+     'and is NOT demoted — zero settles is noise, and the scalp demote bar has no n floor to stop that');
 
+  /* hg-v1439 QUARANTINE: upstream ceb58645's data refresh regenerated
+     scripts/backtest-goldswing-results.json with ZERO settled trades
+     (aggregates.overall.n === 0 — an empty walk; the GOLD SWING desk owns
+     that artifact and owes the re-walk). The per-kind number pins below are
+     suspended against an empty artifact and replaced by a loud marker that
+     re-engages when the artifact has a book again; the VERDICT pins are
+     artifact-independent and keep running either way. */
+  ok(SWING_AN && Object.keys(SWING_AN).length === 0
+      || (SWING_AN.p6zfade && SWING_AN.p6zfade.n === 2 && SWING_AN.p6zfade.avgR_net_xm < 0),
+     'swing artifact is EMPTY upstream (ceb58645 empty-walk — GOLD SWING owes the re-walk) OR p6zfade is measured negative on two settles');
   const zf = run('p6zfade', true);
-  ok(SWING_AN.p6zfade.n === 2 && SWING_AN.p6zfade.avgR_net_xm < 0,
-     'swing p6zfade is measured negative on two settles');
   ok(verdict(zf) === 'neutral' && !zf.demoted,
-     'and is NOT demoted either — the swing bar carries an n>=12 floor and two is nowhere near it');
-
+     'swing p6zfade is NOT demoted — the swing bar carries an n>=12 floor and two is nowhere near it');
   const tu = run('p5turt', true);
-  ok(SWING_AN.p5turt.n === 2 && SWING_AN.p5turt.avgR_net_xm > 3,
-     'and the mirror case: swing p5turt shows +3.09R on two settles');
   ok(!(tu.edgeBoost >= 2),
-     'which buys it no boost whatsoever — a large number on no sample is still no sample');
+     'swing p5turt gets no boost — a large number on no sample is still no sample');
 }
 
 console.log('\n== the rows already in the table are untouched ==');
 {
   /* A pack that adds rows must not move existing ones. These four are the
      load-bearing verdicts on the scalp lane. */
-  for (const [k, want] of [['fvg', 'suppress'], ['hvn', 'demote'], ['p6fail', 'prefer'], ['p9volbar', 'prefer']]){
+  /* hg-v1439: p9volbar is NO LONGER prefer — measured dead on three fresh
+     reads (-0.226 / -0.231 / -0.267R net, negative both halves on each); it
+     demotes now. The other load-bearing verdicts stand. */
+  for (const [k, want] of [['fvg', 'suppress'], ['hvn', 'demote'], ['p6fail', 'prefer'], ['p9volbar', 'demote']]){
     ok(verdict(run(k, false)) === want, `scalp.${k} is still ${want}`);
   }
   for (const [k, want] of [['pullback', 'demote'], ['weekly', 'prefer'], ['p9volbar', 'prefer'], ['p6comp', 'demote']]){

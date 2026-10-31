@@ -7,8 +7,12 @@
 
 function trendmxPlanBlock(r){
   var dir = tmDirOf(r);
-  if (!dir)
+  if (!dir){
+    var indep = tmIndependentSum(r);
+    if (indep !== null && r && typeof r.score === 'number' && isFinite(r.score) && Math.abs(r.score) >= TM_MAJORITY)
+      return '<div class="plan">No majority direction on this row — one leg plus the ADX echo is not a side — no levels.</div>';
     return '<div class="plan">No majority direction on this row (|score| &lt; ' + TM_MAJORITY + ') — no levels.</div>';
+  }
   if (dir === 'long' && tmAltLongBlockedByBtc(r))
     return '<div class="plan">No long. BTC structure is down, so alt longs are stood down.</div>';
   var s = trendmxPlan(Object.assign({}, r, { dir: dir }));

@@ -226,8 +226,13 @@ console.log('== 5) every crypto record map forwards the mark it had in hand (tex
      never match the raw-sym resolves the scan loops hand back; that evidence
      looked recorded and was frozen. The mark/bar contract this pin guards is
      unchanged — tests/test-edge-gate-v1000.mjs drives the strip behaviorally. */
-  assert(/const fwdMark = \(typeof hgMpMarkOf === 'function'\) \? hgMpMarkOf\(bookMeta, bookMeta, \{\}\) : NaN;\s*const fwdBar = \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(bookMeta\.rows\) : \{\};\s*hgFwdRecordScan\('CARD:' \+ scanId, '4h',\s*\[\{ sym: String\(sym\)\.replace\(\/\^\\\[\[\^\\\]\]\*\\\]\\s\*\/, ''\), dir: dir, entry: entry, stop: stop, t1: t1,\s*mark: \(isFinite\(fwdMark\) && fwdMark > 0\) \? fwdMark : undefined, barT: fwdBar\.barT,/.test(shell),
-    'index.html: the inline CARD choke point (SMC, ORDER BLOCKS, TRAP, DIV, COIL, APEX) records the RAW sym (venue tag stripped, hg-v1000) and forwards the mark its own geometry line reads and the bar off bookMeta.rows');
+  /* hg-v1432 re-pin: the tf literal '4h' became hgInlineScanTf(scanId,
+     bookMeta) — the hardcoded tf settled liq-trap/scalp 15m plans on 4h
+     bars — and `ticket: true` became `ticket: tradeable` so NEAR/FORMING
+     tiers record ticket:false instead of not at all. The mark/bar contract
+     this pin guards is unchanged. */
+  assert(/const fwdMark = \(typeof hgMpMarkOf === 'function'\) \? hgMpMarkOf\(bookMeta, bookMeta, \{\}\) : NaN;\s*const fwdBar = \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(bookMeta\.rows\) : \{\};\s*hgFwdRecordScan\('CARD:' \+ scanId, hgInlineScanTf\(scanId, bookMeta\),\s*\[\{ sym: String\(sym\)\.replace\(\/\^\\\[\[\^\\\]\]\*\\\]\\s\*\/, ''\), dir: dir, entry: entry, stop: stop, t1: t1,\s*mark: \(isFinite\(fwdMark\) && fwdMark > 0\) \? fwdMark : undefined, barT: fwdBar\.barT,/.test(shell),
+    'index.html: the inline CARD choke point (SMC, ORDER BLOCKS, TRAP, DIV, COIL, APEX) records the RAW sym (venue tag stripped, hg-v1000) on the scanner\'s own tf (hg-v1432) and forwards the mark its own geometry line reads and the bar off bookMeta.rows');
   assert((shell.match(/\.\.\.c, barT: \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(c\.rows\)\.barT : undefined, mechanic: kind\.toUpperCase\(\) \+ '-(CLEAN|NEAR)'/g) || []).length === 2,
     'index.html: the BEST/SWING/SCALP publish spreads the candidate (its mark rides the spread) and reads the bar off its rows, CLEAN and NEAR alike');
 }
@@ -258,7 +263,15 @@ console.log('== 6) the census, derived by call shape: every record writer carrie
       const before = src.slice(Math.max(0, m.index - 30), m.index);
       if (/function\s+$/.test(before) || /=\s*function\s*$/.test(src.slice(m.index, m.index + 40))) continue;
       if (/hgFwdRecordScan = function/.test(src.slice(m.index, m.index + 40))) continue;
-      const span = src.slice(m.index, m.index + 900);
+      /* hg-v1389: the lookforward used to be 900 chars, which silently reads
+         a writer as bare the moment its record literal grows past that count
+         -- the mirror of the hg-v1295 lookback defect ("silently reads a
+         writer as bare once a pack adds lines between its record literal's
+         declaration and the call"). SUPER:GOLD's record (super-gold.js, hg-v1361)
+         grew past 900 chars when it added perfect/perfectPlus/chased/chaseCode/
+         reads/fundingPct, pushing `mark: c.mark` to offset 1081 inside the
+         literal. Bumped to 3000 (matches the lookback magnitude). */
+      const span = src.slice(m.index, m.index + 3000);
       const tab = (span.match(/\(\s*('[^']+'|[A-Za-z_$][\w$]*)/) || [])[1];
       /* hg-v1295: the lookback used to be a hard 3000 chars, which silently
          reads a writer as bare once a pack adds lines between its record

@@ -457,6 +457,37 @@ function hg80PlanBe(plan, rtFrac){
 
 /* The breakeven to print on a card ABOUT A FIRED SETUP: its own, falling
    back to the rung's only when the plan cannot be priced at all. */
+/* hg-v1421 — THE COST FLOOR (wide05 R1/R2; measured on this desk's first baked
+   walk, scripts/walk-80percent.mjs over 20,000 PAXG 5m bars): the cohort whose
+   stop sat under 4x the venue round trip settled net -0.744R / -1.305R in BOTH
+   chronological halves at XM costs (and -7.9R / -15.9R at Binance-PAXG taker).
+   Friction above 0.25R of planned risk is the measured-toxic tail, so those
+   setups are stood aside WITH THE REASON NAMED (paint-level; this desk mints
+   no ticket and nothing is suppressed from the record). Lever
+   window.HG_80_COST_FLOOR = false restores pre-v1421 counting. Three-state,
+   the hg-v1418 shape: an unreadable geometry is NOT a verdict — null means no
+   claim, never a pass. */
+var HG_80_COST_FLOOR_MULT = 4;
+function hg80CostFloorWhy(entry, stop, dir, venueRt){
+  var gv = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
+  if (gv.HG_80_COST_FLOOR === false) return null;
+  var rt = (typeof venueRt === 'number' && isFinite(venueRt) && venueRt >= 0) ? venueRt : null;
+  var e = (typeof entry === 'number' && isFinite(entry) && entry > 0) ? entry : null;
+  var s = (typeof stop === 'number' && isFinite(stop) && stop > 0) ? stop : null;
+  if (rt === null || e === null || s === null) return null;
+  if (dir !== 'long' && dir !== 'short') return null;
+  var width = (dir === 'long') ? (e - s) : (s - e);
+  if (!(width > 0)) return null;                       /* inverted or zero width: unreadable */
+  var stopPct = width / e * 100;
+  var floorPct = HG_80_COST_FLOOR_MULT * rt * 100;     /* XM 0.02% RT -> 0.08% of entry; PAXG 0.26% RT -> 1.04% */
+  if (stopPct < floorPct)
+    return 'COST FLOOR — the stop is ' + stopPct.toFixed(3) + '% of entry, under '
+      + HG_80_COST_FLOOR_MULT + 'x the venue round trip (' + floorPct.toFixed(3) + '%): friction alone '
+      + 'eats more than 0.25R of the planned risk (the sub-floor cohort measured net -0.744R/-1.305R '
+      + 'in both halves at XM, hg-v1421 walk)';
+  return null;
+}
+
 function hg80CardBe(sig, rung){
   var rt = (rung && rung.be) ? rung.be.rtFrac : NaN;
   return hg80PlanBe(sig && sig.plan, rt) || (rung ? rung.be : null);
@@ -983,6 +1014,17 @@ function hg80Quality(sig, rung, grade, livePx){
      input would be a worse error than showing it. */
   var pays = !(v.key === 'gone' || v.key === 'negative');
 
+  /* hg-v1421 cost floor: risk-relative friction, on the same binding geometry
+     the rest of this function already priced (live fill when it binds, the
+     card's otherwise). Floor-refused setups join the arithmetic-refused
+     bucket with their own stamp and the measured reason. */
+  var rtFloor = (rung && rung.be) ? finStrict(rung.be.rtFrac) : NaN;
+  var floorEntry = (repriceBinds && lp) ? lp.entry : (sig && sig.plan ? fin(sig.plan.entry) : NaN);
+  var floorStop = (repriceBinds && lp) ? lp.stop : (sig && sig.plan ? fin(sig.plan.stop) : NaN);
+  var floorDir = (sig && sig.plan && sig.plan.dir) ? sig.plan.dir : ((lp && lp.dir) ? lp.dir : null);
+  var floorWhy = (typeof hg80CostFloorWhy === 'function') ? hg80CostFloorWhy(floorEntry, floorStop, floorDir, rtFloor) : null;
+  if (floorWhy) pays = false;
+
   /* A firing that lands while the previous trade on this rung is still
      running is not a second independent trade — taking it doubles the
      position. It is not refused (the spec fired, and a reader may well be
@@ -1030,6 +1072,7 @@ function hg80Quality(sig, rung, grade, livePx){
   return { score: score, pays: pays, verdict: v, costShare: v.share,
            stopPct: stopPct, underFloor: underFloor, gradeRank: gradeRank[grade],
            doubles: doubles, live: lp, liveBe: liveBe, planVerdict: planV,
+           floorWhy: floorWhy,
            repriced: repriceBinds, terms: terms };
 }
 
@@ -3163,7 +3206,7 @@ function ladderBoardHtml(rungs, livePx){
       var lgrade = hg80LiveGrade(lv, livePx);
       var lq = hg80Quality(lv, r, lgrade, livePx);
       var acts = hg80LiveActs(lgrade);
-      var why = !acts ? 'price gone' : (!lq.pays ? 'cannot pay here' : null);
+      var why = !acts ? 'price gone' : (!lq.pays ? (lq.floorWhy ? 'under the cost floor' : 'cannot pay here') : null);
       state = variantChipHtml(lv) + ' <span class="statuschip ' + (why ? 'veto' : 'ok') + '">'
         + esc(lv.dir.toUpperCase()) + ' FIRED' + (why ? ' · ' + esc(why) : '') + '</span>';
     }
@@ -4272,7 +4315,9 @@ function simpleSetupsHtml(rungs, livePx){
       for (k = 0; k < noPay.length; k++){
         var cn = noPay[k];
         h += simpleCardHtml(cn.s, cn.r,
-          '<span class="stamp veto">CANNOT PAY AT THIS VENUE</span>'
+          (cn.q.floorWhy
+            ? '<span class="stamp veto">UNDER THE COST FLOOR</span><div class="note">' + esc(cn.q.floorWhy) + '</div>'
+            : '<span class="stamp veto">CANNOT PAY AT THIS VENUE</span>')
           + feedLagChipHtml(cn.s, cn.r)
           + liveChipHtml(cn.grade, spot) + reprintHtml(cn.q, vn)
           + sizeHtml(cn.s, cn.q, slip) + bookChipHtml(cn.s));
@@ -6180,7 +6225,17 @@ function mount(el){
         return '<b>' + esc(v.mech) + '</b> (' + v.rsiLong + ' / ' + v.rsiShort + ')';
       }).join(' and ')
     + ' run the identical rules at a looser pullback on the bars the tighter one turned away, '
-    + 'each recorded apart so none lends another its numbers.</div>'
+    + 'each recorded apart so none lends another its numbers. '
+    /* hg-v1421 venue fact, measured on this desk's first baked walk
+       (scripts/walk-80percent.mjs, 20,000 PAXG 5m bars) — stated once here,
+       not on every card. */
+    + '<b>Measured, hg-v1421:</b> on the first baked walk (20,000 PAXG 5m bars) the '
+    + 'all-mechanics book hit 84.35% against an 84.21% gross bar — a coin flip — settling '
+    + 'net -0.19R at XM and -2.58R at Binance-PAXG taker. At PAXG taker costs the book is '
+    + 'structurally negative (median friction 0.58R of planned risk); a stop under 4x the '
+    + 'venue round trip is stood aside as UNDER THE COST FLOOR (the sub-floor cohort '
+    + 'measured -0.744R/-1.305R in both halves at XM). That is loss-reduction, not a green '
+    + 'book — the forward ledger decides.</div>'
     + '<div class="row" style="margin-top:8px"><button class="btn" id="p80Run">SCAN</button>'
     + '<span class="note" id="p80Stat">auto-runs on open</span></div>'
     + '<div class="p80-ctl" id="p80AutoCtl"></div>'
@@ -6239,6 +6294,8 @@ W.firedSplitHtml     = firedSplitHtml;
 W.variantNoteHtml    = variantNoteHtml;
 W.armedHtml          = armedHtml;
 W.costLineHtml       = costLineHtml;
+W.hg80CostFloorWhy   = hg80CostFloorWhy;
+W.HG_80_COST_FLOOR_MULT = HG_80_COST_FLOOR_MULT;
 W.hg80Shown          = hg80Shown;
 W.hg80CostVerdict    = hg80CostVerdict;
 W.hg80Quality        = hg80Quality;

@@ -9,11 +9,14 @@
    Depends: desk-scan-universe.js (universe + kline fetch), cryptoultra.js
    (cryptoUltraEngine). Both must load before this file.
 
-   ALL SETUPS ARE RECORD ONLY — the engine is measured NOT TRADABLE on BTCUSDT
-   (rule is self-canceling: ~3,600 candidates merge/dedupe to 0 settled trades).
-   Engine has never been backtested on any other symbol. These are what the
-   470-read vote rule WOULD say, printed for the record so the count can be
-   audited. NOT FOR TRADING.                                                    */
+   ALL SETUPS ARE RECORD ONLY — the engine is measured NOT TRADABLE, hg-v1421
+   rebake on a priced walk (BTCUSDT 6,000 x 15m, 0.20% RT): every one of the 14
+   grid cells is negative in-sample AND 0%-win out-of-sample; cross-sectionally
+   negative on ETH and SOL too. The votes carry no edge at this cost; fires are
+   what the 470-read vote rule WOULD say, printed for the record so the count
+   can be audited. NOT FOR TRADING. A measured CHOP FLOOR (Kaufman ER(20) <
+   0.30, lever HG_CS_ER_FLOOR) stands low-efficiency signals aside with the
+   reason named; the skipped cohort measured -0.147R/-0.124R in both halves. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
@@ -257,6 +260,19 @@ function csTrimToBar(rows, barT){
     }
   }
   return rows.slice(0, -1);
+}
+
+/* hg-v1421 — Kaufman Efficiency Ratio over the last `len` closed bars.
+   Null on insufficient tape: an unreadable ER is no verdict, and the caller
+   fails open. Measured seam (hg-v1421 walk, both grid cells, both halves):
+   the ER(20) < 0.30 cohort settled -0.147R / -0.124R net. */
+function csKaufmanER(rows, len){
+  if (!Array.isArray(rows) || rows.length < len + 1) return null;
+  var n = rows.length;
+  var ch = Math.abs(rows[n - 1].c - rows[n - 1 - len].c);
+  var s = 0;
+  for (var i = n - len; i < n; i++) s += Math.abs(rows[i].c - rows[i - 1].c);
+  return s > 0 ? ch / s : null;
 }
 
 /* cryptoultra.js closedRows, for a tape the engine reports no bar for (it
@@ -1683,6 +1699,8 @@ function setupCardHTML(s, idx, tally){
 
   h += '<small>RECORD ONLY — engine measured NOT TRADABLE; this is what the rule would say</small></div>';
 
+  if (s.ema150dNote) h += '<div style="font-size:9px;color:#94A3B8;margin-top:2px">1D REGIME: ' + esc(s.ema150dNote) + '</div>';
+
   /* Sentiment context and warnings */
   if (s.sentiment && typeof hgSentimentCardHTML === 'function'){
     h += '<div style="margin:6px 0">' + hgSentimentCardHTML(s.sym) + '</div>';
@@ -2010,11 +2028,25 @@ async function runScan(ui){
           if (res.regime === 'chop') addGate('regime', 'regime: CHOP');
           if (!liquidHour) addGate('session', 'session: low liquidity (outside 07:00-17:00 UTC)');
 
+
           /* The same closed bars layer 1 voted on. See csTrimToBar above for
              the lookahead and the clock dependence this removes; the trimmed
              15m tape is reused by the SMC block at the bottom of the loop,
              which has always wanted exactly this. */
           var closed15 = csTrimToBar(rows15m, res.bar ? res.bar.t : null);
+
+          /* hg-v1421 CHOP FLOOR (stand-aside, paint-level — the forward log
+             below still records the setup, tier-split, so the ledger can
+             judge kept vs stood-aside cohorts). Measured on the hg-v1421
+             rebake rows: the ER(20)<0.30 cohort settled -0.147R (loosest
+             cell) / -0.124R (best-IS cell) net in BOTH chronological
+             halves. Lever window.HG_CS_ER_FLOOR = false restores the
+             pre-v1421 gates. Tape = the same closed 15m bars the engine
+             voted on; an unreadable ER (short tape) is no verdict. */
+          var er20 = csKaufmanER(closed15, 20);
+          if (W.HG_CS_ER_FLOOR !== false && er20 !== null && er20 < 0.30){
+            addGate('er-floor', 'CHOP FLOOR — Kaufman ER(20) ' + er20.toFixed(2) + ' < 0.30 (skipped cohort measured -0.147R/-0.124R both halves, hg-v1421)');
+          }
           /* closed1h was trimmed beside the fetch above, so the tape layer 2
              scores is the same one csH1State judged. */
 
@@ -2133,6 +2165,7 @@ async function runScan(ui){
             bar: res.bar,
             qualityGates: qualityGates,
             gateKeys: gateKeys,
+            er20: er20,
             isHighQuality: qualityGates.length === 0 && proGradeCheck.isPro
           };
 
@@ -2205,6 +2238,34 @@ async function runScan(ui){
         if (fwdRows.length) W.hgFwdRecordScan('CRYPTO SCAN', '15m', fwdRows, { horizonBars: csFwdHorizon(setups) });
       }
     }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('cryptoscan', eFwd); }catch(eW){} }
+
+    /* hg-v1421 EMA150(1d) counter-regime FOOTNOTE — display-only, never a
+       gate. The veto WAS measured adoptable on the skipped cohort (-0.151R,
+       both halves) but stacking it on the chop floor thins the stream 89%,
+       so it annotates instead. One daily leg for the top-25 sorted cards,
+       fetched in parallel, fail-open: an unread daily leg prints no
+       footnote, exactly like any other absent read on this tab. */
+    try{
+      var noteTop = setups.slice(0, 25);
+      await Promise.all(noteTop.map(async function(s){
+        try{
+          var got1d = fetchRes
+            ? await fetchRes(s.item, '1d', 200)
+            : { rows: (await fetchKl(s.item, '1d', 200)) || [], ok: true, reason: null };
+          var rows1d = (got1d && got1d.rows) || [];
+          if (!got1d || got1d.ok === false || rows1d.length < 151) return;
+          var e150 = rows1d[0].c, kE = 2 / 151;
+          for (var ei = 1; ei < rows1d.length; ei++) e150 = rows1d[ei].c * kE + e150 * (1 - kE);
+          var lastC = rows1d[rows1d.length - 1].c;
+          var counter = (s.dir === 'long') ? (lastC < e150) : (lastC > e150);
+          s.ema150dNote = counter
+            ? ('counter-regime — 1d close ' + (s.dir === 'long' ? 'below' : 'above')
+               + ' EMA150; the counter-regime cohort measured -0.151R net (both halves, hg-v1421). '
+               + 'Annotation only, unadopted as a gate (stacking thins the stream 89%)')
+            : ('1d close ' + (s.dir === 'long' ? 'above' : 'below') + ' EMA150 — regime agrees');
+        }catch(eN){}
+      }));
+    }catch(eN2){}
 
     /* universe is the list the scan was HANDED, which two filters already
        shrank. Carry the funnel so COVERAGE can quote both. */
@@ -2291,6 +2352,7 @@ W.cryptoScanState = cryptoScanState;
    so a behaviour test is impossible unless the decision is a pure function. */
 W.__csSmcRank = csSmcRank;
 W.__csSortSetups = csSortSetups;
+W.__csKaufmanER = csKaufmanER;
 W.__csFwdRows = csFwdRows;
 W.__csTrimToBar = csTrimToBar;
 W.__csClosedRows = csClosedRows;

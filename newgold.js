@@ -563,10 +563,12 @@ function ngAssess(rows){
      never print 1.75 \u2014 so the headroom gate rewarded exactly the cards
      whose geometry the detector got wrong. Derive from the levels the card
      actually carries; never inherit (the plans.js hgSyncPlanRatios rule). */
-  risk = Math.abs(entry - stop);
+  risk = dir === 'long' ? entry - stop : stop - entry;
   if (!(risk > 0)) return null;
-  var rr1Final = Math.abs(t1 - entry) / risk;
-  var rr2Final = Math.abs(t2 - entry) / risk;
+  var rew1 = dir === 'long' ? t1 - entry : entry - t1;
+  var rew2 = dir === 'long' ? t2 - entry : entry - t2;
+  var rr1Final = (typeof hgGoldLegR === 'function') ? hgGoldLegR(dir, entry, stop, t1) : (rew1 > 0 ? rew1 / risk : NaN);
+  var rr2Final = (typeof hgGoldLegR === 'function') ? hgGoldLegR(dir, entry, stop, t2) : (rew2 > 0 ? rew2 / risk : NaN);
 
   /* Fail closed (hg-v700): the composed floor must never ship a card whose
      FINAL T1 pays under the module's MIN_RR. The R-multiple ladder re-prices
@@ -1950,20 +1952,20 @@ var NG_CSS = ''
 + '.ng-dim{opacity:.65;font-weight:500}'
 + '.ng-form-row{padding:6px 9px;margin-top:6px;border-left:3px solid #C9921A;background:#FFFBEB;border-radius:4px;line-height:1.6}'
 + '.ng-form-row b{letter-spacing:.06em}'
-+ '.ng-leg{padding:5px 8px;border-left:3px solid #E2E8F0;margin:4px 0;background:#fff}'
++ '.ng-leg{padding:5px 8px;border-left:3px solid #E2E8F0;margin:4px 0;background:#1e293b}'
 + '.ng-leg.ok{border-left-color:#059669}'
 + '.ng-leg.no{border-left-color:#DC2626}'
-+ '.ng-leg.dark{border-left-color:#64748B;background:#F1F5F9;color:#334155}'
++ '.ng-leg.dark{border-left-color:#94a3b8;background:#F1F5F9;color:#334155}'
 + '.ng-leg b{letter-spacing:.08em}'
 + '.ng-ctx{font-size:9px;letter-spacing:.1em;color:#9A3412;font-weight:800;margin-left:6px}'
 + '.ng-chip{display:inline-block;font-size:8px;letter-spacing:.12em;border:1px solid;border-radius:4px;padding:1px 5px;margin-right:5px;font-weight:800}'
 + '.ng-chip.on{color:#047857;border-color:rgba(5,150,105,.5);background:rgba(5,150,105,.08)}'
-+ '.ng-chip.off{color:#64748B;border-color:#CBD5E1;background:#F8FAFC}'
++ '.ng-chip.off{color:#94a3b8;border-color:#CBD5E1;background:#F8FAFC}'
 + '.ng-needs{margin-top:6px;padding:6px 8px;border:1px dashed #FDE68A;background:#FFFBEB;border-radius:6px}'
 + '.ng-needs b{color:#A67C12;letter-spacing:.08em}'
 + '.ng-wrow{padding:5px 8px;border-left:3px solid #C9921A;background:#FFFBEB;margin:4px 0}'
 + '.ng-wrow b{letter-spacing:.08em}'
-+ '.ng-hrow{padding:4px 8px;border-left:3px solid #E2E8F0;margin:3px 0;background:#fff}'
++ '.ng-hrow{padding:4px 8px;border-left:3px solid #E2E8F0;margin:3px 0;background:#1e293b}'
 + '.ng-hrow.t1{border-left-color:#059669}'
 + '.ng-hrow.stop{border-left-color:#DC2626}'
 + '.ng-hrow.expired{border-left-color:#A67C12}'

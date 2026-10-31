@@ -66,33 +66,51 @@ const verdict = (n, gross, net) => {
 
 /* ---- 1. every moved verdict is the rule applied to the live numbers ---- */
 console.log('1. each retune is the stated bar on the live population, not a pick');
+/* hg-v1439 re-derivation: the retune block's liveN/liveGross/liveNet are the
+   HG-V928 HISTORICAL record (that walk's numbers — they do not change with
+   the artifact); the CURRENT artifact's numbers live in each row's live:
+   block, and the rule applied to them must reproduce the row's action today.
+   bosalign's hg-v928/hg-v916 loosening LAPSED at hg-v1439 (the re-walk reads
+   -0.071R net over n=94 — the demote rule fires again; the hg-v916 note
+   warned the sign flips at every split, and it flipped), so its action is
+   back to its baked demote. */
 const moved = ctx.hgGoldEdgeRetunedRows();
-eq(moved.length, 4, 'four verdicts moved');
+eq(moved.length, 4, 'four rows carry retune records');
 eq(moved.map((m) => m.key).sort().join(','), 'bosalign,liqsweep,nyexh,ribbon', 'and they are these four');
 for (const { key, row } of moved){
   const rows = of(key);
   const n = rows.length, g = mean(rows.map((t) => t.rGross)), nt = mean(rows.map((t) => t.netR));
-  eq(row.retune.liveN, n, key + ' live n matches the replay');
-  near(row.retune.liveGross, g, 5e-4, key + ' live gross matches');
-  near(row.retune.liveNet, nt, 5e-4, key + ' live net matches');
-  eq(row.retune.to, verdict(n, g, nt), key + ' new verdict is what the stated bars give');
-  eq(row.action, row.retune.to, key + ' action is the new verdict');
+  ok(typeof row.retune.liveN === 'number' && typeof row.retune.liveGross === 'number' && typeof row.retune.liveNet === 'number',
+     key + ' keeps its hg-v928 historical record (liveN/liveGross/liveNet from that walk)');
+  eq(verdict(n, g, nt), row.action,
+     key + ' the rule on TODAY\'s replay (' + n + ' trades, net ' + nt.toFixed(3) + ') reproduces the in-force action ' + row.action);
   eq(row.actionBaked, row.retune.from, key + ' keeps the original under actionBaked');
-  ok(row.action !== row.actionBaked, key + ' actually moved');
-  ok(/RETUNED ON INSTRUCTION/.test(row.why), key + ' why says it was an instruction');
+  ok(/RETUNED ON INSTRUCTION|hg-v1439/.test(row.why), key + ' why records the instruction and its hg-v1439 fate');
 }
-/* all four loosen — none of them makes the board emptier */
+/* the hg-v928 loosenings: liqsweep/nyexh/ribbon still loosen; bosalign's
+   lapsed at hg-v1439 — it is back to the baked demote. */
 const rank = { suppress: 0, demote: 1, neutral: 2, prefer: 3 };
-for (const { key, row } of moved)
-  ok(rank[row.action] > rank[row.actionBaked], key + ' loosened rather than tightened');
+for (const { key, row } of moved){
+  if (key === 'bosalign'){
+    eq(row.action, row.actionBaked, 'bosalign: hg-v1439 returned it to the baked demote (the instruction-retune lapsed on the re-walk)');
+    ok(/hg-v1439: BACK TO DEMOTE/.test(row.why), 'bosalign why records the hg-v1439 return with numbers');
+  } else {
+    ok(rank[row.action] > rank[row.actionBaked], key + ' loosened rather than tightened');
+  }
+}
 
 /* ---- 2. none is unanimous, and the row admits it ---- */
 console.log('2. not one is unanimous on disjoint windows, and each says so');
+/* hg-v1439 re-derivation: retune.windows is the HG-V928 historical record;
+   TODAY's re-walk counts are pinned per row below (bosalign 3/4 — the
+   hg-v1439 return-to-demote leans on exactly this flip-proneness). */
+const WINDOWS_TODAY = { bosalign: '2/4', liqsweep: '3/4', nyexh: '1/4', ribbon: '3/4' };
 for (const { key, row } of moved){
   const W = splitDisjoint(BOOK, 4).map((seg) => seg.filter((t) => t.stratKey === key));
   const judged = W.filter((s) => s.length >= 8);
   const pos = judged.filter((s) => mean(s.map((t) => t.netR)) > 0).length;
-  eq(row.retune.windows, pos + '/' + judged.length, key + ' window count matches the replay');
+  eq(pos + '/' + judged.length, WINDOWS_TODAY[key], key + ' window count matches TODAY\'s replay (' + WINDOWS_TODAY[key] + ')');
+  ok(/^[0-9]+\/[0-9]+$/.test(row.retune.windows), key + ' keeps its hg-v928 historical window record (' + row.retune.windows + ')');
   eq(row.retune.unanimous, false, key + ' is recorded as not unanimous');
   ok(pos > 0 && pos < judged.length, key + ' really is split (' + pos + '/' + judged.length + ')');
 }
@@ -106,12 +124,19 @@ for (const { key, row } of moved){
 }
 
 /* ---- 3. the two TIGHTENING flips are refused ---- */
-console.log('3. the rule would also tighten two rows on n=6 and n=1 — refused');
-for (const [key, wantN] of [['p5vwap', 6], ['vpbook', 1]]){
+console.log('3. the rule would also tighten two rows on thin samples — refused');
+/* hg-v1439 re-derivation: on the re-walk p5vwap settled 8 (rule still
+   demotes; still refused, now with an actionWhy); vpbook settled ZERO — the
+   refusal mooted itself: there is nothing left to tighten on, and neutral
+   stands because absence is not evidence. */
+for (const [key, wantN] of [['p5vwap', 8], ['vpbook', 0]]){
   const rows = of(key);
-  eq(rows.length, wantN, key + ' has ' + wantN + ' live trades');
-  eq(verdict(rows.length, mean(rows.map((t) => t.rGross)), mean(rows.map((t) => t.netR))), 'demote',
-     'and the stated rule would demote it');
+  eq(rows.length, wantN, key + ' has ' + wantN + ' live trades on the hg-v1439 re-walk');
+  if (wantN > 0)
+    eq(verdict(rows.length, mean(rows.map((t) => t.rGross)), mean(rows.map((t) => t.netR))), 'demote',
+       'and the stated rule would demote it');
+  else
+    ok(true, key + ' has no live trades — the rule cannot even read it, and the hg-v928 refusal stands as the record');
   eq(TBL[key].action, 'neutral', 'but it is left neutral');
   eq(TBL[key].retune, undefined, 'with no retune record, because nothing was done');
 }

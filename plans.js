@@ -1282,13 +1282,21 @@ function hgSyncPlanRatios(p){
   if (!p) return p;
   try{
     var entry = hgPlanNum(p.entry), stop = hgPlanNum(p.stop);
-    var risk = (isFinite(entry) && isFinite(stop)) ? Math.abs(entry - stop) : NaN;
-    var usable = isFinite(risk) && risk > 0;
+    var d = String(p.dir || '').toLowerCase();
     var t1 = hgPlanNum(p.t1), t2 = hgPlanNum(p.t2);
-    p.rr1 = (usable && isFinite(t1)) ? Math.abs(t1 - entry) / risk : null;
-    p.rr2 = (usable && isFinite(t2)) ? Math.abs(t2 - entry) / risk : null;
+    var leg = (typeof hgGoldLegR === 'function') ? hgGoldLegR : null;
+    if (leg && (d === 'long' || d === 'short')){
+      p.rr1 = leg(d, entry, stop, t1);
+      p.rr2 = leg(d, entry, stop, t2);
+    } else {
+      var risk = (isFinite(entry) && isFinite(stop)) ? Math.abs(entry - stop) : NaN;
+      var usable = isFinite(risk) && risk > 0;
+      p.rr1 = (usable && isFinite(t1)) ? Math.abs(t1 - entry) / risk : null;
+      p.rr2 = (usable && isFinite(t2)) ? Math.abs(t2 - entry) / risk : null;
+    }
     if (p.rr !== undefined) p.rr = p.rr1;
-    p.riskPct = (usable && isFinite(entry) && entry > 0) ? (risk / entry * 100) : null;
+    var sideRisk = d === 'long' ? entry - stop : d === 'short' ? stop - entry : Math.abs(entry - stop);
+    p.riskPct = (isFinite(sideRisk) && sideRisk > 0 && isFinite(entry) && entry > 0) ? (sideRisk / entry * 100) : null;
   }catch(e){}
   return p;
 }
@@ -1381,10 +1389,23 @@ function hgPlanFromRisk(dir, entry, stop, opts){
       t2 = (dir === 'long') ? entry + t2R * risk : entry - t2R * risk;
       rew2 = t2R * risk;
     }
+    /* hg-v1461: the v675 fall-through itself can still ship an inverted
+       ladder. When the surviving T1 sits BEYOND the policy target (a
+       structural T1 hint past the t2R rung) — or a caller configures
+       t2R <= t1R — the policy T2 lands closer to entry than T1: the card
+       advertises T2 as the further rung while T2 pays LESS R, and a ledger
+       closing at T2 realises less than the card claims (the exact v675
+       harm, one rung higher; 2875 of 20000 fuzzed plans inverted). The
+       house answer is "does not invent an R": when the resolved T2 does
+       not sit strictly beyond T1 the plan publishes NO T2 and names why.
+       The plan still passes — this names, it does not gate. */
+    var t2Unordered = !(isFinite(t2) && rew2 > 0 && rew2 > rew1);
+    if (t2Unordered){ t2 = NaN; rew2 = NaN; }
     return {
       dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
       risk: risk, riskPct: risk / entry * 100,
-      rr1: rr1, rr2: rew2 / risk,
+      rr1: rr1, rr2: (isFinite(t2) && isFinite(rew2)) ? rew2 / risk : NaN,
+      t2Unordered: t2Unordered,
       targetPolicy: opts.targetPolicy || 'R-multiples',
       t1R: t1R, t2R: t2R,
       /* v681: signal that the stop was widened to meet the ATR floor. Cards

@@ -244,7 +244,16 @@ const MACRO_ALL = { silverTrend: 'RISING', gsRatioTrend: 'FALLING', vixTrend: 'R
 /* a detector stubbed to fire on the tape in hand: the REAL table, the REAL
    builder, the REAL desk seams run; only whether the bar fired is fixed */
 function stubFire(dir){
-  return function(rows){ const c = rows[rows.length - 1].c; const risk = 6;
+  /* hg-v1400 recalibration (tape-only, v1399 pattern): the hg-v1400 admission
+     floor vetoes a scalp row whose stop is under 0.3% of entry, and this
+     stub's old risk=6 on a ~2313 tape priced 0.26% — so the §4 release card
+     lost its handoff button to the new floor, not to any release defect.
+     risk 6 → 8 prices 0.35% (over the floor), keeps the R:R at exactly 2.0
+     and every level relation (sidesOk, the one-builder equality at §2, the
+     record-carries-levels check at §3) unchanged. Mutation proof after the
+     wiggle: breaking the release (pineGoldRecordJudge never sets
+     recordReleased) still turns §4 RED; revert → GREEN. No assertion moved. */
+  return function(rows){ const c = rows[rows.length - 1].c; const risk = 8;
     const stop = dir === 'long' ? c - risk : c + risk;
     return { dir, newLong: dir === 'long', newShort: dir === 'short', barsAgo: 0, price: c, entry: c, stop,
              t1: dir === 'long' ? c + 2 * risk : c - 2 * risk, t2: dir === 'long' ? c + 3.5 * risk : c - 3.5 * risk, recordOnly: true }; };
@@ -333,7 +342,16 @@ const cardOf = (html, label) => { const i = html.indexOf('· ' + label + ' · Gr
   assert(/RECORD ONLY · 0 of 20 settled/.test(stCard) && /NO TRADE HANDOFF — RECORD ONLY/.test(stCard) && !/class="toTrade"/.test(stCard) && !/ADD TO BOOK/.test(stCard),
     'the Supertrend card carries the RECORD ONLY chip and the withheld-handoff note, and NO handoff button');
   assert(/recorded under GOLDPINE:scalp|recorded under GOLDPINE:swing/.test(stCard) && /paying at or over 20 settled/.test(stCard), 'the note names the pool and the release rule');
-  assert(/OMNIGOLD ICHI-KUMO, gate-clear n=106, 89 settled, −0\.161R net at XM, z −1\.27/.test(icCard) && /OMNIGOLD’s gates and 1h horizon/.test(icCard), 'the Ichimoku card quotes its twin\'s gate-clear record through hgGoldSiblingRecord, attributed to OMNIGOLD\'s gates and horizon');
+  /* hg-v1404: the quoted record follows the regenerated sibling bake.
+     hg-v1438 RE-DERIVED: upstream's data refresh ceb58645 ("chore(data):
+     refresh all tab/backtest data") regenerated scripts/omnigold-replay-
+     evidence.json and the GENERATED HG_GOLD_SIBLING_RECORD block in
+     gold-extra-strategies.js (scripts/gold-sibling-records.mjs); ICHI-KUMO
+     now reads n=114, 95 settled, -0.172R, z -1.67 (was n=111, 93 settled,
+     -0.160R, z -1.54 on the hg-v1404 regen; 106/89/-0.161R/-1.27 on the
+     hg-v1402 walk). The pin re-derives the literal FROM the shipped
+     generated block, it does not recalibrate a desk number. */
+  assert(/OMNIGOLD ICHI-KUMO, gate-clear n=114, 95 settled, −0\.172R net at XM, z −1\.67/.test(icCard) && /OMNIGOLD’s gates and 1h horizon/.test(icCard), 'the Ichimoku card quotes its twin\'s gate-clear record through hgGoldSiblingRecord, attributed to OMNIGOLD\'s gates and horizon');
   assert(!/Nearest measured twin/.test(stCard), 'the Supertrend card, with no twin, quotes none');
   /* Derive the expected counts FROM the measured rows so the guard tracks the
      table instead of hardcoding a vintage. `rec.length` is asserted above.

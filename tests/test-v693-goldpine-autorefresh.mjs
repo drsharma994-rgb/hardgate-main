@@ -1,7 +1,7 @@
-/* v693: GOLD PINE tab auto-refreshes every 5 minutes while mounted.
+/* v693: GOLD PINE tab auto-refreshes every 2 minutes while mounted.
 
    Mirrors the v691 NEW GOLD auto-refresh pattern precisely:
-   * Cadence constant GOLDPINE_AUTO_REFRESH_MS = 5 * 60 * 1000
+   * Cadence constant GOLDPINE_AUTO_REFRESH_MS = 2 * 60 * 1000
    * Timer + mountEl stored on module state (__goldPineTab)
    * Timer starts only on MOUNT (never module load) so Node test
      processes never hang on a stray interval.
@@ -19,13 +19,13 @@ const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 
 /* --- structural asserts --- */
 const src = readFileSync(resolve(ROOT, 'goldpine.js'), 'utf8');
-assert.ok(/var GOLDPINE_AUTO_REFRESH_MS = 5 \* 60 \* 1000;/.test(src),
-  '5-minute refresh cadence constant');
+assert.ok(/var GOLDPINE_AUTO_REFRESH_MS = 2 \* 60 \* 1000;/.test(src),
+  '2-minute refresh cadence constant');
 assert.ok(/v693: auto-refresh cadence for GOLD PINE/.test(src),
   'v693 rationale comment at cadence constant');
 assert.ok(/__timer: null, __mountEl: null/.test(src),
   'timer + mountEl fields on __goldPineTab state');
-assert.ok(/v693: auto-refresh every 5 minutes while the tab is mounted/.test(src),
+assert.ok(/v693: auto-refresh every 2 minutes while the tab is mounted/.test(src),
   'v693 mount rationale comment');
 assert.ok(/setInterval\(function\(\)\{/.test(src),
   'setInterval wired at mount');
@@ -63,8 +63,8 @@ const qv = HG_VER.replace(/^hg-v/, '');
 assert.ok(new RegExp('goldpine\\.js\\?v=' + qv).test(idx),
   'index.html goldpine.js cache-buster = ?v=' + qv);
 
-console.log('OK - v693: GOLD PINE auto-refresh every 5 minutes on mount');
-console.log('  * cadence constant GOLDPINE_AUTO_REFRESH_MS = 5 * 60 * 1000');
+console.log('OK - v693: GOLD PINE auto-refresh every 2 minutes on mount');
+console.log('  * cadence constant GOLDPINE_AUTO_REFRESH_MS = 2 * 60 * 1000');
 console.log('  * timer + mountEl fields on __goldPineTab');
 console.log('  * setInterval only inside mount()');
 console.log('  * clearInterval prevents timer stacking on remount');

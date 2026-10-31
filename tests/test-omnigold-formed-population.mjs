@@ -72,26 +72,26 @@ for (const [kind, want] of Object.entries(measured.rows)){
   eq(got.n, want.shownN, kind + ' unscoped n is unchanged');
   eq(got.avgNetR, want.shownNetPaxg, kind + ' unscoped net is unchanged and still PAXG');
 }
-eq(checked, 54, 'all 54 mechanics carry a re-derived gate-clear record');
+eq(checked, 53, 'hg-v1404: 53 of 54 carry a re-derived gate-clear record — EQH-SWEEP is under the bar on the re-walk');
 
 /* ---- 2. the correction is UNFAVOURABLE, which is why it matters ---- */
 console.log('2. the gate-clear record is worse, not softer');
 const s = measured.summary;
 eq(s.kinds, 54, '54 mechanics carry a replay row');
-eq(s.withFormed, 54, 'all 54 have a gate-clear row in the same file');
-eq(s.formedWorse, 42, 'gate-clear is WORSE than the re-priced line for 42');
-eq(s.formedBetter, 11, 'and better for 11');
+eq(s.withFormed, 53, 'hg-v1404: 53 of 54 carry a gate-clear row — EQH-SWEEP fell under the 40 bar on the re-walk and its tail was removed');
+eq(s.formedWorse, 40, 'gate-clear is WORSE than the re-priced line for 40 (hg-v1404 re-walk)');
+eq(s.formedBetter, 13, 'and better for 13 (hg-v1404 re-walk)');
 ok(s.formedWorse > s.formedBetter * 3, 'so the correction tightens the desk rather than loosening it');
 eq(s.positiveShown, 12, '12 kinds read net-positive at XM as displayed');
-eq(s.positiveFormed, 9, 'only 9 do on the gate-clear record');
-eq(s.signDiffers, 7, '7 kinds differ in sign between the two');
+eq(s.positiveFormed, 7, 'only 7 do on the gate-clear record (hg-v1404 re-walk)');
+eq(s.signDiffers, 13, '13 kinds differ in sign between the two (hg-v1404 re-walk)');
 /* the two worst gaps, named in the comment a reader will hit */
 {
   const p = measured.rows['PIN-REJECT'], t = measured.rows['THREE-BAR'];
   ok(Math.abs(p.shownNetXm - (-0.208)) < 0.002, 'PIN-REJECT re-prices to -0.21R');
-  ok(Math.abs(p.formedNetXm - (-0.940)) < 0.002, 'and its gate-clear record is -0.94R');
+  ok(Math.abs(p.formedNetXm - (-0.911)) < 0.002, 'and its gate-clear record is -0.91R (hg-v1404 artifact)');
   ok(Math.abs(t.shownNetXm - (-0.237)) < 0.002, 'THREE-BAR re-prices to -0.24R');
-  ok(Math.abs(t.formedNetXm - (-0.927)) < 0.002, 'and its gate-clear record is -0.93R');
+  ok(Math.abs(t.formedNetXm - (-0.908)) < 0.002, 'and its gate-clear record is -0.91R (hg-v1404 artifact)');
   /* These figures appear in TWO comments — the evidence header and the render
      site. A bare includes() check is satisfied by either, so a stale copy
      hides behind its twin (the hg-v916 survivor, again). Count every
@@ -110,7 +110,7 @@ eq(s.signDiffers, 7, '7 kinds differ in sign between the two');
     eq(sign.length, 2, 'the sign-flip count is stated in both comments');
     ok(sign.every((n) => n === s.signDiffers), 'and every copy is ' + s.signDiffers);
   }
-  for (const n of ['-0.21R', '-0.94R', '-0.24R', '-0.93R'])
+  for (const n of ['-0.21R', '-0.91R', '-0.24R'])
     ok(src.includes(n), 'omnigold.js states ' + n);
 }
 
@@ -123,8 +123,8 @@ console.log('2b. hgOgReplayLineHtml renders the gate-clear record');
     const h = String(LINE('PIN-REJECT') || '');
     ok(/og-replay-formed/.test(h), 'the gate-clear line is rendered');
     ok(/gate-clear:/.test(h), 'and labelled as the gate-clear record');
-    ok(/-0\.94R at XM/.test(h), 'carrying PIN-REJECT\'s own -0.94R');
-    ok(/n=138/.test(h), 'and its own SETTLED count, not its firing count');
+    ok(/-0\.91R at XM/.test(h), 'carrying PIN-REJECT\'s own -0.91R (hg-v1404)');
+    ok(/n=147/.test(h), 'and its own SETTLED count, not its firing count (hg-v1404: 147 settled)');
     /* No venue preset in this env, so the line above carries no XM figure and
        the render must make NO comparative claim. The first cut said
        'better than the line above' here, comparing against nothing. */
@@ -133,11 +133,11 @@ console.log('2b. hgOgReplayLineHtml renders the gate-clear record');
     ok(!/undefined|NaN/.test(h), 'and nothing leaks into the line');
     const b = String(LINE('MMOVE') || '');
     ok(/og-replay-formed/.test(b), 'a kind where gate-clear is better also renders');
-    ok(/\+0\.06R at XM/.test(b), 'with its own positive figure');
+    ok(/\+0\.04R at XM/.test(b), 'with its own positive figure (hg-v1404: +0.044R)');
     /* MMOVE fires 204 times and settles 177. The rate is over settles, so the
        count printed beside it must be 177 — printing 204 would misstate it. */
-    ok(/n=177/.test(b), 'MMOVE prints its 177 settles, not its 204 firings');
-    ok(!/n=204/.test(b), 'and never its firing count');
+    ok(/n=170/.test(b), 'MMOVE prints its 170 settles, not its 196 firings (hg-v1404)');
+    ok(!/n=196/.test(b), 'and never its firing count');
     /* and the comparison, when it CAN be made, tracks the numbers */
     ok(/fm\.netXm < shownXm \? 'WORSE than'/.test(src), 'worse renders WORSE');
     ok(/fm\.netXm > shownXm \? 'better than'/.test(src), 'better renders better');
@@ -181,7 +181,7 @@ ok(shown.family === gclear.family, 'so promotion is unchanged — this pack move
 eq(shown.naive, 1, 'exactly one kind clears the naive 95% bar as displayed');
 eq(gclear.naive, 0, 'and none does on the gate-clear record');
 eq(shown.closest.kind, 'P6-FAIL', 'the one is P6-FAIL');
-eq(gclear.closest.kind, 'P6-FAIL', 'and it is still the closest on the corrected basis');
+eq(gclear.closest.kind, 'STOCHRSI-TURN', 'hg-v1404: closest on the corrected basis is STOCHRSI-TURN (-0.040R) — the committed artifact, hg-v754 discipline');
 ok(shown.closest.margin > 0 && shown.closest.margin < 0.001,
    'it clears by +' + shown.closest.margin.toFixed(4) + ' — a hair, not an edge');
 ok(gclear.closest.margin < 0, 'and misses by ' + gclear.closest.margin.toFixed(4) + ' once scoped');

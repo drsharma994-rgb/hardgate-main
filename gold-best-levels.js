@@ -482,25 +482,73 @@ function hgBestLevelsGold(inp){
    candidate, and any leg that cannot be computed is CLEARED, never carried. */
 function gbNum(v){ return (v === null || v === undefined || v === '') ? NaN : +v; }
 
+/* Reward / risk for a published gold setup.
+
+   Absolute value is not a side. |target − entry| / |entry − stop| is 2 for a
+   long whose stop is above the entry and whose target is below it — a plan
+   that is already invalidated. When dir is long or short, the stop must sit
+   beyond the entry and the target must sit beyond it the other way, or this
+   returns null and the card must not quote an R. When dir is absent, the
+   historical absolute ratio is kept so an unlabeled level pair still syncs. */
+function hgGoldLegR(dir, entry, stop, target){
+  entry = gbNum(entry); stop = gbNum(stop); target = gbNum(target);
+  var d = String(dir || '').toLowerCase();
+  if (d === 'long' || d === 'short'){
+    var risk = d === 'long' ? entry - stop : stop - entry;
+    var rew = d === 'long' ? target - entry : entry - target;
+    if (!(fin(entry) && entry > 0 && fin(risk) && risk > 0 && fin(rew) && rew > 0)) return null;
+    return rew / risk;
+  }
+  var absRisk = (fin(entry) && fin(stop)) ? Math.abs(entry - stop) : NaN;
+  if (!(fin(absRisk) && absRisk > 0 && fin(target))) return null;
+  return Math.abs(target - entry) / absRisk;
+}
+
+/* Rewrite rr / rr1 / rr2 / rr3 from the levels on the candidate. A leg that
+   is not beyond the entry in the trade's direction is cleared, never given
+   a positive R. geometryOk is true only when the stop protects the entry
+   and T1 pays a real reward. */
+function hgSealGoldSetup(c){
+  if (!c) return c;
+  hgSyncPlanRr(c);
+  var d = String(c.dir || '').toLowerCase();
+  c.rr1 = c.rr;
+  c.geometryOk = (d === 'long' || d === 'short') && fin(c.rr) && c.rr > 0;
+  if (!c.geometryOk && (d === 'long' || d === 'short')){
+    c.geometryReason = c.rrNote || 'stop or target is not beyond the entry';
+  } else {
+    c.geometryReason = null;
+  }
+  return c;
+}
+
 function hgSyncPlanRr(c){
   if (!c) return c;
   try{
     var entry = gbNum(c.entry), stop = gbNum(c.stop);
-    var risk = (fin(entry) && fin(stop)) ? Math.abs(entry - stop) : NaN;
-    var usable = fin(risk) && risk > 0;
+    var d = String(c.dir || '').toLowerCase();
+    var signed = d === 'long' || d === 'short';
+    var risk = signed
+      ? (d === 'long' ? entry - stop : stop - entry)
+      : ((fin(entry) && fin(stop)) ? Math.abs(entry - stop) : NaN);
+    var usable = fin(entry) && (signed ? entry > 0 : true) && fin(risk) && risk > 0;
     var legs = [['t1', 'rr'], ['t2', 'rr2'], ['t3', 'rr3']];
-    var cleared = [], i, tgt, key;
+    var cleared = [], i, tgt, key, ratio;
     for (i = 0; i < legs.length; i++){
       tgt = gbNum(c[legs[i][0]]); key = legs[i][1];
-      if (usable && fin(tgt)){
-        c[key] = Math.abs(tgt - entry) / risk;
+      ratio = usable ? hgGoldLegR(signed ? d : '', entry, stop, tgt) : null;
+      if (ratio != null && fin(ratio)){
+        c[key] = ratio;
       } else {
         if (c[key] !== null && c[key] !== undefined) cleared.push(key.toUpperCase());
         c[key] = null;
       }
     }
+    c.rr1 = c.rr;
     if (!usable){
-      c.rrNote = 'R:R unavailable — entry and stop do not define a risk distance';
+      c.rrNote = signed
+        ? 'R:R unavailable — the stop is not beyond the entry'
+        : 'R:R unavailable — entry and stop do not define a risk distance';
     } else if (cleared.length){
       c.rrNote = cleared.join(' / ') + ' cleared — no target at these levels';
     } else {
@@ -594,7 +642,7 @@ function hgGoldPostApplyRefresh(c, metaInp){
   if (!c) return c;
   /* Before anything reads c.rr — the tally leg does — make sure it matches the
      levels currently on the candidate rather than the ones it was built from. */
-  hgSyncPlanRr(c);
+  hgSealGoldSetup(c);
   hgGoldRefreshTallyRr(c);
   hgGoldSyncCandidateGrade(c);
   hgGoldAnnotateCandidateMeta(c, metaInp);
@@ -660,7 +708,7 @@ function hgApplyGoldBestLevels(gc, inp){
       if (fin(plan.t3)) gc.t3 = plan.t3;
     }
 
-    hgSyncPlanRr(gc);
+    hgSealGoldSetup(gc);
     return gc;
   }catch(e){ return gc; }
 }
@@ -680,6 +728,8 @@ G.hgGoldGradeFromScore = hgGoldGradeFromScore;
 G.hgGoldSyncCandidateGrade = hgGoldSyncCandidateGrade;
 G.hgGoldRefreshTallyRr = hgGoldRefreshTallyRr;
 G.hgSyncPlanRr = hgSyncPlanRr;
+G.hgGoldLegR = hgGoldLegR;
+G.hgSealGoldSetup = hgSealGoldSetup;
 G.hgGoldAnnotateCandidateMeta = hgGoldAnnotateCandidateMeta;
 G.hgGoldPostApplyRefresh = hgGoldPostApplyRefresh;
 

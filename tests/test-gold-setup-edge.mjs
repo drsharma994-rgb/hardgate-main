@@ -90,11 +90,14 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
     ok(c.demoted === true && !c.dropped, 'SCALP ' + key + ' demoted — never MOST PROBABLE / ENGINE lead');
     ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, key + ' EDGE DEMOTE stamp');
   }
+  /* hg-v1439: n re-derived from the hg-v1439 re-walk analysis
+     (scripts/gold-scalp-bt-analysis-floor.json, Aug21-Oct22, post ceiling-reject);
+     the old pins quoted the v699 walk (74/132/167/97). */
   const suppressKeys = [
-    ['sweep', 'LIQUIDITY SWEEP REVERSAL', /n=74/],
-    ['vwap', 'SESSION VWAP BOUNCE', /n=132/],
-    ['nyexh', 'NY VOLUME EXHAUSTION', /n=167/],
-    ['liqsweep', 'GOLD SWEEP ENGINE', /n=97/]
+    ['sweep', 'LIQUIDITY SWEEP REVERSAL', /n=80/],
+    ['vwap', 'SESSION VWAP BOUNCE', /n=153/],
+    ['nyexh', 'NY VOLUME EXHAUSTION', /n=61/],
+    ['liqsweep', 'GOLD SWEEP ENGINE', /n=45/]
   ];
   for (const [key, lab, nRe] of suppressKeys){
     const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
@@ -103,15 +106,24 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
     ok((c.stamps || []).indexOf('EDGE SUPPRESS') >= 0 && nRe.test(c.reason || ''),
        key + ' EDGE SUPPRESS stamp + measured n on the reason line');
   }
+  /* hg-v1439: p9volbar's prefer is DEAD — measured net-negative in both halves on
+     three fresh reads (−0.226 / −0.231 / −0.267R, desks/goldscalp-r3); it is a
+     DEMOTE now. p6fail carries the only scalp prefer (live n=64, net +0.128R).
+     Mutation: flipping either action back reddens both loops. */
   const preferKeys = [
-    ['p6fail', 'S30 FAILED-BREAK REVERSAL'],
-    ['p9volbar', 'S62 VOLUME-BAR S0 SWEEP']
+    ['p6fail', 'S30 FAILED-BREAK REVERSAL']
   ];
   for (const [key, lab] of preferKeys){
     const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
     W.hgGoldSetupEdgeApply(c, { scalp: true });
     ok(!c.dropped && !c.demoted && c.edgeBoost >= 2, 'SCALP ' + key + ' prefer — measured fee-survivor rank boost');
     ok((c.stamps || []).indexOf('EDGE PREFER') >= 0, key + ' EDGE PREFER stamp');
+  }
+  {
+    const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: 'p9volbar', strategy: 'S62 VOLUME-BAR S0 SWEEP' };
+    W.hgGoldSetupEdgeApply(c, { scalp: true });
+    ok(c.demoted === true && !c.dropped && !(c.edgeBoost >= 2), 'SCALP p9volbar DEMOTED — the hg-v1439 re-walk withdrew the prefer');
+    ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, 'p9volbar EDGE DEMOTE stamp');
   }
   /* sweepob sat one settle short of the prefer bar (n=49) — deliberately NO row */
   {
@@ -219,6 +231,44 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
     plan: engine
   }, { atr: 33, mark: 4422.3, strategy: 'S24 THREE-DRIVE EXHAUSTION' });
   ok(resurrect == null, 'bind does not resurrect a fallback card with TP1 below entry');
+}
+
+/* Forming geometry: R is |target − entry| / |entry − stop|. A missing
+   target is still a legal side check and does not invent an R. A stop
+   on the wrong side is illegal even when the target was never printed. */
+{
+  const geo = W.hgGoldPlanSidesOk({ dir: 'long', entry: 100, stop: 90, t1: 125 });
+  ok(geo.ok === true && geo.risk === 10 && geo.reward === 25 && Math.abs(geo.rr - 2.5) < 1e-12,
+    'long geometry R is 25/10 = 2.5');
+  const geoS = W.hgGoldPlanSidesOk({ dir: 'short', entry: 100, stop: 110, t1: 80 });
+  ok(geoS.ok === true && geoS.risk === 10 && geoS.reward === 20 && Math.abs(geoS.rr - 2) < 1e-12,
+    'short geometry R is 20/10 = 2');
+  const noT = W.hgGoldPlanSidesOk({ dir: 'long', entry: 100, stop: 90 });
+  ok(noT.ok === true && noT.rr === undefined && noT.reward === undefined && noT.risk === 10,
+    'a plan with entry and stop and no target is legal and does not invent an R');
+  const badStop = W.hgGoldPlanSidesOk({ dir: 'long', entry: 100, stop: 110 });
+  ok(badStop.ok === false && /BELOW/.test(badStop.why || ''),
+    'a long stop above entry is illegal even with no target');
+  const lied = W.goldRankSetups([{
+    id: 'geo|long|100', dir: 'long', entry: 100, stop: 90, t1: 125, rr: 9.99,
+    stratKey: 'sweep', strategy: 'LIQUIDITY SWEEP', grade: 'B', agree: 3, oppose: 0, atr: 5
+  }], {});
+  const liedRow = (lied.ranked || []).find(c => c.id === 'geo|long|100');
+  ok(liedRow && liedRow.rr === 2.5,
+    'the ranker prints the geometry R (2.5), not the advertised 9.99 — got ' + (liedRow && liedRow.rr));
+  const bare = W.goldRankSetups([{
+    id: 'bare|long|100', dir: 'long', entry: 100, stop: 90,
+    stratKey: 'sweep', strategy: 'LIQUIDITY SWEEP', grade: 'B', agree: 3, oppose: 0, atr: 5
+  }], {});
+  ok((bare.ranked || []).some(c => c.id === 'bare|long|100'),
+    'entry and stop, no target, still ranks — a missing target is not a rejection');
+  const wrong = W.goldRankSetups([{
+    id: 'wrong|long|100', dir: 'long', entry: 100, stop: 110,
+    stratKey: 'sweep', strategy: 'LIQUIDITY SWEEP', grade: 'B', agree: 3, oppose: 0, atr: 5
+  }], {});
+  ok(!(wrong.ranked || []).some(c => c.id === 'wrong|long|100')
+      && (wrong.rejected || []).some(x => /BELOW/.test(String(x.reason || ''))),
+    'a wrong-side stop with no target is rejected and named');
 }
 
 /* Demoted never gets prefer boost in goldRankSetups.

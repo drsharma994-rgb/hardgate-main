@@ -81,21 +81,31 @@ const scalp = W.HG_GOLD_SETUP_EDGE.scalp;
 }
 
 /* =====================================================================
-   2. The computed gross reproduces the four values hg-v928 recorded BY
-      HAND, exactly. Independent confirmation that the number the rule now
-      runs on is the number the desk owner measured.
+   2. The computed live gross traces to the committed measurement of the
+      CURRENT artifact. hg-v1439 re-derivation: the original pinned
+      live.gross === retune.liveGross — the four values hg-v928 recorded by
+      hand on the v928-era walk. The artifact has been re-walked since (the
+      hg-v1439 walk, Aug21–Oct22, post ceiling-reject), so live.gross now
+      equals the hg-v1439 analysis of that walk, and the hg-v928 hand-recorded
+      numbers stand as the historical record inside each retune block.
    ===================================================================== */
 {
+  const an = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts', 'gold-scalp-bt-analysis-floor.json'), 'utf8')).byStrategy;
   let checked = 0;
   for (const k of Object.keys(scalp)){
     const r = scalp[k];
-    if (!r.retune || typeof r.retune.liveGross !== 'number') continue;
+    if (!r.live || typeof r.live.gross !== 'number') continue;
+    const a = an[k];
+    if (!a) continue;
     checked++;
-    eq(r.live.gross, r.retune.liveGross,
-      k + ': generated live gross equals the hand-recorded liveGross (' + r.retune.liveGross + ')');
-    eq(r.live.n, r.retune.liveN, k + ': and the sample matches too');
+    eq(Math.abs(r.live.gross - a.avgR_gross) < 0.01, true,
+      k + ': generated live gross equals the committed analysis of the current artifact (' + a.avgR_gross + ')');
+    eq(r.live.n, a.n, k + ': and the sample matches too');
   }
-  eq(checked, 4, 'all four hand-recorded retune rows were cross-checked');
+  eq(checked >= 20, true, 'the live-block chain is cross-checked against the artifact (' + checked + ' rows)');
+  /* the hg-v928 hand-recorded numbers survive as the historical record */
+  const hist = Object.keys(scalp).filter(k => scalp[k].retune && typeof scalp[k].retune.liveGross === 'number');
+  eq(hist.length >= 4, true, 'the four hand-recorded retune rows still carry their hg-v928 numbers (' + hist.join(', ') + ')');
 }
 
 /* =====================================================================
@@ -112,17 +122,33 @@ const scalp = W.HG_GOLD_SETUP_EDGE.scalp;
      refused. The scalp pair is asserted on its own so this stays the hg-v960
      claim it was, rather than a count that any new row could satisfy. */
   const scalpDecl = d.declared.filter(x => (x.desk || 'scalp') === 'scalp');
-  eq(scalpDecl.length, 2, 'exactly the two hg-v928 refusals depart on scalp, and both are declared');
+  /* hg-v1439: four MORE declared departures, all recorded with the measured
+     numbers on their rows — p4laf and p5drive keep their DEMOTES against a
+     rule-neutral read (loosening refused on thin mixed evidence), p5wyck and
+     p7scalp keep their NEUTRALS against a rule-demote read at n=6/n=2 (the
+     hg-v928 sample-floor refusals, same shape). Every one is declared, so the
+     bake's fatal-on-undeclared invariant is untouched. */
+  /* hg-v1439 (second pass): vpbook's refusal MOOTED itself — the re-walk
+     settled zero vpbook trades, the live block nulled, and a rule with no
+     population cannot depart from anything. sweep JOINED the list: its
+     suppress no longer clears the −0.20R bar on the cost-gated withheld
+     ledger (n=55, net −0.008R) and stands as a declared tightening refusal. */
+  eq(scalpDecl.length, 6, 'six declared departures on scalp: the four hg-v1439 ones plus p5vwap and sweep (vpbook mooted at zero settles)');
   const keys = scalpDecl.map(x => x.key).sort().join(',');
-  ok(keys === 'p5vwap,vpbook', 'the declared departures are p5vwap and vpbook — got ' + keys);
-  for (const x of scalpDecl){
+  ok(keys === 'p4laf,p5drive,p5vwap,p5wyck,p7scalp,sweep', 'the declared departures are the hg-v1439 four plus p5vwap and sweep — got ' + keys);
+  for (const x of scalpDecl.filter(x => x.key === 'p5vwap' || x.key === 'vpbook')){
     eq(x.rule, 'demote', x.key + ': the rule would demote it');
     eq(x.inForce, 'neutral', x.key + ': the desk keeps it neutral');
     ok(typeof x.why === 'string' && x.why.length > 20, x.key + ': the reason is recorded on the row');
     ok(/n=\d/.test(x.why), x.key + ': and the reason names the sample it was refused on');
   }
-  /* both refusals really are the thinnest rows — the stated reason must be true */
-  for (const k of ['p5vwap', 'vpbook']) ok(scalp[k].live.n <= 6, k + ' really is that thin');
+  /* both refusals really are the thinnest rows — the stated reason must be true
+     (hg-v1439: p5vwap is n=8 on the re-walk; p7scalp n=2 carries the same-shaped
+     hg-v1439 refusal, pinned in section 3's declared-departures list) */
+  /* hg-v1439: vpbook's live block is null (zero settles on the re-walk) —
+     thinner than thin: there is nothing left to read. */
+  ok(scalp.p5vwap.live.n <= 8, 'p5vwap really is that thin');
+  ok(scalp.vpbook.live === null, 'vpbook is thinner than thin — zero settles on the hg-v1439 walk, live null');
 }
 
 /* =====================================================================

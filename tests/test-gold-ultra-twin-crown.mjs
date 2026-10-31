@@ -188,7 +188,7 @@ console.log('\n6. the card says WHY the crown was withheld');
   const html = String(ctx.goldUltraSetupCardHTML(sel.cards[0], 4400, false));
   ok(/CROWN WITHHELD/.test(html), 'the card carries a CROWN WITHHELD chip');
   ok(/P9-VOLBAR/.test(html), '  naming the twin');
-  ok(/n=274/.test(html), '  with the twin\'s sample, not just a verdict');
+  ok(/n=292/.test(html), '  with the twin\'s sample, not just a verdict (hg-v1404: 292, was 274)');
   ok(/OMNIGOLD/.test(html) && /1h horizon/.test(html),
      '  attributing the record to OMNIGOLD\'s gates and its horizon');
   ok(/still forms/.test(html) && /keeps its levels/.test(html),

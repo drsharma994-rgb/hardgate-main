@@ -39,7 +39,7 @@ function trendmxCrossCardHTML(g){
     + '<span class="stamp ' + (isDeath ? 'bad' : 'pass') + '">' + (isDeath ? 'SHORT' : 'LONG') + '</span>'
     + tmSmcChip(g)
     + '</div>'
-    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.note || '') + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#94a3b8">' + escH(g.note || '') + '</div>'
     + '<div style="font-size:22px;font-weight:800;color:' + col + ';margin-top:6px">' + pxFmt(g.entry) + '</div>'
     + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
     + tradeBtn + bookBtn
@@ -108,13 +108,13 @@ function trendmxCandleCardHTML(g){
     ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: 'trendmx-candle' })
     : '';
   var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
-  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(180,83,9,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:#fff">'
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(180,83,9,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:#1e293b">'
     + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
     + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + '</span>'
     + '<span class="stamp">CANDLE</span>'
     + '<span class="stamp ' + (isShort ? 'bad' : 'pass') + '">' + (isShort ? 'SHORT' : 'LONG') + '</span>'
     + '</div>'
-    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.candleNote || '') + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#94a3b8">' + escH(g.candleNote || '') + '</div>'
     + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
     + tradeBtn
     + '</div>';
@@ -172,7 +172,7 @@ function trendmxLimitCardHTML(item){
   var clsStamp = (r.gate && r.gate.clean7)
     ? '<span class="stamp" style="margin-left:6px">GATE-CLEAN 7/7</span>'
     : '<span class="stamp" style="margin-left:6px">CONVICTION ' + (r.score > 0 ? '+' : '') + r.score + '/5</span>';
-  return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
+  return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#1e293b">'
     + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + perfectStamp + clsStamp + stHtml + tmSmcChip(r)
     + trendmxFlowChipHtml(r)   /* hg-v1012: the flow verdict the scan stamped — reads the stamp, never recomputes */
     + trendmxMomChipHtml(r)    /* hg-v1019: the momentum witness's stamp — same read-the-stamp seam */
@@ -394,6 +394,16 @@ function trendmxPerfectState(r){
   if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
     try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
   }
+  /* hg-v1399: PERFECT never contradicts the admission floor — a fresh cross
+     riding with the majority or the 1D cloud against it disqualifies the
+     badge, and the stop-≥2% geometry bar applies when a priced plan is in
+     hand (r.plan); absent marks abstain (hg-v989), so a row the marks have
+     not landed on yet is never disqualified here. The |composite|/gates
+     clause of the floor is already implied (PERFECT is |5| + 7/7). Chop is
+     deliberately NOT added: the hg-v1160 replay measured chop-flagged rows
+     positive in H1 — a veto there would veto winners. Annotation-only, as
+     before: nothing here moves a tier, a plan or a desk. */
+  if (!tmAdmissionFloor(r, r.plan).ok) return false;
   return true;
 }
 

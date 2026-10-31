@@ -167,7 +167,7 @@ console.log('\n9. the note names both samples and attributes the foreign one');
 {
   const n = NOTE('p9volbar', { n: 72, net: 0.155 });
   ok(/72/.test(n), 'names this desk\'s sample (72)');
-  ok(/274/.test(n), 'names the twin\'s sample (274)');
+  ok(/292/.test(n), 'names the twin\'s sample (hg-v1404: 292 settled on the re-walk, was 274)');
   ok(/P9-VOLBAR/.test(n), 'names the twin mechanic');
   ok(/OMNIGOLD/.test(n), 'attributes the foreign record to OMNIGOLD');
   ok(/1h/.test(n), '  and names the horizon it was measured on');

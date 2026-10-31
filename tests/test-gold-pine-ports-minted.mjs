@@ -289,7 +289,7 @@ const firstWindow = (W, fn, opts, rows, from) => {
   assert(mN['pine:macdWith'] === true && mN['pine:psarWith'] === true && mN['pine:stochWith'] === true && mN['pine:majorityWith'] === undefined && Object.keys(mN).length === 3,
     'three new layers WITH and the five unread: three marks and NO majority (the three do not move the five-layer majority)');
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
-  assert(Object.keys(mL).length > 16 && mL['pine:oteWith'] === true && Object.keys(mL).every(k => mL[k] === true) && Object.keys(mS).every(k => mS[k] === false), 'all-long states stay WITH on a long, and OTE is one of them');
+  assert(Object.keys(mL).length > 16 && mL['pine:oteWith'] === true && Object.keys(mL).filter(k => k !== 'pine:dpoWith').every(k => mL[k] === true) && Object.keys(mS).filter(k => k !== 'pine:dpoWith').every(k => mS[k] === false) && typeof mL['pine:dpoWith'] === 'boolean', 'all-long states stay WITH on a long, and OTE is one of them (DPO excepted — detrended)');
   const html = W.pineGoldStackLineHtml(su, mL);
   assert(/\d+ of 27 gold Pine layers readable/.test(html) && /MACD Cross<\/b> LONG/.test(html) && /Parabolic SAR Flip<\/b> LONG/.test(html) && /Stochastic Cross<\/b> LONG/.test(html) && /five hg-v1164 layers/.test(html), 'the line prints the three new states and names the majority population (twenty-seven total since hg-v1220)');
 }

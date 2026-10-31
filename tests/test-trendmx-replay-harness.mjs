@@ -29,6 +29,16 @@
      6) one home: the parts are the combined file; scripts, ignore, the route
      7) build stamps
 
+   hg-v1399: measured-state pins updated now that the v1160 replay has run
+   (n=1952; the committed literal ships measured:true). The artifact-PRESENT
+   branches pin the measured reality (measured:true, n=1952, zero drift vs
+   the artifact, loadRows parity); the artifact-ABSENT branches keep the
+   unmeasured world with the old strictness (a maintainer without
+   scripts/backtest-trendmx-results.json passes exactly as before — the
+   zero-drift guard there becomes a splice round-trip against the committed
+   literal, since drift can only be judged where the artifact lives), and the
+   panel's unmeasured note is covered on a synthetic run(null) literal.
+
    Run: node tests/test-trendmx-replay-harness.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -62,14 +72,33 @@ console.log('1. zero drift, fatal markers, the committed literal is honestly unm
   const src = read('trendtable.combined.js');
   ok(src.indexOf(BEGIN) >= 0 && src.indexOf(END) > src.indexOf(BEGIN), 'trendtable.combined.js carries the BEGIN/END markers');
   const res = run();
-  ok(splice(src, literal(res)) === src, 'HG_TM_FACTOR_SEP equals the generator output on the committed tree (zero drift)');
-  ok(!fs.existsSync(ARTIFACT) && res.measured === false && res.n === 0 && res.rows.length === 0 && res.note === NOT_MEASURED_NOTE, 'no artifact is committed and the literal says NOT MEASURED with the note, an empty row set and no verdict');
-  ok(/measured: false/.test(literal(res)) && /does not exist/.test(literal(res)) && !/verdict: "/.test(literal(res)), 'the committed literal reads measured:false and carries no verdict row');
+  /* hg-v1399: the v1160 replay HAS run (n=1952) and the measured literal ships.
+     The artifact-ABSENT branch pins the unmeasured world with the old strictness
+     (a maintainer without scripts/backtest-trendmx-results.json passes exactly as
+     before — the drift guard can only run where the artifact lives, so there it
+     becomes a splice round-trip against the committed literal); the
+     artifact-PRESENT branch pins the measured reality: measured:true, n=1952,
+     zero drift vs the artifact. */
+  const committedLit = src.slice(src.indexOf(BEGIN), src.indexOf(END) + END.length);
+  if (!fs.existsSync(ARTIFACT)){
+    ok(res.measured === false && res.n === 0 && res.rows.length === 0 && res.note === NOT_MEASURED_NOTE, 'no artifact on this machine and the generator output says NOT MEASURED with the note, an empty row set and no verdict');
+    ok(/measured: false/.test(literal(res)) && /does not exist/.test(literal(res)) && !/verdict: "/.test(literal(res)), 'the generator output reads measured:false and carries no verdict row');
+    ok(splice(splice(src, literal(res)), committedLit) === src, 'the unmeasured literal splices in and the committed literal splices back byte for byte (the drift guard runs where the artifact lives)');
+  } else {
+    ok(splice(src, literal(res)) === src, 'HG_TM_FACTOR_SEP equals the generator output on the committed tree (zero drift)');
+    ok(res.measured === true && res.n === 1952 && res.rows.length > 0 && res.note !== NOT_MEASURED_NOTE, 'the artifact exists on this machine and the committed literal is MEASURED (n=' + res.n + ') with verdict rows — not the NOT-MEASURED note (hg-v1399)');
+    ok(/measured: true/.test(literal(res)) && !/measured: false/.test(literal(res)), 'the committed literal reads measured:true (hg-v1399)');
+  }
   ok(Array.isArray(res.forwardOnly) && res.forwardOnly.join() === 'takerFlowWith,fundWith,postgate:veto', 'the three forward-only reads are named on the literal');
   let threw = null; try { splice('x', literal(res)); } catch (e) { threw = e; }
   ok(threw && /BEGIN marker not found in trendtable\.combined\.js/.test(threw.message), 'a missing marker is fatal and names the file');
   ok(res.windows === WINDOWS && WINDOWS === 4 && MIN_SIDE === 20, 'four disjoint windows, twenty a side — the core bars, not restated');
-  ok(loadRows() === null, 'loadRows reads null (not an empty list) when the artifact does not exist — unmeasured is not zero');
+  if (!fs.existsSync(ARTIFACT)){
+    ok(loadRows() === null, 'loadRows reads null (not an empty list) when the artifact does not exist — unmeasured is not zero');
+  } else {
+    const L = loadRows();
+    ok(Array.isArray(L) && L.length === res.n && L.every(r => r.outcome !== 'unfilled'), 'loadRows reads the settled rows of the committed artifact, in parity with the literal (n=' + (L && L.length) + ') — unfilled rows stay excluded (hg-v1399)');
+  }
 }
 
 console.log('\n2. the harness end to end on synthetic bars: the desk rides every trade');
@@ -178,7 +207,8 @@ console.log('\n4. the config: factors derived from the rows, three states as two
   ok(R.measured === true && R.n === S.length && R.tab === 'TRENDMX' && Array.isArray(R.rows) && R.rows.length === F.length && /both-touch/.test(R.bound), 'on walked rows the result is measured, judged through the core, and names the bound');
   const src = read('trendtable.combined.js');
   const lit2 = literal(R);
-  ok(/measured: true/.test(lit2) && splice(src, lit2) !== src && splice(splice(src, lit2), literal(run(null))) === src, 'a measured literal splices in and the committed unmeasured literal splices back byte for byte');
+  const committedLit4 = src.slice(src.indexOf(BEGIN), src.indexOf(END) + END.length);
+  ok(/measured: true/.test(lit2) && splice(src, lit2) !== src && splice(splice(src, lit2), committedLit4) === src, 'a different measured literal splices in and the committed literal splices back byte for byte (hg-v1399: the committed literal is measured; the round-trip reads it off the tree, not the local artifact state)');
   /* a synthetic artifact: loadRows keeps settled rows only */
   const tmp = path.join(ROOT, 'scripts', '.tm-guard-artifact.json');
   const unfilledRow = { sym: 'ZZZUSDT', dir: 'long', tISO: '2026-01-01T00:00:00.000Z', outcome: 'unfilled', entry: 1, stop: 0.9, t1: 1.2, reads: {} };
@@ -190,14 +220,17 @@ console.log('\n4. the config: factors derived from the rows, three states as two
 console.log('\n5. the tab: the unmeasured note, the delegated render, fail-open, read nowhere else');
 {
   const T = W.HG_TM_FACTOR_SEP;
-  ok(T && T.measured === false && typeof W.tmFactorSepHtml === 'function', 'the tab exports the generated literal and the panel');
-  const h = W.tmFactorSepHtml();
-  ok(/NOT YET MEASURED/.test(h) && /does not exist/.test(h) && /takerFlowWith, fundWith, postgate:veto/.test(h) && /data-tm-replay="unmeasured"/.test(h), 'unmeasured: the panel says the walk has not run and names the forward-only reads, in place of an empty table');
+  ok(T && T.measured === true && T.n === 1952 && typeof W.tmFactorSepHtml === 'function', 'the tab exports the generated literal and the panel (hg-v1399: the committed literal is MEASURED, n=1952)');
+  /* the unmeasured note is still covered — driven on a synthetic unmeasured
+     literal (run(null) is unmeasured on every machine), since the committed
+     one is measured now (hg-v1399) */
+  const h = W.tmFactorSepHtml(run(null));
+  ok(/NOT YET MEASURED/.test(h) && /does not exist/.test(h) && /takerFlowWith, fundWith, postgate:veto/.test(h) && /data-tm-replay="unmeasured"/.test(h), 'unmeasured: the panel says the walk has not run and names the forward-only reads, in place of an empty table (synthetic unmeasured literal — hg-v1399)');
   /* a measured literal with the renderer present delegates; without it renders nothing */
   const S = settledOf(RES.trades); const R = run(S);
   let got = null; W.hgOmniFactorSepHtml = (X) => { got = X; return '<i>sep</i>'; };
   ok(W.tmFactorSepHtml(R) === '<i>sep</i>' && got && got.measured === true && got.n === S.length, 'measured: the panel delegates to OMNIROUTE\'s one renderer with the literal (handed in on the renderer\'s own seam)');
-  ok(/NOT YET MEASURED/.test(W.tmFactorSepHtml()) && got.n === S.length, 'with no literal handed in the panel still reads the committed one');
+  ok(W.tmFactorSepHtml() === '<i>sep</i>' && got === T, 'with no literal handed in the panel reads the committed one — the MEASURED literal, delegated to the one renderer (hg-v1399)');
   delete W.hgOmniFactorSepHtml;
   ok(W.tmFactorSepHtml(R) === '', 'measured with the renderer absent renders nothing rather than a second renderer');
   const src = strip(read('trendtable.combined.js'));

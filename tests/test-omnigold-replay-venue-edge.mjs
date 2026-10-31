@@ -77,8 +77,8 @@ console.log('== the inverse normal is accurate enough to set a family-wise bound
   /* references from python statistics.NormalDist().inv_cdf — the tail branch
      is the one that matters here and Acklam holds it to ~3e-9 */
   ok(near(XM.hgOgInvNorm(0.975), 1.9599639845, 1e-8), 'z(0.975) = 1.9599639845');
-  ok(near(XM.hgOgInvNorm(1 - 0.05 / (2 * 54)), 3.3121176663, 1e-8),
-     'family-wise z for 54 tests = 3.3121176663 (tail branch, to 1e-8)');
+  ok(near(XM.hgOgInvNorm(1 - 0.05 / (2 * 55)), 3.3172473616, 1e-8),
+     'family-wise z for 55 tests = 3.3172473616 (tail branch, to 1e-8; hg-v1402: the family grew 54 -> 55 when P4-ADRX crossed the bar on the re-walk)');
   ok(near(XM.hgOgInvNorm(0.999), 3.0902323062, 1e-8), 'z(0.999) = 3.0902323062');
   ok(near(XM.hgOgInvNorm(0.5), 0, 1e-9), 'z(0.5) = 0');
   ok(!isFinite(XM.hgOgInvNorm(0)) || isNaN(XM.hgOgInvNorm(0)), 'p=0 is not a number');
@@ -95,8 +95,15 @@ console.log('\n== the family is counted, not assumed ==');
      are TWO TESTS, so the count is the table size again — and the bar goes
      UP, which is the direction a correction should move when you admit to
      having made another comparison. */
-  const rows = Object.keys(TABLE.perKind).length;
+  /* hg-v1402: the tested records are the rows the MODULE carries (its baked
+     kinds literal — 55 with P4-ADRX). The artifact's top-level perKind is a
+     frozen hg-v699-era map the additive bake never refreshes, so it is no
+     longer the reference for the count; the live measured map in the
+     artifact is sequentialBake.formedByKind. */
+  const rows = Object.keys(XM.HG_OG_REPLAY_EVIDENCE.kinds).length;
   ok(m === rows, `family size is every row that was tested (${m} of ${rows} rows)`);
+  ok(TABLE.sequentialBake.formedByKind['P4-ADRX'],
+     'and the one row the artifact perKind map lacks is measured in the bake (P4-ADRX, 159 settled)');
   ok(m > 1, 'and it is a real family, not a single test');
   ok(XM.hgOgFamilyZ(m) > XM.hgOgFamilyZ(m - 1),
      'so un-pooling raises the bar rather than lowering it — one more test, not one fewer');
@@ -166,7 +173,7 @@ console.log('\n== a mechanic that was never measured says so ==');
   const below = XM.hgOgReplayLineHtml('POC-REVERT');
   ok(below !== '', 'an unmeasured mechanic no longer renders as silence');
   ok(/NOT MEASURED/.test(below), 'it says so in as many words');
-  ok(/2 settled firing/.test(below), 'with the count it actually reached');
+  ok(/6 settled firing/.test(below), 'with the count it actually reached (hg-v1402 re-walk: 6, was 2)');
   ok(/40/.test(below), 'and the bar it fell short of');
   ok(!/%/.test(below), 'and NO win rate — a rate on two trades is the same overclaim with a caveat');
   ok(!/NaN|undefined|null/.test(below), 'with nothing leaked');
@@ -236,15 +243,18 @@ console.log('\n== the verdict answers breakeven AND selection ==');
   ok(vd.tier !== 'family', 'and even the best mechanic does not clear family-wise');
 }
 
-console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge ==');
+console.log('\n== sweeping all 55: re-pricing helps, and still finds no edge ==');
 {
   let repriced = 0, netPosXM = 0, netPosPaxg = 0, naive = 0, family = 0;
   /* EVERY ROW, because every row is a record that was measured and judged.
      hg-v764 walked this table folding SPRING and UTAD into one entry; that
      fold is withdrawn. Their halves disagree by 19 points of win rate,
      which v764 read as a reason to pool and is in fact the reason not to —
-     a pooled record describes neither side. */
-  for (const kind of Object.keys(TABLE.perKind)){
+     a pooled record describes neither side.
+     hg-v1402: the sweep reads the MODULE's table (55 rows — P4-ADRX crossed
+     the bar on the re-walk); the artifact's perKind is the frozen hg-v699
+     map and one row short of what is actually judged. */
+  for (const kind of Object.keys(XM.HG_OG_REPLAY_EVIDENCE.kinds)){
     const ev = XM.hgOgReplayEvidence(kind);
     if (!ev) continue;
     if (ev.avgNetR > 0) netPosPaxg++;
@@ -254,7 +264,7 @@ console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge =='
     if (vd && vd.tier === 'naive') naive++;
     if (vd && vd.tier === 'family') family++;
   }
-  ok(repriced === 54, `all 54 rows re-price (${repriced}) — every measured record is one`);
+  ok(repriced === 55, `all 55 rows re-price (${repriced}) — every measured record is one`);
   ok(netPosPaxg === 0, 'at the replay\'s PAXG cost, NOTHING is net positive');
   /* 17 -> 18, back where it was before hg-v764 pooled the pair. UTAD reads
      net positive at XM and SPRING does not, and that is a FACT ABOUT THE
@@ -267,7 +277,11 @@ console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge =='
      six of the eighteen only cleared zero because the fee was understated.
      Being too generous about the venue this desk actually trades is the
      direction that would not have been questioned. */
-  ok(netPosXM === 12, `at XM cost, 12 are net positive (${netPosXM}) — six fewer than the median-fee arithmetic claimed`);
+  /* hg-v1402: 12 -> 13 on the re-walked records (P4-ADRX's gate-clear read
+     is +0.007R at XM — a hair over zero, and pinned as exactly that). The
+     veto logic is untouched; nothing here clears breakeven, let alone the
+     family bar, and the assertions below still say so. */
+  ok(netPosXM === 13, `at XM cost, 13 are net positive (${netPosXM}) — hg-v1402 re-walk, was 12`);
   /* WAS 1, IS NOW 0, and the change is the point rather than a regression.
      hgOgReplayEdgeVerdict used to read n replay rows as n independent
      trades. The walk that produced them published 59.4 plans a day on one
@@ -280,7 +294,7 @@ console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge =='
      The test's own thesis gets stronger, not weaker: 0 is further below
      the ~2.7 that chance alone yields than 1 was. */
   ok(naive === 0, `and NONE clears its own breakeven at 95% (${naive})`);
-  ok(naive < 54 * 0.05, 'which is FEWER than the ~2.7 chance alone would produce');
+  ok(naive < 55 * 0.05, 'which is FEWER than the ~2.75 chance alone would produce');
   ok(family === 0, 'and none survives the family-wise bound — no mechanic has a provable edge');
 }
 
