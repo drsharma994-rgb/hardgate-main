@@ -785,6 +785,11 @@
       "version": "hg-v1479",
       "built": "2026-11-01T12:00:00Z",
       "note": "CONFLUENCE r2 (renumbered four times; upstream took v1455-v1478, their v1463 GOLD SETUP LOGIC and v1464 GOLD TAB MATH): the formed-plan stack gate is re-cut to the measured 48 (the 78/68 desk cuts are unreachable for a desk plan; READY was 0 of 2,349 taped scans in the 14.3-month census; below-48 measured -0.452R XM both halves, 48+ +0.802R both halves; validated re-walk n=44 +0.536R XM both halves). The cut governs ticket minting on the FORMED plan; the v1456/v1457 keeps govern a plan's survival at formation — a kept-but-sub-48 plan paints on the card and mints nothing. A member card over 48h old stands the plan aside (measured -0.35R both halves, n=7 thin). The WATCH card prints its measured loss (-0.74R XM both halves, n=78; never recorded, no handoff). Fail-open when the tape or scorer is absent."
+    },
+    {
+      "version": "hg-v1480",
+      "built": "2026-11-01T12:30:00Z",
+      "note": "OMNIBTC COMBO. A crown stays a watch unless three measured legs all hold: the stop is 0.80-2.50% of entry, Kaufman efficiency of the last 20 closed 4h bars is above 0.35, and the signal bar taker-buy imbalance is against the trade. 46 one-position trades, +18.6R across three periods. Missing taker volume fails open. Demote, never hide. Binance klines now keep taker-buy base volume. Not re-walked; the forward ledger decides."
     }
   ]
 }

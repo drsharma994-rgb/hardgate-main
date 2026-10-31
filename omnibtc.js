@@ -1768,6 +1768,79 @@ a global hard refresh.
     return pick;
   }
 
+  /* hg-v1478: THE MEASURED COMBINATION.
+     A one-position walk of the 4h book, split into three periods the search
+     could not all see at once, kept one rule green in every period even
+     after its best trade was removed: stop between 0.80% and 2.50% of
+     entry, Kaufman efficiency of the last 20 closed bars above 0.35, and
+     the signal bar's taker-buy imbalance against the trade by more than
+     0.05. 46 separate trades, +18.6R. It is a stand-down, not a new
+     strategy: it cannot mint a level and it cannot add a vote.
+     THREE-STATE. No taker-buy print on the bar (tb missing, or volume not
+     positive) is not a verdict — the fixtures and a non-Binance tape fail
+     open. A readable leg that fails demotes. Unreadable efficiency or an
+     unreadable stop is skipped, not invented.
+     ORDER. After the cost floor, before the loaded-bank guard, so an
+     unloaded pine bank cannot mask it. A stop already under 0.80% is named
+     by the cost floor and never reaches here.
+     Lever: window.HG_OBTC_COMBO = false, or localStorage hg_obtc_combo = '0'.
+     Default ON. */
+  function hgObtcComboOn(){
+    try{
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_COMBO === false) return false;
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_COMBO === true) return true;
+      if (W && W.localStorage){
+        var v = W.localStorage.getItem('hg_obtc_combo');
+        if (v === '0' || v === 'false') return false;
+      }
+    }catch(eLv){}
+    return true;
+  }
+  function hgObtcComboTape(rows){
+    if (!rows || rows.length < 22) return null;
+    var out = rows;
+    var n = rows.length;
+    var step = +rows[n - 1].t - +rows[n - 2].t;
+    if (isFinite(step) && step > 0 && isFinite(+rows[n - 1].t) && (+rows[n - 1].t + step) * 1000 > Date.now()){
+      out = rows.slice(0, n - 1);
+    }
+    return out.length >= 22 ? out : null;
+  }
+  function hgObtcComboWhy(row, rows){
+    if (!row) return null;
+    var tape = hgObtcComboTape(rows);
+    if (!tape) return null;
+    var last = tape[tape.length - 1];
+    var vol = +last.v, tb = +last.tb;
+    if (!(vol > 0) || !isFinite(tb)) return null;
+    var why = [];
+    var e = +row.entry, s = +row.stop;
+    var d = String(row.dir || '').toLowerCase();
+    var stopOk = isFinite(e) && e > 0 && isFinite(s) && s > 0
+      && ((d === 'long' && s < e) || (d === 'short' && s > e));
+    if (stopOk){
+      var stopPct = Math.abs(e - s) / e;
+      if (stopPct < 0.008 || stopPct > 0.025){
+        why.push('stop ' + (stopPct * 100).toFixed(2) + '% of entry is outside 0.80–2.50%');
+      }
+    }
+    var er = NaN;
+    if (typeof W.hgKaufmanER === 'function'){
+      var closes = [];
+      for (var i = 0; i < tape.length; i++) closes.push(+tape[i].c);
+      var arr = W.hgKaufmanER(closes, 20);
+      if (arr && arr.length) er = +arr[arr.length - 1];
+    }
+    if (isFinite(er) && !(er > 0.35)){
+      why.push('20-bar efficiency ' + er.toFixed(2) + ' is not above 0.35');
+    }
+    var imb = (2 * tb / vol) - 1;
+    var against = (d === 'long' && imb < -0.05) || (d === 'short' && imb > 0.05);
+    if (!against) why.push('taker flow is not against the trade');
+    if (!why.length) return null;
+    return 'COMBO — ' + why.join('; ');
+  }
+
   /* hg-v1296: THE TAPE-REGIME GATE OMNIBTC NEVER APPLIED.
      ------------------------------------------------------------------
      `hgRegimeAllowsSetup` (plans.js:114) is a HARD veto every other crypto
@@ -2179,6 +2252,13 @@ a global hard refresh.
       if (cfWhy){
         pick.row.costFloorRefused = true;
         return hgObtcDemoteWatch(pick, cfWhy + '. Watch only, not a ticket.');
+      }
+    }
+    if (hgObtcComboOn()){
+      var comboWhy = hgObtcComboWhy(pick.row, rows);
+      if (comboWhy){
+        pick.row.comboRefused = true;
+        return hgObtcDemoteWatch(pick, comboWhy + '. Watch only, not a ticket.');
       }
     }
     if (!book.loaded){

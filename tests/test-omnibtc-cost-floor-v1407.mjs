@@ -241,11 +241,43 @@ console.log('\n== 7) both lever surfaces exist by name (a rename trips here) =='
 console.log('\n== 8) the deploy pins moved with the pack (?v= byte-check) ==');
 {
   const bs = (read('build-stamp.js').match(/version:\s*'([^']+)'/) || [])[1];
-  ok(bs === 'hg-v1479', 'build-stamp.js carries hg-v1459 (got ' + bs + ')');
+  ok(bs === 'hg-v1480', 'build-stamp.js carries hg-v1480 (got ' + bs + ')');
   ok(bs === HG_VER, 'and it is the tree version ' + HG_VER);
   const idx = read('index.html');
-  ok(idx.indexOf('omnibtc.js?v=1479') !== -1, 'index.html loads omnibtc.js?v=1479');
+  ok(idx.indexOf('omnibtc.js?v=1480') !== -1, 'index.html loads omnibtc.js?v=1480');
   ok(!/\?v=1406\b/.test(idx), 'no stale ?v=1406 pin survives in index.html');
+}
+
+console.log('\n== 9) the measured combo demotes only when the bar has taker volume ==');
+{
+  function withTb(tb, closeOf){
+    const rows = [];
+    for (let i = 0; i < 280; i++){
+      const px = closeOf ? closeOf(i) : 100;
+      rows.push({ t: i, o: px, h: px + 1, l: px - 1, c: px, v: 1, tb: tb });
+    }
+    return rows;
+  }
+  const band = crown();
+  band.row.stop = 98.5;
+  const W = boot(); armBank(W);
+  const pass = W.hgObtcApplyPineAccuracy(band, withTb(0.4), []);
+  ok(pass.tier === 'clean' && !pass.row.comboRefused,
+    '1.5% stop and taker against: the crown still mints (' + pass.row.pineNote + ')');
+  const wide = W.hgObtcApplyPineAccuracy(crown(), withTb(0.4), []);
+  ok(wide.tier === 'near' && wide.row.comboRefused === true && /COMBO/.test(wide.row.pineNote || '') && !/COST FLOOR/.test(wide.row.pineNote || ''),
+    'a 10% stop on a bar that has taker volume is the combo, not the cost floor (' + wide.row.pineNote + ')');
+  const withFlow = crown();
+  withFlow.row.stop = 98.5;
+  const flowed = W.hgObtcApplyPineAccuracy(withFlow, withTb(0.7), []);
+  ok(flowed.tier === 'near' && /taker flow is not against/.test(flowed.row.pineNote || ''),
+    'taker flow with the trade stands the crown down');
+  const chopped = W.hgObtcApplyPineAccuracy(band, withTb(0.4, i => 100 + (i % 2 ? 1 : -1)), []);
+  ok(chopped.tier === 'near' && /efficiency/.test(chopped.row.pineNote || ''),
+    'a choppy tape stands the crown down (' + chopped.row.pineNote + ')');
+  W.HG_OBTC_COMBO = false;
+  const off = W.hgObtcApplyPineAccuracy(crown(), withTb(0.4), []);
+  ok(off.tier === 'clean' && !off.row.comboRefused, 'window.HG_OBTC_COMBO = false leaves the 10% stop alone');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

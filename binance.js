@@ -238,7 +238,7 @@ async function binanceKlines(symbol, interval, limit){
     const raw = await __binFetchJson(url);
     if (!Array.isArray(raw)) return [];
     const rows = raw.map(function(k){
-      return { t: Math.floor((+k[0])/1000), o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] };
+      return { t: Math.floor((+k[0])/1000), o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5], tb: +k[9] };
     }).filter(function(r){
       return isFinite(r.t) && isFinite(r.o) && isFinite(r.h) && isFinite(r.l) && isFinite(r.c);
     }).sort(function(a,b){ return a.t - b.t; });
