@@ -78,7 +78,7 @@ function trendmxLimitClasses(rows){
      witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
      · volume hg-v1020). */
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
-              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0 } },
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0, lab: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0, floor: 0, lab: 0 } },
               /* hg-v1154: the post-gate-vetoed rows, kept so they are RECORDED (ticket:false) and never shown */
               heldPostGate: [],
               /* hg-v1159: the rows the four witnesses held off, kept for the same reason (heldBy names the witness) */
@@ -175,6 +175,21 @@ function trendmxLimitClasses(rows){
       out.heldWitness.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean, heldBy: 'floor', floorWhy: tmFloor.why });
       continue;
     }
+    /* hg-v1484: THE MEASURED MINT CONFIG (tmLabConfig — the win-rate lab's
+       confirmed winner, scripts/trendmx-winrate-lab-results.json): the
+       four-leg direction (the h4Cascade leg no longer votes), the
+       ADX-strength and trend-quality reads explicitly WITH. Held rows are
+       counted and named under heldWhy.lab and recorded ticket:false — the
+       same shape as every hold above. Unlike the floor, an unread mark does
+       NOT abstain: trading ONLY when both reads are explicitly WITH is the
+       measured rule, and the absent case is part of what was measured. */
+    var tmLab = tmLabConfig(r, dir);
+    if (!tmLab.ok){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.lab++; }
+      else { out.heldConv++; out.heldWhy.conv.lab++; }
+      out.heldWitness.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean, heldBy: 'lab', floorWhy: tmLab.why });
+      continue;
+    }
     var item = { row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir) };
     if (isClean){
       /* the old board's intra-class rank, unchanged: composite, then gates */
@@ -256,6 +271,7 @@ function trendmxHeldBits(held, why){
   if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
   if (w.postgate) bits.push('the SWING post-gate rule refused the row — flow trap, BTC relative strength or stale momentum on the free feeds (hg-v1154); recorded, not shown');
   if (w.floor) bits.push('the admission floor refused the row — stop under 2% of entry, a fresh cross with the majority, the 1D cloud against it, or a bare |2| majority without 3 gates (hg-v1399); recorded, not shown');
+  if (w.lab) bits.push('the measured mint config held the row — the direction rests on the removed 4h-cascade leg, or the ADX-strength / trend-quality reads are not explicitly WITH (hg-v1484); recorded, not shown');
   if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   return bits;
 }
@@ -280,6 +296,7 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     if (w2.fund) tags.push('fundamental headwind');
     if (w2.postgate) tags.push('SWING post-gate rule refused the row (recorded, not shown; hg-v1154)');
     if (w2.floor) tags.push('admission floor (stop ≥2% · no fresh cross · cloud with · |2| needs 3 gates; hg-v1399)');
+    if (w2.lab) tags.push('measured mint config (4-leg direction · ADX + trend quality explicitly WITH; hg-v1484)');
     if (!tags.length) tags.push('taker flow against');
     heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }

@@ -70,13 +70,13 @@ function tape(n, tfSec, start, step){
   const rows = []; let c = start;
   for (let i = 0; i < n; i++){
     const o = c; c = c + step;
-    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 4,   /* hg-v1399: wider wicks so the house stop prices >=2% of entry (the admission floor) — closes, and every read off closes, are byte-identical */
-                l: Math.min(o, c) - Math.abs(step) * 4, c, v: 1000 });
+    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 1,   /* hg-v1484: wicks back to x1 of step — choppiness reads 'trend' (the lab clause) and the stop still clears the 2% floor (the 4h step is 1.2); closes byte-identical */
+                l: Math.min(o, c) - Math.abs(step) * 1, c, v: 1000 });
   }
   return rows;
 }
-const UP1 = tape(260, 86400, 100, 1), UP4 = tape(120, 14400, 100, 0.6);
-const DN1 = tape(260, 86400, 400, -1), DN4 = tape(120, 14400, 400, -0.6);
+const UP1 = tape(260, 86400, 100, 1), UP4 = tape(120, 14400, 100, 1.2);
+const DN1 = tape(260, 86400, 400, -1), DN4 = tape(120, 14400, 400, -1.2);
 
 function mkRow(w, sym, dirn, opts){
   const up = dirn === 'long';

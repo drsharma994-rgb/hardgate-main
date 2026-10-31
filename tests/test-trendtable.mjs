@@ -256,9 +256,13 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(pl && pl.dir === 'long', 'score +5 -> long plan');
   assert(pl.entry === up4[up4.length - 1].c, 'long: entry = last 4h close');
   assert(pl.stop < pl.entry, 'long: stop below entry');
-  assert(Math.abs(pl.stop - (pl.entry - 1.5 * a4)) < 1e-9, 'long: far structure -> stop = entry - 1.5×ATR');
-  assert(Math.abs(pl.t1 - (pl.entry + 2 * (pl.entry - pl.stop))) < 1e-9, 'long: T1 = entry + 2R exactly');
-  assert(Math.abs(pl.t2 - (pl.entry + 3.5 * (pl.entry - pl.stop))) < 1e-9, 'long: T2 = entry + 3.5R exactly');
+  /* hg-v1484: the measured mint config widens every stop 1.25x at the one
+     return seam — 1.5×ATR becomes 1.875×ATR — and the targets do NOT move:
+     T1/T2 are still priced off the pre-widening risk (2R / 3.5R of 1.5×ATR). */
+  assert(Math.abs(pl.stop - (pl.entry - 1.875 * a4)) < 1e-9, 'long: far structure -> stop = entry - 1.875×ATR (1.5×ATR widened 1.25x, hg-v1484)');
+  assert(pl.tmStopWiden === 1.25, 'long: the widening is marked on the plan (hg-v1484)');
+  assert(Math.abs(pl.t1 - (pl.entry + 3 * a4)) < 1e-9, 'long: T1 = entry + 2R of the ORIGINAL risk, unmoved');
+  assert(Math.abs(pl.t2 - (pl.entry + 5.25 * a4)) < 1e-9, 'long: T2 = entry + 3.5R of the ORIGINAL risk, unmoved');
   assert(pl.t1 > pl.entry && pl.t2 > pl.t1, 'long: T1 above entry, T2 beyond T1');
 
   /* short */
@@ -266,9 +270,9 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   const ps = G.trendmxPlan({ score: -5, rows4h: dn4 });
   assert(ps && ps.dir === 'short', 'score -5 -> short plan');
   assert(ps.stop > ps.entry, 'short: stop above entry');
-  assert(Math.abs(ps.stop - (ps.entry + 1.5 * a4d)) < 1e-9, 'short: stop = entry + 1.5×ATR');
-  assert(Math.abs(ps.t1 - (ps.entry - 2 * (ps.stop - ps.entry))) < 1e-9, 'short: T1 = entry - 2R exactly');
-  assert(Math.abs(ps.t2 - (ps.entry - 3.5 * (ps.stop - ps.entry))) < 1e-9, 'short: T2 = entry - 3.5R exactly');
+  assert(Math.abs(ps.stop - (ps.entry + 1.875 * a4d)) < 1e-9, 'short: stop = entry + 1.875×ATR (widened, hg-v1484)');
+  assert(Math.abs(ps.t1 - (ps.entry - 3 * a4d)) < 1e-9, 'short: T1 = entry - 2R of the ORIGINAL risk, unmoved');
+  assert(Math.abs(ps.t2 - (ps.entry - 5.25 * a4d)) < 1e-9, 'short: T2 = entry - 3.5R of the ORIGINAL risk, unmoved');
   assert(ps.t1 < ps.entry && ps.t2 < ps.t1, 'short: T1 below entry, T2 beyond T1');
 
   /* explicit dir wins over the score */
@@ -301,14 +305,16 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(pLS && isFinite(pLS.stop) && isFinite(pLS.t1),
          'hgBestLevels produces valid plan on structure rows');
   const riskLS = Math.abs(pLS.entry - pLS.stop);
-  assert(riskLS > 0 && Math.abs(pLS.t1 - pLS.entry) / riskLS >= 1.99, 'structure plan: min ~2R');
+  assert(riskLS > 0 && Math.abs(pLS.t1 - pLS.entry) / riskLS >= 1.59, 'structure plan: min ~2R of the original risk = ~1.6R of the widened risk (hg-v1484)');
 
   /* smartSetup preference (legacy path when hgBestLevels absent) */
   const keepBL = G.hgBestLevels;
   G.hgBestLevels = undefined;
   const fakeS = { type:'SWING', dir:'long', entry:50, stop:48, t1:54, t2:57, rr1:2, rr2:3.5, riskPct:4, confirmed:true, note:'stub' };
   G.smartSetup = function(){ return fakeS; };
-  assert(G.trendmxPlan({ score: 5, rows4h: up4 }) === fakeS, 'smartSetup preferred when it returns a valid plan');
+  const sp = G.trendmxPlan({ score: 5, rows4h: up4 });
+  assert(sp && sp.entry === fakeS.entry && sp.t1 === fakeS.t1 && Math.abs(sp.stop - (fakeS.entry + (fakeS.stop - fakeS.entry) * 1.25)) < 1e-9,
+         'smartSetup preferred when it returns a valid plan — its levels ride, the stop widened 1.25x at the one seam (hg-v1484)');
   G.smartSetup = function(){ return null; };
   assert(G.trendmxPlan({ score: 5, rows4h: up4 }).type === 'ATR', 'smartSetup declining -> house fallback');
   G.smartSetup = function(){ throw new Error('x'); };
@@ -324,7 +330,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/ENTRY <b>/.test(blk), 'block contains ENTRY level');
   assert(/STOP <b>/.test(blk), 'block contains STOP level');
   assert(blk.indexOf('T1') !== -1 && blk.indexOf('T2') !== -1, 'block contains T1 and T2 labels');
-  assert(/\(2(\.0)?R\)/.test(blk) && /\(3\.5R\)/.test(blk), 'block shows 2R / 3.5R multiples');
+  assert(/\(1\.6R\)/.test(blk) && /\(2\.8R\)/.test(blk), 'block shows the honest widened multiples 1.6R / 2.8R (hg-v1484)');
   assert(blk.indexOf('FAKEUSDT') !== -1 && blk.indexOf('LONG') !== -1, 'block names the symbol and direction');
   const blkS = G.trendmxPlanBlock({ sym:'FAKEUSDT', score:-5, comps:{}, rows4h: dn4 });
   assert(blkS.indexOf('SHORT') !== -1 && /STOP <b>/.test(blkS), 'short row block: direction + STOP level');

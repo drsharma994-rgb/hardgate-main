@@ -33,6 +33,11 @@
    its own fixtures (§9b) — a veto row carrying a downtrend rows1d, its
    fail-open twin without one, and the unit-level clause fires/symmetry/
    abstain pins. Every pre-hg-v1419 assertion unchanged.
+   hg-v1484: tape recalibrated for the measured mint config — the wicks come
+   back in (x4 -> x1 of step, closes untouched) so the last-14 choppiness
+   reads 'trend' (the lab's trendQualityWith clause); the house stop still
+   prices 2.56% of entry, so the hg-v1399 floor passes and every prior
+   assertion is unchanged.
    Run: node tests/test-trendmx-class-desks-v1018.mjs */
 
 import fs from 'node:fs';
@@ -76,13 +81,18 @@ function tape(n, tfSec, start, step){
   const rows = []; let c = start;
   for (let i = 0; i < n; i++){
     const o = c; c = c + step;
-    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 4,   /* hg-v1399: wider wicks so the house stop prices >=2% of entry (the admission floor) — closes, and every read off closes, are byte-identical */
-                l: Math.min(o, c) - Math.abs(step) * 4, c, v: 1000 });
+    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 1,   /* hg-v1484: wicks back to x1 of step — the stop still prices 2.56% of entry (the hg-v1399 floor passes) AND the last-14 choppiness reads 'trend' (the hg-v1484 lab's trendQualityWith clause passes); closes, and every read off closes, are byte-identical to the pre-v1399 tape */
+                l: Math.min(o, c) - Math.abs(step) * 1, c, v: 1000 });
   }
   return rows;
 }
-const UP1 = tape(260, 86400, 100, 1), UP4 = tape(120, 14400, 100, 0.6);
-const DN1 = tape(260, 86400, 400, -1), DN4 = tape(120, 14400, 400, -0.6);
+/* hg-v1484: the 4h step is 1.2 (was 0.6) — at wick x1 the 1.875xATR house stop
+   must still clear the hg-v1399 floor's 2%-of-entry bar on BOTH twins (the
+   short starts at 400, so the same absolute ATR is a smaller pct of entry);
+   step 1.2 prices 2.77% (long) / 2.64% (short). Closes stay linear, so every
+   read off closes (score, majority, crosses) is unchanged. */
+const UP1 = tape(260, 86400, 100, 1), UP4 = tape(120, 14400, 100, 1.2);
+const DN1 = tape(260, 86400, 400, -1), DN4 = tape(120, 14400, 400, -1.2);
 
 function mkRow(w, sym, dirn, opts){
   const up = dirn === 'long';

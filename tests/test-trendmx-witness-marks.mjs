@@ -215,7 +215,7 @@ console.log('\n3. the class partition, driven directly: held rows keep their pla
   S.__fund.FUNDUSDT = FUND_AGAINST; S.__fund.FLOWFUNDUSDT = FUND_AGAINST;
   const out = S.trendmxLimitClasses(rows);
   ok(out.clean.length === 1 && out.clean[0].row.sym === 'SOLUSDT' && out.conv.length === 0, 'one clean row reaches the desk; every held row stays off it');
-  ok(out.heldClean === 7 && JSON.stringify(out.heldWhy.clean) === JSON.stringify({ flow: 4, mom: 1, vol: 1, fund: 1, postgate: 0, floor: 0 }), 'the hold-off COUNTS are the hg-v1019 counts: each held row counted ONCE under the first witness that fired (' + JSON.stringify(out.heldWhy.clean) + '); hg-v1399: the admission floor adds its own named reason (zero here — every priced stop clears 2%)');
+  ok(out.heldClean === 7 && JSON.stringify(out.heldWhy.clean) === JSON.stringify({ flow: 4, mom: 1, vol: 1, fund: 1, postgate: 0, floor: 0, lab: 0 }), 'the hold-off COUNTS are the hg-v1019 counts: each held row counted ONCE under the first witness that fired (' + JSON.stringify(out.heldWhy.clean) + '); hg-v1399: the admission floor adds its own named reason (zero here — every priced stop clears 2%); hg-v1484: the measured mint config adds its own (zero here — these fixtures trend and read ADX-with)');
   ok(Array.isArray(out.heldWitness) && out.heldWitness.length === 6 && out.heldWitness.every(h => h.plan && isFinite(h.plan.entry) && isFinite(h.plan.stop) && isFinite(h.plan.t1)), 'six held rows are KEPT with a priced plan (the seventh had no tape to price on)');
   ok(!out.heldWitness.some(h => h.row.sym === 'NOPLANUSDT'), 'the held row with no plan is counted and NOT kept — a record needs levels');
   const by = {}; out.heldWitness.forEach(h => { by[h.row.sym] = h.heldBy; });
@@ -299,8 +299,17 @@ console.log('\n6. one home: both sites call the helper, the parts are the combin
   ok(namers.length === 0, 'no other file names the new marks or the helpers (' + namers.join(', ') + ')');
   for (const g of ['hg-gates.js', 'cryptogates.js', 'plans.js', 'hg-solidity.js', 'conviction-lock.js', 'hg-forward.js', 'setup-stack.js'])
     ok(!/trendQualityWith|tm:d1Trend|tm:cascade|momWith|volWith|fundWith|takerFlowWith/.test(strip(read(g))), g + ' names none of the witness marks');
-  /* the matrix reads none of them back: the only readers of the bag are the two record literals */
-  ok(!/reads\['tm:|reads\.momWith|reads\.fundWith|reads\.volWith|reads\.takerFlowWith|reads\.trendQualityWith/.test(src), 'trendtable reads no mark back — the marks gate nothing');
+  /* the matrix reads none of them back: the only readers of the bag are the two record literals.
+     hg-v1484: ONE measured exception — tmLabConfig reads reads['tm:adx'] and
+     reads.trendQualityWith, because the win-rate lab MEASURED those two marks
+     as admission clauses (27.6% -> 41.1% win, net -0.028R -> +0.205R, held-out
+     window confirmed, z=4.52 — scripts/trendmx-winrate-lab-results.json).
+     hg-v966 (no gate without a bake) is satisfied by that bake; every OTHER
+     mark still gates nothing. The sweep strips the tmLabConfig body and pins
+     the rest of the desk clean. */
+  const srcNoLab = src.replace(/function tmLabConfig\(r, dir\)\{[\s\S]*?\n\}/, '');
+  ok(srcNoLab.length < src.length && !/reads\['tm:|reads\.momWith|reads\.fundWith|reads\.volWith|reads\.takerFlowWith|reads\.trendQualityWith/.test(srcNoLab),
+     'trendtable reads no mark back — the marks gate nothing (ONE measured exception: tmLabConfig reads tm:adx + trendQualityWith, the two clauses the win-rate lab baked — hg-v966 satisfied by scripts/trendmx-winrate-lab-results.json)');
   /* the twelve served parts ARE the combined file */
   let parts = ''; for (let i = 0; i < 12; i++) parts += read('trendtable-src-' + i + '.js');
   const norm = s => s.split('\n').filter(l => l.trim() !== '').join('\n');

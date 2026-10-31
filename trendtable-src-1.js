@@ -241,7 +241,8 @@ function tmRecordReads(r, dir){
    7/7 clean on a sub-2% stop or a fresh-cross/cloud-against read is not a
    ticket the desk would mint on its own boards. */
 function tmTicketClaim(r, plan){
-  return trendmxRowTier(r, plan) === 'clean' && tmAdmissionFloor(r, plan).ok;
+  return trendmxRowTier(r, plan) === 'clean' && tmAdmissionFloor(r, plan).ok
+    && tmLabConfig(r, (plan && plan.dir) || tmDirOf(r)).ok;   /* hg-v1484: the ticket means what the mint means */
 }
 /* hg-v1399: THE ADMISSION FLOOR — the measured expectancy bar every admission
    seam now shares. Read off the hg-v1160 replay walk (n=1953 settled, both
@@ -303,6 +304,74 @@ function tmAdmissionFloor(r, plan){
   if (!(sc >= 3) && gp < 3) why.push('bare|2|<3gates');
   return { ok: why.length === 0, why: why };
 }
+/* hg-v1484: THE MEASURED MINT CONFIG — the win-rate lab's winner, shipped.
+   scripts/trendmx-winrate-lab.mjs walked every closed 4h bar of 12 symbols
+   (2,200 bars each, the desk's own gate/plan chain, real fills, stop-first
+   on both-touch, 0.20% round trip) through 196 add/remove configurations on
+   three disjoint search windows and confirmed the winner on a fourth window
+   the search never saw (scripts/trendmx-winrate-lab-results.json):
+   27.6% -> 41.1% win, net -0.028R -> +0.205R, all four windows and both
+   directions better, z = 4.52, p < 0.0001. The four clauses, exactly as
+   measured:
+     1. the composite drops the h4Cascade LEG for direction — anti-predictive
+        in the desk's own factor separation (26.2% WITH vs 28.9% WITHOUT);
+        it duplicates d1Trend/d1Cross and flips the majority on 4h noise.
+        The leg still COMPUTES and displays (comps.h4Cascade, the tm:cascade
+        ledger mark); it no longer casts a vote. labScore = score -
+        h4Cascade, majority unchanged at |2|.
+     2. the ADX-strength read must be explicitly WITH (reads['tm:adx']).
+     3. the trend-quality read must be explicitly WITH
+        (reads.trendQualityWith — choppiness + Kaufman ER, hg-v1057).
+     4. the plan's stop widens 1.25x; the T1/T2 prices do not move (2R of
+        the original risk = 1.6R of the widened risk).
+   UNLIKE the admission floor above, clauses 2-3 do NOT abstain on an unread
+   mark — the measured rule is "trade ONLY when both reads are explicitly
+   WITH", and the absent case is part of what was measured (a thin-tape row
+   did not mint in the lab either). Said plainly so nobody "repairs" this
+   into the abstain shape the measurement never walked (hg-v966: this gate
+   has its bake). Held rows are named under heldWhy.lab and recorded
+   ticket:false, exactly like the witness holds. */
+var TM_LAB_STOP_WIDEN = 1.25;
+function tmLabScore(r){
+  var sc = (r && typeof r.score === 'number' && isFinite(r.score)) ? r.score : 0;
+  var casc = (r && r.comps && r.comps.h4Cascade === 1) ? 1 : ((r && r.comps && r.comps.h4Cascade === -1) ? -1 : 0);
+  return sc - casc;
+}
+function tmLabDirOf(r){
+  var d = (r && typeof r.dir === 'string') ? r.dir.toLowerCase() : null;
+  if (d === 'long' || d === 'short') return d;
+  var s = tmLabScore(r);
+  if (s >= TM_MAJORITY) return 'long';
+  if (s <= -TM_MAJORITY) return 'short';
+  return null;
+}
+function tmLabConfig(r, dir){
+  var why = [];
+  var ld = tmLabDirOf(r);
+  if (!ld) why.push('labMajorityMissing');
+  else if (dir && ld !== dir) why.push('labDirAgainst:' + ld);
+  var reads = {};
+  try{ reads = tmRecordReads(r, dir) || {}; }catch(eRd){ reads = {}; }
+  if (reads['tm:adx'] !== true) why.push('adxNotWith');
+  if (reads.trendQualityWith !== true) why.push('tqNotWith');
+  return { ok: why.length === 0, why: why };
+}
+function tmLabStopWiden(plan){
+  try{
+    if (!plan || !isFinite(+plan.entry) || !isFinite(+plan.stop)) return plan;
+    var e = +plan.entry, s0 = +plan.stop, risk0 = Math.abs(e - s0);
+    if (!(risk0 > 0)) return plan;
+    var stop = e + (s0 - e) * TM_LAB_STOP_WIDEN;
+    var risk = Math.abs(e - stop);
+    var out = Object.assign({}, plan, { stop: stop, tmStopWiden: TM_LAB_STOP_WIDEN });
+    if (isFinite(+plan.t1)) out.rr1 = Math.abs(+plan.t1 - e) / risk;
+    if (isFinite(+plan.t2)) out.rr2 = Math.abs(+plan.t2 - e) / risk;
+    if (isFinite(+plan.riskPct)) out.riskPct = risk / e * 100;
+    out.note = (plan.note ? plan.note + ' · ' : '') + 'stop widened 1.25x, targets unmoved (hg-v1484, measured)';
+    return out;
+  }catch(eW){ return plan; }
+}
+
 /* hg-v1160: WHICH READS SEPARATE, ON THIS DESK'S OWN REPLAY. HG_TM_FACTOR_SEP
    is written by scripts/trendmx-factor-separation.mjs off the walk that
    scripts/backtest-trendmx.mjs leaves (the hg-v921 rule: a generated thing
@@ -504,7 +573,11 @@ function tmValidSetup(s){
   if (Math.abs(s.entry - s.stop) <= 0) return false;
   var rr = isFinite(s.rr1) ? s.rr1
     : Math.abs(s.t1 - s.entry) / Math.abs(s.entry - s.stop);
-  return isFinite(rr) && rr >= TM_MIN_RR - 1e-9;
+  /* hg-v1484: a lab-widened plan is judged against the desk's 2R bar in the
+     ORIGINAL risk units the bar was set in — 2 / 1.25 = 1.6R of the widened
+     stop. The bar itself is not loosened: an unmarked plan answers to 2R. */
+  var rrBar = (s.tmStopWiden === TM_LAB_STOP_WIDEN) ? TM_MIN_RR / TM_LAB_STOP_WIDEN : TM_MIN_RR;
+  return isFinite(rr) && rr >= rrBar - 1e-9;
 }
 
 function trendmxTicker(inp){
@@ -738,7 +811,10 @@ function trendmxPlan(inp){
       } else if (bl && bl.veto) return null;
     }
     if (!plan) plan = trendmxPlanLegacy(inp);
-    return trendmxApplyCrossLimit(plan, inp, dir);
+    /* hg-v1484: the measured 1.25x stop widening rides the one return seam,
+       so every consumer — the mint, the cards, the cross desks, the replay
+       harness, OMNIBTC's TREND MATRIX engine card — sees the same levels. */
+    return tmLabStopWiden(trendmxApplyCrossLimit(plan, inp, dir));
   }catch(e){ return null; }
 }
 

@@ -134,16 +134,22 @@ let RES = null, W = null;
 console.log('\n2b. the candidate map on crafted rows: a CLEAN row tickets, a witness-held CLEAN row does not, an invalid plan is the desk\'s own skip');
 {
   const bars4 = tape(520, SEC4, END4, 7), bars1 = tape(400, SEC1D, END1, 11);
-  const row = (() => { for (let i = bars4.length - 2; i >= 300; i--){ const r = buildRow(W, 'AAAUSDT', bars4, bars1, i); if (r && W.tmDirOf(r)) return r; } return null; })();
+  /* hg-v1484: the ticket claim also clears the measured mint config, so the
+     crafted row is chosen to make THAT the thing under test — the four-leg
+     direction agrees (no cascade-only majority), and below the ADX leg
+     rides and the 4h tape drifts (reads 'trend', not chop). */
+  const row = (() => { for (let i = bars4.length - 2; i >= 300; i--){ const r = buildRow(W, 'AAAUSDT', bars4, bars1, i); if (r && W.tmDirOf(r) && W.tmLabDirOf(r) === W.tmDirOf(r)) return r; } return null; })();
   ok(row && W.tmDirOf(row), 'the tape yields a majority row to craft on');
   const dir = W.tmDirOf(row);
   const savedClean = W.swingTryClean, savedPlan = W.trendmxPlan;
   W.swingTryClean = (rows, ticker) => { const c = rows[rows.length - 1].c; return dir === 'long'
     ? { dir, entry: c, stop: c * 0.97, t1: c * 1.06, t2: c * 1.09, rr: 2, clean: true, passed: 7, mark: c }
     : { dir, entry: c, stop: c * 1.03, t1: c * 0.94, t2: c * 0.91, rr: 2, clean: true, passed: 7, mark: c }; };
-  const r1 = Object.assign({}, row, { rsi: dir === 'long' ? 55 : 45, volDiv: null, volConf: null });
+  const drift4 = (() => { const r = []; let c = 100; for (let i = 0; i < 60; i++){ const o = c; c = dir === 'long' ? c + 1 : c - 1; r.push({ t: 1e9 + i * SEC4, o, h: Math.max(o, c) + 1, l: Math.min(o, c) - 1, c, v: 1000 }); } return r; })();
+  const r1 = Object.assign({}, row, { rsi: dir === 'long' ? 55 : 45, volDiv: null, volConf: null,
+    comps: Object.assign({}, row.comps, { adxPt: dir === 'long' ? 1 : -1 }), rows4h: drift4 });
   const c1 = candidateOf(W, r1);
-  ok(!c1.skip && c1.isClean === true && c1.mechanic === 'TM-CLEAN7' && c1.gatesPassed === 7 && c1.tier === 'clean' && c1.ticket === true && c1.heldBy === null, 'a 7/7 CLEAN row with every witness quiet is a TM-CLEAN7 candidate whose ticket claim is true');
+  ok(!c1.skip && c1.isClean === true && c1.mechanic === 'TM-CLEAN7' && c1.gatesPassed === 7 && c1.tier === 'clean' && c1.ticket === true && c1.heldBy === null, 'a 7/7 CLEAN row with every witness quiet AND the hg-v1484 reads WITH is a TM-CLEAN7 candidate whose ticket claim is true');
   const r2 = Object.assign({}, row, { rsi: dir === 'long' ? 30 : 70, volDiv: null, volConf: null });
   const c2 = candidateOf(W, r2);
   ok(!c2.skip && c2.isClean === true && c2.tier === 'near' && c2.ticket === false && c2.heldBy === 'mom' && c2.reads.momWith === false, 'the same CLEAN row with the momentum witness against is held: isClean stays true, the tier is NEAR, the ticket claim is false, heldBy names the witness and the mark reads false');

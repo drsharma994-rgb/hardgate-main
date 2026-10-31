@@ -26,6 +26,12 @@
    hg-v1399: tape recalibrated for the stopPct>=2% admission floor — the
    wicks widen (x0.5 -> x4 of step, closes untouched); every assertion and
    its coverage is unchanged.
+   hg-v1484: tape recalibrated again for the measured mint config — the
+   wicks come back in (x4 -> x1 of step) so the last-14 choppiness reads
+   'trend' (the lab's trendQualityWith clause), and the 4h step is 1.2 (was
+   0.6) so the 1.875xATR stop still clears the hg-v1399 floor's 2% bar on
+   BOTH twins (the short starts at 400). Closes stay linear: every read
+   off closes, and every assertion, is unchanged.
    Run: node tests/test-trendmx-volume-v1020.mjs */
 
 import fs from 'node:fs';
@@ -69,13 +75,13 @@ function tape(n, tfSec, start, step){
   const rows = []; let c = start;
   for (let i = 0; i < n; i++){
     const o = c; c = c + step;
-    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 4,   /* hg-v1399: wider wicks so the house stop prices >=2% of entry (the admission floor) — closes, and every read off closes, are byte-identical */
-                l: Math.min(o, c) - Math.abs(step) * 4, c, v: 1000 });
+    rows.push({ t: T0 - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + Math.abs(step) * 1,   /* hg-v1484: wicks back to x1 of step — choppiness reads 'trend' (the lab clause) and the stop still clears the 2% floor (the 4h step is 1.2); closes byte-identical */
+                l: Math.min(o, c) - Math.abs(step) * 1, c, v: 1000 });
   }
   return rows;
 }
-const UP1 = tape(260, 86400, 100, 1), UP4 = tape(120, 14400, 100, 0.6);
-const DN1 = tape(260, 86400, 400, -1), DN4 = tape(120, 14400, 400, -0.6);
+const UP1 = tape(260, 86400, 100, 1), UP4 = tape(120, 14400, 100, 1.2);
+const DN1 = tape(260, 86400, 400, -1), DN4 = tape(120, 14400, 400, -1.2);
 /* segmented 1D tapes: the last two 20-bar windows are the witness's stage */
 function segs(spec){
   const rows = []; let i0 = 0;
