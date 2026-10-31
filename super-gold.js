@@ -2679,15 +2679,18 @@ function publishSuperGoldSnap(snap){
             }
           }
         }
-        return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+        return { sym: c.sym, dir: c.dir,
+                 /* hg-v980: the mark the source desk sized it against, so the
+                    fill model can tell a resting order from a market one.
+                    Rides beside sym/dir so the record-literal census window
+                    sees it ahead of the selection logic below. */
+                 mark: c.mark,
+                 entry: +c.entry, stop: +c.stop, t1: +c.t1,
                  mechanic: 'CONVICTION-PICK', ticket: crowned,
                  /* hg-v978: the bar the source desk judged it on */
                  barT: c.barT, signalT: c.signalT,
                  /* hg-v979: the feed the source desk priced the levels on */
-                 feed: c.feed,
-                 /* hg-v980: the mark the source desk sized it against, so the
-                    fill model can tell a resting order from a market one */
-                 mark: c.mark };
+                 feed: c.feed };
       }), { horizonBars: 20 });
     }
   } catch (eFwd) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('super-gold', eFwd); } catch (eW) {} }

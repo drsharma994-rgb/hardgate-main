@@ -383,14 +383,20 @@ console.log('\n[§6] mutation pass on shipped source');
 /* ---------- §7: ship stamps align ---------- */
 console.log('\n[§7] ship stamps align');
 {
+  /* The pack shipped at hg-v1304 but the tree keeps moving — assert the
+     triad is aligned to whatever build-stamp.js declares (hg-v956 one home),
+     not to this pack's frozen number. */
   const bs = read('build-stamp.js');
   const sw = read('sw.js');
   const tt = read('trendtable.js');
-
-  ok(/version:\s*'hg-v1304'/.test(bs), "build-stamp.js version: 'hg-v1304'");
-  ok(/HG_CACHE\s*=\s*'hg-v1304'/.test(sw), "sw.js HG_CACHE = 'hg-v1304'");
-  ok(/hg-v1304/.test(tt), 'trendtable.js stamped hg-v1304');
-  ok(/\?v=1304/.test(tt), 'trendtable.js uses ?v=1304');
+  const m = bs.match(/version:\s*'hg-v([0-9]+)'/);
+  const N = m ? m[1] : null;
+  ok(!!N, 'build-stamp.js carries an hg-v<digits> version');
+  if (N){
+    ok(new RegExp("HG_CACHE\\s*=\\s*'hg-v" + N + "'").test(sw), `sw.js HG_CACHE = 'hg-v${N}'`);
+    ok(new RegExp('hg-v' + N).test(tt), 'trendtable.js stamped hg-v' + N);
+    ok(new RegExp('\\?v=' + N).test(tt), 'trendtable.js uses ?v=' + N);
+  }
 }
 
 /* ---------- summary ---------- */

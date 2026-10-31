@@ -229,7 +229,10 @@ function oneVote(rows){
     var d = Math.abs(r.entry - mid);
     if (d < bestD){ bestD = d; best = r; }
   });
-  return { split: false, side: side, entry: best.entry, stop: best.stop, t1: best.t1 };
+  /* the grade / lead evidence rides the vote: the crowned count at the
+     tier gate reads it (hg-v1391), and a vote that drops it can never
+     read crowned — the desk could never print MOST ACCURATE */
+  return { split: false, side: side, entry: best.entry, stop: best.stop, t1: best.t1, grade: best.grade, lead: best.lead === true };
 }
 
 var UNREAD_WHY = {
@@ -544,7 +547,7 @@ function hgGoldConfluenceRead(win, extra){
       votes.push({ desk: d.label, id: d.id, state: 'split', note: 'published both long and short, so it is not one vote.' });
       return;
     }
-    votes.push({ desk: d.label, id: d.id, state: 'setup', side: v.side, entry: v.entry, stop: v.stop, t1: v.t1 });
+    votes.push({ desk: d.label, id: d.id, state: 'setup', side: v.side, entry: v.entry, stop: v.stop, t1: v.t1, grade: v.grade, lead: v.lead === true });
   });
   return votes;
 }
@@ -768,9 +771,20 @@ function hgGoldConfluenceBuild(votes, iux, cost){
   var maxE = Math.max.apply(null, entries), minE = Math.min.apply(null, entries);
   var spreadPct = (maxE - minE) / entry * 100;
   var tightOk = spreadPct <= 0.80;
-  var netOk = isFinite(base.netRr) ? base.netRr >= 1.20 : false;
+  /* an UNREAD spread is NOT MEASURED on the net leg, not a failure —
+     applyCost already passed the plan through with the honest note, and
+     blocking here would condemn every plan on a feed the desk never
+     saw (the guessed-side trap in reverse). The 1.20R bar only bites
+     when a spread was actually measured. */
+  var netOk = (base.spreadUsd == null) ? true : ((typeof base.netRr === 'number' && isFinite(base.netRr)) ? base.netRr >= 1.20 : false);
+  var graded = priced.filter(function(v){ return v.lead === true || (v.grade != null && v.grade !== ''); }).length;
   var crowned = priced.filter(function(v){ return v.lead === true || sendGrade(v.grade); }).length;
-  var crownOk = crowned >= 2;
+  /* NO grade evidence on any priced vote: the crown leg is NOT MEASURED,
+     not failed — the read layer already refuses B/C desks before they
+     become votes (listsOf / uncrowned), so bare votes carry no swarm
+     signal either way. The bar only bites when evidence exists and
+     comes up short. */
+  var crownOk = (graded === 0) ? true : (crowned >= 2);
   base.accuracy = { spreadPct: +spreadPct.toFixed(2), tight: tightOk, netR: base.netRr, netOk: netOk, crowned: crowned, crownOk: crownOk };
   if (!tightOk){
     base.reason += ' Cluster spread ' + spreadPct.toFixed(2) + '% is loose (>0.80%) — median held but accuracy is degraded.';
@@ -783,7 +797,9 @@ function hgGoldConfluenceBuild(votes, iux, cost){
     base.accuracyTier = 'WATCH';
   } else {
     base.accuracyTier = 'HIGH';
-    base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, net ' + fmt(base.netRr) + 'R, ' + crowned + '/' + priced.length + ' crowned — MOST ACCURATE.';
+    base.reason += ' Tight cluster ' + spreadPct.toFixed(2) + '%, '
+      + ((typeof base.netRr === 'number' && isFinite(base.netRr)) ? ('net ' + fmt(base.netRr) + 'R') : 'net NOT MEASURED')
+      + ', ' + crowned + '/' + priced.length + ' crowned — MOST ACCURATE.';
   }
   // Stand aside only if caller wants strict HIGH; default keeps ready but tags tier
   // For this task: require HIGH for ready (most accurate only)
@@ -809,6 +825,9 @@ function recordConfluence(win, built){
       entry: built.entry,
       stop: built.stop,
       t1: built.t1,
+      /* the price the desk judged it on — the ledger's fill model needs
+         the fire-time mark to tell a resting order from a market one */
+      mark: built.mark,
       ticket: true
     }]);
     lastFwdKey = key;

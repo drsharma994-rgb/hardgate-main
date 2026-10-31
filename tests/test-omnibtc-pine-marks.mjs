@@ -296,7 +296,11 @@ console.log('== 6) record-site wiring: fwdPine declared, stamp called post-liter
 console.log('== 7) scan-site pfReads.pineMarks: card reads what the record stamps ==');
 {
   const src = read('omnibtc.js');
-  ok(/pfReads\.pineMarks\s*=\s*hgObtcPineMarks\s*\(\s*match\s*&&\s*match\._rows\s*\)/.test(src),
+  /* hg-v1300 renamed the stash (read once, quoted everywhere): the pin
+     follows the decision, not the memory — the PROPERTY is unchanged
+     (the marks are read off the winner's OWN 4h tape, match._rows). */
+  ok(/var livePineMarks\s*=\s*hgObtcPineMarks\s*\(\s*match\s*&&\s*match\._rows\s*\)/.test(src)
+    && /pfReads\.pineMarks\s*=\s*livePineMarks/.test(src),
     'pfReads.pineMarks is read off the winner\'s 4h tape (match._rows)');
 
   /* the TECHNICAL block reads reads.pineMarks and prints a PINE line */

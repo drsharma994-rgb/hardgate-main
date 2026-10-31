@@ -186,9 +186,16 @@ console.log('== 5) the marks reach the forward ledger, and gate nothing ==');
   const ln = SRC.indexOf("W.hgFwdRecordScan('OMNIBTC'");
   ok(ln > 0, 'the OMNIBTC record call exists');
   const lit = SRC.slice(Math.max(0, ln - 7000), ln);
-  ok(/pick\.row\.pineRecord/.test(lit), 'the record literal reads the crown row\'s record states');
-  ok(/fwdRow\['pine:' \+ rk\]/.test(lit), 'and writes them under the pine: namespace');
-  ok(/if \(rv === 'long' \|\| rv === 'short'\)/.test(lit), 'only a readable side is written');
+  /* hg-v1296/v1297 follow the decision, not the memory: the bank now rides
+     the record's reads: bag (fwdReadsBag, assembled just before the
+     literal) instead of top-level `pine:<id>` fields the forward
+     normaliser never whitelisted — the hg-v955 drop this suite's own
+     successor pack documented. The PROPERTIES below are the ones that
+     still matter: the states come off the crown row, only a readable
+     side is written, the namespace survives, junk is refused. */
+  ok(/pick\.row\.pineRecord/.test(lit), 'the record path reads the crown row\'s record states');
+  ok(/fwdReadsBag\['pine:' \+ rk \+ 'With'\]/.test(lit), 'and writes them under the pine: namespace');
+  ok(/if \(pr\[rk\] !== 'long' && pr\[rk\] !== 'short'\) continue;/.test(lit), 'only a readable side is written');
   ok(/Object\.prototype\.hasOwnProperty\.call/.test(lit), 'the loop guards against prototype keys');
   const FWD_READ_KEY = /^[A-Za-z0-9][A-Za-z0-9:_. -]{0,47}$/;
   ok(FWD_READ_KEY.test('pine:supertrend'), 'pine:<id> passes the ledger key validator');

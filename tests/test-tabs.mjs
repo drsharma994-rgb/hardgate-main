@@ -299,11 +299,12 @@ const EXPECTED_GROUPS = {
      behind the stale inline-block count in the same file until hg-v762 —
      which is what a permanently red suite costs. Checked against the live
      list: the other four groups match exactly, only gold had drifted. */
-  /* hg-v1329: 'candle-forecast' appended. The CANDLE FORECAST tab joined the GOLD
-     group and this hand-kept list had drifted behind it — the same "a list kept by
-     hand goes stale" mechanism the comment above this block describes, caught this
+  /* hg-v1391: 'gold-confluence' prepended to the GOLD group — the GOLD CONFLUENCE
+     setup tab (one gold setup from the gold desks, gold-confluence.js) joined ahead of
+     the pick engines, and this hand-kept list drifted behind it — the same "a list kept
+     by hand goes stale" mechanism the comment above this block describes, caught this
      time by the assertion rather than by a user noticing a missing tab. */
-  gold:       ['super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric', '80percent', 'candle-forecast'],
+  gold:       ['gold-confluence', 'super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric', '80percent', 'candle-forecast'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };

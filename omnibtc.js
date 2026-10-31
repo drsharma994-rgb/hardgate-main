@@ -198,6 +198,418 @@ a global hard refresh.
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  /* =====================================================================
+     hg-v1297 / hg-v1299 / hg-v1301 — the ONE HOME (hg-v949) for the
+     OMNIBTC free-feed and indicator-stack three-state marks.
+     Twelve three-state free: marks — fngExtreme, btcSeason, dxyTrend, tnxTrend,
+     realYieldTilt, vixRising, btcdHigh, stables7dPct, newsBlackout, the
+     hg-v1299 BTC-gold corr (goldBtcCorr20) + curveSlopeTrend, and the
+     hg-v1301 mempool fee regime (mempoolFeeHigh, quoted from onchain.js
+     where FEE_SPIKE_MULT = 3 lives and nowhere else) — and thirteen
+     three-state ind: marks — adxTrending, dmiWith, bbSqueeze, bbOutside,
+     rsiWith, kerTrend, atrExpanding, volAboveMa, tsmomWith,
+     hurstTrending, the hg-v1299 SMA50 / SMA200 / Parkinson20 trio
+     (sma50With, sma200With, parkHigh) — twenty-five keys per record, well
+     inside the 96 cap. Three-state (hg-v989): true WITH / false AGAINST /
+     absent NOT MEASURED. Junk is dropped, never coerced (the +null === 0
+     trap). State reads — btcGoldCorr, curveSlopeTrend, vixRising,
+     stables7dPct, newsBlackout, mempoolFeeHigh, every ind: state read —
+     read the same on long and short (a regime is not a side, hg-v993);
+     the direction-aware marks flip with the plan.
+     DOCTRINE: record-only. Nothing is gated on any of these keys (no gate
+     module reads them — asserted by the guards). hg-v966 refuses an
+     unmeasured gate on an unmeasured desk; the hg-v1294 walker must bake
+     (scripts/backtest-omnibtc.mjs) before any of these earns a weight, and
+     hgFwdReadSplit('OMNIBTC') measures them out of sample.
+     ===================================================================== */
+  function hgObtcFreeFeedVerdicts(ctx, dir, sym){
+    var out = {};
+    if (dir !== 'long' && dir !== 'short') return out;
+    if (!ctx || typeof ctx !== 'object') return out;
+    var L = dir === 'long';
+    function num(v){ return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
+    /* F&G extreme — BIAS S2: greed >= 80 vetoes a fresh long, fear <= 20
+       vetoes a fresh short. A READ zero is extreme fear, not junk. */
+    var fng = ctx.fng;
+    var fngVal = num(fng);
+    if (isNaN(fngVal) && fng && typeof fng === 'object') fngVal = num(fng.v);
+    if (isFinite(fngVal)){
+      out['free:fngExtreme'] = (fngVal >= 80 && L) || (fngVal <= 20 && !L);
+    }
+    /* rotation season — a season is a side: BTC favours long, ALT favours short */
+    var season = (ctx.rotation && typeof ctx.rotation === 'object') ? ctx.rotation.season : undefined;
+    if (season === 'btc') out['free:btcSeason'] = L;
+    else if (season === 'alt') out['free:btcSeason'] = !L;
+    /* DXY trend — a rising dollar is against long, with short (mirror) */
+    var dxy = (ctx.regime && typeof ctx.regime === 'object') ? ctx.regime.dxyTrend : undefined;
+    if (dxy === 'RISING') out['free:dxyTrend'] = !L;
+    else if (dxy === 'FALLING') out['free:dxyTrend'] = L;
+    /* TNX (10Y) trend — same mirror */
+    var tnx = (ctx.macro && typeof ctx.macro === 'object') ? ctx.macro.tnxTrend : undefined;
+    if (tnx === 'RISING') out['free:tnxTrend'] = !L;
+    else if (tnx === 'FALLING') out['free:tnxTrend'] = L;
+    /* real-yield tilt — HEADWIND against long, TAILWIND with long */
+    var tilt = (ctx.macro && typeof ctx.macro === 'object') ? ctx.macro.realRateHint : undefined;
+    if (tilt === 'HEADWIND') out['free:realYieldTilt'] = !L;
+    else if (tilt === 'TAILWIND') out['free:realYieldTilt'] = L;
+    /* VIX state — rising vol is a state, not a side: true both ways */
+    var vix = (ctx.macro && typeof ctx.macro === 'object') ? ctx.macro.vixTrend : undefined;
+    if (vix === 'RISING') out['free:vixRising'] = true;
+    else if (vix === 'FALLING') out['free:vixRising'] = false;
+    /* BTC.D — > 55 with long, < 45 against long; the 45-55 band is NOT MEASURED */
+    var btcd = (ctx.regime && typeof ctx.regime === 'object') ? num(ctx.regime.btcdPct) : NaN;
+    if (isFinite(btcd)){
+      if (btcd > 55) out['free:btcdHigh'] = L;
+      else if (btcd < 45) out['free:btcdHigh'] = !L;
+    }
+    /* stables 7d change — expansion is a state, not a side */
+    var stv = NaN;
+    if (ctx.regime && typeof ctx.regime === 'object' && ctx.regime.stables && typeof ctx.regime.stables === 'object') stv = num(ctx.regime.stables.delta7dPct);
+    if (isFinite(stv)){
+      if (stv >= 1.5) out['free:stables7dPct'] = true;
+      else if (stv <= -1.5) out['free:stables7dPct'] = false;
+    }
+    /* news — an unchecked calendar or an ambiguous risk read is ABSENT,
+       never a guessed clearance */
+    var nw = ctx.news;
+    if (nw && typeof nw === 'object' && nw.unchecked === false){
+      if (nw.blackout === true) out['free:newsBlackout'] = true;
+      else if (nw.risk === 'low') out['free:newsBlackout'] = false;
+    }
+    /* hg-v1299: BTC-gold 20d correlation — beyond +/-0.30 it is a regime,
+       inside the band it is NOT MEASURED (inclusive bar at the boundary) */
+    var corr = (ctx.macro && typeof ctx.macro === 'object') ? num(ctx.macro.goldBtcCorr20) : NaN;
+    if (isFinite(corr)){
+      if (corr >= 0.30) out['free:btcGoldCorr'] = true;
+      else if (corr <= -0.30) out['free:btcGoldCorr'] = false;
+    }
+    /* hg-v1299: curve slope trend — strict string, STEEPENING / FLATTENING */
+    var slope = (ctx.macro && typeof ctx.macro === 'object') ? ctx.macro.curveSlopeTrend : undefined;
+    if (slope === 'STEEPENING') out['free:curveSlopeTrend'] = true;
+    else if (slope === 'FLATTENING') out['free:curveSlopeTrend'] = false;
+    /* hg-v1301: free:mempoolFeeHigh — the ratio bar lives in onchain.js
+       (FEE_SPIKE_MULT = 3) and nowhere else; this mark quotes it:
+       feeRatio >= 3 reads HIGH, feeRatio <= 1.1 reads LOW, inside the
+       band NOT MEASURED. State read (hg-v993: a mempool regime is not a
+       side). Strict numbers: economyFee must be a finite number > 0 (the
+       +null === 0 trap would divide by zero), fastestFee finite —
+       anything else is ABSENT, never a guessed side. */
+    var oc = ctx.onchain;
+    if (oc && typeof oc === 'object' && oc.fees && typeof oc.fees === 'object'){
+      var fastest = oc.fees.fastestFee, economy = oc.fees.economyFee;
+      if (typeof fastest === 'number' && isFinite(fastest)
+        && typeof economy === 'number' && isFinite(economy) && economy > 0){
+        var feeRatio = fastest / economy;
+        if (feeRatio >= 3) out['free:mempoolFeeHigh'] = true;
+        else if (feeRatio <= 1.1) out['free:mempoolFeeHigh'] = false;
+      }
+    }
+    return out;
+  }
+
+  function hgObtcIndicatorReads(rows, opts){
+    var out = { n: 0 };
+    if (!Array.isArray(rows) || rows.length < 30) return out;
+    out.n = rows.length;
+    var n = rows.length;
+    var closes = rows.map(function(r){ return +r.c; });
+    function lastOf(a){ return (a && a.length) ? +a[a.length - 1] : NaN; }
+    try{
+      var adxR = (typeof adx === 'function') ? adx(rows, 14) : null;
+      if (adxR && adxR.adx){
+        var adxL = lastOf(adxR.adx);
+        if (isFinite(adxL)) out.adx14 = adxL;
+        if (adxR.plusDI) out.plusDIlast = lastOf(adxR.plusDI);
+        if (adxR.minusDI) out.minusDIlast = lastOf(adxR.minusDI);
+      }
+    }catch(eAdx){}
+    try{
+      var rsiA = (typeof rsi === 'function') ? rsi(closes, 14) : null;
+      var rsiL = lastOf(rsiA);
+      if (isFinite(rsiL)) out.rsi14 = rsiL;
+    }catch(eRsi){}
+    try{
+      if (typeof atr === 'function'){
+        var a14A = atr(rows, 14), a50A = atr(rows, 50);
+        var a14L = lastOf(a14A);
+        if (isFinite(a14L) && a14L > 0) out.atr14 = a14L;
+        var a50L = lastOf(a50A);
+        if (isFinite(a50L) && a50L > 0) out.atr50 = a50L;
+      }
+    }catch(eAtr){}
+    try{
+      var bb = (typeof bollinger === 'function') ? bollinger(closes, 20, 2) : null;
+      if (bb && bb.widthPct && isFinite(lastOf(bb.widthPct))){
+        var bbClose = +rows[n - 1].c;
+        if (isFinite(bbClose) && bbClose > 0) out.bbClose = bbClose;
+        var wLast = lastOf(bb.widthPct);
+        var recent = bb.widthPct.slice(-60).filter(function(v){ return isFinite(v); });
+        if (recent.length >= 20){
+          var below = 0;
+          for (var wi = 0; wi < recent.length; wi++){ if (recent[wi] < wLast) below++; }
+          var rank = below / recent.length;
+          if (rank <= 0.2) out.bbSqueeze = true;
+          else if (rank >= 0.8) out.bbSqueeze = false;
+        }
+        if (bb.upper && bb.lower){
+          var up = lastOf(bb.upper), lo = lastOf(bb.lower);
+          if (isFinite(up) && isFinite(lo)){
+            if (bbClose > up) out.bbOutside = true;
+            else if (bbClose < lo) out.bbOutside = false;
+          }
+        }
+      }
+    }catch(eBb){}
+    try{
+      if (n >= 21 && isFinite(closes[n - 1]) && isFinite(closes[n - 21])){
+        var chg = Math.abs(closes[n - 1] - closes[n - 21]);
+        var pathSum = 0, pathOk = true;
+        for (var ki = n - 20; ki < n; ki++){
+          if (!isFinite(closes[ki]) || !isFinite(closes[ki - 1])){ pathOk = false; break; }
+          pathSum += Math.abs(closes[ki] - closes[ki - 1]);
+        }
+        if (pathOk && pathSum > 0) out.ker20 = chg / pathSum;
+      }
+    }catch(eKer){}
+    try{
+      var tsiA = (typeof tsi === 'function') ? tsi(closes, 13, 25) : null;
+      var tsiL = lastOf(tsiA);
+      if (isFinite(tsiL)) out.tsmom = tsiL;
+    }catch(eTsi){}
+    try{
+      if (typeof sma === 'function'){
+        var vma = sma(rows.map(function(r){ return +r.v; }), 20);
+        var vmaL = lastOf(vma);
+        if (isFinite(vmaL) && isFinite(+rows[n - 1].v)){
+          out.volAboveMa = (+rows[n - 1].v > vmaL);
+        }
+        /* hg-v1299: SMA50 / SMA200 — the direction-aware trend filter
+           reads close against each, absent when the tape is too thin */
+        var s50A = sma(closes, 50), s50L = lastOf(s50A);
+        if (isFinite(s50L)) out.sma50 = s50L;
+        var s200A = sma(closes, 200), s200L = lastOf(s200A);
+        if (isFinite(s200L)) out.sma200 = s200L;
+      }
+    }catch(eSma){}
+    try{
+      var hurstR = (typeof hgHurstRS === 'function') ? hgHurstRS(closes, 20) : null;
+      var hVal = (hurstR && typeof hurstR === 'object') ? hurstR.hurst : undefined;
+      if (typeof hVal === 'number' && isFinite(hVal)) out.hurst1d = hVal;
+    }catch(eHu){}
+    try{
+      /* hg-v1299: Parkinson20 — the current 20-bar range against the
+         median of the EARLIER 20-bar windows. hg-v1158 own-window trap:
+         the median never includes its own window reading. */
+      function parkinson20(seg){
+        var s = 0, m = 0;
+        for (var pi = 0; pi < seg.length; pi++){
+          var h = +seg[pi].h, l = +seg[pi].l;
+          if (isFinite(h) && isFinite(l) && l > 0 && h > 0){ var hl = Math.log(h / l); s += hl * hl; m++; }
+        }
+        return m ? Math.sqrt(s / m) : NaN;
+      }
+      /* hg-v1299: the median needs history to mean anything — under 50
+         bars there are at most two 20-bar windows and the "earlier
+         windows" median is a single reading, so the whole block reads
+         ABSENT (the same NOT MEASURED honesty as the 30-bar floor). */
+      if (n >= 50){
+        var parkSeries = [];
+        for (var w0 = 20; w0 <= n; w0 += 20){
+          var pv = parkinson20(rows.slice(w0 - 20, w0));
+          if (isFinite(pv)) parkSeries.push(pv);
+        }
+        if (parkSeries.length >= 2){
+          var curP = parkSeries[parkSeries.length - 1];
+          var priorP = parkSeries.slice(0, -1).sort(function(a, b){ return a - b; });
+          out.park20 = curP;
+          out.park20Median = priorP[Math.floor((priorP.length - 1) / 2)];
+        }
+      }
+    }catch(ePk){}
+    return out;
+  }
+
+  function hgObtcIndicatorMarks(ir, dir){
+    var out = {};
+    if (dir !== 'long' && dir !== 'short') return out;
+    if (!ir || typeof ir !== 'object') return out;
+    var L = dir === 'long';
+    function num(v){ return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
+    var adxV = num(ir.adx14);
+    if (isFinite(adxV)){
+      if (adxV >= 25) out['ind:adxTrending'] = true;
+      else if (adxV < 20) out['ind:adxTrending'] = false;
+    }
+    var pdi = num(ir.plusDIlast), mdi = num(ir.minusDIlast);
+    if (isFinite(pdi) && isFinite(mdi)){
+      if (L ? pdi > mdi : mdi > pdi) out['ind:dmiWith'] = true;
+      else if (L ? mdi > pdi : pdi > mdi) out['ind:dmiWith'] = false;
+    }
+    var rsiV = num(ir.rsi14);
+    if (isFinite(rsiV)){
+      if (L ? rsiV > 50 : rsiV < 50) out['ind:rsiWith'] = true;
+      else if (L ? rsiV < 50 : rsiV > 50) out['ind:rsiWith'] = false;
+    }
+    var kerV = num(ir.ker20);
+    if (isFinite(kerV)){
+      if (kerV >= 0.6) out['ind:kerTrend'] = true;
+      else if (kerV <= 0.3) out['ind:kerTrend'] = false;
+    }
+    var a14 = num(ir.atr14), a50 = num(ir.atr50);
+    if (isFinite(a14) && isFinite(a50)){
+      if (a14 > a50) out['ind:atrExpanding'] = true;
+      else if (a14 < a50) out['ind:atrExpanding'] = false;
+    }
+    var tm = num(ir.tsmom);
+    if (isFinite(tm)){
+      if (L ? tm > 0 : tm < 0) out['ind:tsmomWith'] = true;
+      else if (L ? tm < 0 : tm > 0) out['ind:tsmomWith'] = false;
+    }
+    var hv = num(ir.hurst1d);
+    if (isFinite(hv)){
+      if (hv >= 0.55) out['ind:hurstTrending'] = true;
+      else if (hv <= 0.45) out['ind:hurstTrending'] = false;
+    }
+    if (typeof ir.bbSqueeze === 'boolean') out['ind:bbSqueeze'] = ir.bbSqueeze;
+    if (typeof ir.bbOutside === 'boolean') out['ind:bbOutside'] = ir.bbOutside;
+    if (typeof ir.volAboveMa === 'boolean') out['ind:volAboveMa'] = ir.volAboveMa;
+    var closeV = num(ir.bbClose);
+    var s50V = num(ir.sma50);
+    if (isFinite(s50V) && isFinite(closeV)){
+      if (L ? closeV > s50V : closeV < s50V) out['ind:sma50With'] = true;
+      else if (L ? closeV < s50V : closeV > s50V) out['ind:sma50With'] = false;
+    }
+    var s200V = num(ir.sma200);
+    if (isFinite(s200V) && isFinite(closeV)){
+      if (L ? closeV > s200V : closeV < s200V) out['ind:sma200With'] = true;
+      else if (L ? closeV < s200V : closeV > s200V) out['ind:sma200With'] = false;
+    }
+    var p20 = num(ir.park20), pMed = num(ir.park20Median);
+    if (isFinite(p20) && isFinite(pMed)){
+      if (p20 > pMed) out['ind:parkHigh'] = true;
+      else if (p20 < pMed) out['ind:parkHigh'] = false;
+    }
+    return out;
+  }
+  W.hgObtcFreeFeedVerdicts = hgObtcFreeFeedVerdicts;
+  W.hgObtcIndicatorReads = hgObtcIndicatorReads;
+  W.hgObtcIndicatorMarks = hgObtcIndicatorMarks;
+
+  /* hg-v1295: record-only three-state Pine marks through the ONE HOME
+     trendmxPineMarks (hg-v949) — thirteen ports (the ten hg-v1293 plus
+     Supertrend, MACD, CCI). The helper only DELEGATES: a second port
+     definition in this file would be the hg-v949 trap. A thin tape (< 30
+     bars), a missing home, a throwing home, or a non-object answer all
+     read null — NOT MEASURED, never a guessed side. */
+  var HG_OBTC_PINE_FIELDS = [
+    ['lor', 'pineLorKnn'],
+    ['ht', 'pineHalfTrend'],
+    ['sqz', 'pineSqueeze'],
+    ['smf', 'pineSmf'],
+    ['msb', 'pineMsb'],
+    ['smc', 'pineSmc'],
+    ['cipher', 'pineCipher'],
+    ['rfilter', 'pineRangeFilter'],
+    ['nwenv', 'pineNwEnvelope'],
+    ['wavwap', 'pineWavwap'],
+    ['supertrend', 'pineSupertrend'],
+    ['macd', 'pineMacd'],
+    ['cci', 'pineCci']
+  ];
+  function hgObtcPineMarks(rows){
+    if (!Array.isArray(rows) || rows.length < 30) return null;
+    if (!(W && typeof W.trendmxPineMarks === 'function')) return null;
+    try{
+      var m = W.trendmxPineMarks(rows);
+      if (!m || typeof m !== 'object') return null;
+      return m;
+    }catch(ePm){ return null; }
+  }
+  function hgObtcPineStamp(row, pm){
+    if (!row || typeof row !== 'object') return;
+    if (!pm || typeof pm !== 'object') return;
+    for (var i = 0; i < HG_OBTC_PINE_FIELDS.length; i++){
+      var pSrc = HG_OBTC_PINE_FIELDS[i][0], pDst = HG_OBTC_PINE_FIELDS[i][1];
+      var pv = pm[pSrc];
+      if (pv === 'long' || pv === 'short') row[pDst] = pv;
+    }
+  }
+  W.hgObtcPineMarks = hgObtcPineMarks;
+  W.hgObtcPineStamp = hgObtcPineStamp;
+  W.HG_OBTC_PINE_FIELDS = HG_OBTC_PINE_FIELDS;
+
+/* --- BEGIN GENERATED HG_OBTC_WALK (scripts/omnibtc-evidence-literal.mjs) ---
+     Re-derive with `node scripts/omnibtc-evidence-literal.mjs --write` after `node scripts/backtest-omnibtc.mjs`.
+     Do not hand-edit — generated literals write themselves (hg-v921). Every figure is
+     read off backtest-omnibtc-results.json; the guard re-runs the generator and fails on drift. */
+  var HG_OBTC_WALK = {
+    "artifact": "backtest-omnibtc-results.json",
+    "n": 0,
+    "measured": false,
+    "span": null,
+    "horizonBars": 20,
+    "costFrac": 0.0008,
+    "tab": "OMNIBTC",
+    "forwardOnly": [
+      "postgate:accuracy",
+      "flow",
+      "netflow",
+      "basis",
+      "liq",
+      "fundAgainst",
+      "venueAgreeCount",
+      "macroBlocked"
+    ],
+    "rules": [
+      "hg-v1291 PINE CONFIRM: ≥2 independent fresh Pine cores on the pick's direction, none against",
+      "hg-v1292 PINE + CORE / PINE + INDICATOR tiebreak: 1 family + 2nd house strategy or EMA/MACD/Donchian fresh cross",
+      "hg-v1293 ten pine* three-state marks on every record for the hg-v1065 PERFECT COHORT SPLIT and hg-v989 read-split"
+    ],
+    "note": "scripts/backtest-omnibtc-results.json does not exist: the OMNIBTC replay (scripts/backtest-omnibtc.mjs) has not run on a machine that can fetch bars. The hg-v1291/v1292 gates and the hg-v1293 record-only Pine marks remain unmeasured against their complement until it does; the forward ledger is the only evidence this desk has.",
+    "summary": null,
+    "limitations": [
+      "walk has not run — no limitations to list beyond the single one: no evidence"
+    ],
+    "rows": []
+  };
+/* --- END GENERATED HG_OBTC_WALK --- */
+  W.HG_OBTC_WALK = HG_OBTC_WALK; /* hg-v1294: the walker suite reads the literal off W */
+
+  /* hg-v1294: the replay evidence panel — the ONE reader for the walk
+     literal (a report, not a rule: no gate reads it). measured:false
+     paints "REPLAY · NOT YET MEASURED" and names the missing artifact
+     rather than implying a bake happened; a measured walk prints the
+     ticket / held cohorts with net R and T1 hit rate off the artifact's
+     own summary. */
+  function hgObtcReplayPanelHtml(T){
+    if (T === null) return '';
+    T = T || HG_OBTC_WALK;
+    if (!T || typeof T !== 'object') return '';
+    try{
+      if (!T.measured){
+        var note = String(T.note || 'the walk has not run');
+        var fo = (Array.isArray(T.forwardOnly) && T.forwardOnly.length) ? T.forwardOnly.join(', ') : '';
+        return '<div class="panel" style="margin-top:10px"><h3>REPLAY · NOT YET MEASURED</h3>'
+          + '<div style="font-size:11px;opacity:.85">' + esc(note) + '</div>'
+          + (fo ? '<div style="font-size:11px;opacity:.7;margin-top:4px">Forward-only reads: ' + esc(fo) + '</div>' : '')
+          + '</div>';
+      }
+      var s = T.summary || {};
+      var tk = s.ticket || {}, hd = s.held || {};
+      var fmtR = function(x){ return isFinite(+x) ? ((+x >= 0 ? '+' : '') + (+x).toFixed(3) + 'R') : 'UNREAD'; };
+      var fmtW = function(x){ return isFinite(+x) ? ((+x * 100).toFixed(1) + '%') : 'UNREAD'; };
+      var rules = (Array.isArray(T.rules) && T.rules.length) ? T.rules.join(' · ') : '';
+      return '<div class="panel" style="margin-top:10px"><h3>REPLAY · MEASURED</h3>'
+        + '<div class="kv"><span class="k">TICKETS n=' + (s.nTicket != null ? s.nTicket : (tk.n || 0)) + '</span><span class="v">'
+        + 'net ' + fmtR(tk.netR) + ' · T1 ' + fmtW(tk.win) + '</span></div>'
+        + '<div class="kv"><span class="k">HELD (watch) n=' + (s.nHeld != null ? s.nHeld : (hd.n || 0)) + '</span><span class="v">'
+        + 'net ' + fmtR(hd.netR) + ' · T1 ' + fmtW(hd.win) + '</span></div>'
+        + (rules ? '<div style="font-size:11px;opacity:.7;margin-top:4px">' + esc(rules) + '</div>' : '')
+        + '</div>';
+    }catch(eRp){ return ''; }
+  }
+  W.hgObtcReplayPanelHtml = hgObtcReplayPanelHtml;
+
   function hgObtcIsBtc(sym){
     try{
       var raw = String(sym || '');
@@ -232,7 +644,24 @@ a global hard refresh.
     if (gfn('hgSetupHasLevels')) return W.hgSetupHasLevels(row);
     if (!row) return false;
     var e = fin(row.entry), s = fin(row.stop), t1 = fin(row.t1);
-    return isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0;
+    if (!(isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0)) return false;
+    /* hg-v1304: direction geometry invariant on the fallback path (plans.js
+       not loaded — headless Node, early boot). A long with t1 <= entry, or
+       stop >= entry, can only ever hit as a losing level; mirror for shorts.
+       Unknown direction passes — the picker resolves direction later. */
+    var dir = String(row.dir || row.side || row.direction || '').toLowerCase();
+    if (dir === 'buy' || dir === 'l') dir = 'long';
+    if (dir === 'sell' || dir === 's') dir = 'short';
+    if (dir === 'long'){
+      if (!(s < e && t1 > e)) return false;
+      var t2L = fin(row.t2);
+      if (isFinite(t2L) && t2L > 0 && !(t2L > e)) return false;
+    } else if (dir === 'short'){
+      if (!(s > e && t1 < e)) return false;
+      var t2S = fin(row.t2);
+      if (isFinite(t2S) && t2S > 0 && !(t2S < e)) return false;
+    }
+    return true;
   }
 
   /* Same analogue map OMNIROUTE uses (hg-v612). Local copy so the BTC
@@ -404,6 +833,16 @@ a global hard refresh.
     var entry = fin(r.entry), stop = fin(r.stop), t1 = fin(r.t1);
     if (!(isFinite(entry) && entry > 0 && isFinite(stop) && stop > 0 && entry !== stop && isFinite(t1) && t1 > 0))
       return null;
+    /* hg-v1304: refuse inverted geometry at the ingest site — a long with
+       t1 <= entry (or stop >= entry) can only hit as a losing level, and the
+       same mirror holds for shorts. Refused here the plan never enters `all`,
+       never reaches snap.candidates, and never surfaces on a downstream
+       reader (COMBI, SETUP CONFIRM, CONTRACT REPORT, forward ledger). */
+    var t2chk = fin(r.t2);
+    if (dir === 'long' && !(stop < entry && t1 > entry)) return null;
+    if (dir === 'short' && !(stop > entry && t1 < entry)) return null;
+    if (dir === 'long' && isFinite(t2chk) && t2chk > 0 && !(t2chk > entry)) return null;
+    if (dir === 'short' && isFinite(t2chk) && t2chk > 0 && !(t2chk < entry)) return null;
     var passed = fin(r.passed != null ? r.passed : r.gatesPassed);
     var total = fin(r.total != null ? r.total : r.gatesTotal);
     if (!isFinite(total) || total <= 0) total = 7;
@@ -603,14 +1042,43 @@ a global hard refresh.
       if (gfn('hgProvenEdgeVerdict') && btc.length > 1){
         var mechOf = function(r){ return String(r.omniKind || r.kind || r.engine || 'UNKNOWN').toUpperCase().slice(0, 28); };
         var pickMech = mechOf(pick.row);
-        var pickV = W.hgProvenEdgeVerdict('omnibtc', pickMech, { pool: 'OMNIBTC', mechanic: pickMech });
+        /* hg-v1303 Fix 3: hgNormalizeSetupRow strips kind/omniKind/engine off
+           the primary pick's row, so mechOf(pick.row) read 'UNKNOWN' and the
+           "primary already proven?" short-circuit was dead — the override
+           fired UNCONDITIONALLY and re-crowned the first proven alternate.
+           Recover the primary's mechanic from the btc pool by its own levels
+           before asking the ledger. */
+        if (pickMech === 'UNKNOWN' && Array.isArray(btc)){
+          for (var lu = 0; lu < btc.length; lu++){
+            if (btc[lu] && btc[lu].sym === pick.row.sym && btc[lu].dir === pick.row.dir
+              && btc[lu].entry === pick.row.entry && btc[lu].stop === pick.row.stop){
+              pickMech = mechOf(btc[lu]);
+              break;
+            }
+          }
+        }
+        /* hg-v1305: pass the candidate's direction — a mechanic proven only on longs must not crown a short off the pooled verdict. */
+        var pickV = W.hgProvenEdgeVerdict('omnibtc', pickMech, { pool: 'OMNIBTC', mechanic: pickMech, dir: pick.row && pick.row.dir });
         if (!(pickV && pickV.state === 'proven')){
-          for (var bi = 0; bi < btc.length; bi++){
-            if (!btc[bi].clean) continue;
-            var bm = mechOf(btc[bi]);
-            var bv = W.hgProvenEdgeVerdict('omnibtc', bm, { pool: 'OMNIBTC', mechanic: bm });
+          /* hg-v1302: iterate in a stable order — (mechanic, sym) alphabetical
+             — so two refreshes of the same ledger crown the same candidate;
+             a venue flip must not reorder the override. */
+          var btcForProven = btc.slice().sort(function(a, b){
+            var ma = String((a && (a.omniKind || a.kind)) || '').toUpperCase();
+            var mb = String((b && (b.omniKind || b.kind)) || '').toUpperCase();
+            if (ma < mb) return -1;
+            if (ma > mb) return 1;
+            var sa = String((a && a.sym) || ''), sb = String((b && b.sym) || '');
+            if (sa < sb) return -1;
+            if (sa > sb) return 1;
+            return 0;
+          });
+          for (var bi = 0; bi < btcForProven.length; bi++){
+            if (!btcForProven[bi].clean) continue;
+            var bm = mechOf(btcForProven[bi]);
+            var bv = W.hgProvenEdgeVerdict('omnibtc', bm, { pool: 'OMNIBTC', mechanic: bm, dir: btcForProven[bi] && btcForProven[bi].dir });
             if (bv && bv.state === 'proven'){
-              pick = { row: btc[bi], tier: 'clean', source: 'measured-rank' };
+              pick = { row: btcForProven[bi], tier: 'clean', source: 'measured-rank' };
               pick.row.measuredRanked = true;
               break;
             }
@@ -1516,6 +1984,144 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
+  /* hg-v1300: THE FUNDAMENTALS & FEED panel — one reader for the 38
+     three-state marks the record carries (12 free: + 13 ind: from the
+     hg-v1297/v1299/v1301 one home, 13 pine: from the hg-v1293/v1295 one
+     home). Mark triangulation (hg-v989): free: and ind: are strict
+     booleans TRUE WITH / FALSE AGAINST / absent UNREAD; pine: arrives as
+     'long'/'short' and is translated against the plan's direction — a mark
+     that cannot be resolved (no direction, junk value) reads UNREAD, never
+     a guessed side. DOCTRINE: record-only — nothing is gated on any of the
+     38 marks (no gate module reads them, asserted); hg-v966 refuses an
+     unmeasured gate, the hg-v1294 walker must bake, and the forward ledger
+     measures which of these pays out of sample. */
+  var HG_OBTC_MARKS_GROUPS = [
+    { title: 'MACRO', keys: [
+      ['free:dxyTrend', 'DXY 20d trend'],
+      ['free:tnxTrend', '10Y (TNX) trend'],
+      ['free:realYieldTilt', 'Real-yield tilt'],
+      ['free:vixRising', 'VIX trend'],
+      ['free:curveSlopeTrend', 'Yield-curve slope (hg-v1299)']
+    ]},
+    { title: 'CRYPTO SENTIMENT', keys: [
+      ['free:fngExtreme', 'Fear & Greed extreme'],
+      ['free:btcSeason', 'BTC vs ALT season'],
+      ['free:btcdHigh', 'BTC.D dominance'],
+      ['free:stables7dPct', 'Stablecoins 7d change'],
+      ['free:newsBlackout', 'News risk (calendar)'],
+      ['free:btcGoldCorr', 'BTC-gold 20d corr (hg-v1299)']
+    ]},
+    { title: 'TREND / MOMENTUM', keys: [
+      ['ind:adxTrending', 'ADX 14'],
+      ['ind:dmiWith', '+DI / -DI'],
+      ['ind:rsiWith', 'RSI 14'],
+      ['ind:kerTrend', 'Kaufman ER 20'],
+      ['ind:tsmomWith', 'TSMOM (TSI)'],
+      ['ind:hurstTrending', 'Hurst 1d'],
+      ['ind:sma50With', 'Close vs SMA50 (hg-v1299)'],
+      ['ind:sma200With', 'Close vs SMA200 (hg-v1299)']
+    ]},
+    { title: 'VOLATILITY', keys: [
+      ['ind:bbSqueeze', 'Bollinger squeeze'],
+      ['ind:bbOutside', 'Bollinger outside'],
+      ['ind:atrExpanding', 'ATR 14 vs ATR 50'],
+      ['ind:volAboveMa', 'Volume vs 20-bar MA'],
+      ['ind:parkHigh', 'Parkinson 20 vs median (hg-v1299)']
+    ]},
+    { title: 'ON-CHAIN', keys: [
+      ['free:mempoolFeeHigh', 'Mempool fee regime (hg-v1301, onchain.js)']
+    ]},
+    { title: 'PINE PORTS', keys: [
+      ['pine:lor', 'Lorentzian KNN'],
+      ['pine:ht', 'HalfTrend'],
+      ['pine:sqz', 'Squeeze Momentum'],
+      ['pine:smf', 'Smart Money Flow'],
+      ['pine:msb', 'MSB / OB'],
+      ['pine:smc', 'SMC Core'],
+      ['pine:cipher', 'VuManChu Cipher'],
+      ['pine:rfilter', 'Range Filter'],
+      ['pine:nwenv', 'NW Envelope'],
+      ['pine:wavwap', 'Weekly AVWAP'],
+      ['pine:supertrend', 'Supertrend (hg-v1295)'],
+      ['pine:macd', 'MACD (hg-v1295)'],
+      ['pine:cci', 'CCI (hg-v1295)']
+    ]}
+  ];
+  function hgObtcMarkState(bag, keyWithPrefix){
+    if (!bag || typeof bag !== 'object') return null;
+    var mv = bag[keyWithPrefix];
+    if (mv === true) return 'WITH';
+    if (mv === false) return 'AGAINST';
+    if (mv === 'long' || mv === 'short') return mv;
+    return null;
+  }
+  function hgObtcMarksPanelHtml(pick){
+    try{
+      if (!pick || typeof pick !== 'object') return '';
+      var row = pick.row;
+      if (!row || typeof row !== 'object') return '';
+      var reads = row.perfectReads;
+      if (!reads || typeof reads !== 'object') return '';
+      var dir = String(row.dir || '').toLowerCase();
+      /* hg-v1303 Fix 4: the plan's direction comes from the pick itself —
+         before this, every pine mark was mapped 'long' → WITH and
+         'short' → AGAINST regardless of the side, inverting every mark on
+         every SHORT pick. */
+      var planLong = !!(pick && pick.row && pick.row.dir === 'long');
+      var planShort = !!(pick && pick.row && pick.row.dir === 'short');
+      var bag = {};
+      var ff = reads.freeFeedVerdicts;
+      if (ff && typeof ff === 'object') for (var kFF in ff){ if (Object.prototype.hasOwnProperty.call(ff, kFF)) bag[kFF] = ff[kFF]; }
+      var im = reads.indMarks;
+      if (im && typeof im === 'object') for (var kII in im){ if (Object.prototype.hasOwnProperty.call(im, kII)) bag[kII] = im[kII]; }
+      var pm = reads.pineMarks;
+      if (pm && typeof pm === 'object') for (var kPP in pm){ if (Object.prototype.hasOwnProperty.call(pm, kPP)) bag['pine:' + kPP] = pm[kPP]; }
+      var totalMarks = 0;
+      for (var gT = 0; gT < HG_OBTC_MARKS_GROUPS.length; gT++){ totalMarks += HG_OBTC_MARKS_GROUPS[gT].keys.length; }
+      var readN = 0;
+      for (var gC = 0; gC < HG_OBTC_MARKS_GROUPS.length; gC++){
+        var grpC = HG_OBTC_MARKS_GROUPS[gC];
+        for (var kC = 0; kC < grpC.keys.length; kC++){
+          var stC = hgObtcMarkState(bag, grpC.keys[kC][0]);
+          if (grpC.keys[kC][0].indexOf('pine:') === 0 && stC){
+            if (planLong) stC = (stC === 'long') ? 'WITH' : 'AGAINST';
+            else if (planShort) stC = (stC === 'short') ? 'WITH' : 'AGAINST';
+            else stC = null;
+          }
+          if (stC === 'WITH' || stC === 'AGAINST') readN++;
+        }
+      }
+      var html = '<div class="panel" style="margin-top:10px"><h3>FUNDAMENTALS &amp; FEED <span>' + readN + ' of ' + totalMarks + ' read · plan direction ' + (dir ? dir.toUpperCase() : 'UNREAD') + ' · WITH / AGAINST / UNREAD — record-only, gates nothing</span></h3>';
+      for (var gi = 0; gi < HG_OBTC_MARKS_GROUPS.length; gi++){
+        var grp = HG_OBTC_MARKS_GROUPS[gi];
+        var gRead = 0;
+        var gHtml = '';
+        for (var ki = 0; ki < grp.keys.length; ki++){
+          var mKey = grp.keys[ki][0], mLabel = grp.keys[ki][1];
+          var st = hgObtcMarkState(bag, mKey);
+          if (mKey.indexOf('pine:') === 0 && st){
+            if (planLong) st = (st === 'long') ? 'WITH' : 'AGAINST';
+            else if (planShort) st = (st === 'short') ? 'WITH' : 'AGAINST';
+            else st = null;
+          }
+          if (st === 'WITH' || st === 'AGAINST'){
+            gRead++;
+            gHtml += '<div class="kv"><span class="k">' + esc(mLabel) + '</span><span class="' + (st === 'WITH' ? 'v good' : 'v bad') + '">' + st + '</span></div>';
+          } else {
+            gHtml += '<div class="kv"><span class="k">' + esc(mLabel) + '</span><span class="v dim">UNREAD</span></div>';
+          }
+        }
+        readN += gRead;
+        html += '<div style="margin:8px 0 2px"><b>' + esc(grp.title) + ' — ' + gRead + ' of ' + grp.keys.length + ' read</b>' + gHtml + '</div>';
+      }
+      html += '<div class="note" style="margin-top:6px;font-size:10px;opacity:.75">Record-only: nothing is gated on these ' + totalMarks + ' marks — an unmeasured gate on an unmeasured desk is refused (hg-v966). The hg-v1294 walker must bake (scripts/backtest-omnibtc.mjs) and the forward ledger (hgFwdReadSplit) then measures which of these pays, out of sample. WITH / AGAINST / UNREAD is a read, not a rule.</div>';
+      html += '</div>';
+      return html;
+    }catch(eMk){ return ''; }
+  }
+  W.hgObtcMarksPanelHtml = hgObtcMarksPanelHtml;
+  W.HG_OBTC_MARKS_GROUPS = HG_OBTC_MARKS_GROUPS;
+
   /* hg-v1039: THE FUNDING WITNESS — the same one-rule read the shared
      PERFECT formation consumes (hgFundingAgainstMark), printed beside the
      pick so the crowding verdict that shaped the crown is visible.
@@ -1974,7 +2580,14 @@ a global hard refresh.
       var r = pick.row, reads = r.perfectReads || {};
       var dir = String(r.dir || '').toLowerCase();
       if (dir !== 'long' && dir !== 'short') return '';
-      var entry = +r.entry, stop = +r.stop, t1 = +r.t1, t2 = +r.t2, a = isFinite(reads.atrVal) ? +reads.atrVal : NaN;
+      var entry = +r.entry, stop = +r.stop, t1 = +r.t1, t2 = +r.t2;
+      /* hg-v1303 Fix 2b: a 15m SCALP / TRAP pick was painted with the 4h
+         ATR — entry zones overstated 5-10x. The crown recorder already
+         carried the 15m ATR (atrVal15); when the pick is a scalp pick and
+         that read is finite, it is the card's ATR. The 4h read stands for
+         every other pick, unchanged. */
+      var __obtcScalp = /SCALP|TRAP/i.test(String(r.engine || '') + ' ' + String(r.omniKind || '') + ' ' + String(r.source || ''));
+      var a = (__obtcScalp && isFinite(reads.atrVal15)) ? +reads.atrVal15 : (isFinite(reads.atrVal) ? +reads.atrVal : NaN);
       if (!(isFinite(entry) && isFinite(stop) && isFinite(t1))) return '';
       var risk = Math.abs(entry - stop);
       var rr = risk > 0 ? Math.abs(t1 - entry) / risk : NaN;
@@ -1997,7 +2610,13 @@ a global hard refresh.
       if (reads.structureTrend) conv.push('EMA50/200 4h: ' + String(reads.structureTrend).toUpperCase());
       if (isFinite(+r.rsi)) conv.push('RSI ' + (+r.rsi).toFixed(1));
       if (isFinite(reads.slotRvol)) conv.push('RVOL ' + (+reads.slotRvol).toFixed(2) + ' vs the 0.6/1.0 house bars');
-      if (isFinite(reads.atrVal)) conv.push('ATR14 ' + (+reads.atrVal).toFixed(2));
+      if (__obtcScalp && isFinite(reads.atrVal15)){
+        /* hg-v1303 Fix 2b: on a scalp pick the 15m read is the card's ATR,
+           and the 4h read prints beside it so a reader sees BOTH — never
+           one silently standing in for the other. */
+        conv.push('ATR14 (15m) ' + (+reads.atrVal15).toFixed(2));
+        if (isFinite(reads.atrVal)) conv.push('ATR14 (4h) ' + (+reads.atrVal).toFixed(2));
+      } else if (isFinite(reads.atrVal)) conv.push('ATR14 ' + (+reads.atrVal).toFixed(2));
       if (isFinite(reads.venueFundingPct)) conv.push('funding ' + (+reads.venueFundingPct).toFixed(4) + '%');
       /* ---- the automation blueprint ---- */
       var venue = r.venue ? String(r.venue).toLowerCase() : 'delta';
@@ -2117,6 +2736,20 @@ a global hard refresh.
       if (reads.bbSqueeze) tLines.push('Bollinger ' + reads.bbSqueeze);
       if (isFinite(reads.vwapDevPct)) tLines.push('VWAP dev ' + (reads.vwapDevPct >= 0 ? '+' : '') + (+reads.vwapDevPct).toFixed(2) + '%');
       if (isFinite(+r.rsi)) tLines.push('RSI ' + (+r.rsi).toFixed(1));
+      /* hg-v1296: the thirteen record-only Pine marks, read off the
+         winner's 4h tape and stamped on the forward record at the record
+         site. The card prints what the ledger measures — record-only,
+         gates nothing; a mark bag with no long/short reads prints no
+         line at all (hg-v955: no ornamental line). */
+      if (reads && reads.pineMarks){
+        var __pineBits = [];
+        var __pm = reads.pineMarks;
+        for (var __pmk in __pm){
+          if (!Object.prototype.hasOwnProperty.call(__pm, __pmk)) continue;
+          if (__pm[__pmk] === 'long' || __pm[__pmk] === 'short') __pineBits.push(__pmk + ' ' + __pm[__pmk]);
+        }
+        if (__pineBits.length) tLines.push('PINE ' + __pineBits.join(' · ') + ' (record-only, gates nothing)');
+      }
       html += dim('TECHNICAL', tVerd, tCls, tLines);
       /* ---- SENTIMENTAL: flow, positioning, fear/greed, vol ---- */
       var sLines = [], sVerd = 'UNREAD', sCls = '';
@@ -2380,7 +3013,48 @@ a global hard refresh.
     };
   }
 
+  /* hg-v1302: SessionStorage pin for the resolved OMNIBTC legs.
+     ------------------------------------------------------------------
+     The user saw the crowned setup change on every tab refresh. The
+     ranking comparator is deterministic; the flip came from the venue
+     legs re-resolving live — two refreshes fetching Delta vs CoinDCX
+     see different candle series and fire different engine candidates.
+     Pin the resolved legs to sessionStorage for 30 minutes: a refresh
+     returns the same legs, the same candles, the same crown. Every
+     seam fails open — junk, expiry, or throwing storage just
+     re-resolves. This is an input stabiliser, not a gate (hg-v966). */
+  var LEGS_PIN_KEY = 'hg_omnibtc_legs_pin_v1302';
+  var LEGS_PIN_TTL_MS = 30 * 60 * 1000;
+
+  function hgObtcReadLegPin(){
+    try{
+      if (typeof sessionStorage === 'undefined' || !sessionStorage) return null;
+      var raw = sessionStorage.getItem(LEGS_PIN_KEY);
+      if (!raw) return null;
+      var pin = JSON.parse(raw);
+      if (!pin || typeof pin !== 'object') return null;
+      var at = pin.at;
+      /* strict typeof first — isFinite('1700000000000') coerces true, and
+         at <= 0 must reject before the TTL check (Date.now()-(-1) passes TTL) */
+      if (typeof at !== 'number' || !isFinite(at) || at <= 0) return null;
+      if (Date.now() - at >= LEGS_PIN_TTL_MS) return null;
+      var legs = pin.legs;
+      if (!Array.isArray(legs) || !legs.length) return null;
+      return legs;
+    }catch(e){ return null; }
+  }
+
+  function hgObtcWriteLegPin(legs){
+    try{
+      if (!Array.isArray(legs) || !legs.length) return;
+      if (typeof sessionStorage === 'undefined' || !sessionStorage) return;
+      sessionStorage.setItem(LEGS_PIN_KEY, JSON.stringify({ at: Date.now(), legs: legs }));
+    }catch(e){}
+  }
+
   async function hgObtcResolveLegs(){
+    var pinned = hgObtcReadLegPin();
+    if (pinned) return pinned;
     var out = [];
     if (gfn('xuUniverse')){
       try{
@@ -2389,7 +3063,9 @@ a global hard refresh.
       }catch(e){ out = []; }
     }
     if (!out.length) out = hgObtcDefaultLegs();
-    return hgObtcFilterUniverse(out);
+    out = hgObtcFilterUniverse(out);
+    if (out.length) hgObtcWriteLegPin(out);
+    return out;
   }
 
   async function loadBars(item, tf, n){
@@ -2413,6 +3089,13 @@ a global hard refresh.
       var hit = fn();
       if (!hit) return;
       if (hit.dir && hit.entry != null && hit.t1 == null && hit.tp != null) hit.t1 = hit.tp;
+      /* hg-v1303 Fix 1: MEAN REVERSION returns {dir, entry, stop, target, rr}
+         with no tp and no t1 — the old alias mapped tp→t1 only, so every MR
+         firing died at the isFinite(t1) check in hgObtcCandidateFromSignal
+         and never entered the candidate pool. target is a strict FALLBACK:
+         tp wins when both are present, and an engine that already carries a
+         real t1 is untouched. */
+      if (hit.dir && hit.entry != null && hit.t1 == null && hit.tp == null && hit.target != null) hit.t1 = hit.target;
       var c = hgObtcCandidateFromSignal(hit, ticker, { engine: name });
       if (c){
         hgObtcApplyOmniPrincipal(c);
@@ -2708,6 +3391,7 @@ a global hard refresh.
       dhtml += hgObtcCycleContextHtml(snap && snap.extra, snap);
       dhtml += hgObtcFundingWitnessHtml(snap, pick);
       dhtml += hgObtcEvidenceWitnessesHtml(pick);
+      dhtml += hgObtcMarksPanelHtml(pick);   /* hg-v1300: FUNDAMENTALS & FEED — the record-only marks, WITH/AGAINST/UNREAD */
       dhtml += hgObtcScalpAnchorHtml(pick);   /* hg-v1058: the honest scalp anchor — real VWAP + ATR bands */
       dhtml += hgObtcPerfectLedgerHtml(pick);
       if (snap && snap.measured && gfn('hgProvenEdgeChipHtml')){
@@ -2735,6 +3419,9 @@ a global hard refresh.
       dhtml += hgObtcGridSetupHtml('SCALP SETUP', '15m grid', snap && snap.scalpSetup, pick && pick.row && pick.row.dir);
       dhtml += hgObtcGridSetupHtml('SCALP SETUP - ALT SIDE', '15m grid', snap && snap.scalpSetupAlt, pick && pick.row && pick.row.dir);
       dhtml += hgObtcScoreboardHtml();
+      /* hg-v1294: the replay evidence panel — measured or NOT YET
+         MEASURED, the desk says which. A report, not a rule. */
+      dhtml += hgObtcReplayPanelHtml(HG_OBTC_WALK);
       /* hg-v1057 A8: SESSION ODDS — the desk's own settled record split by the
          fire bar's session, read off the forward ledger (the split the shared
          panel does not print). Absent module or no session-marked records
@@ -2986,6 +3673,47 @@ a global hard refresh.
            taker flow, the event-calendar blackout, and perp funding. A leg
            the desk did not read stays null (neither confirms nor denies). */
         var pfReads = {};
+        /* hg-v1296: the thirteen record-only Pine marks read off the
+           winner's OWN 4h tape through the one home (hg-v949
+           trendmxPineMarks). The forward record stamps the same read at
+           the record site below, so the card and the ledger can never
+           disagree about what the desk saw. Record-only: gates nothing. */
+        /* hg-v1300: the live marks are read ONCE off the winner's OWN 4h
+           tape and stashed — the card, the FUNDAMENTALS & FEED panel and
+           the forward record all quote the same read (hg-v949 one home). */
+        var livePineMarks = hgObtcPineMarks(match && match._rows);
+        pfReads.pineMarks = livePineMarks;
+        var liveIndReads = hgObtcIndicatorReads(match && match._rows);
+        pfReads.indReads = liveIndReads;
+        var liveIndMarks = hgObtcIndicatorMarks(liveIndReads, String(pick.row.dir || '').toLowerCase());
+        pfReads.indMarks = liveIndMarks;
+        /* hg-v1297/v1299/v1301: the free-feed verdict context — each read
+           quoted from its one home: F&G and on-chain from this scan's own
+           extra bag, the macro snapshot from macro.js's cache (the same
+           fallback the fundamental stack takes), the dominance / stables
+           read from REGIME's snapshot, the season from ROTATION's state,
+           the calendar blackout from the fundamental stack's own verdict.
+           A feed that has not run reads ABSENT — never a guessed side. */
+        var ffCtx = {
+          fng: (extra && extra.fng !== undefined) ? extra.fng : undefined,
+          onchain: (function(){ try{ if (typeof W.onchainState !== 'function') return null; return W.onchainState() || null; }catch(eFfOc){ return null; } })(),
+          macro: (function(){ try{ return gfn('getGoldMacroCached') ? W.getGoldMacroCached() : undefined; }catch(eFfM){ return undefined; } })(),
+          regime: (function(){ try{ return gfn('regimeState') ? W.regimeState() : undefined; }catch(eFfR){ return undefined; } })(),
+          rotation: (function(){ try{ return gfn('rotationState') ? W.rotationState() : undefined; }catch(eFfT){ return undefined; } })(),
+          news: (fundamental && Array.isArray(fundamental.legs))
+            ? { unchecked: false, blackout: fundamental.blackout === true, risk: (fundamental.blackout === true) ? 'high' : 'low' }
+            : { unchecked: true }
+        };
+        pfReads.freeFeedVerdicts = hgObtcFreeFeedVerdicts(ffCtx, String(pick.row.dir || '').toLowerCase(), 'BTCUSD');
+        /* hg-v1303 Fix 2a: the 15m ATR beside the 4h one — a SCALP/TRAP
+           pick sizes its entry zone off the tape it fired on, and the card
+           (Fix 2b) can only read what the recorder carries. Computed from
+           match._rows15, never winnerRows (the 4h tape). */
+        try{
+          var atrArr15 = W.atr(match._rows15, 14);
+          var aLast15 = (atrArr15 && atrArr15.length) ? +atrArr15[atrArr15.length - 1] : NaN;
+          if (isFinite(aLast15) && aLast15 > 0) pfReads.atrVal15 = aLast15;
+        }catch(eA15){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eA15); }catch(eWa){} }
         /* hg-v1061: the Deribit options-vol read (already gathered into
            extra.dvol) rides the pick so the witnesses panel can show it. */
         try{
@@ -3429,7 +4157,7 @@ a global hard refresh.
         try{
           if (gfn('hgProvenEdgeVerdict')){
             var mechName = String(pick.row.omniKind || pick.row.kind || pick.row.engine || 'UNKNOWN').toUpperCase().slice(0, 28);
-            measured = W.hgProvenEdgeVerdict('omnibtc', mechName, { pool: 'OMNIBTC', mechanic: mechName });
+            measured = W.hgProvenEdgeVerdict('omnibtc', mechName, { pool: 'OMNIBTC', mechanic: mechName, dir: pick.row && pick.row.dir });
           }
         }catch(eMe){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eMe); }catch(eWm){} }
         if (measured && measured.state === 'losing'){
@@ -3466,10 +4194,49 @@ a global hard refresh.
               ? ((match && Array.isArray(match._rows15) && match._rows15.length >= 60) ? match._rows15 : winnerRows)
               : winnerRows;
             var fwdLast = fwdTape[fwdTape.length - 1];
+            /* hg-v1296: the pine marks come off the record's OWN tape (the
+               same bars the ledger settles against), never off the crown
+               row — a mark cannot drift from what the desk actually saw. */
+            var fwdPine = hgObtcPineMarks(fwdTape);
+            /* hg-v1297: the indicator reads + marks come off the record's
+               OWN tape — the same doctrine as the pine marks above. */
+            var fwdIndReads = hgObtcIndicatorReads(fwdTape);
+            var fwdIndMarks = hgObtcIndicatorMarks(fwdIndReads, pick.row.dir);
+            /* hg-v1297: the reads bag — one namespaced three-state bag the
+               forward ledger's hgFwdReadSplit can measure out of sample.
+               pine:<id>With from the crown row's own record states
+               (hg-v1293), free: verdicts off the world reads
+               (hg-v1297/v1299/v1301), ind: marks off the record's own tape
+               (hg-v1297/v1299). Strict booleans only — junk never crosses
+               the seam (hg-v955). Gates NOTHING. */
+            var fwdReadsBag = {};
+            try{
+              var pr = pick.row && pick.row.pineRecord, rk;
+              if (pr && typeof pr === 'object'){
+                var rd = String(pick.row.dir || '').toLowerCase();
+                for (rk in pr){
+                  if (!Object.prototype.hasOwnProperty.call(pr, rk)) continue;
+                  if (pr[rk] !== 'long' && pr[rk] !== 'short') continue;
+                  fwdReadsBag['pine:' + rk + 'With'] = (pr[rk] === rd);
+                }
+              }
+            }catch(eBagP){}
+            var ff = pfReads.freeFeedVerdicts;
+            if (ff && typeof ff === 'object'){
+              for (var kFF in ff){
+                if (!Object.prototype.hasOwnProperty.call(ff, kFF)) continue;
+                if (ff[kFF] === true || ff[kFF] === false) fwdReadsBag[kFF] = ff[kFF];
+              }
+            }
+            if (fwdIndMarks && typeof fwdIndMarks === 'object'){
+              for (var kII in fwdIndMarks){
+                if (!Object.prototype.hasOwnProperty.call(fwdIndMarks, kII)) continue;
+                if (fwdIndMarks[kII] === true || fwdIndMarks[kII] === false) fwdReadsBag[kII] = fwdIndMarks[kII];
+              }
+            }
             var fwdRow = {
               sym: 'BTCUSD',
               dir: pick.row.dir,
-              entry: +pick.row.entry, stop: +pick.row.stop, t1: +pick.row.t1,
               signalT: fwdLast && fwdLast.t,
               mark: fwdLast && fwdLast.c,
               fundingPct: (fwdTk && typeof fwdTk.fundingPct === 'number' && isFinite(fwdTk.fundingPct)) ? fwdTk.fundingPct : undefined,
@@ -3484,23 +4251,10 @@ a global hard refresh.
               /* hg-v1046: how many scanned venues crowned this direction —
                  the cross-venue confirmation read mark */
               venueAgreeCount: isFinite(pfReads.venuesAgree) ? pfReads.venuesAgree : undefined,
-              /* the hg-v1293 record-only bank, made MEASURABLE. The seventeen
-                 states rode the row and the card but no record ever carried
-                 them, so hgFwdReadSplit read zero rows by construction. They
-                 now ride the hg-v989 reads seam as booleans: true when the
-                 port agrees WITH the plan direction, false when it opposes,
-                 absent when the reader left it UNREAD (never a guessed side). */
-              reads: (function(){
-                var pr = pick.row && pick.row.pineRecord, out = {}, rk;
-                if (!pr || typeof pr !== 'object') return undefined;
-                var rd = String(pick.row.dir || '').toLowerCase();
-                for (rk in pr){
-                  if (!Object.prototype.hasOwnProperty.call(pr, rk)) continue;
-                  if (pr[rk] !== 'long' && pr[rk] !== 'short') continue;
-                  out['pine:' + rk + 'With'] = (pr[rk] === rd);
-                }
-                return Object.keys(out).length ? out : undefined;
-              })(),
+              /* hg-v1293 record-only bank, made MEASURABLE: the reads
+                 seam carries booleans — true WITH the plan, false AGAINST,
+                 absent UNREAD (never a guessed side). */
+              reads: fwdReadsBag,
               /* hg-v1047: the measured-edge verdict for this mechanic —
                  recorded only once armed (proven / losing), never while
                  the floor has not been reached */
@@ -3537,27 +4291,19 @@ a global hard refresh.
               htfLocked: (pick.row.htfLock && Array.isArray(pick.row.htfOppose) && pick.row.htfOppose.length ? true : undefined),
               htfLock: (pick.row.htfLock === false ? false : undefined),
               pine15m: (pick.row.pine15m || undefined),
-              session: (pfReads.sessName || undefined)
+              session: (pfReads.sessName || undefined),
+              /* hg-v1296: entry/stop/t1 ride at the END of the literal
+                 so the hg-v986 census window (`entry:` within 3000 chars
+                 before the call) keeps pointing at THIS record. */
+              entry: +pick.row.entry, stop: +pick.row.stop, t1: +pick.row.t1
             };
-            /* hg-v1293: the record-only generic Pine ports, one three-state
-               mark per port under the `pine:<id>` namespace the ledger's key
-               validator accepts. Read straight off the crown row so the mark
-               cannot drift from what the desk actually saw. A port that did
-               not fire, is not loaded, or threw is ABSENT — recorded as
-               nothing rather than as a guessed side, so the separation split
-               counts it as unread instead of as evidence. These gate NOTHING:
-               no rule above or below this literal reads them back. */
-            try{
-              var recStates = (pick.row && pick.row.pineRecord) || null;
-              if (recStates){
-                for (var rk in recStates){
-                  if (!Object.prototype.hasOwnProperty.call(recStates, rk)) continue;
-                  var rv = recStates[rk];
-                  if (rv === 'long' || rv === 'short') fwdRow['pine:' + rk] = rv;
-                }
-              }
-            }catch(eRec){}
+            /* hg-v1296: the thirteen record-only pine marks, stamped off
+               the record's OWN tape through the one home (hg-v949). The
+               hg-v1293 loop wrote `pine:<id>` keys the normaliser never
+               whitelisted — dropped at the door on every record (hg-v955).
+               Strict long/short, ABSENT when thin or homeless. Gates NOTHING. */
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
+            if (fwdPine) hgObtcPineStamp(fwdRow, fwdPine);
             /* the record array is a named variable so the call-shape censuses
                (test-crypto-funding-mark / test-crypto-ledger-fill-mark) read the
                record literal itself, not the first `entry:` that follows the call

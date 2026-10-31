@@ -195,12 +195,13 @@ assert(groupTabs('overview') === 'brain,book,trade,log,signallog,setupconfirm,ne
   'COMMAND group: workflow then context (incl. signallog since v658)');
 assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse,ninetypercent',
   'CRYPTO group: BTC desk first, then anticipation, ranked scans → structure → flow → funding → ultra → scan');
-/* hg-v1329: 'candle-forecast' appended. The CANDLE FORECAST tab joined GOLD and this
-   pin read the composition before it did. The pin exists so the shipped group cannot
-   drift silently — not to freeze membership — so it records the tab in its real
+/* hg-v1391: 'gold-confluence' prepended. The GOLD CONFLUENCE setup tab (one gold
+   setup from the gold desks, gold-confluence.js) joined GOLD ahead of the pick engines,
+   and this pin read the composition before it did. The pin exists so the shipped group
+   cannot drift silently — not to freeze membership — so it records the tab in its real
    position rather than being loosened to a pattern. */
-assert(groupTabs('gold') === 'super-gold,omnigold,omnigold1,milligold,optigold,newgold,golddirection,goldswing,goldscalp,ganeshgold,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,tauric,80percent,candle-forecast',
-  'GOLD group: super desk first, then scanners (signallog moved to COMMAND at v658)');
+assert(groupTabs('gold') === 'gold-confluence,super-gold,omnigold,omnigold1,milligold,optigold,newgold,golddirection,goldswing,goldscalp,ganeshgold,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,tauric,80percent,candle-forecast',
+  'GOLD group: gold-confluence (setup) first, then super desk + scanners (signallog moved to COMMAND at v658)');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',
   'HG_TAB_GROUP maps rotation→overview, onchain→crypto, goldspot→gold');

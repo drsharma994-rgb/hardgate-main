@@ -854,8 +854,14 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
      point of the pin is that the shipped nav and the test cannot drift apart
      silently, not that new gold tabs are forbidden. Recorded in its actual
      position, at the end, rather than loosening the assertion to a pattern. */
-  assert(/tabs:\['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent','candle-forecast'\]/.test(gLine),
-         'GOLD group: super desk first, then swing/scalp scanners — got: ' + gLine.trim());
+  /* hg-v1391: 'gold-confluence' prepended. The GOLD CONFLUENCE setup tab (one gold
+     setup from the gold desks, gold-confluence.js) joined GOLD ahead of the pick
+     engines, which is a real membership change this pin is SUPPOSED to catch — the
+     point of the pin is that the shipped nav and the test cannot drift apart
+     silently, not that new gold tabs are forbidden. Recorded in its actual
+     position, at the front, rather than loosening the assertion to a pattern. */
+  assert(/tabs:\['gold-confluence','super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent','candle-forecast'\]/.test(gLine),
+         'GOLD group: gold-confluence (setup) first, then super desk + swing/scalp scanners — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');
   assert(sw.indexOf("'./goldswing.js'") !== -1 && sw.indexOf("'./goldpine.js'") !== -1
