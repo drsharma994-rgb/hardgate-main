@@ -620,10 +620,6 @@ W.trendmxState = function(){
 W.trendmxScanRows = function(){
   try{ return (__tmScanSnap && Array.isArray(__tmScanSnap.rows) && __tmScanSnap.rows.length) ? __tmScanSnap.rows : null; }catch(e){ return null; }
 };
-/* hg-v1293: export the one home for the crypto Pine marks (defined in the
-   src-9 part) so OMNIBTC's record-only mark helper can delegate (hg-v949)
-   instead of carrying a second port definition. */
-W.trendmxPineMarks = trendmxPineMarks;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'trendmx', label: 'TREND MATRIX', mount: mountTrendMatrix, refresh: refreshTrendMatrix });
 W.HG_warmups = W.HG_warmups || [];

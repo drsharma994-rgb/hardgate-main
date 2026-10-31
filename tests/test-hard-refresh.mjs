@@ -195,12 +195,13 @@ assert(groupTabs('overview') === 'brain,book,trade,log,signallog,setupconfirm,ne
   'COMMAND group: workflow then context (incl. signallog since v658)');
 assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse,ninetypercent,syndicate',
   'CRYPTO group: BTC desk first, then anticipation, ranked scans → structure → flow → funding → ultra → scan');
-/* hg-v1391: 'gold-confluence' prepended. The GOLD CONFLUENCE setup tab (one gold
-   setup from the gold desks, gold-confluence.js) joined GOLD ahead of the pick engines,
-   and this pin read the composition before it did. The pin exists so the shipped group
-   cannot drift silently — not to freeze membership — so it records the tab in its real
-   position rather than being loosened to a pattern. */
-assert(groupTabs('gold') === 'gold-confluence,super-gold,omnigold,omnigold1,milligold,optigold,newgold,golddirection,goldswing,goldscalp,ganeshgold,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,tauric,80percent,candle-forecast',
+/* hg-v1329: 'candle-forecast' appended; hg-v1391: 'gold-confluence' prepended;
+   since then 'shivagold', 'puregold' and 'sona' joined — the pin had drifted stale
+   against index.html's own HG_NAV_GROUPS and is re-read here in the shipped order.
+   The pin exists so the shipped group cannot drift silently — not to freeze
+   membership — so it records the tabs in their real positions rather than being
+   loosened to a pattern. */
+assert(groupTabs('gold') === 'gold-confluence,super-gold,omnigold,omnigold1,milligold,optigold,newgold,golddirection,goldswing,goldscalp,ganeshgold,shivagold,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,puregold,sona,tauric,80percent,candle-forecast',
   'GOLD group: gold-confluence (setup) first, then super desk + scanners (signallog moved to COMMAND at v658)');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',
