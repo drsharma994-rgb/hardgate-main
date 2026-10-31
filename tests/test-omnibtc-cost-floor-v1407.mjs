@@ -241,10 +241,10 @@ console.log('\n== 7) both lever surfaces exist by name (a rename trips here) =='
 console.log('\n== 8) the deploy pins moved with the pack (?v= byte-check) ==');
 {
   const bs = (read('build-stamp.js').match(/version:\s*'([^']+)'/) || [])[1];
-  ok(bs === 'hg-v1480', 'build-stamp.js carries hg-v1480 (got ' + bs + ')');
+  ok(bs === 'hg-v1481', 'build-stamp.js carries hg-v1481 (got ' + bs + ')');
   ok(bs === HG_VER, 'and it is the tree version ' + HG_VER);
   const idx = read('index.html');
-  ok(idx.indexOf('omnibtc.js?v=1480') !== -1, 'index.html loads omnibtc.js?v=1480');
+  ok(idx.indexOf('omnibtc.js?v=1481') !== -1, 'index.html loads omnibtc.js?v=1481');
   ok(!/\?v=1406\b/.test(idx), 'no stale ?v=1406 pin survives in index.html');
 }
 
@@ -278,6 +278,41 @@ console.log('\n== 9) the measured combo demotes only when the bar has taker volu
   W.HG_OBTC_COMBO = false;
   const off = W.hgObtcApplyPineAccuracy(crown(), withTb(0.4), []);
   ok(off.tier === 'clean' && !off.row.comboRefused, 'window.HG_OBTC_COMBO = false leaves the 10% stop alone');
+}
+
+console.log('\n== 10) a ticket needs sentiment and fundamental agreement ==');
+{
+  const W = boot(); armBank(W);
+  const plain = W.hgObtcApplyPineAccuracy(crown(), bars(280), []);
+  ok(plain.tier === 'clean' && !plain.row.signsRefused,
+    'no sign stamp is not a verdict — the crown still mints');
+  const aligned = crown();
+  aligned.row.signSentiment = 'with';
+  aligned.row.signFundamental = 'with';
+  aligned.row.signSentimentNames = ['PERP FUNDING'];
+  aligned.row.signFundamentalNames = ['ON-CHAIN'];
+  const yes = W.hgObtcApplyPineAccuracy(aligned, bars(280), []);
+  ok(yes.tier === 'clean' && /technical, sentiment and fundamental agree/.test(yes.row.pineNote || ''),
+    'both signs with the trade: the ticket names the alignment (' + yes.row.pineNote + ')');
+  const thin = crown();
+  thin.row.signSentiment = 'unread';
+  thin.row.signFundamental = 'with';
+  const no = W.hgObtcApplyPineAccuracy(thin, bars(280), []);
+  ok(no.tier === 'near' && no.row.signsRefused === true && /sentiment unread/.test(no.row.pineNote || ''),
+    'an unread sentiment sign stands the ticket down (' + no.row.pineNote + ')');
+  const against = crown();
+  against.row.signSentiment = 'against';
+  against.row.signFundamental = 'with';
+  against.row.signSentimentNames = ['FEAR & GREED'];
+  const bad = W.hgObtcApplyPineAccuracy(against, bars(280), []);
+  ok(bad.tier === 'near' && /sentiment against/.test(bad.row.pineNote || ''),
+    'a sentiment sign the other way stands the ticket down');
+  W.HG_OBTC_SIGNS = false;
+  const fresh = crown();
+  fresh.row.signSentiment = 'unread';
+  fresh.row.signFundamental = 'with';
+  const lever = W.hgObtcApplyPineAccuracy(fresh, bars(280), []);
+  ok(lever.tier === 'clean' && !lever.row.signsRefused, 'window.HG_OBTC_SIGNS = false turns the alignment off');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

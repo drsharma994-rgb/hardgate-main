@@ -790,6 +790,11 @@
       "version": "hg-v1480",
       "built": "2026-11-01T12:30:00Z",
       "note": "OMNIBTC COMBO. A crown stays a watch unless three measured legs all hold: the stop is 0.80-2.50% of entry, Kaufman efficiency of the last 20 closed 4h bars is above 0.35, and the signal bar taker-buy imbalance is against the trade. 46 one-position trades, +18.6R across three periods. Missing taker volume fails open. Demote, never hide. Binance klines now keep taker-buy base volume. Not re-walked; the forward ledger decides."
+    },
+    {
+      "version": "hg-v1481",
+      "built": "2026-11-01T13:00:00Z",
+      "note": "OMNIBTC SIGNS. A formed ticket needs three agreements: the technical book, a sentiment sign with the trade, and a fundamental sign with the trade. Sentiment reads fear and greed, funding, retail, top traders, the 25-delta skew, a fresh open-interest divergence and taker flow. Fundamental reads on-chain, term structure, real rates, hashrate, NVT and COT. One vote against, or no vote at all, stands the crown down as a watch. A row that never received the stack is not a verdict. Lever HG_OBTC_SIGNS."
     }
   ]
 }

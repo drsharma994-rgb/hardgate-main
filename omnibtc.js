@@ -1785,6 +1785,36 @@ a global hard refresh.
      by the cost floor and never reaches here.
      Lever: window.HG_OBTC_COMBO = false, or localStorage hg_obtc_combo = '0'.
      Default ON. */
+  function hgObtcSignsOn(){
+    try{
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_SIGNS === false) return false;
+      if (typeof W !== 'undefined' && W && W.HG_OBTC_SIGNS === true) return true;
+      if (W && W.localStorage){
+        var v = W.localStorage.getItem('hg_obtc_signs');
+        if (v === '0' || v === 'false') return false;
+      }
+    }catch(eLv){}
+    return true;
+  }
+  /* A formed ticket needs the technical book (already required below) AND
+     a sentiment sign with the trade AND a fundamental sign with the trade.
+     The two signs are stamped by hgObtcApplyEvidence. A row that never
+     went through that stamp is not a verdict — the pine fixtures have no
+     stack. Once stamped, unread is not agreement. */
+  function hgObtcSignsWhy(row){
+    if (!row) return null;
+    if (row.signSentiment == null && row.signFundamental == null) return null;
+    var bad = [];
+    if (row.signSentiment !== 'with') bad.push('sentiment ' + (row.signSentiment || 'unread'));
+    if (row.signFundamental !== 'with') bad.push('fundamental ' + (row.signFundamental || 'unread'));
+    if (!bad.length) return null;
+    var sentN = Array.isArray(row.signSentimentNames) && row.signSentimentNames.length
+      ? ' (' + row.signSentimentNames.join(', ') + ')' : '';
+    var fundN = Array.isArray(row.signFundamentalNames) && row.signFundamentalNames.length
+      ? ' (' + row.signFundamentalNames.join(', ') + ')' : '';
+    return 'SIGNS — ' + bad.join('; ') + sentN + fundN
+      + '. A setup needs technical, sentiment and fundamental agreement';
+  }
   function hgObtcComboOn(){
     try{
       if (typeof W !== 'undefined' && W && W.HG_OBTC_COMBO === false) return false;
@@ -2321,8 +2351,17 @@ a global hard refresh.
       + (h1Agree.length ? (' · 1h agrees: ' + h1Agree.join(', ')) : '')
       + dNote;
     if (fams.length >= 2){
+      if (hgObtcSignsOn()){
+        var signsWhy = hgObtcSignsWhy(pick.row);
+        if (signsWhy){
+          pick.row.signsRefused = true;
+          return hgObtcDemoteWatch(pick, signsWhy + '. Watch only, not a ticket.');
+        }
+      }
+      var signsOk = pick.row.signSentiment === 'with' && pick.row.signFundamental === 'with';
       pick.row.pineNote = 'PINE CONFIRM — ' + agree.join(', ')
         + (cores.length ? (' · also ' + cores.join(', ')) : '')
+        + (signsOk ? ' · technical, sentiment and fundamental agree' : '')
         + extra;
       return pick;
     }
