@@ -535,6 +535,22 @@ function rsAssess(rows, opts){
         }
       }catch(eFl){}
     }
+    try{
+      if (typeof W.hgCryptoSigns === 'function' && W.HG_CRYPTO_SIGNS !== false){
+        var rsSg = W.hgCryptoSigns(setup.dir || 'long', setup.sym || '', rows);
+        if (rsSg){
+          setup.signsLine = rsSg.line || '';
+          if (rsSg.why){
+            setup.ticket = false;
+            setup.demote = true;
+            setup.demoted = true;
+            setup.watchOnly = true;
+            setup.floorReasons = (setup.floorReasons || []).concat([rsSg.why]);
+            if (setup.tier === 'clean') setup.tier = 'near';
+          }
+        }
+      }
+    }catch(eSg){}
     return setup;
   }catch(e){ return null; }
 }

@@ -634,6 +634,18 @@ function npEvaluate(inp){
       }
     }
   }catch(eFl){}
+  try{
+    if (out.setup && typeof W.hgCryptoSigns === 'function' && W.HG_CRYPTO_SIGNS !== false){
+      var npSg = W.hgCryptoSigns(out.setup.dir, (inp && (inp.sym || inp.symbol)) || '', rows);
+      if (npSg){
+        out.signsLine = npSg.line || '';
+        if (npSg.why){
+          out.demote = true;
+          out.floorReasons = (out.floorReasons || []).concat([npSg.why]);
+        }
+      }
+    }
+  }catch(eSg){}
   return out;
 }
 
@@ -903,6 +915,7 @@ function npCardHTML(row, idx){
   h += npPairsHTML(row.pairs);
   h += npMacroNoteHTML(row);   /* hg-v984 */
   h += npFundingNoteHTML(row);   /* hg-v985 */
+  if (row.signsLine) h += '<div class="np-note"><b>SIGNS.</b> ' + esc(row.signsLine) + '</div>';
   if ((row.floorReasons && row.floorReasons.length) || (row.floorMarks && row.floorMarks.length))
     h += '<div class="np-note"><b>' + (row.demote ? 'STANDS ASIDE — hg-v1434 admission floor.' : 'FLOOR MARK — hg-v1434.') + '</b> '
       + esc((row.floorReasons || []).concat(row.floorMarks || []).join(' · '))
@@ -1012,7 +1025,7 @@ async function runScan(ui){
         var closed = npClosedRows(got.rows || [], 900, now);
         if (closed.length < NP_MIN_15M){ skipped++; continue; }
 
-        var res = npEvaluate({ rows15: closed, venueCost: costFor(item) });
+        var res = npEvaluate({ rows15: closed, sym: item.sym, venueCost: costFor(item) });
         if (!res.ok){
           var stopped = (res.gates && res.gates.length) ? String(res.gates[0]) : 'too few closed bars';
           for (var g = 0; g < res.ledger.length; g++){
@@ -1025,6 +1038,7 @@ async function runScan(ui){
                     setup: res.setup, ledger: res.ledger, pairs: res.pairs,
                     demote: !!res.demote, floorReasons: res.floorReasons || [],
                     floorMarks: res.floorMarks || [], floorAbstained: res.floorAbstained || [],
+                    signsLine: res.signsLine || '',
                     macro: npMacroMark(item.sym, res.setup.dir),
                     funding: npFundingMark(item, res.setup.dir) });
         setStat('scanned ' + scanned + '/' + items.length + ' · ' + rows.length + ' setup(s) so far…');

@@ -164,6 +164,97 @@ var HG_CS_BANNERS = {
   'FINDER-JUDAS': 'MEASURED — n=47 (thin), 31.9% win, -0.319R at 0.20% RT, negative both halves (-0.445/-0.198).',
   'SYNDICATE': 'MEASURED STAND-DOWN — the kline-only relay minted 111 blueprints over 12.1 months: 17.6% win into ~2.2R targets, -4.21R at 0.20% RT, negative in BOTH halves (-5.577/-2.899). Floors were tested and refused (best kept cohort still -1.14R). Blueprints are READS for the news desk, never orders — the desk already sends none.'
 };
+function hgCryptoSignState(withN, against){
+  if (against > 0) return 'against';
+  if (withN > 0) return 'with';
+  return 'unread';
+}
+/* hg-v1482: the three signs on a crypto setup. Technical is the desk's own
+   direction. Sentiment is taker flow, funding, fear and greed, the 25-delta
+   skew. Fundamental is on-chain, term structure, real rates, hashrate, NVT
+   and COT. A neutral print does not vote. Unread is not agreement and is
+   not a verdict — the holdout rejected treating a missing feed as a reason
+   to erase the setup. A sign that printed and is against the trade is. */
+function hgCryptoSigns(dir, sym, rows){
+  var d = String(dir || '').toLowerCase();
+  var out = {
+    technical: (d === 'long' || d === 'short') ? 'with' : 'unread',
+    sentiment: 'unread', fundamental: 'unread',
+    sentimentNames: [], fundamentalNames: [], line: '', why: ''
+  };
+  if (out.technical !== 'with'){
+    out.line = 'technical unread';
+    return out;
+  }
+  var sw = 0, sa = 0, fw = 0, fa = 0;
+  try{
+    var last = rows && rows.length ? rows[rows.length - 1] : null;
+    var vol = last ? +last.v : NaN, tb = last ? +last.tb : NaN;
+    if (vol > 0 && isFinite(tb)){
+      var imb = tb / vol - 0.5;
+      if (Math.abs(imb) > 0.02){
+        var withFlow = d === 'long' ? imb > 0 : imb < 0;
+        if (withFlow) sw++; else sa++;
+        out.sentimentNames.push('taker flow');
+      }
+    }
+  }catch(eTb){}
+  try{
+    var fr = NaN, list = G.S && G.S.tickers, u = String(sym || '').toUpperCase();
+    if (list && u){
+      for (var ti = 0; ti < list.length; ti++){
+        var ts = String(list[ti] && list[ti].symbol || '').toUpperCase();
+        if (ts && (ts === u || ts.indexOf(u) === 0 || u.indexOf(ts) === 0) && isFinite(+list[ti].fundingPct)){
+          fr = +list[ti].fundingPct; break;
+        }
+      }
+    }
+    if (isFinite(fr) && (fr >= 0.05 || fr <= -0.05)){
+      var fundVote = fr >= 0.05 ? 'bear' : 'bull';
+      var want = d === 'long' ? 'bull' : 'bear';
+      if (fundVote === want) sw++; else sa++;
+      out.sentimentNames.push('funding');
+    }
+  }catch(eFr){}
+  try{
+    if (typeof G.hgFundamentalRegime === 'function'){
+      var regime = G.hgFundamentalRegime('btc', {});
+      var legs = regime && regime.legs;
+      var sentKeys = { fng: 1, retail: 1, toptrader: 1, funding: 1, rr25d: 1, oidiv: 1 };
+      var fundKeys = { onchain: 1, term: 1, realrate: 1, hashrate: 1, nvt: 1, cot: 1 };
+      var want2 = d === 'long' ? 'bull' : 'bear';
+      for (var i = 0; i < (legs ? legs.length : 0); i++){
+        var leg = legs[i];
+        if (!leg || leg.info || leg.state !== 'checked') continue;
+        if (leg.vote !== 'bull' && leg.vote !== 'bear') continue;
+        var side = leg.vote === want2;
+        if (sentKeys[leg.key]){
+          if (leg.key === 'funding' && out.sentimentNames.indexOf('funding') >= 0) continue;
+          if (side) sw++; else sa++;
+          out.sentimentNames.push(leg.label || leg.key);
+        } else if (fundKeys[leg.key]){
+          if (side) fw++; else fa++;
+          out.fundamentalNames.push(leg.label || leg.key);
+        }
+      }
+    }
+  }catch(eRg){}
+  out.sentiment = hgCryptoSignState(sw, sa);
+  out.fundamental = hgCryptoSignState(fw, fa);
+  out.line = 'technical with · sentiment ' + out.sentiment
+    + (out.sentimentNames.length ? ' (' + out.sentimentNames.join(', ') + ')' : '')
+    + ' · fundamental ' + out.fundamental
+    + (out.fundamentalNames.length ? ' (' + out.fundamentalNames.join(', ') + ')' : '');
+  if (out.sentiment === 'against' || out.fundamental === 'against'){
+    var bad = [];
+    if (out.sentiment === 'against') bad.push('sentiment against');
+    if (out.fundamental === 'against') bad.push('fundamental against');
+    out.why = 'SIGNS — ' + bad.join('; ') + '. ' + out.line
+      + '. A setup does not form against a sign that printed';
+  }
+  return out;
+}
+
 function hgCryptoSinglesBannerHtml(desk){
   try{
     var key = String(desk || '').toUpperCase().replace(/[^A-Z0-9]/g, '-');
@@ -175,5 +266,6 @@ function hgCryptoSinglesBannerHtml(desk){
 
 G.hgCryptoSinglesFloor = hgCryptoSinglesFloor;
 G.hgCryptoSinglesBannerHtml = hgCryptoSinglesBannerHtml;
+G.hgCryptoSigns = hgCryptoSigns;
 G.HG_CS_FLOOR_VERSION = 'hg-v1434';
 })();

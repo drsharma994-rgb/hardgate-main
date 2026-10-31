@@ -241,6 +241,7 @@ function cvCardHTML(r){
   var floorBlock = ((r.floorReasons && r.floorReasons.length) || (r.floorMarks && r.floorMarks.length))
     ? '<div class="note warn" style="margin-top:6px"><b>' + (r.demote ? 'STANDS ASIDE' : 'FLOOR MARK') + '</b> — '
       + esc((r.floorReasons || []).concat(r.floorMarks || []).join(' · ')) + '</div>' : '';
+  var signsBlock = r.signsLine ? '<div class="note" style="margin-top:6px"><b>SIGNS</b> — ' + esc(r.signsLine) + '</div>' : '';
   var tradeOnclick = '';
   if (isTicket && fin(+r.entry) && fin(+r.stop) && fin(+r.t1)){
     if (typeof W.hgToTradePlanOnclickAttr === 'function'){
@@ -272,7 +273,7 @@ function cvCardHTML(r){
     + (fin(+r.rr) ? ('<span class="k">R:R</span><span>' + pxF(r.rr) + '</span>') : '')
     + '</div>'
     + '<div class="gates">' + cvGateHtml(r) + '</div>'
-    + cvPlanHtml(r) + clr + miss + note + floorBlock + visionHtml + visionOnlySvg
+    + cvPlanHtml(r) + clr + miss + note + signsBlock + floorBlock + visionHtml + visionOnlySvg
     + '<div class="hgchart" id="' + chartId + '"></div>'
     + tradeBtn + bookBtn
     + '</div>';
@@ -484,6 +485,16 @@ async function cvRunScan(opts){
             results[fi].floorReasons = fl.reasons || [];
             results[fi].floorMarks = fl.marks || [];
             results[fi].floorAbstained = fl.abstained || [];
+          }
+          if (typeof W.hgCryptoSigns === 'function' && W.HG_CRYPTO_SIGNS !== false){
+            var cvSg = W.hgCryptoSigns(results[fi].dir, results[fi].sym, results[fi].rows || results[fi].rows4h);
+            if (cvSg){
+              results[fi].signsLine = cvSg.line || '';
+              if (cvSg.why){
+                results[fi].demote = true;
+                results[fi].floorReasons = (results[fi].floorReasons || []).concat([cvSg.why]);
+              }
+            }
           }
         }
       }

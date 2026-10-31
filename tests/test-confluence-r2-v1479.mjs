@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* hg-v1481 — CONFLUENCE r2: the measured plan cut (48), the 48h member-card
+/* hg-v1482 — CONFLUENCE r2: the measured plan cut (48), the 48h member-card
    freshness clause, and the WATCH measured-loss disclosure.
 
    MEASURED BASIS (desks/confluence-r2, 14.3-month census, 2,349 four-hour
@@ -189,15 +189,15 @@ function stubScore(win, score, alertOk){
   const build = fs.readFileSync(path.join(ROOT, 'build-stamp.js'), 'utf8');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok('5.a version shape', /^hg-v\d+$/.test(HG_VER));
-  ok('5.b this pack IS hg-v1481', HG_VER === 'hg-v1481');
+  ok('5.b this pack IS hg-v1482', HG_VER === 'hg-v1482');
   ok('5.c sw cache matches build-stamp', swCacheOk(sw));
-  ok('5.d build-stamp names the hg-v1481 pack', /hg-v1481/.test(build));
+  ok('5.d build-stamp names the hg-v1482 pack', /hg-v1482/.test(build));
   const trend = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
   ok('5.e trendtable.js stamp matches', new RegExp(HG_VER).test(trend));
   const api = fs.readFileSync(path.join(ROOT, 'hg-api-base.js'), 'utf8');
-  ok('5.f hg-api-base version matches', new RegExp("'1481'").test(api));
+  ok('5.f hg-api-base version matches', new RegExp("'1482'").test(api));
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  ok('5.g index.html rides ?v=1481', html.includes('?v=1481'));
+  ok('5.g index.html rides ?v=1482', html.includes('?v=1482'));
   ok('5.h no stale ?v=1459 byte', !html.includes('?v=1459'));
 })();
 

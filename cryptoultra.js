@@ -1108,7 +1108,7 @@ function renderResult(ui, res, src){
     var smcChip = '';
     try{ if (res.smcRow && typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(res.smcRow) || ''; }catch(eSmc){ smcChip = ''; }
     h += '<div class="cu-plan">' + (res.recordOnly ? '<b>RECORD ONLY — NOT A TICKET</b> (not yet measured / measured negative; this is what the rule would have done)<br>' : '') + esc(p.orderType) + ' at the close <b>$' + esc(fmt(p.entry)) + '</b> · STOP <b>$' + esc(fmt(p.stop)) + '</b> (' + esc(fmt(p.stopAtr, 2)) + '×ATR) · TP1 <b>$' + esc(fmt(p.t1)) + '</b> (' + p.rr1 + 'R) · TP2 <b>$' + esc(fmt(p.t2)) + '</b> (' + p.rr2 + 'R) · expires after ' + p.timeoutBars + ' bars (6h)'
-      + '<br>At TP1 close 50%, stop to breakeven ($' + esc(fmt(p.entry)) + '); runner to TP2. A 15m close beyond the stop kills the idea.' + (p.floorNote ? '<br>' + esc(p.floorNote) : '') + (smcChip ? '<br>' + smcChip : '') + '</div>';
+      + '<br>At TP1 close 50%, stop to breakeven ($' + esc(fmt(p.entry)) + '); runner to TP2. A 15m close beyond the stop kills the idea.' + (p.floorNote ? '<br>' + esc(p.floorNote) : '') + (res.signsLine ? '<br><b>SIGNS</b> — ' + esc(res.signsLine) : '') + (smcChip ? '<br>' + smcChip : '') + '</div>';
     if (res.gates.length) h += '<div class="cu-gate">' + esc(res.gates.join(' · ')) + '</div>';
   }
   ui.cards.innerHTML = h + voteTableHTML(res) + evidenceHTML();
@@ -1145,6 +1145,19 @@ async function runScan(ui){
     if (!f.rows15m.length){ setStat(ui, 'feeds failed — no BTCUSDT klines from Binance; nothing fabricated', true); return 'error: no feed'; }
     var now = Date.now();
     var res = cryptoUltraEngine({ rows15m: f.rows15m, rows1h: f.rows1h, now: now, venueCost: venueCost() });
+    try{
+      if (res && typeof W.hgCryptoSigns === 'function' && W.HG_CRYPTO_SIGNS !== false){
+        var cuSg = W.hgCryptoSigns(res.dir, 'BTCUSDT', f.rows15m);
+        if (cuSg){
+          res.signsLine = cuSg.line || '';
+          if (cuSg.why && res.fire){
+            res.fire = false;
+            res.recordOnly = true;
+            res.gates = (res.gates || []).concat([cuSg.why]);
+          }
+        }
+      }
+    }catch(eSg){}
     /* hg-v729: SMC context on the priced plan — record-only annotation, never a gate.
        A synthetic row carries the plan's geometry (plus the symbol the plan has no field
        for) so the plan object itself — and the cryptoUltraState() snapshot that clones it —
