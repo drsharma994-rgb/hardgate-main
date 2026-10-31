@@ -1,0 +1,386 @@
+{
+ "meta": {
+  "generated": "2026-10-31T11:49:21.373Z",
+  "symbols": [
+   "BTCUSDT",
+   "ETHUSDT",
+   "SOLUSDT",
+   "BNBUSDT",
+   "XRPUSDT",
+   "ADAUSDT",
+   "DOGEUSDT",
+   "LINKUSDT",
+   "AVAXUSDT",
+   "DOTUSDT",
+   "LTCUSDT",
+   "NEARUSDT"
+  ],
+  "bars": 2200,
+  "evaluated": 196,
+  "windows": [
+   "2025-12-03 → 2026-02-24",
+   "2026-02-24 → 2026-05-18",
+   "2026-05-18 → 2026-08-09",
+   "2026-08-09 → 2026-10-31"
+  ],
+  "searchWindows": "W1-W3",
+  "heldOut": "W4",
+  "cost": 0.002
+ },
+ "baseline": {
+  "all": {
+   "n": 2131,
+   "win": 0.2763960581886438,
+   "net": -0.028454278935138237
+  },
+  "windows": [
+   {
+    "n": 587,
+    "win": 0.3049403747870528,
+    "net": 0.1166214743953621
+   },
+   {
+    "n": 454,
+    "win": 0.21806167400881057,
+    "net": -0.23045574494312002
+   },
+   {
+    "n": 536,
+    "win": 0.32276119402985076,
+    "net": 0.0940432032379465
+   },
+   {
+    "n": 554,
+    "win": 0.2490974729241877,
+    "net": -0.13515004081628118
+   }
+  ]
+ },
+ "path": [
+  {
+   "move": "baseline (desk as shipped)",
+   "cfg": {
+    "legs": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "majority": 2,
+    "allowClean": true,
+    "allowConv": true,
+    "minGates": 0,
+    "skipMomAgainst": false,
+    "skipVolAgainst": false,
+    "skipChop": false,
+    "skipRsiDiv": false,
+    "skipVolDiv": false,
+    "skipCandleAgainst": false,
+    "perfectOnly": false,
+    "freshAlign": false,
+    "score5Only": false,
+    "adxWith": false,
+    "tqWith": false,
+    "volWithReq": false,
+    "momWithReq": false,
+    "cascadeWithReq": false,
+    "session": null,
+    "geom": 0
+   },
+   "search": {
+    "n": 1577,
+    "win": 0.2859860494610019,
+    "net": 0.009027935447964642
+   },
+   "ws": [
+    {
+     "n": 587,
+     "win": 0.3049403747870528,
+     "net": 0.1166214743953621
+    },
+    {
+     "n": 454,
+     "win": 0.21806167400881057,
+     "net": -0.23045574494312002
+    },
+    {
+     "n": 536,
+     "win": 0.32276119402985076,
+     "net": 0.0940432032379465
+    }
+   ]
+  },
+  {
+   "move": "+adxWith",
+   "cfg": {
+    "legs": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "majority": 2,
+    "allowClean": true,
+    "allowConv": true,
+    "minGates": 0,
+    "skipMomAgainst": false,
+    "skipVolAgainst": false,
+    "skipChop": false,
+    "skipRsiDiv": false,
+    "skipVolDiv": false,
+    "skipCandleAgainst": false,
+    "perfectOnly": false,
+    "freshAlign": false,
+    "score5Only": false,
+    "adxWith": true,
+    "tqWith": false,
+    "volWithReq": false,
+    "momWithReq": false,
+    "cascadeWithReq": false,
+    "session": null,
+    "geom": 0
+   },
+   "search": {
+    "n": 946,
+    "win": 0.3097251585623679,
+    "net": 0.070747271494035
+   },
+   "ws": [
+    {
+     "n": 467,
+     "win": 0.30620985010706636,
+     "net": 0.10147233664228764
+    },
+    {
+     "n": 164,
+     "win": 0.25609756097560976,
+     "net": -0.12190994254895703
+    },
+    {
+     "n": 315,
+     "win": 0.34285714285714286,
+     "net": 0.1255002165061516
+    }
+   ]
+  },
+  {
+   "move": "+tqWith",
+   "cfg": {
+    "legs": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "majority": 2,
+    "allowClean": true,
+    "allowConv": true,
+    "minGates": 0,
+    "skipMomAgainst": false,
+    "skipVolAgainst": false,
+    "skipChop": false,
+    "skipRsiDiv": false,
+    "skipVolDiv": false,
+    "skipCandleAgainst": false,
+    "perfectOnly": false,
+    "freshAlign": false,
+    "score5Only": false,
+    "adxWith": true,
+    "tqWith": true,
+    "volWithReq": false,
+    "momWithReq": false,
+    "cascadeWithReq": false,
+    "session": null,
+    "geom": 0
+   },
+   "search": {
+    "n": 203,
+    "win": 0.37438423645320196,
+    "net": 0.218911419784571
+   },
+   "ws": [
+    {
+     "n": 121,
+     "win": 0.33884297520661155,
+     "net": 0.13290026586353518
+    },
+    {
+     "n": 22,
+     "win": 0.36363636363636365,
+     "net": 0.11933530733438126
+    },
+    {
+     "n": 60,
+     "win": 0.45,
+     "net": 0.42887848809039636
+    }
+   ]
+  },
+  {
+   "move": "geom=stop1.25x t1 2R",
+   "cfg": {
+    "legs": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "majority": 2,
+    "allowClean": true,
+    "allowConv": true,
+    "minGates": 0,
+    "skipMomAgainst": false,
+    "skipVolAgainst": false,
+    "skipChop": false,
+    "skipRsiDiv": false,
+    "skipVolDiv": false,
+    "skipCandleAgainst": false,
+    "perfectOnly": false,
+    "freshAlign": false,
+    "score5Only": false,
+    "adxWith": true,
+    "tqWith": true,
+    "volWithReq": false,
+    "momWithReq": false,
+    "cascadeWithReq": false,
+    "session": null,
+    "geom": 10
+   },
+   "search": {
+    "n": 193,
+    "win": 0.41450777202072536,
+    "net": 0.23079100684136458
+   },
+   "ws": [
+    {
+     "n": 116,
+     "win": 0.3793103448275862,
+     "net": 0.147242236866232
+    },
+    {
+     "n": 22,
+     "win": 0.4090909090909091,
+     "net": 0.2715795139966747
+    },
+    {
+     "n": 55,
+     "win": 0.4909090909090909,
+     "net": 0.39068755519952
+    }
+   ]
+  },
+  {
+   "move": "remove h4Cascade",
+   "cfg": {
+    "legs": [
+     1,
+     1,
+     0,
+     1,
+     1
+    ],
+    "majority": 2,
+    "allowClean": true,
+    "allowConv": true,
+    "minGates": 0,
+    "skipMomAgainst": false,
+    "skipVolAgainst": false,
+    "skipChop": false,
+    "skipRsiDiv": false,
+    "skipVolDiv": false,
+    "skipCandleAgainst": false,
+    "perfectOnly": false,
+    "freshAlign": false,
+    "score5Only": false,
+    "adxWith": true,
+    "tqWith": true,
+    "volWithReq": false,
+    "momWithReq": false,
+    "cascadeWithReq": false,
+    "session": null,
+    "geom": 10
+   },
+   "search": {
+    "n": 192,
+    "win": 0.4166666666666667,
+    "net": 0.23746391029792738
+   },
+   "ws": [
+    {
+     "n": 115,
+     "win": 0.3826086956521739,
+     "net": 0.15765657333305746
+    },
+    {
+     "n": 22,
+     "win": 0.4090909090909091,
+     "net": 0.2715795139966747
+    },
+    {
+     "n": 55,
+     "win": 0.4909090909090909,
+     "net": 0.39068755519952
+    }
+   ]
+  }
+ ],
+ "final": {
+  "config": {
+   "legs": [
+    1,
+    1,
+    0,
+    1,
+    1
+   ],
+   "majority": 2,
+   "allowClean": true,
+   "allowConv": true,
+   "minGates": 0,
+   "skipMomAgainst": false,
+   "skipVolAgainst": false,
+   "skipChop": false,
+   "skipRsiDiv": false,
+   "skipVolDiv": false,
+   "skipCandleAgainst": false,
+   "perfectOnly": false,
+   "freshAlign": false,
+   "score5Only": false,
+   "adxWith": true,
+   "tqWith": true,
+   "volWithReq": false,
+   "momWithReq": false,
+   "cascadeWithReq": false,
+   "session": null,
+   "geom": 10
+  },
+  "description": "legs -h4Cascade · maj>=2 · clean+conv · adxWith · tqWith · geom:stop1.25x t1 2R",
+  "search": {
+   "n": 192,
+   "win": 0.4166666666666667,
+   "net": 0.23746391029792738
+  },
+  "heldOut": {
+   "n": 71,
+   "win": 0.39436619718309857,
+   "net": 0.11900302488767298
+  },
+  "heldOutBaseline": {
+   "n": 554,
+   "win": 0.2490974729241877,
+   "net": -0.13515004081628118
+  },
+  "all": {
+   "n": 263,
+   "win": 0.41064638783269963,
+   "net": 0.20548397545333402
+  },
+  "z": 4.52,
+  "pTwoSided": 0,
+  "confirmed": true
+ }
+}
