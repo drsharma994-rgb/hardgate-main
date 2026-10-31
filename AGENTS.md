@@ -1,3 +1,10 @@
+# STANDING RULE (from the user, 2026-11-01): EVERY commit bumps the version stamp.
+# The triad moves together, always: build-stamp.js (version + pack line + built),
+# sw.js (HG_CACHE), and every ?v= pin (index.html, trendtable.js + its header,
+# hg-api-base.js data-v + loaders). No exceptions for test-only, tooling or
+# merge commits — the stamp is how the user sees the repo move. Verify with
+# scripts/check-cache-bump.mjs before pushing.
+
 ### GOLD CONFLUENCE r2 — the stack re-cut to the measured 48, the 48h member freshness clause, the WATCH honesty line — hg-v1479
 - **The census came first (desks/confluence-r2; hg-v966 both-halves everywhere, XM 0.020% / PAXG-taker 0.26% RT).** The hg-v1441 harness re-run on the shipped tree (2,349 four-hour scans, 2025-09-10→2026-10-29, member books verbatim, the REAL hgGoldConfluenceBuild + the REAL hgGoldConfluenceScore in one vm): the v1452 widening roughly doubled the book — **READY n=36 settled, +0.280R XM both halves (+0.470/+0.090); WATCH n=78, −0.735R both halves (−0.545/−0.926)**. With the tape in hand — the live gather path — **the v1454 stack stood aside on 100% of formed plans: READY 0 of 2,349 scans.** Every formed plan scores 28–64 against an analytic ceiling of ~66 for stratKey 'confluence' (no location/trigger leg matches, no sweep/volume leg fires), below the 68 watch cut and the 78 setup bar. The v1454 entry said "not re-walked" — this is that walk.
 - **The stack is a real ranking input, badly cut.** Within formed plans corr(score, netR@XM) = +0.54: **below 48 settled −0.452R both halves (n=15); 48 and up +0.802R both halves (n=21)** — the widest cut also both-halves positive at PAXG taker (+0.354R; plateau 44–56, not a knife-edge).
