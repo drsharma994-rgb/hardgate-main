@@ -138,6 +138,26 @@ function labelOf(s){
   return String(s.layerLabel || s.nativeStrategy || s.strategy || s.kind || 'unlabeled');
 }
 function scanLane(W, bars, lane, out, counters){
+  /* hg-v1501: the gold-catalog indicator stack on the lane's own tape — the
+     same reads the live desk's ctx carries, recorded per candidate so the lab
+     can sweep the latest indicators as admission clauses on THIS book. */
+  let __ir = null;
+  try { __ir = W.hgGoldIndicatorReads(lane === 'swing' ? bars.rows4h : bars.rows15m, { rows1d: bars.rows1d }) || null; } catch (eIr) { __ir = null; }
+  const reg = (__ir && __ir.ok === true) ? {
+    vrs: __ir.vrState || null, ents: __ir.entropyState || null,
+    rsi: isFinite(__ir.rsi14) ? +__ir.rsi14.toFixed(2) : null,
+    adxs: __ir.adxState || null,
+    ker: isFinite(__ir.ker20) ? +__ir.ker20.toFixed(3) : null,
+    sqz: __ir.squeeze || null,
+    pdi: isFinite(__ir.plusDI) ? +__ir.plusDI.toFixed(2) : null,
+    mdi: isFinite(__ir.minusDI) ? +__ir.minusDI.toFixed(2) : null,
+    bbB: isFinite(__ir.bbPctB) ? +__ir.bbPctB.toFixed(3) : null,
+    hv: isFinite(__ir.hv20) ? +__ir.hv20.toFixed(5) : null,
+    hvMed: isFinite(__ir.hv20Med) ? +__ir.hv20Med.toFixed(5) : null,
+    volR: isFinite(__ir.volRatio) ? +__ir.volRatio.toFixed(3) : null,
+    tsmom: isFinite(__ir.tsmom96) ? +__ir.tsmom96.toFixed(4) : null,
+    sma50: isFinite(__ir.sma50) ? +__ir.sma50.toFixed(2) : null
+  } : null;
   const srcLabel = 'GP-BT';
   const scanOpts = { now: bars.now || Date.now(), macro: null, spot: null, levels: {} };
   const scanCtx = { macro: null, spot: null, now: bars.now || Date.now(), news: null,
@@ -159,7 +179,7 @@ function scanLane(W, bars, lane, out, counters){
     if (!long && !(stop > entry && t1 < entry)) { counters.badGeometry++; continue; }
     out.push({
       i: bars.i, t: bars.t * 1000, lane,   /* bars carry SECONDS (the harness convention); the lab's clock is ms */
-      label: labelOf(s),
+      label: labelOf(s), reg,
       pine: s.kind === 'confluence' || !!s.layerLabel,
       recordOnly: !!s.recordOnly,
       demoted: !!s.demoted || !!s.mintDemoted,
@@ -258,6 +278,7 @@ function baseConfig(records){
   for (const r of records) on[r.lane + '|' + r.label] = true;
   return {
     on, dirLong: true, dirShort: true,
+    reg: {},                      /* hg-v1501: the indicator clauses */
     lanes: { scalp: true, swing: true },
     pineOnly: false, nativeOnly: false,
     admitRecordOnly: false,          /* shipped: the record-only layers stay withheld */
@@ -274,6 +295,21 @@ function selected(cfg, r){
   if (cfg.nativeOnly && r.pine) return false;
   if (!cfg.admitRecordOnly && r.recordOnly) return false;
   if (cfg.skipDemoted && r.demoted) return false;
+  const reg = r.reg || {};
+  if (cfg.reg.skipVrMeanrev && reg.vrs === 'MEANREV') return false;
+  if (cfg.reg.requireVrTrend && reg.vrs !== 'TRENDING') return false;
+  if (cfg.reg.skipEntropyDisorder && reg.ents === 'DISORDER') return false;
+  if (cfg.reg.requireEntropyOrdered && reg.ents !== 'ORDERED') return false;
+  if (cfg.reg.rsiWith && isFinite(reg.rsi) && ((r.dir === 'long' && reg.rsi <= 50) || (r.dir === 'short' && reg.rsi >= 50))) return false;
+  if (cfg.reg.adxTrending && reg.adxs !== 'TRENDING') return false;
+  if (cfg.reg.kerTrend && !(isFinite(reg.ker) && reg.ker >= 0.6)) return false;
+  if (cfg.reg.dmiWith && isFinite(reg.pdi) && isFinite(reg.mdi) && ((r.dir === 'long' && reg.pdi <= reg.mdi) || (r.dir === 'short' && reg.mdi <= reg.pdi))) return false;
+  if (cfg.reg.skipBbExtreme && isFinite(reg.bbB) && ((r.dir === 'long' && reg.bbB > 0.95) || (r.dir === 'short' && reg.bbB < 0.05))) return false;
+  if (cfg.reg.volAbove && !(isFinite(reg.volR) && reg.volR >= 1)) return false;
+  if (cfg.reg.skipHvSpike && isFinite(reg.hv) && isFinite(reg.hvMed) && reg.hvMed > 0 && reg.hv > reg.hvMed * 1.25) return false;
+  if (cfg.reg.tsmomWith && isFinite(reg.tsmom) && ((r.dir === 'long' && reg.tsmom <= 0) || (r.dir === 'short' && reg.tsmom >= 0))) return false;
+  if (cfg.reg.sma50With && isFinite(reg.sma50) && ((r.dir === 'long' && r.entry < reg.sma50) || (r.dir === 'short' && r.entry > reg.sma50))) return false;
+  if (cfg.reg.squeezeOn && reg.sqz !== 'ON') return false;
   return true;
 }
 function describe(cfg){
@@ -394,15 +430,47 @@ if (isMain) (async () => {
   moves.push({ label: 'native only', apply: c => { c.nativeOnly = !c.nativeOnly; c.pineOnly = c.nativeOnly ? false : c.pineOnly; } });
   moves.push({ label: 'record-only ADMITTED', apply: c => { c.admitRecordOnly = !c.admitRecordOnly; } });
   moves.push({ label: 'skip demoted', apply: c => { c.skipDemoted = !c.skipDemoted; } });
+  for (const k of ['skipVrMeanrev', 'requireVrTrend', 'skipEntropyDisorder', 'requireEntropyOrdered', 'rsiWith', 'adxTrending', 'kerTrend', 'dmiWith', 'skipBbExtreme', 'volAbove', 'skipHvSpike', 'tsmomWith', 'sma50With', 'squeezeOn'])
+    moves.push({ label: k, apply: c => { c.reg[k] = !c.reg[k]; } });
+  moves.push({ label: 'record-only ADMITTED', apply: c => { c.admitRecordOnly = !c.admitRecordOnly; } });
   moves.push({ label: 'geom next', apply: c => { c.geom = (c.geom + 1) % GEOMS.length; } });
   moves.push({ label: 'geom prev', apply: c => { c.geom = (c.geom + GEOMS.length - 1) % GEOMS.length; } });
   moves.push({ label: 'geom plan', apply: c => { c.geom = 0; } });
+
+  /* hg-v1501: THE INDICATOR SWEEP on the pine book — every latest-indicator
+     clause measured ALONE on the three search windows and the held-out
+     window, before the greedy loop mixes anything. Recorded in the artifact
+     (indicatorSweep) so the honest nulls are as durable as the winners. */
+  let evaluated = 0;
+  const indicatorSweep = [];
+  {
+    const CLAUSES = ['skipVrMeanrev', 'requireVrTrend', 'skipEntropyDisorder', 'requireEntropyOrdered', 'rsiWith', 'adxTrending', 'kerTrend', 'dmiWith', 'skipBbExtreme', 'volAbove', 'skipHvSpike', 'tsmomWith', 'sma50With', 'squeezeOn'];
+    const baseW = base.win;
+    log('\nINDICATOR SWEEP — each clause alone vs the baseline:');
+    for (const k of CLAUSES){
+      const cand = JSON.parse(JSON.stringify(cur));
+      cand.reg[k] = true;
+      const w = score(cand).win;
+      evaluated++;
+      const clears = w.slice(0, 3).every((x, i) => x.win != null && x.win >= baseW[i].win - 1e-12)
+        && w[3].win != null && w[3].win >= baseW[3].win - 1e-12;
+      indicatorSweep.push({ clause: k, windows: w, clears });
+      log('  ' + k.padEnd(24) + ' ' + w.map(x => (x.win == null ? '—' : (100 * x.win).toFixed(1) + '%/' + x.n + '/' + (x.net == null ? '—' : x.net.toFixed(2)))).join('  ') + (clears ? '  <-- CLEARS' : ''));
+    }
+    const roC = JSON.parse(JSON.stringify(cur));
+    roC.admitRecordOnly = true;
+    const roW = score(roC).win;
+    evaluated++;
+    const roClears = roW.slice(0, 3).every((x, i) => x.win != null && x.win >= baseW[i].win - 1e-12)
+      && roW[3].win != null && roW[3].win >= baseW[3].win - 1e-12;
+    indicatorSweep.push({ clause: 'record-only ADMITTED', windows: roW, clears: roClears });
+    log('  ' + 'record-only ADMITTED'.padEnd(24) + ' ' + roW.map(x => (x.win == null ? '—' : (100 * x.win).toFixed(1) + '%/' + x.n + '/' + (x.net == null ? '—' : x.net.toFixed(2)))).join('  ') + (roClears ? '  <-- CLEARS' : ''));
+  }
 
   const okMove = (res) => res.win.every((w, i) => i < 3 ? (w.win != null && w.n >= 40 && w.win >= base.win[i].win - 1e-12) : true)
     && res.searchAll.n >= 0.35 * base.searchAll.n
     && res.searchAll.net >= base.searchAll.net - 1e-12;
 
-  let evaluated = 0;
   const history = [];
   for (let pass = 0; pass < PASSES; pass++){
     let bestMove = null, bestRes = null;
@@ -497,7 +565,8 @@ if (isMain) (async () => {
     path: history,
     final: { config: cur, description: describe(cur), search: base.searchAll, heldOut: confNew, heldOutBaseline: confBase, all: fAll, z: +z.toFixed(2), pTwoSided: +zP.toFixed(4), confirmed },
     postmortem,
-    directionCohort: dirCohort
+    directionCohort: dirCohort,
+    indicatorSweep
   };
   fs.writeFileSync(LAB_OUT, JSON.stringify(report, null, 1));
 
