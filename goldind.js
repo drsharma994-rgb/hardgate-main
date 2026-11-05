@@ -2926,6 +2926,35 @@ function hgGoldSetLabLongDemote(on){
 }
 function hgGoldLabLongDemoteOn(){ return HG_GS_LAB_LONG_DEMOTE !== false; }
 
+/* hg-v1493: THE MEASURED SQUEEZE BOOST lever — the GOLD SCALP win-rate lab's
+   indicator sweep (scripts/goldscalp-winrate-lab-results.json,
+   indicatorSweep): fifteen latest-indicator clauses measured alone on the
+   walk; the ONE that cleared the bar is the squeeze-ON cohort — the BB/KC
+   volatility-compression state of the gold-catalog stack (hg-v1471's shared
+   reads): +0.19R/trade over n=196 on the three search windows and +0.36R
+   over n=74 on the held-out window, vs the book's −0.004R. Squeeze-ON rows
+   get a measured +2 rank boost and the stamp; everything else unchanged.
+   Lever HG_GS_LAB_SQUEEZE (default ON; localStorage hg_gs_lab_squeeze=0
+   removes the boost). */
+var HG_GS_LAB_SQUEEZE_LS = 'hg_gs_lab_squeeze';
+var HG_GS_LAB_SQUEEZE = true;
+function hgGoldLabSqueezeInit(){
+  try{
+    var ovr = (typeof window !== 'undefined') ? window.HG_GS_LAB_SQUEEZE : undefined;
+    if (ovr === true || ovr === false){ HG_GS_LAB_SQUEEZE = ovr; return HG_GS_LAB_SQUEEZE; }
+    var v = null;
+    try { v = localStorage.getItem(HG_GS_LAB_SQUEEZE_LS); } catch (e){ v = null; }
+    HG_GS_LAB_SQUEEZE = !(v === '0' || v === 'false');
+  }catch(e){ HG_GS_LAB_SQUEEZE = true; }
+  return HG_GS_LAB_SQUEEZE;
+}
+function hgGoldSetLabSqueeze(on){
+  HG_GS_LAB_SQUEEZE = (on !== false);
+  try { localStorage.setItem(HG_GS_LAB_SQUEEZE_LS, HG_GS_LAB_SQUEEZE ? '1' : '0'); } catch (e){}
+  return HG_GS_LAB_SQUEEZE;
+}
+function hgGoldLabSqueezeOn(){ return HG_GS_LAB_SQUEEZE !== false; }
+
 /* The panel. Every figure comes from the generated literal, so nothing here
    can drift from the walk. '' when the literal is absent — never a
    zero-filled panel, which would read as a measurement. */
@@ -6629,6 +6658,26 @@ function goldRankSetups(cands, ctx){
         parts.push({ label: 'replay EDGE PREFER +' + c.edgeBoost + ' (fee-survivor kind)', pts: c.edgeBoost });
         tally += c.edgeBoost;
       }
+      /* hg-v1493: THE MEASURED SQUEEZE BOOST — the win-rate lab's indicator
+         sweep (scripts/goldscalp-winrate-lab-results.json, indicatorSweep):
+         the squeeze-ON cohort measured +0.19R/trade over n=196 on the search
+         windows and +0.36R over n=74 held-out, vs the book's −0.004R — the
+         one latest indicator that cleared the bar alone. indReads is computed
+         once per scan (hgGoldIndicatorReads on ctx.rows15m), in scope here.
+         Lever HG_GS_LAB_SQUEEZE. */
+      try{
+        if (HG_GS_LAB_SQUEEZE && indReads && indReads.squeeze === 'ON' && !c.demoted){
+          /* RECORD-ONLY measured mark (the hg-v1471 marks-never-gates shape):
+             the cohort is promising (+0.19R search / +0.36R held-out) but thin
+             (n=196/74) — promoting it to a rank boost needs its own re-walk
+             with the catalog loaded in the harness boot (this pack adds that)
+             and the re-pin cycle that follows. The stamp rides the card and
+             the ledger; the rank arithmetic is untouched. */
+          parts.push({ label: 'LAB SQUEEZE ON — measured +0.19R search / +0.36R held-out (hg-v1493 indicator sweep; record-only)', pts: 0 });
+          if (!Array.isArray(c.stamps)) c.stamps = [];
+          if (c.stamps.indexOf('LAB SQUEEZE ON') < 0) c.stamps.push('LAB SQUEEZE ON');
+        }
+      }catch(eSq){}
       /* (1) OFF-SESSION tally bar: demoted off-session candidates must clear
          +2 on STRUCTURAL confluence (agreeing reads + killzone weight only).
          Macro/news/positioning penalties shrink the displayed tally and can
@@ -18521,7 +18570,10 @@ W.hgGoldSessionSepPanelHtml = hgGoldSessionSepPanelHtml;
 W.hgGoldSetOffSessionDemote = hgGoldSetOffSessionDemote;
 W.hgGoldOffSessionDemoteOn = hgGoldOffSessionDemoteOn;
 W.hgGoldOffSessionDemoteInit = hgGoldOffSessionDemoteInit;
-W.hgGoldSetLabLongDemote = hgGoldSetLabLongDemote;   /* hg-v1488 the measured direction book */
+W.hgGoldSetLabLongDemote = hgGoldSetLabLongDemote;
+W.hgGoldSetLabSqueeze = hgGoldSetLabSqueeze;   /* hg-v1493 the measured squeeze boost */
+W.hgGoldLabSqueezeOn = hgGoldLabSqueezeOn;
+W.hgGoldLabSqueezeInit = hgGoldLabSqueezeInit;   /* hg-v1488 the measured direction book */
 W.hgGoldLabLongDemoteOn = hgGoldLabLongDemoteOn;
 W.hgGoldLabLongDemoteInit = hgGoldLabLongDemoteInit;
 W.HG_GOLD_EXACT_TWIN = HG_GOLD_EXACT_TWIN;

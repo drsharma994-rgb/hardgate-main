@@ -188,7 +188,20 @@ function walkRecords(W, m15, h1, h4, d1){
       rsi: isFinite(ir.rsi14) ? +ir.rsi14.toFixed(2) : null,
       adx: isFinite(ir.adx) ? +ir.adx.toFixed(2) : null, adxs: ir.adxState || null,
       ker: isFinite(ir.ker20) ? +ir.ker20.toFixed(3) : null,
-      sqz: ir.squeeze || null
+      sqz: ir.squeeze || null,
+      /* hg-v1493: the REST of the gold-catalog indicator stack, recorded so the
+         lab can measure every latest indicator as an admission clause */
+      pdi: isFinite(ir.plusDI) ? +ir.plusDI.toFixed(2) : null,
+      mdi: isFinite(ir.minusDI) ? +ir.minusDI.toFixed(2) : null,
+      bbB: isFinite(ir.bbPctB) ? +ir.bbPctB.toFixed(3) : null,
+      bbW: isFinite(ir.bbWidthPct) ? +ir.bbWidthPct.toFixed(2) : null,
+      hv: isFinite(ir.hv20) ? +ir.hv20.toFixed(5) : null,
+      hvMed: isFinite(ir.hv20Med) ? +ir.hv20Med.toFixed(5) : null,
+      park: isFinite(ir.park20) ? +ir.park20.toFixed(5) : null,
+      parkMed: isFinite(ir.park20Med) ? +ir.park20Med.toFixed(5) : null,
+      volR: isFinite(ir.volRatio) ? +ir.volRatio.toFixed(3) : null,
+      tsmom: isFinite(ir.tsmom96) ? +ir.tsmom96.toFixed(4) : null,
+      sma50: isFinite(ir.sma50) ? +ir.sma50.toFixed(2) : null
     } : null;
     const take = (c, shadow) => {
       if (!c || (c.dir !== 'long' && c.dir !== 'short')) return;
@@ -303,6 +316,14 @@ function selected(cfg, r){
   if (cfg.reg.adxTrending && !(reg.adxs === 'TRENDING')) return false;
   if (cfg.reg.kerTrend && !(isFinite(reg.ker) && reg.ker >= 0.6)) return false;
   if (cfg.reg.squeezeOff && reg.sqz && String(reg.sqz).indexOf('OFF') < 0) return false;
+  /* hg-v1493: the latest-indicator clauses, each a measured admission filter */
+  if (cfg.reg.dmiWith && isFinite(reg.pdi) && isFinite(reg.mdi) && ((r.dir === 'long' && reg.pdi <= reg.mdi) || (r.dir === 'short' && reg.mdi <= reg.pdi))) return false;
+  if (cfg.reg.skipBbExtreme && isFinite(reg.bbB) && ((r.dir === 'long' && reg.bbB > 0.95) || (r.dir === 'short' && reg.bbB < 0.05))) return false;
+  if (cfg.reg.volAbove && !(isFinite(reg.volR) && reg.volR >= 1)) return false;
+  if (cfg.reg.skipHvSpike && isFinite(reg.hv) && isFinite(reg.hvMed) && reg.hvMed > 0 && reg.hv > reg.hvMed * 1.25) return false;
+  if (cfg.reg.tsmomWith && isFinite(reg.tsmom) && ((r.dir === 'long' && reg.tsmom <= 0) || (r.dir === 'short' && reg.tsmom >= 0))) return false;
+  if (cfg.reg.sma50With && isFinite(reg.sma50) && ((r.dir === 'long' && r.entry < reg.sma50) || (r.dir === 'short' && r.entry > reg.sma50))) return false;
+  if (cfg.reg.squeezeOn && reg.sqz && String(reg.sqz).indexOf('ON') < 0) return false;
   if (cfg.mpOnly && !r.mp) return false;
   if (cfg.minStopAtr > 0 && !(isFinite(r.stopAtr) && r.stopAtr >= cfg.minStopAtr)) return false;
   if (cfg.maxStopAtr > 0 && !(isFinite(r.stopAtr) && r.stopAtr <= cfg.maxStopAtr)) return false;
@@ -411,7 +432,8 @@ if (isMain) (async () => {
     moves.push({ label: k, apply: c => { c.kz[k] = !c.kz[k]; } });
   moves.push({ label: 'skip goldShut', apply: c => { c.skipGoldShut = !c.skipGoldShut; } });
   for (const label of STAMP_CLAUSES) moves.push({ label, apply: c => { c.stamps[label] = !c.stamps[label]; } });
-  for (const k of ['skipVrMeanrev', 'requireVrTrend', 'skipEntropyDisorder', 'requireEntropyOrdered', 'rsiWith', 'adxTrending', 'kerTrend', 'squeezeOff'])
+  for (const k of ['skipVrMeanrev', 'requireVrTrend', 'skipEntropyDisorder', 'requireEntropyOrdered', 'rsiWith', 'adxTrending', 'kerTrend', 'squeezeOff',
+                   'dmiWith', 'skipBbExtreme', 'volAbove', 'skipHvSpike', 'tsmomWith', 'sma50With', 'squeezeOn'])
     moves.push({ label: k, apply: c => { c.reg[k] = !c.reg[k]; } });
   moves.push({ label: 'MP only', apply: c => { c.mpOnly = !c.mpOnly; } });
   const atrSteps = [0, 0.75, 1, 1.25, 1.5, 2];
@@ -431,6 +453,30 @@ if (isMain) (async () => {
     && res.searchAll.net >= base.searchAll.net - 1e-12;
 
   let evaluated = 0;
+
+  /* the INDICATOR SWEEP, first: every latest-indicator clause measured ALONE
+     on all four windows, before the greedy loop mixes them with strategy
+     moves — the honest way to answer "is this indicator worth admitting" */
+  const indicatorSweep = [];
+  {
+    log('\nINDICATOR SWEEP — each clause alone vs the baseline:');
+    const regMoves = moves.filter(m => /^(skip|require)(Vr|Entropy)|^(rsiWith|adxTrending|kerTrend|squeezeOff|dmiWith|skipBbExtreme|volAbove|skipHvSpike|tsmomWith|sma50With|squeezeOn)$/.test(m.label));
+    for (const mv of regMoves){
+      const cand = JSON.parse(JSON.stringify(cur));
+      mv.apply(cand);
+      const res = score(cand);
+      evaluated++;
+      const better = res.searchAll.win > base.searchAll.win + 1e-12 && res.searchAll.net >= base.searchAll.net - 1e-12;
+      indicatorSweep.push({ clause: mv.label, search: res.searchAll, heldOut: res.win[3], improves: better });
+      log('  ' + mv.label.padEnd(22) + ' W1-W3: n=' + String(res.searchAll.n).padStart(5)
+        + ' win=' + (res.searchAll.win == null ? '—' : (100 * res.searchAll.win).toFixed(1) + '%')
+        + ' net=' + (res.searchAll.net == null ? '—' : res.searchAll.net.toFixed(3) + 'R')
+        + '  W4: n=' + res.win[3].n + ' win=' + (res.win[3].win == null ? '—' : (100 * res.win[3].win).toFixed(1) + '%')
+        + ' net=' + (res.win[3].net == null ? '—' : res.win[3].net.toFixed(3) + 'R')
+        + (better ? '  <— improves' : ''));
+    }
+  }
+
   const history = [];
   for (let pass = 0; pass < PASSES; pass++){
     let bestMove = null, bestRes = null;
@@ -508,7 +554,8 @@ if (isMain) (async () => {
     baseline: { all: score(baseConfig(data.records)).all, description: describe(baseConfig(data.records)) },
     path: history,
     final: { config: cur, description: describe(cur), search: base.searchAll, heldOut: confNew, heldOutBaseline: confBase, all: fAll, z: +z.toFixed(2), pTwoSided: +zP.toFixed(4), confirmed },
-    postmortem
+    postmortem,
+    indicatorSweep
   };
   fs.writeFileSync(LAB_OUT, JSON.stringify(report, (k, v) => (k === 'trades' ? undefined : v), 1));
 

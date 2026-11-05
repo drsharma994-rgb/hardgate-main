@@ -869,6 +869,7 @@ function hgGpSetLabDemote(on){
   return HG_GP_LAB_DEMOTE;
 }
 function hgGpLabDemoteOn(){ return HG_GP_LAB_DEMOTE !== false; }
+/* (goldpine's lever above; the SCALP squeeze lever lives beside its scalp siblings) */
 /* lane|label -> the measured cohort (net@XM per trade, n, windows-negative) */
 var HG_GP_LAB_BOOK = {
   'scalp|MSB + OB':            'gross \u22126.91R/trade over n=624, negative in all four disjoint windows',

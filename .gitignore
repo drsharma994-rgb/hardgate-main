@@ -35,3 +35,4 @@ final-test.log
 
 # local backtest bar cache (walk-80percent)
 .cache/
+server-run.log

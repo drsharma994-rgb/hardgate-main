@@ -219,7 +219,21 @@ function boot(){
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
-  /* goldind.js is standalone (tests/test-goldscalp.mjs boots it alone). */
+  /* goldind.js is standalone (tests/test-goldscalp.mjs boots it alone).
+     hg-v1493 FIDELITY FIX: the LIVE tab loads gold-catalog.js, so the ranker's
+     indicator-stack reads (indReads: VR20, ENTROPY20, RSI14, ADX, Kaufman,
+     squeeze, DMI, BB, HV20, Parkinson20, volume ratio, TSMOM96 — hg-v1471's
+     shared stack) are computed live and ride every ranked row's freeReads.
+     The walk never loaded the catalog, so its rows recorded NONE of them —
+     the artifact could not answer a single latest-indicator question. Load
+     the catalog (+ its indicators deps) before goldind so the walk records
+     the same marks the live tab computes. Marks only: nothing in the ranker
+     reads them back for decisions except the record-only squeeze stamp
+     (hg-v1493), which changes no trade. */
+  for (const f of ['indicators.js', 'indicators2.js', 'gold-catalog.js']){
+    try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }); }
+    catch (eCat) { console.log('  WARN: ' + f + ' failed to load (' + eCat.message + ') — the indicator-stack marks will be absent'); }
+  }
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'goldind.js'), 'utf8'), ctx, { filename: 'goldind.js' });
   for (const fn of ['goldScalpSetups', 'goldRankSetups', 'goldSeason', 'goldCrossVenueMap', 'goldKillzone']){
     if (typeof ctx[fn] !== 'function') throw new Error('boot failed: ' + fn + ' is not a function');
