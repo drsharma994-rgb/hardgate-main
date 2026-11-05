@@ -824,8 +824,11 @@ function gpRecordLayerSetups(rows, mode, source){
          walk measured paying clears record-only and forms like the primary
          layers (the desk's own release rule, satisfied with backtest
          evidence). The measurement rides the row. */
-      if (HG_GP_LAB_RELEASE && HG_GP_LAB_RELEASED[lane + '|' + (it.layerLabel || it.label || it.kind || '')]){
-        s.releasedByMeasurement = 'RELEASED — ' + (HG_GP_LAB_RELEASED[lane + '|' + (it.layerLabel || it.label || it.kind || '')]) + ' Lever HG_GP_LAB_RELEASE.';
+      var __relKey = lane + '|' + (it.layerLabel || it.label || it.kind || '');
+      var __rel = HG_GP_LAB_RELEASED[__relKey];
+      var __relDirOk = !(__rel && __rel.dir) || String(it.dir || '').toLowerCase() === __rel.dir;
+      if (HG_GP_LAB_RELEASE && __rel && __relDirOk){
+        s.releasedByMeasurement = 'RELEASED (SHORT ONLY) — ' + __rel.why + ' Lever HG_GP_LAB_RELEASE.';
       } else {
         s.recordOnly = true;
         s.recordLayer = it.recordLayer || null;
@@ -889,7 +892,13 @@ function hgGpLabDemoteOn(){ return HG_GP_LAB_DEMOTE !== false; }
    HG_GP_LAB_RELEASE (default ON). */
 var HG_GP_LAB_RELEASE_LS = 'hg_gp_lab_release';
 var HG_GP_LAB_RELEASE = true;
-var HG_GP_LAB_RELEASED = { 'swing|Williams %R Re-entry': '+0.18R/trade over n=44, 3/4 windows positive (the hg-v1502 lab, Phase I)' };
+var HG_GP_LAB_RELEASED = {
+  /* hg-v1503: the DIRECTION SPLIT measured — the blend (+0.18R over n=44) hid
+     it: the SHORT side pays +0.52R/trade over n=21, positive in ALL FOUR
+     disjoint windows; the LONG side loses (−0.13R over n=23). The release is
+     short-only: the layer's long rows stay record-only. */
+  'swing|Williams %R Re-entry': { dir: 'short', why: 'SHORT side +0.52R/trade over n=21, positive in 4/4 disjoint windows (the hg-v1503 lab direction split); the long side measured −0.13R and stays record-only' }
+};
 function hgGpLabReleaseInit(){
   try{
     var ovr = (typeof window !== 'undefined') ? window.HG_GP_LAB_RELEASE : undefined;

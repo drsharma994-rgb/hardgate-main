@@ -163,6 +163,17 @@ function boot(){
    (Phase I) found swing|Williams %R Re-entry paying on its OWN lane
    (+0.178R/trade over n=44, 3/4 windows positive) and the desk now releases
    it: the layer forms like the primary layers and may lead. */
+console.log('[hg-v1503] the release is SHORT-ONLY — the direction split measured');
+{
+  const lab3 = JSON.parse(read('scripts/goldpine-winrate-lab-results.json'));
+  const walk3 = JSON.parse(read('scripts/goldpine-walk-results.json'));
+  const wr3 = walk3.records.filter(r => r.lane === 'swing' && r.label === 'Williams %R Re-entry');
+  const grids3 = { swing: { rows: [], index: new Map() } };
+  ok(wr3.length >= 40, 'the released layer’s walk records: n=' + wr3.length);
+  const gp3 = read('goldpine.js');
+  ok(gp3.indexOf("dir: 'short'") >= 0 && gp3.indexOf('__relDirOk') >= 0, 'the release branch checks the direction (short-only)');
+  ok(gp3.indexOf('RELEASED (SHORT ONLY)') >= 0, 'and the stamp says SHORT ONLY');
+}
 console.log('[hg-v1502] the measured release of swing|Williams %R Re-entry');
 {
   const lab = JSON.parse(read('scripts/goldpine-winrate-lab-results.json'));
@@ -173,7 +184,7 @@ console.log('[hg-v1502] the measured release of swing|Williams %R Re-entry');
      'swing|Williams %R Re-entry clears the release bar: +' + (w ? w.net : '?') + 'R/trade over n=' + (w ? w.n : '?') + ', ' + (w ? w.positiveWindows : '?') + '/4 windows');
   ok((rel.releasable || []).indexOf('swing|Williams %R Re-entry') >= 0, 'and Phase I names it RELEASABLE');
   const gp = read('goldpine.js');
-  ok(gp.indexOf('HG_GP_LAB_RELEASED[lane') >= 0, 'the released set + branch are declared in goldpine.js');
+  ok(gp.indexOf('HG_GP_LAB_RELEASED[__relKey]') >= 0, 'the released set + branch are declared in goldpine.js');
 }
 /* hg-v1502: THE MEASURED RELEASE — the walk's own record-only-release check
    (Phase I) found swing|Williams %R Re-entry paying on its OWN lane
@@ -189,7 +200,7 @@ console.log('[hg-v1502] the measured release of swing|Williams %R Re-entry');
      'swing|Williams %R Re-entry clears the release bar: +' + (w ? w.net : '?') + 'R/trade over n=' + (w ? w.n : '?') + ', ' + (w ? w.positiveWindows : '?') + '/4 windows');
   ok((rel.releasable || []).indexOf('swing|Williams %R Re-entry') >= 0, 'and Phase I names it RELEASABLE');
   const gp = read('goldpine.js');
-  ok(gp.indexOf('HG_GP_LAB_RELEASED[lane') >= 0, 'the released set + branch are declared in goldpine.js');
+  ok(gp.indexOf('HG_GP_LAB_RELEASED[__relKey]') >= 0, 'the released set + branch are declared in goldpine.js');
   ok(/s\.demoted = true;\s*\n\s*s\.demotedWhy = it\.demotedWhy/.test(gp),
      'the demotedWhy sits inside the else (a released row never carries it)');
 }
