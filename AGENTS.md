@@ -5,6 +5,12 @@
 # merge commits — the stamp is how the user sees the repo move. Verify with
 # scripts/check-cache-bump.mjs before pushing.
 
+### THE NEW-STRATEGY MEASUREMENT — the 26 withheld pine ports measured, all negative — hg-v1498
+- **The \"add strategies\" question now has a standing answer machine.** The lab's new **Phase H** generates the 26 RECORD-ONLY pine layers (the withheld ports: Supertrend 10x3, Ichimoku TK, Donchian 20/10, EMA8/21+RSI50, Keltner Pullback, MACD, PSAR, Stochastic, Chandelier, Hull, Fisher, QQE, TRIX, OTE, BPR, Williams %R, CCI, ADX+DI, NW Envelope, Session/Weekly AVWAP, Heikin Ashi, Squeeze, HalfTrend…) per closed 15m bar **through their own minter** (a pine-aware sandbox — the main boot stays pine-free: loading pinegoldmath in the main boot turned the ranker pine-aware and DIVERGED the squeeze sweep; the guard pins caught it) and settles them at the walk semantics.
+- **THE RESULT: 16,022 candidates, ALL NEGATIVE as scalp candidates.** The best of the 26 (Parabolic SAR Flip −0.18R n=486, Weekly AVWAP −0.21R n=249, QQE −0.21R n=355) still sit below the book's −0.015R; the worst (Stochastic −1.45R, TRIX −1.29R, Kaufman −1.24R) are catastrophic. **0/26 clear.** They stay record-only — now with measured evidence instead of \"no record yet\": the desk's own release rule asked for exactly this measurement before anything ships.
+- Phase H runs in every lab refresh — the next \"add this strategy\" request gets its cohort measured in one command, before any wiring.
+- Tests: the v1493 guard pins Phase H (≥20 layers measured, none clears). Boot-split lesson recorded: the main lab boot must match the live tab's script set EXACTLY — a dependency added \"just to measure\" changes the pipeline it measures.
+- The forward ledger decides.
 ### THE SQUEEZE BOOST MEASURED DEAD — the honest reversal, and the lesson — hg-v1497
 - **The lab's new Phase G (`leadEligibleSqueeze`) measured the population a squeeze rank boost would act on — non-demoted squeeze-ON rows — and found it EMPTY: n=0 over the whole 62-day walk, in every disjoint window.** Every one of the 202 squeeze-ON candidates carries a demote stamp: compression = the chop/conf demotes coincide. The +0.19R cohort lived entirely in trades the desk never takes.
 - **The opt-in boost lever shipped in hg-v1495 is REMOVED.** The record-only stamp stays as disclosure, with the finding named on it (\"the measured squeeze-ON cohort is entirely chop-demoted\").

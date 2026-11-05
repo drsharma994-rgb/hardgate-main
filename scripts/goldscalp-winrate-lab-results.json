@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-11-05T20:43:57.487Z",
+  "generated": "2026-11-05T21:01:01.797Z",
   "symbol": "PAXGUSDT",
   "bars": 6000,
   "span": [
@@ -838,6 +838,713 @@
     "n": 335,
     "win": 0.4208955223880597,
     "net": 0.015320577429401358
+   }
+  ]
+ },
+ "recordLayerSweep": {
+  "note": "the record-only pine layers measured as scalp candidates (net@XM per trade, four disjoint windows) — the would-be new strategies",
+  "layers": [
+   {
+    "label": "Stochastic Cross",
+    "candidates": 487,
+    "settled": 486,
+    "win": 0.331,
+    "net": -1.447,
+    "windows": [
+     {
+      "n": 115,
+      "net": -2.993
+     },
+     {
+      "n": 116,
+      "net": -0.954
+     },
+     {
+      "n": 129,
+      "net": -1.315
+     },
+     {
+      "n": 126,
+      "net": -0.625
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Heikin Ashi Flip",
+    "candidates": 1393,
+    "settled": 1387,
+    "win": 0.319,
+    "net": -0.44,
+    "windows": [
+     {
+      "n": 345,
+      "net": -0.754
+     },
+     {
+      "n": 345,
+      "net": -0.4
+     },
+     {
+      "n": 346,
+      "net": -0.375
+     },
+     {
+      "n": 351,
+      "net": -0.233
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Session VWAP",
+    "candidates": 673,
+    "settled": 665,
+    "win": 0.295,
+    "net": -0.897,
+    "windows": [
+     {
+      "n": 148,
+      "net": -2.428
+     },
+     {
+      "n": 153,
+      "net": -0.411
+     },
+     {
+      "n": 190,
+      "net": -0.658
+     },
+     {
+      "n": 174,
+      "net": -0.282
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Weekly AVWAP",
+    "candidates": 249,
+    "settled": 249,
+    "win": 0.297,
+    "net": -0.214,
+    "windows": [
+     {
+      "n": 70,
+      "net": -0.288
+     },
+     {
+      "n": 53,
+      "net": 0.143
+     },
+     {
+      "n": 61,
+      "net": -0.167
+     },
+     {
+      "n": 65,
+      "net": -0.468
+     }
+    ],
+    "positiveWindows": 1,
+    "clears": false
+   },
+   {
+    "label": "HalfTrend",
+    "candidates": 5740,
+    "settled": 5730,
+    "win": 0.276,
+    "net": -0.429,
+    "windows": [
+     {
+      "n": 1435,
+      "net": -0.363
+     },
+     {
+      "n": 1435,
+      "net": -0.289
+     },
+     {
+      "n": 1435,
+      "net": -0.763
+     },
+     {
+      "n": 1425,
+      "net": -0.301
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Chandelier Exit",
+    "candidates": 370,
+    "settled": 370,
+    "win": 0.284,
+    "net": -0.893,
+    "windows": [
+     {
+      "n": 120,
+      "net": -1.501
+     },
+     {
+      "n": 94,
+      "net": -0.776
+     },
+     {
+      "n": 81,
+      "net": -0.486
+     },
+     {
+      "n": 75,
+      "net": -0.507
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "NW Envelope",
+    "candidates": 385,
+    "settled": 385,
+    "win": 0.314,
+    "net": -0.398,
+    "windows": [
+     {
+      "n": 126,
+      "net": -0.512
+     },
+     {
+      "n": 85,
+      "net": -0.114
+     },
+     {
+      "n": 86,
+      "net": -0.336
+     },
+     {
+      "n": 88,
+      "net": -0.568
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Parabolic SAR Flip",
+    "candidates": 488,
+    "settled": 486,
+    "win": 0.282,
+    "net": -0.184,
+    "windows": [
+     {
+      "n": 116,
+      "net": -0.369
+     },
+     {
+      "n": 121,
+      "net": -0.112
+     },
+     {
+      "n": 129,
+      "net": -0.159
+     },
+     {
+      "n": 120,
+      "net": -0.106
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "CCI Re-entry",
+    "candidates": 550,
+    "settled": 548,
+    "win": 0.336,
+    "net": -0.252,
+    "windows": [
+     {
+      "n": 134,
+      "net": -0.244
+     },
+     {
+      "n": 136,
+      "net": -0.193
+     },
+     {
+      "n": 142,
+      "net": -0.313
+     },
+     {
+      "n": 136,
+      "net": -0.255
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "ADX + DI",
+    "candidates": 183,
+    "settled": 181,
+    "win": 0.188,
+    "net": -0.501,
+    "windows": [
+     {
+      "n": 48,
+      "net": -0.435
+     },
+     {
+      "n": 44,
+      "net": -0.39
+     },
+     {
+      "n": 47,
+      "net": -0.669
+     },
+     {
+      "n": 42,
+      "net": -0.504
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Hull MA Turn",
+    "candidates": 689,
+    "settled": 687,
+    "win": 0.297,
+    "net": -0.398,
+    "windows": [
+     {
+      "n": 168,
+      "net": -0.905
+     },
+     {
+      "n": 171,
+      "net": -0.337
+     },
+     {
+      "n": 176,
+      "net": -0.233
+     },
+     {
+      "n": 172,
+      "net": -0.133
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Fisher Transform",
+    "candidates": 641,
+    "settled": 638,
+    "win": 0.282,
+    "net": -0.418,
+    "windows": [
+     {
+      "n": 170,
+      "net": -0.359
+     },
+     {
+      "n": 156,
+      "net": -0.998
+     },
+     {
+      "n": 157,
+      "net": -0.223
+     },
+     {
+      "n": 155,
+      "net": -0.096
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "QQE",
+    "candidates": 357,
+    "settled": 355,
+    "win": 0.282,
+    "net": -0.214,
+    "windows": [
+     {
+      "n": 92,
+      "net": -0.353
+     },
+     {
+      "n": 90,
+      "net": -0.243
+     },
+     {
+      "n": 89,
+      "net": -0.3
+     },
+     {
+      "n": 84,
+      "net": 0.062
+     }
+    ],
+    "positiveWindows": 1,
+    "clears": false
+   },
+   {
+    "label": "Balanced Price Range",
+    "candidates": 245,
+    "settled": 244,
+    "win": 0.365,
+    "net": -0.309,
+    "windows": [
+     {
+      "n": 70,
+      "net": -0.169
+     },
+     {
+      "n": 64,
+      "net": -0.519
+     },
+     {
+      "n": 48,
+      "net": -0.169
+     },
+     {
+      "n": 62,
+      "net": -0.357
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Williams %R Re-entry",
+    "candidates": 714,
+    "settled": 713,
+    "win": 0.331,
+    "net": -0.291,
+    "windows": [
+     {
+      "n": 180,
+      "net": -0.375
+     },
+     {
+      "n": 173,
+      "net": -0.204
+     },
+     {
+      "n": 186,
+      "net": -0.281
+     },
+     {
+      "n": 174,
+      "net": -0.301
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Kaufman Efficiency",
+    "candidates": 638,
+    "settled": 637,
+    "win": 0.24,
+    "net": -1.237,
+    "windows": [
+     {
+      "n": 167,
+      "net": -1.893
+     },
+     {
+      "n": 164,
+      "net": -1.148
+     },
+     {
+      "n": 153,
+      "net": -1.588
+     },
+     {
+      "n": 153,
+      "net": -0.265
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "MACD Cross",
+    "candidates": 466,
+    "settled": 465,
+    "win": 0.267,
+    "net": -0.712,
+    "windows": [
+     {
+      "n": 112,
+      "net": -0.592
+     },
+     {
+      "n": 120,
+      "net": -1.112
+     },
+     {
+      "n": 121,
+      "net": -0.301
+     },
+     {
+      "n": 112,
+      "net": -0.848
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "TTM Squeeze",
+    "candidates": 131,
+    "settled": 130,
+    "win": 0.285,
+    "net": -0.861,
+    "windows": [
+     {
+      "n": 30,
+      "net": -0.392
+     },
+     {
+      "n": 31,
+      "net": -2.987
+     },
+     {
+      "n": 29,
+      "net": -0.14
+     },
+     {
+      "n": 40,
+      "net": -0.087
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Supertrend 10x3",
+    "candidates": 242,
+    "settled": 242,
+    "win": 0.223,
+    "net": -0.32,
+    "windows": [
+     {
+      "n": 68,
+      "net": -0.38
+     },
+     {
+      "n": 68,
+      "net": -0.513
+     },
+     {
+      "n": 56,
+      "net": -0.167
+     },
+     {
+      "n": 50,
+      "net": -0.145
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Donchian 20/10",
+    "candidates": 238,
+    "settled": 238,
+    "win": 0.202,
+    "net": -0.345,
+    "windows": [
+     {
+      "n": 67,
+      "net": -0.553
+     },
+     {
+      "n": 62,
+      "net": -0.47
+     },
+     {
+      "n": 55,
+      "net": -0.384
+     },
+     {
+      "n": 54,
+      "net": 0.097
+     }
+    ],
+    "positiveWindows": 1,
+    "clears": false
+   },
+   {
+    "label": "Ichimoku TK Cross",
+    "candidates": 146,
+    "settled": 146,
+    "win": 0.253,
+    "net": -0.675,
+    "windows": [
+     {
+      "n": 46,
+      "net": -0.725
+     },
+     {
+      "n": 40,
+      "net": -0.714
+     },
+     {
+      "n": 31,
+      "net": -0.616
+     },
+     {
+      "n": 29,
+      "net": -0.603
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "EMA 8/21 + RSI50",
+    "candidates": 328,
+    "settled": 326,
+    "win": 0.255,
+    "net": -0.62,
+    "windows": [
+     {
+      "n": 79,
+      "net": -1.389
+     },
+     {
+      "n": 89,
+      "net": -0.519
+     },
+     {
+      "n": 91,
+      "net": -0.269
+     },
+     {
+      "n": 67,
+      "net": -0.325
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Aroon Cross",
+    "candidates": 274,
+    "settled": 274,
+    "win": 0.259,
+    "net": -0.859,
+    "windows": [
+     {
+      "n": 78,
+      "net": -0.786
+     },
+     {
+      "n": 71,
+      "net": -0.486
+     },
+     {
+      "n": 65,
+      "net": -1.841
+     },
+     {
+      "n": 60,
+      "net": -0.332
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "OTE 0.705",
+    "candidates": 154,
+    "settled": 150,
+    "win": 0.233,
+    "net": -0.242,
+    "windows": [
+     {
+      "n": 34,
+      "net": -0.681
+     },
+     {
+      "n": 39,
+      "net": -0.082
+     },
+     {
+      "n": 38,
+      "net": -0.497
+     },
+     {
+      "n": 39,
+      "net": 0.23
+     }
+    ],
+    "positiveWindows": 1,
+    "clears": false
+   },
+   {
+    "label": "TRIX Zero Cross",
+    "candidates": 150,
+    "settled": 150,
+    "win": 0.267,
+    "net": -1.288,
+    "windows": [
+     {
+      "n": 40,
+      "net": -3.717
+     },
+     {
+      "n": 41,
+      "net": -0.513
+     },
+     {
+      "n": 41,
+      "net": -0.222
+     },
+     {
+      "n": 28,
+      "net": -0.514
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
+   },
+   {
+    "label": "Keltner Pullback",
+    "candidates": 93,
+    "settled": 93,
+    "win": 0.312,
+    "net": -0.39,
+    "windows": [
+     {
+      "n": 25,
+      "net": -0.556
+     },
+     {
+      "n": 27,
+      "net": -0.21
+     },
+     {
+      "n": 21,
+      "net": -0.78
+     },
+     {
+      "n": 20,
+      "net": -0.017
+     }
+    ],
+    "positiveWindows": 0,
+    "clears": false
    }
   ]
  }

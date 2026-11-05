@@ -127,10 +127,32 @@ function boot(){
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
+  /* hg-v1493: the catalog loads here (the live tab loads it) — the ranker's
+     indicator-stack reads are live-faithful. pinegoldmath does NOT load in
+     this boot: the live GOLD SCALP tab runs without it, and loading it here
+     turned the ranker pine-aware (PINE stamps on every candidate) — a
+     divergence the squeeze sweep caught immediately. Phase H boots its own
+     pine-aware sandbox when it needs the record-only layers. */
   for (const f of ['indicators.js', 'indicators2.js', 'goldind.js', 'gold-catalog.js'])
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   for (const fn of ['goldScalpSetups', 'goldRankSetups', 'goldSeason', 'goldCrossVenueMap', 'goldKillzone', 'hgGoldIndicatorReads'])
     if (typeof ctx[fn] !== 'function') throw new Error('boot failed: ' + fn + ' is not a function');
+  return ctx;
+}
+/* the pine-aware boot, for Phase H only */
+function bootPine(){
+  const ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, isFinite, parseFloat, parseInt, JSON, Array, Object,
+                Number, String, Promise, RegExp, setTimeout, clearTimeout, NaN, Infinity };
+  ctx.window = ctx; ctx.globalThis = ctx;
+  ctx.localStorage = { getItem: () => null, setItem(){}, removeItem(){} };
+  ctx.document = { createElement: () => ({ style: {}, innerHTML: '', appendChild(){}, setAttribute(){},
+                    querySelector: () => null, querySelectorAll: () => [] }),
+                   getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+                   head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
+  vm.createContext(ctx);
+  for (const f of ['indicators.js', 'indicators2.js', 'goldind.js', 'gold-catalog.js', 'pinemath.js', 'pinegoldmath.js'])
+    vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+  if (typeof ctx.pineGoldRecordLayerSetups !== 'function') throw new Error('pine boot failed');
   return ctx;
 }
 
@@ -377,7 +399,7 @@ function windowAgg(trades, t0, t1){
 }
 
 /* exported so a sensitivity driver can re-use the machinery without re-walking */
-export { boot, cachedKlines, walkRecords, settleOne, baseConfig, selected, describe, evalConfig, windowAgg, GEOMS, STAMP_CLAUSES, DEPTH, COST_XM_FRAC };
+export { boot, bootPine, cachedKlines, walkRecords, settleOne, baseConfig, selected, describe, evalConfig, windowAgg, GEOMS, STAMP_CLAUSES, DEPTH, COST_XM_FRAC };
 
 /* ---------- main ---------- */
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -583,6 +605,66 @@ if (isMain) (async () => {
     leadSq.bookSameWindows = [0, 1, 2, 3].map(i => windowAgg(baseAll, winBars[i][0], winBars[i][1]));
   }
 
+  /* Phase H — the RECORD-ONLY PINE LAYERS as new-strategy candidates: the
+     "add strategies" question measured honestly. The 26 record-only layers
+     (pinegoldmath's withheld ports) are generated per closed 15m bar through
+     their own minter and settled at the same semantics — the cohort each
+     would bring IF the desk admitted it. This is the measurement the desk's
+     own release rule wanted before anything ships. */
+  const recordLayerSweep = { note: 'the record-only pine layers measured as scalp candidates (net@XM per trade, four disjoint windows) — the would-be new strategies', layers: [] };
+  {
+    const rlFn = bootPine().pineGoldRecordLayerSetups;
+    if (typeof rlFn === 'function'){
+      const layerRecs = [];
+      for (let i = 260; i < m15.length; i++){
+        const rows15 = m15.slice(Math.max(0, i - 240), i);
+        let items = [];
+        try { items = rlFn(rows15, 'scalp') || []; } catch (eRl) { items = []; }
+        for (const it of items){
+          if (!it || !it.recordOnly || !it.dir || !isFinite(+it.entry) || !isFinite(+it.stop) || !isFinite(+it.t1)) continue;
+          const long = it.dir === 'long';
+          if (long && !(+it.stop < +it.entry && +it.t1 > +it.entry)) continue;
+          if (!long && !(+it.stop > +it.entry && +it.t1 < +it.entry)) continue;
+          layerRecs.push({ i: i - 1, t: m15[i - 1].t * 1000, label: it.layerLabel || it.label || it.kind || 'layer',
+            dir: it.dir, entry: +it.entry, stop: +it.stop, t1: +it.t1, markAtFire: m15[i - 1].c });
+        }
+      }
+      const labels = {};
+      for (const r of layerRecs) labels[r.label] = (labels[r.label] || 0) + 1;
+      for (const label of Object.keys(labels)){
+        const list = layerRecs.filter(r => r.label === label);
+        const settled = [];
+        for (const r of list){
+          const st = settleOne(m15, r, GEOMS[0]);
+          if (st.outcome === 'unfilled' || st.outcome === 'open' || st.outcome === 'unpriced') continue;
+          settled.push({ t: r.t, outcome: st.outcome, net: st.rGross - (r.entry * COST_XM_FRAC) / Math.abs(r.entry - r.stop) });
+        }
+        const entry = { label, candidates: list.length, settled: settled.length };
+        if (settled.length){
+          entry.win = +(settled.filter(t => t.outcome === 'win').length / settled.length).toFixed(3);
+          entry.net = +(settled.reduce((a, t) => a + t.net, 0) / settled.length).toFixed(3);
+          entry.windows = [];
+          let pos = 0;
+          const w0 = settled.length ? settled[0].t : 0, w1 = m15[m15.length - 1].t * 1000;
+          for (let w = 0; w < 4; w++){
+            const a = w0 + (w1 - w0) * w / 4, b = w0 + (w1 - w0) * (w + 1) / 4;
+            const seg = settled.filter(t => t.t >= a && t.t < b);
+            if (!seg.length){ entry.windows.push({ n: 0 }); continue; }
+            const wn = seg.reduce((x, y) => x + y.net, 0) / seg.length;
+            entry.windows.push({ n: seg.length, net: +wn.toFixed(3) });
+            if (wn > 0) pos++;
+          }
+          entry.positiveWindows = pos;
+          entry.clears = (entry.net > 0 && pos >= 3);
+        }
+        recordLayerSweep.layers.push(entry);
+      }
+      const clearers = recordLayerSweep.layers.filter(x => x.clears === true);
+      log('Phase H — the record-only pine layers as new-strategy candidates: ' + recordLayerSweep.layers.length + ' measured, '
+        + clearers.length + ' clear the bar' + (clearers.length ? ': ' + clearers.map(x => x.label).join(', ') : ' — NONE (they stay record-only, now with evidence)'));
+    }
+  }
+
   const report = {
     meta: { generated: new Date().toISOString(), symbol: SYMBOL, bars: BARS_15M,
       span: [new Date(m15[first].t * 1000).toISOString(), new Date(m15[m15.length - 1].t * 1000).toISOString()],
@@ -593,7 +675,8 @@ if (isMain) (async () => {
     final: { config: cur, description: describe(cur), search: base.searchAll, heldOut: confNew, heldOutBaseline: confBase, all: fAll, z: +z.toFixed(2), pTwoSided: +zP.toFixed(4), confirmed },
     postmortem,
     indicatorSweep,
-    leadEligibleSqueeze: leadSq
+    leadEligibleSqueeze: leadSq,
+    recordLayerSweep
   };
   fs.writeFileSync(LAB_OUT, JSON.stringify(report, (k, v) => (k === 'trades' ? undefined : v), 1));
 

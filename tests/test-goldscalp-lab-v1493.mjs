@@ -169,6 +169,14 @@ function tape2(trendBars, trendStep, flatBars, flatWick){
   ok(read('goldind.js').indexOf('the measured squeeze-ON cohort is entirely chop-demoted') >= 0,
      'and the stamp says why (record-only, the cohort is chop-demoted)');
   /* the disclosure stamp still fires through the real ranker on a squeeze-ON tape */
+
+  /* hg-v1498: the RECORD-ONLY PINE LAYERS measured as new-strategy candidates —
+     Phase H runs in every lab refresh; the honest null is pinned */
+  const rl = lab2.recordLayerSweep;
+  ok(rl && Array.isArray(rl.layers) && rl.layers.length >= 20,
+     'Phase H measured ' + (rl ? rl.layers.length : 0) + ' record-only pine layers as scalp candidates');
+  ok(rl && rl.layers.every(x => x.clears !== true),
+     'and NONE clears the bar (the best was still below the book) — they stay record-only, now with measured evidence');
   const rk5 = W.goldRankSetups([mk('long')], ctxR) || { ranked: [] };
   const withStamp2 = (rk5.ranked || []).filter(c => (c.stamps || []).indexOf('LAB SQUEEZE ON') >= 0);
   ok(withStamp2.length === (rk5.ranked || []).length,
