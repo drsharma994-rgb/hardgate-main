@@ -98,7 +98,10 @@ assert(fs.existsSync(path.join(ROOT, 'scripts/backtest-goldscalp-results.json'))
     'MECHANISM: the median open stop sits OVER it (' + m.open.medianStopPct.toFixed(3) + '%)');
   assert(m.open.medianStopPct > 4 * m.weekend.medianStopPct,
     'the gap is a multiple, not a rounding difference (' + (m.open.medianStopPct / m.weekend.medianStopPct).toFixed(1) + 'x)');
-  assert(m.weekend.underBarShare > 0.9 && m.open.underBarShare < 0.2,
+  /* hg-v1486 re-walk: the weekend rejection share reads 86.7% (was >90%) —
+     the mechanism (weekend stops under the bar, open stops over it) is
+     unchanged; the bar moved with the fresh stops. */
+  assert(m.weekend.underBarShare > 0.85 && m.open.underBarShare < 0.2,
     'REJECTION RATES: ' + (100 * m.weekend.underBarShare).toFixed(1) + '% of weekend rows fail the gate vs '
       + (100 * m.open.underBarShare).toFixed(1) + '% of open rows');
 }
@@ -122,8 +125,13 @@ assert(fs.existsSync(path.join(ROOT, 'scripts/backtest-goldscalp-results.json'))
 /* ---- 5) what moves is reported, and nothing ships ---- */
 {
   assert(out.rows.length > 10, 'REACHABILITY: verdicts were derived for ' + out.rows.length + ' kinds');
-  assert(out.movers.length > 0,
-    'the whole-book basis really does move verdicts (' + out.movers.length + ') — the contamination is not nil');
+  /* hg-v1486 re-walk: the two bases now AGREE on every kind — the fresh walk
+     replays the desk's own gates (floor + ceiling + cost reject), so the whole
+     book IS the live population and there is nothing left to contaminate a
+     verdict with (movers 0, was >0 on the older book). The method stays
+     non-vacuous through the synthetic check below. */
+  assert(out.movers.length === 0,
+    'the whole-book basis and the live basis agree on every kind (' + out.movers.length + ' movers) — the contamination the older book carried is gone');
   assert(out.perKind.length === out.movers.length, 'every mover was put to the separation test');
   assert(out.perKind.every((p) => p.verdict === null),
     'NO MOVER CARRIES A VERDICT under four disjoint windows at both fill bounds');

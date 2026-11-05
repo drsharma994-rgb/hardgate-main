@@ -591,25 +591,25 @@ function hgGoldRosterTabGaps(){
    wrong file, and hg-v921 made the literals write themselves for exactly this
    reason. `npm run gold:siblings` is the read-only drift check. */
 var HG_GOLD_SIBLING_RECORD = {
-  'BOS-RETEST': { n: 85, settled: 76, winRate: 0.2763, grossR: -0.1171, netXm: -0.1577, tCluster: -0.99, zBreakeven: -1.05, minRr: 2, breakevenPct: 33.3 },
-  'CCI-EXTREME': { n: 332, settled: 329, winRate: 0.3435, grossR: 0.0359, netXm: -0.0371, tCluster: 0.65, zBreakeven: 0.39, minRr: 2, breakevenPct: 33.3 },
-  'CUSUM-SHIFT': { n: 47, settled: 35, winRate: 0.3429, grossR: 0.1318, netXm: 0.1102, tCluster: 0.95, zBreakeven: 0.12, minRr: 2, breakevenPct: 33.3 },
-  'FIB-618': { n: 137, settled: 135, winRate: 0.3111, grossR: -0.0559, netXm: -0.1108, tCluster: -0.56, zBreakeven: -0.55, minRr: 2, breakevenPct: 33.3 },
-  'ICHI-KUMO': { n: 114, settled: 95, winRate: 0.2526, grossR: -0.1406, netXm: -0.1721, tCluster: -1.79, zBreakeven: -1.67, minRr: 2, breakevenPct: 33.3 },
-  'INSIDE-BREAK': { n: 123, settled: 113, winRate: 0.3363, grossR: 0.0688, netXm: 0.0308, tCluster: 0.58, zBreakeven: 0.07, minRr: 2, breakevenPct: 33.3 },
-  'LONDON-FIX': { n: 87, settled: 70, winRate: 0.2286, grossR: -0.265, netXm: -0.2949, tCluster: -2.27, zBreakeven: -1.86, minRr: 2, breakevenPct: 33.3 },
-  'MMOVE': { n: 201, settled: 174, winRate: 0.3391, grossR: 0.0513, netXm: 0.0241, tCluster: 0.74, zBreakeven: 0.16, minRr: 2, breakevenPct: 33.3 },
-  'NY-OPEN-DRIVE': { n: 52, settled: 42, winRate: 0.3571, grossR: 0.1626, netXm: 0.1272, tCluster: 0.98, zBreakeven: 0.33, minRr: 2, breakevenPct: 33.3 },
-  'ORB': { n: 145, settled: 125, winRate: 0.336, grossR: 0.0684, netXm: 0.0365, tCluster: 0.68, zBreakeven: 0.06, minRr: 2, breakevenPct: 33.3 },
-  'P4-ADRX': { n: 157, settled: 157, winRate: 0.3503, grossR: 0.051, netXm: -0.0004, tCluster: 0.41, zBreakeven: 0.45, minRr: 2, breakevenPct: 33.3 },
-  'P5-DRIVE': { n: 55, settled: 46, winRate: 0.3478, grossR: 0.0589, netXm: 0.0149, tCluster: 0.47, zBreakeven: 0.21, minRr: 2, breakevenPct: 33.3 },
-  'P6-COMP': { n: 101, settled: 84, winRate: 0.3214, grossR: -0.0105, netXm: -0.0477, tCluster: -0.09, zBreakeven: -0.23, minRr: 2, breakevenPct: 33.3 },
-  'PIVOT-REJECT': { n: 182, settled: 181, winRate: 0.2597, grossR: -0.2208, netXm: -0.3187, tCluster: -2.15, zBreakeven: -2.1, minRr: 2, breakevenPct: 33.3 },
-  'ROUND-MAGNET': { n: 569, settled: 563, winRate: 0.2984, grossR: -0.1005, netXm: -0.1694, tCluster: -1.97, zBreakeven: -1.76, minRr: 2, breakevenPct: 33.3 },
-  'SQUEEZE-FIRE': { n: 50, settled: 42, winRate: 0.3095, grossR: -0.0042, netXm: -0.0402, tCluster: -0.02, zBreakeven: -0.33, minRr: 2, breakevenPct: 33.3 },
-  'STRUCT-BOS': { n: 111, settled: 93, winRate: 0.3226, grossR: 0.0418, netXm: 0.0104, tCluster: 0.43, zBreakeven: -0.22, minRr: 2, breakevenPct: 33.3 },
-  'TREND-RECLAIM': { n: 114, settled: 109, winRate: 0.367, grossR: 0.1105, netXm: 0.0532, tCluster: 1.06, zBreakeven: 0.75, minRr: 2, breakevenPct: 33.3 },
-  'WEEKLY-OPEN': { n: 163, settled: 159, winRate: 0.283, grossR: -0.1392, netXm: -0.2099, tCluster: -1.35, zBreakeven: -1.35, minRr: 2, breakevenPct: 33.3 }
+  'BOS-RETEST': { n: 85, settled: 77, winRate: 0.3117, grossR: -0.0259, netXm: -0.0672, tCluster: -0.23, zBreakeven: -0.4, minRr: 2, breakevenPct: 33.3 },
+  'CCI-EXTREME': { n: 329, settled: 326, winRate: 0.3313, grossR: -0.0002, netXm: -0.0745, tCluster: 0, zBreakeven: -0.08, minRr: 2, breakevenPct: 33.3 },
+  'CUSUM-SHIFT': { n: 42, settled: 31, winRate: 0.3548, grossR: 0.1631, netXm: 0.142, tCluster: 1.1, zBreakeven: 0.25, minRr: 2, breakevenPct: 33.3 },
+  'FIB-618': { n: 138, settled: 136, winRate: 0.3456, grossR: 0.046, netXm: -0.0096, tCluster: 0.45, zBreakeven: 0.3, minRr: 2, breakevenPct: 33.3 },
+  'ICHI-KUMO': { n: 116, settled: 99, winRate: 0.2727, grossR: -0.1001, netXm: -0.1348, tCluster: -1.35, zBreakeven: -1.28, minRr: 2, breakevenPct: 33.3 },
+  'INSIDE-BREAK': { n: 124, settled: 115, winRate: 0.3391, grossR: 0.0777, netXm: 0.0392, tCluster: 0.71, zBreakeven: 0.13, minRr: 2, breakevenPct: 33.3 },
+  'LONDON-FIX': { n: 95, settled: 80, winRate: 0.25, grossR: -0.2238, netXm: -0.2553, tCluster: -2.16, zBreakeven: -1.58, minRr: 2, breakevenPct: 33.3 },
+  'MMOVE': { n: 206, settled: 182, winRate: 0.3626, grossR: 0.1157, netXm: 0.0876, tCluster: 1.57, zBreakeven: 0.84, minRr: 2, breakevenPct: 33.3 },
+  'NY-OPEN-DRIVE': { n: 55, settled: 47, winRate: 0.3191, grossR: 0.0111, netXm: -0.0286, tCluster: 0.07, zBreakeven: -0.21, minRr: 2, breakevenPct: 33.3 },
+  'ORB': { n: 146, settled: 128, winRate: 0.3516, grossR: 0.0975, netXm: 0.0643, tCluster: 0.83, zBreakeven: 0.44, minRr: 2, breakevenPct: 33.3 },
+  'P4-ADRX': { n: 163, settled: 163, winRate: 0.3558, grossR: 0.0675, netXm: 0.0155, tCluster: 0.55, zBreakeven: 0.61, minRr: 2, breakevenPct: 33.3 },
+  'P5-DRIVE': { n: 54, settled: 47, winRate: 0.3404, grossR: 0.0091, netXm: -0.034, tCluster: 0.08, zBreakeven: 0.1, minRr: 2, breakevenPct: 33.3 },
+  'P6-COMP': { n: 95, settled: 80, winRate: 0.35, grossR: 0.0644, netXm: 0.0257, tCluster: 0.49, zBreakeven: 0.32, minRr: 2, breakevenPct: 33.3 },
+  'PIVOT-REJECT': { n: 176, settled: 175, winRate: 0.2743, grossR: -0.1772, netXm: -0.2771, tCluster: -1.61, zBreakeven: -1.66, minRr: 2, breakevenPct: 33.3 },
+  'ROUND-MAGNET': { n: 567, settled: 561, winRate: 0.3012, grossR: -0.095, netXm: -0.1621, tCluster: -1.9, zBreakeven: -1.61, minRr: 2, breakevenPct: 33.3 },
+  'SQUEEZE-FIRE': { n: 49, settled: 40, winRate: 0.375, grossR: 0.1919, netXm: 0.1547, tCluster: 0.89, zBreakeven: 0.56, minRr: 2, breakevenPct: 33.3 },
+  'STRUCT-BOS': { n: 113, settled: 97, winRate: 0.3608, grossR: 0.1153, netXm: 0.0816, tCluster: 1.26, zBreakeven: 0.57, minRr: 2, breakevenPct: 33.3 },
+  'TREND-RECLAIM': { n: 112, settled: 108, winRate: 0.3704, grossR: 0.1181, netXm: 0.0581, tCluster: 1.16, zBreakeven: 0.82, minRr: 2, breakevenPct: 33.3 },
+  'WEEKLY-OPEN': { n: 163, settled: 160, winRate: 0.2938, grossR: -0.1081, netXm: -0.1866, tCluster: -1, zBreakeven: -1.06, minRr: 2, breakevenPct: 33.3 }
 };
 /* --- END GENERATED HG_GOLD_SIBLING_RECORD --- */
 

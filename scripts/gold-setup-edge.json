@@ -29,17 +29,17 @@
       "action": "suppress"
     },
     "nyexh": {
-      "n": 61,
-      "gross": -0.047,
-      "netXm": -0.119,
-      "netPaxg": -0.985,
+      "n": 64,
+      "gross": -0.027,
+      "netXm": -0.1,
+      "netPaxg": -0.981,
       "action": "suppress"
     },
     "liqsweep": {
       "n": 45,
-      "gross": -0.042,
-      "netXm": -0.122,
-      "netPaxg": -1.091,
+      "gross": 0.207,
+      "netXm": 0.124,
+      "netPaxg": -0.863,
       "action": "suppress"
     },
     "sweep": {
@@ -50,136 +50,136 @@
       "action": "suppress"
     },
     "hvn": {
-      "n": 282,
-      "gross": 0.059,
-      "netXm": -0.026,
-      "netPaxg": -1.04,
+      "n": 255,
+      "gross": 0.063,
+      "netXm": -0.023,
+      "netPaxg": -1.06,
       "action": "demote"
     },
     "ob": {
-      "n": 53,
-      "gross": 0.08,
-      "netXm": -0.009,
-      "netPaxg": -1.079,
-      "action": "demote"
+      "n": 46,
+      "gross": 0.244,
+      "netXm": 0.151,
+      "netPaxg": -0.963,
+      "action": "neutral"
     },
     "openrange": {
-      "n": 179,
-      "gross": -0.014,
-      "netXm": -0.084,
-      "netPaxg": -0.932,
+      "n": 170,
+      "gross": 0.047,
+      "netXm": -0.025,
+      "netPaxg": -0.888,
       "action": "demote"
     },
     "bosalign": {
-      "n": 94,
-      "gross": 0.004,
-      "netXm": -0.071,
-      "netPaxg": -0.97,
+      "n": 87,
+      "gross": 0.061,
+      "netXm": -0.017,
+      "netPaxg": -0.951,
       "action": "demote"
     },
     "asian": {
-      "n": 86,
-      "gross": -0.023,
-      "netXm": -0.092,
-      "netPaxg": -0.924,
+      "n": 85,
+      "gross": 0.016,
+      "netXm": -0.055,
+      "netPaxg": -0.901,
       "action": "demote"
     },
     "ribbon": {
-      "n": 104,
-      "gross": 0.141,
-      "netXm": 0.059,
-      "netPaxg": -0.927,
+      "n": 108,
+      "gross": 0.145,
+      "netXm": 0.061,
+      "netPaxg": -0.946,
       "action": "demote"
     },
     "rsidiv": {
-      "n": 52,
-      "gross": -0.042,
-      "netXm": -0.109,
-      "netPaxg": -0.915,
+      "n": 50,
+      "gross": -0.067,
+      "netXm": -0.137,
+      "netPaxg": -0.976,
       "action": "demote"
     },
     "p4laf": {
-      "n": 17,
-      "gross": 0.285,
-      "netXm": 0.205,
-      "netPaxg": -0.745,
+      "n": 15,
+      "gross": 0.243,
+      "netXm": 0.163,
+      "netPaxg": -0.797,
       "action": "demote"
     },
     "silverb": {
-      "n": 42,
-      "gross": 0.012,
-      "netXm": -0.073,
-      "netPaxg": -1.087,
-      "action": "demote"
+      "n": 40,
+      "gross": 0.232,
+      "netXm": 0.142,
+      "netPaxg": -0.934,
+      "action": "neutral"
     },
     "p6fail": {
-      "n": 64,
-      "gross": 0.206,
-      "netXm": 0.128,
-      "netPaxg": -0.803,
+      "n": 69,
+      "gross": 0.121,
+      "netXm": 0.042,
+      "netPaxg": -0.909,
       "action": "prefer"
     },
     "p9volbar": {
-      "n": 50,
-      "gross": 0.058,
-      "netXm": -0.008,
-      "netPaxg": -0.795,
-      "action": "demote"
+      "n": 48,
+      "gross": 0.08,
+      "netXm": 0.013,
+      "netPaxg": -0.793,
+      "action": "neutral"
     },
     "p5drive": {
-      "n": 10,
-      "gross": 0.264,
-      "netXm": 0.208,
-      "netPaxg": -0.473,
+      "n": 7,
+      "gross": 0.43,
+      "netXm": 0.37,
+      "netPaxg": -0.352,
       "action": "demote"
     },
     "p6comp": {
-      "n": 21,
-      "gross": -0.231,
-      "netXm": -0.291,
-      "netPaxg": -1.006,
+      "n": 18,
+      "gross": -0.045,
+      "netXm": -0.109,
+      "netPaxg": -0.88,
       "action": "demote"
     },
     "sweepob": {
-      "n": 27,
-      "gross": 0.295,
-      "netXm": 0.214,
-      "netPaxg": -0.759,
+      "n": 30,
+      "gross": 0.248,
+      "netXm": 0.165,
+      "netPaxg": -0.831,
       "action": "neutral"
     },
     "p8range": {
-      "n": 68,
-      "gross": 0.111,
-      "netXm": 0.03,
-      "netPaxg": -0.946,
-      "action": "neutral"
+      "n": 57,
+      "gross": 0.022,
+      "netXm": -0.055,
+      "netPaxg": -0.985,
+      "action": "demote"
     },
     "p5vwap": {
-      "n": 8,
-      "gross": -1,
-      "netXm": -1.083,
-      "netPaxg": -2.071,
+      "n": 9,
+      "gross": -0.621,
+      "netXm": -0.711,
+      "netPaxg": -1.79,
       "action": "neutral"
     },
     "p5wyck": {
-      "n": 6,
-      "gross": 0.076,
-      "netXm": -0.001,
-      "netPaxg": -0.916,
+      "n": 5,
+      "gross": -0.208,
+      "netXm": -0.285,
+      "netPaxg": -1.204,
       "action": "neutral"
     },
     "p8vpinbo": {
-      "n": 10,
-      "gross": -0.185,
-      "netXm": -0.249,
-      "netPaxg": -1.02,
+      "n": 12,
+      "gross": -0.114,
+      "netXm": -0.184,
+      "netPaxg": -1.026,
       "action": "demote"
     },
     "p7scalp": {
-      "n": 2,
+      "n": 1,
       "gross": -1,
-      "netXm": -1.077,
-      "netPaxg": -1.994,
+      "netXm": -1.078,
+      "netPaxg": -2.018,
       "action": "neutral"
     },
     "vpbook": {
@@ -190,10 +190,10 @@
       "action": "neutral"
     },
     "adrfade": {
-      "n": 82,
-      "gross": 0.159,
-      "netXm": 0.076,
-      "netPaxg": -0.926,
+      "n": 81,
+      "gross": 0.096,
+      "netXm": 0.009,
+      "netPaxg": -1.032,
       "action": "neutral"
     }
   },

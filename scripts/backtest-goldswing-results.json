@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-10-21T05:16:09.572Z",
+  "generated": "2026-11-05T04:36:08.245Z",
   "mode": "full",
   "symbol": "PAXGUSDT",
   "universe": "PAXGUSDT Binance spot proxy for XAUUSD (basis ~0.1-0.5%; 24/7 weekend bars a broker never printed)",
@@ -11,8 +11,8 @@
    "d1": 401
   },
   "span": {
-   "from": "2026-05-09T04:00:00.000Z",
-   "to": "2026-10-21T04:00:00.000Z"
+   "from": "2026-05-24T03:00:00.000Z",
+   "to": "2026-11-05T03:00:00.000Z"
   },
   "feedDepths": {
    "h4": 220,
@@ -57,14 +57,14 @@
   ],
   "counters": {
    "scans": 842,
-   "warmupSkips": 148,
+   "warmupSkips": 149,
    "issued": 0,
    "merged": 0,
    "noPlan": 0,
    "badGeometry": 0,
-   "rankRejected": 1576,
+   "rankRejected": 1570,
    "edgeSuppressed": 0,
-   "otherRejected": 1576,
+   "otherRejected": 1570,
    "scanErrors": 0,
    "openAtEnd": 0,
    "bothTouch": 0,

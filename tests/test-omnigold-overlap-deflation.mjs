@@ -100,7 +100,9 @@ console.log('== the overlap is measured, not borrowed ==');
      walk before) — is the error hgFwdOverlap exists to avoid. The constant
      follows the bake; what is pinned is that the forward log never inherits
      it. */
-  ok(C.HG_OG_EFF_N_RATIO === 0.303, 'the replay constant follows the hg-v1402 bake (0.303)');
+  /* hg-v1486 re-walk: the bake ratio moved 0.303 -> 0.248 (2031.2/8187); the
+     pin follows the CURRENT bake, as hg-v1402 established. */
+  ok(C.HG_OG_EFF_N_RATIO === 0.248, 'the replay constant follows the hg-v1486 bake (0.248)');
   ok(ev.overlapRatio !== C.HG_OG_EFF_N_RATIO,
      'and this population measured its own, rather than inheriting that one');
 }

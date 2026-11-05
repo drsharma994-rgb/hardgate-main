@@ -259,8 +259,16 @@ console.log('\n6. the rows that actually govern GOLD SCALP');
      'prefer' reddens both assertions below. */
   ok(s.bosalign.action === 'demote' && s.ribbon.action === 'neutral' && s.hvn.action === 'demote',
      'hg-v1439: bosalign is demoted again (the instruction-retune lapsed on the re-walk), ribbon stays neutral on instruction, hvn stays demoted');
-  ok(s.p9volbar.action === 'demote' && s.p6fail.action === 'prefer',
-     'and hg-v1439 moved the fee-survivor boost: p9volbar prefer is dead (three fresh reads), p6fail carries the only prefer');
+  /* hg-v1486 re-walk (Sep03-Nov05, post floor): p9volbar's demote LAPSED — the
+     fresh live read is net-positive (+0.013R, n=48), so the demote rule no
+     longer fires and the row reads neutral (still under the prefer sample
+     floor and the +0.10R bar, so no boost returns). p6fail still carries the
+     only prefer — a DECLARED departure now (today's live read +0.042R is under
+     the bar; the census decision stands, actionWhy on the row). Mutation:
+     setting p9volbar.action back to 'prefer' or dropping p6fail's actionWhy
+     reddens the assertions below. */
+  ok(s.p9volbar.action === 'neutral' && s.p6fail.action === 'prefer',
+     'and the fee-survivor boost stays with p6fail alone: p9volbar is neutral on the hg-v1486 re-walk (net-positive, under both bars), p6fail prefer stands as a declared departure');
 
   /* a demote must not become a drop: demoted cards still paint */
   const src = fs.readFileSync(root + 'goldind.js', 'utf8');

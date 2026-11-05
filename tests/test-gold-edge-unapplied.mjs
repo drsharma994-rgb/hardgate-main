@@ -107,12 +107,16 @@ console.log('== the demoted rows trace to their committed measurements ==');
        `and it carries the SOURCE numbers (n=${a.n}, net ${a.avgR_net_xm}) rather than retyped ones`);
     ok(!c.dropped, `${k} is demoted, not suppressed — it does not clear the suppress bar (n>=50 AND gross<=0 AND net<=-0.20)`);
   }
-  /* The size of it, so "2.7%" is checked rather than asserted in prose. */
+  /* The size of it, so the share is checked rather than asserted in prose.
+     hg-v1486 re-walk (Sep03-Nov05, post floor): the book is 1,321 settled;
+     p5drive flipped POSITIVE on the fresh window (+2.6R over n=7) while
+     p6comp stays negative (−2.0R over n=18) — the pair together is +0.60R,
+     1.9% of the book. The hg-v1439 record read 31 trades / −4.00R. */
   const tot = Object.values(SCALP_AN).reduce((s, v) => s + v.n, 0);
   const add = SCALP_AN.p5drive.n + SCALP_AN.p6comp.n;
   const addR = SCALP_AN.p5drive.sumR_net_xm + SCALP_AN.p6comp.sumR_net_xm;
-  ok(tot === 1384, `the measured scalp book is ${tot} settled trades (hg-v1439 re-walk, post ceiling-reject)`);
-  ok(add === 31 && Math.abs(addR + 4.00) < 0.01,
+  ok(tot === 1321, `the measured scalp book is ${tot} settled trades (hg-v1486 re-walk, post floor)`);
+  ok(add === 25 && Math.abs(addR - 0.60) < 0.01,
      `and these two are ${add} of them (${(100 * add / tot).toFixed(1)}%), worth ${addR.toFixed(2)}R net at XM`);
 }
 
@@ -164,7 +168,10 @@ console.log('\n== measured-and-flat no longer reads as never-measured ==');
      is -0.249R net@XM, negative in both halves of the fresh book (n=10; thin
      but consistent, and demoting is a TIGHTENING, which thin samples may
      carry). It now demotes, pinned in the demote block above's verdict rule. */
-  const NEUTRAL_SCALP = ['sweepob', 'p8range', 'p5vwap', 'p5wyck', 'p7scalp', 'vpbook', 'adrfade'];
+  /* hg-v1486 re-walk: p8range LEFT the neutral list — the fresh live read is
+     −0.055R net over n=57, so the demote rule (net<0) fires and the row
+     demotes (pinned in the demote block's rule section). */
+  const NEUTRAL_SCALP = ['sweepob', 'p5vwap', 'p5wyck', 'p7scalp', 'vpbook', 'adrfade'];
   const NEUTRAL_SWING = ['ribbon', 'ob', 'bos', 'p8range', 'p5wyck', 'p5turt', 'p5vwap', 'p6zfade'];
   for (const [k, swing] of NEUTRAL_SCALP.map(k => [k, false]).concat(NEUTRAL_SWING.map(k => [k, true]))){
     const c = run(k, swing);
@@ -195,11 +202,11 @@ console.log('\n== a mechanic nobody has measured still carries nothing ==');
 console.log('\n== nothing was invented: no boost, and no demote on a coin flip ==');
 {
   const sw = run('sweepob', false);
-  /* hg-v1439: on the re-walk sweepob settled n=27 at +0.214R net@XM — still
-     under the n>=50 prefer bar, still no boost. */
+  /* hg-v1486 re-walk: sweepob settled n=30 at +0.165R net@XM — still under
+     the n>=50 prefer bar, still no boost (hg-v1439 read n=27 at +0.214R). */
   ok(!(sw.edgeBoost >= 2),
-     'sweepob (n=27, +0.214) misses the n>=50 prefer bar and gets no boost for it');
-  ok(BAKE.scalp.sweepob.n === 27 && BAKE.scalp.sweepob.n < 50,
+     'sweepob (n=30, +0.165) misses the n>=50 prefer bar and gets no boost for it');
+  ok(BAKE.scalp.sweepob.n === 30 && BAKE.scalp.sweepob.n < 50,
      'and the bake records the n that misses the bar, so the miss is checkable rather than remembered');
 
   const vp = run('vpbook', false);
@@ -236,7 +243,9 @@ console.log('\n== the rows already in the table are untouched ==');
   /* hg-v1439: p9volbar is NO LONGER prefer — measured dead on three fresh
      reads (-0.226 / -0.231 / -0.267R net, negative both halves on each); it
      demotes now. The other load-bearing verdicts stand. */
-  for (const [k, want] of [['fvg', 'suppress'], ['hvn', 'demote'], ['p6fail', 'prefer'], ['p9volbar', 'demote']]){
+  /* hg-v1486 re-walk: scalp p9volbar reads neutral (net-positive on the fresh
+     window, under both bars); the swing lane's own prefer is untouched. */
+  for (const [k, want] of [['fvg', 'suppress'], ['hvn', 'demote'], ['p6fail', 'prefer'], ['p9volbar', 'neutral']]){
     ok(verdict(run(k, false)) === want, `scalp.${k} is still ${want}`);
   }
   for (const [k, want] of [['pullback', 'demote'], ['weekly', 'prefer'], ['p9volbar', 'prefer'], ['p6comp', 'demote']]){

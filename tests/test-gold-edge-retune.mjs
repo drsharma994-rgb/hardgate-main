@@ -104,7 +104,9 @@ console.log('2. not one is unanimous on disjoint windows, and each says so');
 /* hg-v1439 re-derivation: retune.windows is the HG-V928 historical record;
    TODAY's re-walk counts are pinned per row below (bosalign 3/4 — the
    hg-v1439 return-to-demote leans on exactly this flip-proneness). */
-const WINDOWS_TODAY = { bosalign: '2/4', liqsweep: '3/4', nyexh: '1/4', ribbon: '3/4' };
+/* hg-v1486 re-walk: bosalign's split flipped again (1 of 4 windows positive —
+   the flip-proneness hg-v916 named is the whole point of the pin). */
+const WINDOWS_TODAY = { bosalign: '1/4', liqsweep: '3/4', nyexh: '1/4', ribbon: '3/4' };
 for (const { key, row } of moved){
   const W = splitDisjoint(BOOK, 4).map((seg) => seg.filter((t) => t.stratKey === key));
   const judged = W.filter((s) => s.length >= 8);
@@ -129,7 +131,7 @@ console.log('3. the rule would also tighten two rows on thin samples — refused
    demotes; still refused, now with an actionWhy); vpbook settled ZERO — the
    refusal mooted itself: there is nothing left to tighten on, and neutral
    stands because absence is not evidence. */
-for (const [key, wantN] of [['p5vwap', 8], ['vpbook', 0]]){
+for (const [key, wantN] of [['p5vwap', 9], ['vpbook', 0]]){   /* hg-v1486 re-walk: p5vwap settled one more (9) */
   const rows = of(key);
   eq(rows.length, wantN, key + ' has ' + wantN + ' live trades on the hg-v1439 re-walk');
   if (wantN > 0)

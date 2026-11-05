@@ -32,3 +32,6 @@ baseline-test.log
 
 # local full-suite scratch log
 final-test.log
+
+# local backtest bar cache (walk-80percent)
+.cache/

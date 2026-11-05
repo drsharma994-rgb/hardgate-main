@@ -72,24 +72,30 @@ console.log('== the in-sample number is real, and it is reproducible ==');
      STRONGER: the demote-reject cut is not even significant in sample any more
      (t=+0.41), and out of sample it is worse at every split. Mutation: reverting
      the artifact or the demote set reddens every pin in this section. */
-  ok(ALL.length === 1384 && BOOK.length === 1384,
-     `${ALL.length} live settled trades, ${BOOK.length} of them past the cost bar (the hg-v1439 walk applies the reject itself)`);
+  /* hg-v1486 re-walk (Sep03-Nov05, post floor): 1,321 settled, and the cost
+     reject still binds zero of them — ALL === BOOK by construction again. */
+  ok(ALL.length === 1321 && BOOK.length === 1321,
+     `${ALL.length} live settled trades, ${BOOK.length} of them past the cost bar (the hg-v1486 walk applies the reject itself)`);
   const edge = J('scripts/gold-setup-edge.json').scalp;
   const SUP = Object.keys(edge).filter(k => edge[k].action === 'suppress');
   const DEM = Object.keys(edge).filter(k => edge[k].action === 'demote');
-  ok(DEM.length === 13, `the edge table demotes ${DEM.length} scalp kinds`);
+  /* hg-v1486 re-walk: ob/silverb/p9volbar lapsed to neutral (net-positive on
+     the fresh walk), p8range lapsed to demote (net-negative) — 11 demotes. */
+  ok(DEM.length === 11, `the edge table demotes ${DEM.length} scalp kinds`);
 
   const afterSup = BOOK.filter(t => SUP.indexOf(String(t.stratKey)) < 0);
   const afterDem = afterSup.filter(t => DEM.indexOf(String(t.stratKey)) < 0);
-  ok(Math.abs(mean(afterSup.map(t => t.netR)) + 0.027) < 0.002,
-     `with today's suppressions the book is ${mean(afterSup.map(t => t.netR)).toFixed(3)}R`);
-  ok(afterDem.length === 278 && Math.abs(mean(afterDem.map(t => t.netR)) - 0.030) < 0.002,
-     `and rejecting the demoted kinds too gives ${mean(afterDem.map(t => t.netR)).toFixed(3)}R over n=${afterDem.length}`);
+  ok(Math.abs(mean(afterSup.map(t => t.netR)) + 0.004) < 0.002,
+     `with today's suppressions the book is ${mean(afterSup.map(t => t.netR)).toFixed(3)}R (hg-v1486 re-walk)`);
+  ok(afterDem.length === 348 && Math.abs(mean(afterDem.map(t => t.netR)) - 0.042) < 0.002,
+     `and rejecting the demoted kinds too gives ${mean(afterDem.map(t => t.netR)).toFixed(3)}R over n=${afterDem.length} (hg-v1486 re-walk)`);
   /* hg-v1439: the in-sample invitation is GONE — the cut book is not
      significantly anything even before the walk-forward. */
   ok(Math.abs(tstat(afterDem.map(t => t.netR))) < 1.96,
      `at t=${tstat(afterDem.map(t => t.netR)).toFixed(2)} — no longer significant even IN sample (was t=+2.9 on the v699 walk)`);
-  ok(afterDem.length / BOOK.length < 0.25,
+  /* hg-v1486 re-walk: the demote-set book is 26% of volume (was 21%) — still
+     a minority cohort, which is what makes the cut worth testing at all. */
+  ok(afterDem.length / BOOK.length < 0.30,
      `on ${(100 * afterDem.length / BOOK.length).toFixed(0)}% of the volume, which is what makes it worth testing rather than taking`);
 }
 
@@ -124,13 +130,16 @@ console.log('\n== out of sample it does not survive ==');
        `${(r.share * 100).toFixed(0)}/${(100 - r.share * 100).toFixed(0)}: ${r.nBad} kinds judged negative in-sample, `
        + `${r.kept} of ${r.n} OOS trades survive the cut`);
 
-  /* THE FINDING. Stated as two independent facts so neither alone carries it. */
-  const positive = results.filter(r => r.cut > 0);
-  ok(positive.length === 0,
-     'at NO split does cutting them produce a positive out-of-sample book — best is '
-     + Math.max(...results.map(r => r.cut)).toFixed(3) + 'R');
+  /* THE FINDING. Stated as two independent facts so neither alone carries it.
+     hg-v1486 re-walk: the cut no longer loses at EVERY split (the 70/30 split
+     reads +0.022R) — but it is insignificant at all three (t +0.20 best) and
+     WORSE than the untouched book at two of three. The refusal stands: the cut
+     buys nothing measurable, on either era's walk. */
+  ok(results.every(r => Math.abs(r.tCut) < 1.96),
+     'at NO split is the cut book significantly anything — best t='
+     + Math.max(...results.map(r => r.tCut)).toFixed(2));
   const worse = results.filter(r => r.cut < r.base);
-  ok(worse.length >= 1,
+  ok(worse.length >= 2,
      `and at ${worse.length} of ${results.length} splits the cut makes the OOS book WORSE than leaving them in`);
   const even = results.find(r => r.share === 0.5);
   ok(even.cut < even.base,

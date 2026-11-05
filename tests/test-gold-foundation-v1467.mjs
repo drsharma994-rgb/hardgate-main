@@ -18,7 +18,11 @@ vm.runInContext(fs.readFileSync(path.join(ROOT, 'lib/hg-gold-foundation.js'), 'u
 const J = ctx.hgGoldFoundationJudge;
 const P = ctx.hgGoldMeasuredPrefer;
 
-ok(P('scalp', 'p6fail') && P('scalp', 'p6fail').net === 0.128, 'p6fail is the scalp prefer');
+/* hg-v1486 re-walk: the recorded prefer carries the fresh book's numbers
+   (n=69, net +0.042R) — the prefer itself stands as a declared departure
+   (the fresh read is under the +0.10R bar; the census decision is named on
+   the goldind row). */
+ok(P('scalp', 'p6fail') && P('scalp', 'p6fail').net === 0.042, 'p6fail is the scalp prefer (hg-v1486 numbers; prefer stands as a declared departure)');
 ok(P('scalp', 'asian') == null && P('scalp', 'rsidiv') == null && P('scalp', 'bosalign') == null, 'measured losers are not prefers');
 ok(P('scalp', 'accurate') == null, 'the failed-sweep has no win-rate record');
 ok(P('swing', 'weekly') && P('swing', 'p9volbar') && P('swing', 'fvg') == null, 'swing prefer is weekly and p9volbar only');

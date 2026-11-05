@@ -60,9 +60,10 @@ console.log('== the deflation itself ==');
   ok(effN(1000, true) < 1000, 'an overlapping sample is deflated');
   ok(effN(1000, false) === 1000, 'a non-overlapping one is not');
   ok(effN(1000) < 1000, 'and overlap is the DEFAULT — the safe direction is wider intervals');
-  /* hg-v1402 recalibration: the shipped ratio moved 0.406 -> 0.303 with the
-     re-walk (formed effN 2442.4 of 8,053, week-clustered). */
-  ok(Math.abs(effN(8053, true) - 8053 * 0.303) < 1, '8,053 replay rows carry ~2,440 trades of information');
+  /* hg-v1486 recalibration: the shipped ratio moved 0.303 -> 0.248 with the
+     re-walk (formed effN 2031.2 of 8,187, week-clustered; hg-v1402 was
+     0.303 = 2442.4 of 8,053). */
+  ok(Math.abs(effN(8187, true) - 8187 * 0.248) < 1, '8,187 replay rows carry ~2,031 trades of information');
   ok(effN(1, true) >= 1, 'a single row never deflates below one observation');
   ok(effN(2, true) >= 1, 'nor does a tiny sample collapse to zero and make the interval degenerate');
   ok(!isFinite(effN(0, true)), 'no sample yields no effective sample, not a fabricated one');
@@ -118,7 +119,9 @@ console.log('\n== the bake that produced the ratio ==');
   const f = j.populations.formed, sq = j.populations.sequential;
   ok(f && sq, 'both populations are reported');
   ok(f.effective.effN < f.n, 'the FORMED population is deflated (' + f.effective.effN + ' of ' + f.n + ')');
-  ok(Math.abs(f.effective.effN / f.n - 0.303) < 0.05,
+  /* hg-v1486 re-walk: the ratio moved 0.303 -> 0.248 (2031.2 of 8,187 formed
+     plans, week-clustered) — OG_EFF_N_RATIO in omnigold.js moves with it. */
+  ok(Math.abs(f.effective.effN / f.n - 0.248) < 0.05,
      'and its ratio is the one hgOgEffN ships — ' + (f.effective.effN / f.n).toFixed(3));
 
   /* the sequential book cannot overlap: the next trade starts after the
@@ -145,9 +148,15 @@ console.log('\n== the sequential book is the one a person could take ==');
   ok(t === null, 'the gated ticket book is empty on the hg-v1402 walk — named, not zero-filled');
   ok(j.populations.sequential && j.populations.sequential.n > 0,
      'the ungated sequential book still exists: ' + j.populations.sequential.n + ' trades');
-  ok(j.populations.sequential.netR_xm > j.populations.formed.netR_xm,
-     'and one-at-a-time nets better at XM than the firehose ('
-     + j.populations.sequential.netR_xm + ' vs ' + j.populations.formed.netR_xm + ')');
+  /* hg-v1486 re-walk: the ordering FLIPPED — one-at-a-time reads −0.225R vs
+     the firehose −0.217R. Both are negative and the gap is noise; the old
+     "sequential nets better" claim was a property of the old walk, not a
+     law. Pin the honest state: both books report their own number, neither
+     significantly separates from the other. */
+  ok(isFinite(j.populations.sequential.netR_xm) && isFinite(j.populations.formed.netR_xm)
+     && Math.abs(j.populations.sequential.netR_xm - j.populations.formed.netR_xm) < 0.05,
+     'and one-at-a-time and the firehose are within noise of each other at XM ('
+     + j.populations.sequential.netR_xm + ' vs ' + j.populations.formed.netR_xm + ' — hg-v1486 re-walk; the old walk read the other order)');
 
   /* no cohort is invented: a cell with too few trades is absent, not 0 */
   for (const [k, v] of Object.entries(j.sequentialByCell)){

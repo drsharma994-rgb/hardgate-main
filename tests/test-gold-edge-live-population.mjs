@@ -114,27 +114,32 @@ console.log('2. the book figure, as quoted and as the desk forms it');
    settles a 1,384-trade main book, and shadows the still-suppressed kinds
    (vwap 153, sweep 80) — the withheld population is measured on that ledger.
    The quoted figure (1,617) is main + withheld; the desk forms 1,278. */
+/* hg-v1486 re-walk (Sep03-Nov05, post floor): every book figure re-derived —
+   main 1,321 settled at −0.004R, withheld 232, the desk forms 1,212; the cost
+   reject STILL binds zero main-book trades (87 sub-bar settles, all withheld). */
 const b = measured.book;
-eq(b.quoted.n, 1617, 'the quoted book is 1617 settled (main 1384 + withheld ledger 233)');
-eq(b.quoted.net, -0.061, 'the quoted book is -0.061R');
-eq(b.today.n, 1278, 'the desk forms 1278 of them');
-eq(b.today.net, -0.027, 'as formed, the book is -0.027R');
-eq(b.noLongerFormed, 339, '339 are no longer formed');
-eq(b.droppedByCost, 80, '80 under the cost reject (all inside the withheld ledger — the floor+ceiling era binds every main-book stop)');
-eq(b.droppedBySuppress, 339, '339 from suppressed kinds');
-eq(b.droppedByBoth, 80, '80 are both');
+eq(b.quoted.n, 1553, 'the quoted book is 1553 settled (main 1321 + withheld ledger 232)');
+eq(b.quoted.net, -0.028, 'the quoted book is -0.028R');
+eq(b.today.n, 1212, 'the desk forms 1212 of them');
+eq(b.today.net, -0.004, 'as formed, the book is -0.004R');
+eq(b.noLongerFormed, 341, '341 are no longer formed');
+eq(b.droppedByCost, 87, '87 under the cost reject (all inside the withheld ledger — the floor+ceiling era binds every main-book stop)');
+eq(b.droppedBySuppress, 341, '341 from suppressed kinds');
+eq(b.droppedByBoth, 87, '87 are both');
 eq(b.droppedByCost + b.droppedBySuppress - b.droppedByBoth, b.noLongerFormed, 'the union arithmetic closes');
-ok(Math.round(b.noLongerFormed / b.quoted.n * 100) === 21, 'that is 21% of the quoted book');
+ok(Math.round(b.noLongerFormed / b.quoted.n * 100) === 22, 'that is 22% of the quoted book');
 /* The five-line ladder in the cost-gate comment is the thing a reader will
    actually quote back. Check each line against the derivation rather than
    grepping for a substring that also appears in the table header — a stale
    figure in one of the two comments must not hide behind the other. */
+/* hg-v1486 re-walk pins: the fresh ladder (the hg-v1439 one is kept in the
+   comment for the record — the includes() list below still pins it). */
 const LADDER = [
-  [/quoted everywhere\s+n=(\d+)\s+([-+][\d.]+)R/,      1384, -0.035],
-  [/minus the four suppressed kinds\s+n=(\d+)\s+([-+][\d.]+)R/, 1278, -0.027],
-  [/minus this cost reject only\s+n=(\d+)\s+([-+][\d.]+)R/,     1384, -0.035],
-  [/what the desk forms\s+n=(\d+)\s+([-+][\d.]+)R/,             1278, -0.027],
-  [/BEFORE venue cost\s+n=(\d+)\s+([-+][\d.]+)R/,               1278, +0.050]
+  [/quoted everywhere\s+n=(\d+)\s+([-+][\d.]+)R/,      1321, -0.004],
+  [/minus the four suppressed kinds\s+n=(\d+)\s+([-+][\d.]+)R/, 1212, -0.004],
+  [/minus this cost reject only\s+n=(\d+)\s+([-+][\d.]+)R/,     1321, -0.004],
+  [/what the desk forms\s+n=(\d+)\s+([-+][\d.]+)R/,             1212, -0.004],
+  [/BEFORE venue cost\s+n=(\d+)\s+([-+][\d.]+)R/,               1212, +0.076]
 ];
 const raw = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-goldscalp-results-floor.json'), 'utf8'));
 const mainBook = raw.trades.filter((t) => typeof t.netR === 'number' && !t.shadow);
@@ -159,7 +164,7 @@ LADDER.forEach(([re, wantN, wantR], i) => {
   eq(Number(m[2]), Math.round(avg * 1000) / 1000, 'ladder line ' + (i + 1) + ' R matches the replay');
   eq(Number(m[2]), wantR, 'ladder line ' + (i + 1) + ' R is the pinned value');
 });
-for (const n of ['1,384', '339', '1,617', '80', '21%']){
+for (const n of ['1,384', '339', '1,617', '80', '21%', '1,553', '341', '22%', '1,321', '1,212']){
   ok(src.includes(n), 'goldind.js states ' + n);
 }
 
@@ -167,13 +172,20 @@ for (const n of ['1,384', '339', '1,617', '80', '21%']){
 console.log('3. no verdict moved on the live read');
 const ACTIONS = {
   fvg: 'suppress', vwapband: 'suppress', vwap: 'suppress', nyexh: 'suppress',
-  liqsweep: 'suppress', sweep: 'suppress', hvn: 'demote', ob: 'demote',
+  liqsweep: 'suppress', sweep: 'suppress', hvn: 'demote', ob: 'neutral',
   openrange: 'demote', bosalign: 'demote', asian: 'demote', ribbon: 'demote',
-  rsidiv: 'demote', p4laf: 'demote', silverb: 'demote', p6fail: 'prefer',
-  p9volbar: 'demote', p5drive: 'demote', p6comp: 'demote', sweepob: 'neutral',
-  p8range: 'neutral', p5vwap: 'neutral', p5wyck: 'neutral', p8vpinbo: 'demote',
+  rsidiv: 'demote', p4laf: 'demote', silverb: 'neutral', p6fail: 'prefer',
+  p9volbar: 'neutral', p5drive: 'demote', p6comp: 'demote', sweepob: 'neutral',
+  p8range: 'demote', p5vwap: 'neutral', p5wyck: 'neutral', p8vpinbo: 'demote',
   p7scalp: 'neutral', vpbook: 'neutral', adrfade: 'neutral'
 };
+/* hg-v1486 re-walk (Sep03-Nov05): FOUR baked verdicts moved on the fresh
+   live read — ob demote→neutral (+0.151R, n=46), silverb demote→neutral
+   (+0.142R, n=40), p9volbar demote→neutral (+0.013R, n=48) — each
+   net-positive but under the prefer sample floor — and p8range
+   neutral→demote (−0.055R, n=57, the demote rule fires). liqsweep's
+   hg-v928 overlay reads neutral on the fresh walk too (RETUNED below).
+   vwap and p6fail stay DECLARED departures (actionWhy on the row). */
 /* hg-v1439: two baked verdicts MOVED on the live read — p9volbar prefer→demote
    (prefer measured dead on three fresh reads: −0.226/−0.231/−0.267R) and
    p8vpinbo neutral→demote (−0.249R, negative both halves, n=10) — pinned here
@@ -188,7 +200,11 @@ for (const [k, act] of Object.entries(ACTIONS)){
    loosening LAPSED — the re-walk reads -0.071R net over n=94, the demote
    rule fires, and the row is back to its baked verdict with the return
    recorded on it. The other three loosenings stand. */
-const RETUNED = { nyexh: 'demote', liqsweep: 'demote', bosalign: 'demote', ribbon: 'neutral' };
+/* hg-v1486 re-walk: liqsweep's overlay reads neutral on the fresh live read
+   (+0.124R, n=45, net-positive — the demote rule no longer fires); the
+   hg-v928 instruction chain suppress→demote→neutral continues in the rule's
+   direction, and the retune guard asserts rule === in-force. */
+const RETUNED = { nyexh: 'demote', liqsweep: 'neutral', bosalign: 'demote', ribbon: 'neutral' };
 const overlaid = Object.keys(scalp).filter((k) => typeof scalp[k].actionBaked === 'string').sort();
 eq(overlaid.join(','), Object.keys(RETUNED).sort().join(','), 'exactly four rows carry a retune overlay');
 for (const [k, act] of Object.entries(RETUNED)){
@@ -213,9 +229,13 @@ ok(/hg-v1439: BACK TO DEMOTE/.test(scalp.bosalign.why), 'the row records the ret
 ok(measured.rows.ribbon.net > 0, 'ribbon stays net-positive on the live population (+0.059R)');
 eq(scalp.ribbon.action, 'neutral', 'ribbon keeps its hg-v928 neutral (the instruction stands; it does not clear the prefer bar)');
 ok(/RETUNED ON INSTRUCTION/.test(scalp.ribbon.why), 'ribbon says on the row that it was an instruction');
-eq(measured.rows.bosalign.oosBroke, 1, 'bosalign flips sign at one of three splits on the hg-v1439 walk');
-eq(measured.rows.bosalign.oosHeld, 2, 'bosalign holds at two');
-eq(measured.rows.ribbon.oosBroke, 0, 'ribbon holds at every split on this walk');
+/* hg-v1486 re-walk: the walk-forward splits MOVED — bosalign now flips at all
+   three (oosHeld 0 / oosBroke 3) and ribbon flips at all three too (its live
+   net is +0.061R but every split reads the other sign). The demote/neutral
+   verdicts stand; the flip-proneness hg-v916 named is the point. */
+eq(measured.rows.bosalign.oosBroke, 3, 'bosalign flips sign at all three splits on the hg-v1486 walk');
+eq(measured.rows.bosalign.oosHeld, 0, 'bosalign holds at none of them');
+eq(measured.rows.ribbon.oosBroke, 3, 'ribbon flips at all three splits on this walk (live net +0.061R, splits all negative)');
 /* and the refusal is written down where the next reader will hit it */
 ok(/hg-v916[\s\S]{0,400}NEITHER WAS TAKEN|THE TWO FLIPS THE LIVE POPULATION INVITES/.test(src),
    'goldind.js records the refusal next to the rows it concerns');
@@ -236,28 +256,33 @@ ok(NOTE({ live: null }) !== NOTE({}),
    the live pipeline — the note says so ('that IS what the desk forms'), which
    is the scalp-true reading of what hg-v962 built for swing. */
 {
+  /* hg-v1486 re-bake: the baked row carries the fresh book (n=255) and the
+     live block equals it — the note renders the headline wording, and the
+     walk-forward held 1 of 3. */
   const s = NOTE(scalp.hvn, 'scalp');
-  ok(s.includes('282'), 'hvn note carries the live n');
-  ok(s.includes('−0.026R'), 'hvn note carries the live net with a real minus sign');
-  ok(s.includes('nothing of this kind is gated out'), 'hvn note says the walk already applies the gates (282 of 282 formed)');
+  ok(s.includes('255'), 'hvn note carries the live n');
+  ok(s.includes('−0.023R'), 'hvn note carries the live net with a real minus sign');
+  ok(s.includes('nothing of this kind is gated out'), 'hvn note says the walk already applies the gates (255 of 255 formed)');
   ok(s.includes('held at 1 of 3'), 'hvn note reports the walk honestly (held 1, flipped 2)');
 }
 {
   const s = NOTE(scalp.vwap, 'scalp');
   ok(s.includes('withholds'), 'a suppressed row says what the suppression withholds');
   ok(!s.includes('the desk still forms'), 'and never claims the desk forms them');
-  ok(s.includes('all 3 walk-forward splits'), 'vwap sign held at every split');
+  /* hg-v1486 re-walk: vwap's sign no longer holds at every split — held 1,
+     flipped 2 on the fresh walk. Named, not hidden. */
+  ok(s.includes('held at 1 of 3'), 'vwap sign held at 1 of 3 splits on the fresh walk');
 }
 {
   const s = NOTE(scalp.bosalign, 'scalp');
-  ok(s.includes('held at 2 of 3'), 'bosalign note reports the hg-v1439 walk (held 2, flipped 1)');
+  ok(s.includes('flipped at all 3'), 'bosalign note reports the hg-v1486 walk (flipped at all three)');
 }
 {
   /* zero walked splits means TOO THIN, not zero held. Rendering that as a
      failure would read as evidence against a verdict that was never tested.
-     hg-v1439: ob now WALKS (flipped at all 2); p5wyck is the too-thin row. */
+     hg-v1439: ob walks; hg-v1486: ob held 1 of 2. p5wyck is the too-thin row. */
   const s = NOTE(scalp.ob, 'scalp');
-  ok(s.includes('flipped at all 2'), 'ob note reports its walked splits honestly');
+  ok(s.includes('held at 1 of 2'), 'ob note reports its walked splits honestly');
   const t = NOTE(scalp.p5wyck, 'scalp');
   ok(t.includes('too thin to walk forward'), 'a row no split could walk says so');
   ok(!/held at|flipped at/.test(t), 'and does not report a walk result it never had');
@@ -276,7 +301,7 @@ console.log('6. the note reaches cand.edge without moving the verdict');
   const c = APPLY(mk(), { scalp: true });
   ok(c.edge && c.edge.liveWhy, 'a demoted candidate carries edge.liveWhy');
   eq(c.edge.liveWhy, NOTE(scalp.hvn, 'scalp'), 'and it is exactly the note for its row');
-  ok(c.edge.live && c.edge.live.n === 282, 'and the structured live block too');
+  ok(c.edge.live && c.edge.live.n === 255, 'and the structured live block too (hg-v1486 re-walk: hvn live n=255)');
   ok(c.demoted === true, 'the demote still fires');
   ok(Array.isArray(c.gateNotes) && c.gateNotes.some((g) => /IS what the desk forms|still forms/.test(g)),
      'the live reading rides along with the demote reason');

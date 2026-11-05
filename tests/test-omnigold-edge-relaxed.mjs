@@ -179,8 +179,9 @@ ok(/var MIN_SAMPLES = 20;/.test(OG_SRC), 'the sample floor is unchanged');
 ok(/var FWD_MIN_JUDGE = 20;/.test(OG_SRC), 'and the forward-judgement floor');
 /* hg-v1402: the constant DID move — it is a bake-derived number and the
    re-walk measured 0.303 (2442.4/8053); pinning 0.406 here would pin a
-   stale bake. The pin is now that it matches the CURRENT bake ratio. */
-ok(/var OG_EFF_N_RATIO = 0\.303;/.test(OG_SRC), 'the overlap deflation follows the hg-v1402 bake (0.303)');
+   stale bake. The pin is now that it matches the CURRENT bake ratio —
+   hg-v1486 re-walk: 0.248 (2031.2/8187). */
+ok(/var OG_EFF_N_RATIO = 0\.248;/.test(OG_SRC), 'the overlap deflation follows the hg-v1486 bake (0.248)');
 ok(/function hgOgFamilyZ/.test(OG_SRC), 'the family-wise correction still exists');
 {
   const t = TALLY();

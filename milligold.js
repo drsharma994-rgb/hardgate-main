@@ -149,21 +149,21 @@ function mgFundBlackout(){
    the bound and it is NEGATIVE. Do not hand-edit — `npm run gold:milli-walk`
    is the drift check. */
   var HG_MILLI_FORWARD = {
-    trials: 6, beatsDesk: 5, pays: 0,
+    trials: 6, beatsDesk: 5, pays: 3,
     beatsDeskAll: false, paysAll: false,
-    shippedSize: 8, sharedMin: 5, sharedMax: 6,
-    inSampleNet: 0.0505, inSampleNetLower: 0.044,
-    deskNet: -0.1138, deskNetLower: -0.2928,
-    seqMilliNet: -0.0242, seqDeskNet: 0.0809,
-    worstForwardNet: -0.1109,
-    bestForwardNet: -0.0764,
+    shippedSize: 8, sharedMin: 5, sharedMax: 7,
+    inSampleNet: 0.0551, inSampleNetLower: 0.0488,
+    deskNet: -0.0925, deskNetLower: -0.2797,
+    seqMilliNet: 0.0281, seqDeskNet: 0.0485,
+    worstForwardNet: -0.057,
+    bestForwardNet: 0.0397,
     splits: [
-      { end: 'as-recorded', split: 0.5, n: 1275, milliNet: -0.1109, deskNet: -0.1396, learned: 19, shared: 5 },
-      { end: 'as-recorded', split: 0.6, n: 702, milliNet: -0.0857, deskNet: -0.1293, learned: 15, shared: 5 },
-      { end: 'as-recorded', split: 0.7, n: 487, milliNet: -0.0976, deskNet: -0.075, learned: 14, shared: 6 },
-      { end: 'lower', split: 0.5, n: 785, milliNet: -0.092, deskNet: -0.3196, learned: 12, shared: 5 },
-      { end: 'lower', split: 0.6, n: 454, milliNet: -0.0897, deskNet: -0.321, learned: 10, shared: 5 },
-      { end: 'lower', split: 0.7, n: 280, milliNet: -0.0764, deskNet: -0.2828, learned: 9, shared: 5 }
+      { end: 'as-recorded', split: 0.5, n: 1590, milliNet: -0.057, deskNet: -0.0728, learned: 20, shared: 5 },
+      { end: 'as-recorded', split: 0.6, n: 738, milliNet: 0.0026, deskNet: -0.0298, learned: 14, shared: 6 },
+      { end: 'as-recorded', split: 0.7, n: 602, milliNet: -0.0191, deskNet: -0.0181, learned: 19, shared: 7 },
+      { end: 'lower', split: 0.5, n: 817, milliNet: -0.0365, deskNet: -0.2817, learned: 12, shared: 5 },
+      { end: 'lower', split: 0.6, n: 339, milliNet: 0.0397, deskNet: -0.26, learned: 8, shared: 6 },
+      { end: 'lower', split: 0.7, n: 335, milliNet: 0.0098, deskNet: -0.254, learned: 12, shared: 7 }
     ]
   };
   /* --- END GENERATED HG_MILLI_FORWARD --- */

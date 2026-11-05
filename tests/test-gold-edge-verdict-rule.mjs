@@ -133,9 +133,15 @@ const scalp = W.HG_GOLD_SETUP_EDGE.scalp;
      population cannot depart from anything. sweep JOINED the list: its
      suppress no longer clears the −0.20R bar on the cost-gated withheld
      ledger (n=55, net −0.008R) and stands as a declared tightening refusal. */
-  eq(scalpDecl.length, 6, 'six declared departures on scalp: the four hg-v1439 ones plus p5vwap and sweep (vpbook mooted at zero settles)');
+  /* hg-v1486 re-walk (Sep03-Nov05, post floor): two MORE verdicts are now
+     DECLARED departures, both carried on their rows with actionWhy — vwap
+     (the rule reads demote on the fresh live read; SUPPRESS STANDS, the
+     mechanic is still negative on both legs at XM) and p6fail (the rule
+     reads neutral; PREFER STANDS as the census decision it is, today's
+     read named on the row — leadership is not a re-bake byproduct). */
+  eq(scalpDecl.length, 8, 'eight declared departures on scalp: the four hg-v1439 ones plus p5vwap and sweep (vpbook mooted at zero settles), plus the hg-v1486 re-walk\'s vwap and p6fail');
   const keys = scalpDecl.map(x => x.key).sort().join(',');
-  ok(keys === 'p4laf,p5drive,p5vwap,p5wyck,p7scalp,sweep', 'the declared departures are the hg-v1439 four plus p5vwap and sweep — got ' + keys);
+  ok(keys === 'p4laf,p5drive,p5vwap,p5wyck,p6fail,p7scalp,sweep,vwap', 'the declared departures are the hg-v1439 four plus p5vwap and sweep, plus the hg-v1486 vwap and p6fail — got ' + keys);
   for (const x of scalpDecl.filter(x => x.key === 'p5vwap' || x.key === 'vpbook')){
     eq(x.rule, 'demote', x.key + ': the rule would demote it');
     eq(x.inForce, 'neutral', x.key + ': the desk keeps it neutral');
@@ -147,7 +153,8 @@ const scalp = W.HG_GOLD_SETUP_EDGE.scalp;
      hg-v1439 refusal, pinned in section 3's declared-departures list) */
   /* hg-v1439: vpbook's live block is null (zero settles on the re-walk) —
      thinner than thin: there is nothing left to read. */
-  ok(scalp.p5vwap.live.n <= 8, 'p5vwap really is that thin');
+  /* hg-v1486 re-walk: p5vwap settled one more (9) — still among the thinnest rows */
+  ok(scalp.p5vwap.live.n <= 9, 'p5vwap really is that thin');
   ok(scalp.vpbook.live === null, 'vpbook is thinner than thin — zero settles on the hg-v1439 walk, live null');
 }
 

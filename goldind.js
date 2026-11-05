@@ -2025,10 +2025,10 @@ function hgGoldEdgeRetuneNote(){
    inventing one would be the fitted-number mistake this desk keeps refusing.
    It reports the age and what the walk cannot have seen. The reader decides. */
 var HG_GOLD_EDGE_WALK = {
-  from: '2026-08-21T03:45:00.000Z',
-  to: '2026-10-22T15:15:00.000Z',
-  generated: '2026-10-22T15:45:53.741Z',
-  trades: 1980,
+  from: '2026-09-03T16:45:00.000Z',
+  to: '2026-11-05T04:15:00.000Z',
+  generated: '2026-11-05T04:35:22.063Z',
+  trades: 1917,
   src: 'scripts/backtest-goldscalp-results-floor.json'
 };
 
@@ -2189,24 +2189,28 @@ var HG_GOLD_SETUP_EDGE = {
       live: null,
       why: 'SCALP VWAP-band MR 0-for-1 settled in shadow replay on the hg-v1439 re-walk (0-for-7 before it) — stays suppressed' },
     vwap: { n: 153, gross: -0.075, net: -0.307, action: 'suppress',
-      live: { n: 98, gross: -0.1211, net: -0.201, oosHeld: 3, oosBroke: 0, formsNone: true },
+      actionWhy: 'rule says demote on the 2026-11-05 live read (gross −0.080R, net −0.164R, n=96); SUPPRESS STANDS — '
+        + 'the mechanic is still negative on BOTH legs at XM on the fresh walk (shadow book n=159, net −0.229R), so '
+        + 'loosening it back onto the board is the move the evidence would have to carry, and it does not '
+        + '(the hg-v928/hg-v1439 refusal shape). Declared, not hidden.',
+      live: { n: 96, gross: -0.0802, net: -0.164, oosHeld: 1, oosBroke: 2, formsNone: true },
       why: 'SCALP VWAP bounce gross −0.08R / net −0.31R at XM (n=153, 36% WR, hg-v1439 re-walk) — negative before fees, not tradable' },
-    nyexh: { n: 61, gross: -0.047, net: -0.119, action: 'demote', actionBaked: 'suppress',
-      live: { n: 61, gross: -0.0471, net: -0.119, oosHeld: 1, oosBroke: 1, formsNone: true },
+    nyexh: { n: 64, gross: -0.027, net: -0.1, action: 'demote', actionBaked: 'suppress',
+      live: { n: 64, gross: -0.0266, net: -0.1, oosHeld: 3, oosBroke: 0, formsNone: true },
       retune: { from: 'suppress', to: 'demote', liveN: 117, liveGross: -0.1235, liveNet: -0.1827,
                 windows: '1/4', unanimous: false },
-      why: 'NY VOLUME EXHAUSTION gross −0.05R / net −0.12R at XM (n=61, hg-v1439 re-walk) — timeout losses dominate; negative before fees'
+      why: 'NY VOLUME EXHAUSTION gross −0.03R / net −0.1R at XM (n=64, hg-v1486 re-walk Sep03–Nov05, post floor) — timeout losses dominate; negative before fees · hg-v1439 record: gross −0.05R / net −0.12R over n=61.'
         + ' · RETUNED ON INSTRUCTION: on the 117 trades the desk still forms it is −0.18R, above the −0.20 suppress bar, so the'
         + ' table\'s own rule reads demote. Net is positive in only 1 of 4 disjoint windows, so this is the rule applied, not an edge shown.' },
-    liqsweep: { n: 45, gross: -0.042, net: -0.122, action: 'demote', actionBaked: 'suppress',
-      live: { n: 45, gross: -0.0415, net: -0.122, oosHeld: 0, oosBroke: 1, formsNone: true },
+    liqsweep: { n: 45, gross: 0.207, net: 0.124, action: 'neutral', actionBaked: 'suppress',
+      live: { n: 45, gross: 0.2068, net: 0.124, oosHeld: 0, oosBroke: 1, formsNone: true },
       retune: { from: 'suppress', to: 'demote', liveN: 54, liveGross: 0.0313, liveNet: -0.0479,
                 windows: '1/4', unanimous: false },
-      why: 'FIVE-LEG SWEEP ENGINE gross −0.04R / net −0.12R at XM (n=45, hg-v1439 re-walk) — no edge at the venue'
-        + ' · RETUNED ON INSTRUCTION: on the 54 it still forms it is −0.05R with gross POSITIVE, clearing the suppress bar on both legs,'
-        + ' so the rule reads demote. Net is positive in only 1 of 4 disjoint windows.' },
+      why: 'FIVE-LEG SWEEP ENGINE gross +0.21R / net +0.12R at XM (n=45, hg-v1486 re-walk Sep03–Nov05, post floor) — net-positive, so the demote rule no longer fires and the row reads neutral; positive in 3 of 4 disjoint windows. The rule is applied, not an edge claimed.'
+        + ' · RETUNED ON INSTRUCTION (hg-v928): on the 54 it still forms then it was −0.05R with gross POSITIVE, clearing the suppress bar on both legs, so the rule read demote.'
+        + ' · hg-v1439 record: −0.04R gross / −0.12R net over n=45 — no edge at the venue.' },
     sweep: { n: 80, gross: 0.141, net: -0.058, action: 'suppress',
-      live: { n: 55, gross: 0.0615, net: -0.008, oosHeld: 0, oosBroke: 2, formsNone: true },
+      live: { n: 49, gross: 0.1414, net: 0.072, oosHeld: 2, oosBroke: 0, formsNone: true },
       /* hg-v1439 declared departure: the rule reads demote on the cost-gated
          withheld ledger (n=55, net −0.008R — the −0.20R suppress bar no
          longer clears arithmetically). SUPPRESS STANDS as a tightening
@@ -2245,59 +2249,61 @@ var HG_GOLD_SETUP_EDGE = {
        why row.live is rendered next to it rather than replacing it.
        tests/test-gold-edge-live-population.mjs re-derives all six numbers and
        fails if either action is ever quietly flipped on the in-sample read. */
-    hvn: { n: 282, gross: 0.059, net: -0.026, action: 'demote',
-      live: { n: 282, gross: 0.0587, net: -0.026, oosHeld: 1, oosBroke: 2 },
-      why: 'SCALP HVN retest net −0.03R at XM (n=282, gross +0.06, hg-v1439 re-walk) — near-flat, never MOST PROBABLE / ENGINE lead' },
-    ob: { n: 53, gross: 0.08, net: -0.009, action: 'demote',
-      live: { n: 53, gross: 0.0797, net: -0.009, oosHeld: 0, oosBroke: 2 },
-      why: 'SCALP OB/breaker net −0.01R at XM (n=53, gross +0.08, hg-v1439 re-walk) — near-flat, never MOST PROBABLE / ENGINE lead' },
-    openrange: { n: 179, gross: -0.014, net: -0.084, action: 'demote',
-      live: { n: 179, gross: -0.0138, net: -0.084, oosHeld: 1, oosBroke: 2 },
-      why: 'SCALP ORB net −0.08R at XM (n=179, gross −0.01, hg-v1439 re-walk) — never MOST PROBABLE / ENGINE lead' },
-    bosalign: { n: 94, gross: 0.004, net: -0.071, action: 'demote', actionBaked: 'demote',
-      live: { n: 94, gross: 0.0037, net: -0.071, oosHeld: 2, oosBroke: 1 },
+    hvn: { n: 255, gross: 0.063, net: -0.023, action: 'demote',
+      live: { n: 255, gross: 0.0632, net: -0.023, oosHeld: 1, oosBroke: 2 },
+      why: 'SCALP HVN retest net −0.023R at XM (n=255, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.06R) — near-flat, never MOST PROBABLE / ENGINE lead · hg-v1439 record: net −0.03R over n=282.' },
+    ob: { n: 46, gross: 0.244, net: 0.151, action: 'neutral',
+      live: { n: 46, gross: 0.244, net: 0.151, oosHeld: 1, oosBroke: 1 },
+      why: 'SCALP OB/breaker net +0.15R at XM (n=46, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.24R) — net-positive, under the prefer sample floor (50); paints unboosted · hg-v1439 record: −0.01R net over n=53.' },
+    openrange: { n: 170, gross: 0.047, net: -0.025, action: 'demote',
+      live: { n: 170, gross: 0.047, net: -0.025, oosHeld: 1, oosBroke: 2 },
+      why: 'SCALP ORB net −0.025R at XM (n=170, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.05R) — never MOST PROBABLE / ENGINE lead · hg-v1439 record: net −0.08R over n=179.' },
+    bosalign: { n: 87, gross: 0.061, net: -0.017, action: 'demote', actionBaked: 'demote',
+      live: { n: 87, gross: 0.0607, net: -0.017, oosHeld: 0, oosBroke: 3 },
       retune: { from: 'demote', to: 'neutral', liveN: 125, liveGross: 0.0654, liveNet: 0.0125,
                 windows: '3/4', unanimous: false },
-      why: 'SCALP BOS align net −0.07R at XM (n=94, gross flat, hg-v1439 re-walk) — never MOST PROBABLE / ENGINE lead'
+      why: 'SCALP BOS align net −0.017R at XM (n=87, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.06R) — never MOST PROBABLE / ENGINE lead · hg-v1439 record: net −0.07R over n=94.'
         + ' · RETUNED ON INSTRUCTION: on the 125 it still forms it is +0.013R, so the demote rule (net<0) no longer fires.'
         + ' REFUSED TWICE BEFORE: its sign flips at all three walk-forward splits and it is net-positive in only 3 of 4'
         + ' disjoint windows. It can lead now because it was asked for, not because it was shown.'
         + ' · hg-v1439: BACK TO DEMOTE — on the hg-v1439 re-walk (Aug21-Oct22, post ceiling-reject) the live read is'
         + ' net −0.071R over n=94 and the demote rule (net<0) fires again; hg-v916 warned the sign flips at every'
         + ' split, and it has flipped. The rule is applied, not an edge claimed.' },
-    asian: { n: 86, gross: -0.023, net: -0.092, action: 'demote',
-      live: { n: 86, gross: -0.023, net: -0.092, oosHeld: 3, oosBroke: 0 },
-      why: 'SCALP Asian breakout net −0.09R at XM (n=86, gross −0.02, hg-v1439 re-walk) — never MOST PROBABLE / ENGINE lead' },
-    ribbon: { n: 104, gross: 0.141, net: 0.059, action: 'neutral', actionBaked: 'demote',
-      live: { n: 104, gross: 0.1407, net: 0.059, oosHeld: 3, oosBroke: 0 },
+    asian: { n: 85, gross: 0.016, net: -0.055, action: 'demote',
+      live: { n: 85, gross: 0.0159, net: -0.055, oosHeld: 1, oosBroke: 2 },
+      why: 'SCALP Asian breakout net −0.055R at XM (n=85, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.02R) — never MOST PROBABLE / ENGINE lead · hg-v1439 record: net −0.09R over n=86.' },
+    ribbon: { n: 108, gross: 0.145, net: 0.061, action: 'neutral', actionBaked: 'demote',
+      live: { n: 108, gross: 0.1447, net: 0.061, oosHeld: 0, oosBroke: 3 },
       retune: { from: 'demote', to: 'neutral', liveN: 102, liveGross: 0.1093, liveNet: 0.0271,
                 windows: '3/4', unanimous: false },
-      why: 'SCALP EMA ribbon gross +0.14R at XM (n=104, hg-v1439 re-walk) — the hg-v916 near-flat read; never MOST PROBABLE / ENGINE lead'
+      why: 'SCALP EMA ribbon gross +0.15R at XM (n=108, hg-v1486 re-walk Sep03–Nov05, post floor) — the hg-v916 near-flat read; never MOST PROBABLE / ENGINE lead · hg-v1439 record: gross +0.14R over n=104.'
         + ' · RETUNED ON INSTRUCTION: on the 102 it still forms it is +0.027R, so the demote rule no longer fires.'
         + ' Net-positive in 3 of 4 disjoint windows — a split, not a result.' },
-    rsidiv: { n: 52, gross: -0.042, net: -0.109, action: 'demote',
-      live: { n: 52, gross: -0.0416, net: -0.109, oosHeld: 1, oosBroke: 2 },
-      why: 'SCALP RSI divergence net −0.11R at XM (n=52, hg-v1439 re-walk) — never MOST PROBABLE / ENGINE lead' },
-    p4laf: { n: 17, gross: 0.285, net: 0.205, action: 'demote',
+    rsidiv: { n: 50, gross: -0.067, net: -0.137, action: 'demote',
+      live: { n: 50, gross: -0.067, net: -0.137, oosHeld: 0, oosBroke: 1 },
+      why: 'SCALP RSI divergence net −0.14R at XM (n=50, hg-v1486 re-walk Sep03–Nov05, post floor; gross −0.07R) — never MOST PROBABLE / ENGINE lead · hg-v1439 record: net −0.11R over n=52.' },
+    p4laf: { n: 15, gross: 0.243, net: 0.163, action: 'demote',
       actionWhy: 'rule says neutral on the hg-v1439 live read (+0.205R, n=17); the demote STANDS — a loosening '
         + 'needs more than 17 trades, and the same book a window earlier read −0.455R (hg-v920: loosenings are '
         + 'refused until the evidence is boring). Declared, not hidden.',
-      live: { n: 17, gross: 0.2846, net: 0.205, oosHeld: 0, oosBroke: 0 },
-      why: 'S9 LIQUIDITY ABSORPTION gross +0.28R at XM (n=17 on the hg-v1439 re-walk; the prior window read −0.46R over n=24) — small sample, never lead until it proves out' },
-    silverb: { n: 42, gross: 0.012, net: -0.073, action: 'demote',
-      live: { n: 42, gross: 0.0119, net: -0.073, oosHeld: 0, oosBroke: 1 },
-      why: 'SESSION SILVER BULLET net −0.07R at XM (n=42, hg-v1439 re-walk; −0.55R over n=14 on the prior window) — unproven, never lead' },
-    p6fail: { n: 64, gross: 0.206, net: 0.128, action: 'prefer',
-      live: { n: 64, gross: 0.206, net: 0.128, oosHeld: 0, oosBroke: 2 },
-      why: 'S30 FAILED-BREAK REVERSAL gross +0.21R at XM (n=64, hg-v1439 re-walk; net +0.13R) — measured fee-survivor' },
-    p9volbar: { n: 50, gross: 0.058, net: -0.008, action: 'demote',
-      live: { n: 50, gross: 0.058, net: -0.008, oosHeld: 0, oosBroke: 2 },
-      why: 'S62 VOLUME-BAR SWEEP net −0.01R at XM (n=50 on the hg-v1439 re-walk; the baked prefer quoted +0.16R over n=72 on the prior window)'
-        + ' · hg-v1439: PREFER IS DEAD. The baked prefer was measured net-negative in BOTH halves on three fresh'
-        + ' reads (r2 Aug16-Oct18 −0.226; r3 Aug21-Oct22 −0.231, −0.236/−0.227 by half; the upstream-refreshed'
-        + ' Aug19-Oct21 artifact −0.267, −0.269/−0.265) — under this table\'s own −0.20 suppress bar pre-reject.'
-        + ' Post ceiling-reject the live read is −0.008R (n=50), above the suppress bar, so the rule reads DEMOTE'
-        + ' and demote is what ships. The +2 rank boost the prefer granted is withdrawn.' },
+      live: { n: 15, gross: 0.2425, net: 0.163, oosHeld: 0, oosBroke: 0 },
+      why: 'S9 LIQUIDITY ABSORPTION gross +0.24R at XM (n=15 on the hg-v1486 re-walk Sep03–Nov05, post floor; the hg-v1439 window read +0.28R over n=17; the prior window read −0.46R over n=24) — small sample, never lead until it proves out' },
+    silverb: { n: 40, gross: 0.232, net: 0.142, action: 'neutral',
+      live: { n: 40, gross: 0.2322, net: 0.142, oosHeld: 0, oosBroke: 0 },
+      why: 'SESSION SILVER BULLET net +0.14R at XM (n=40, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.23R) — net-positive, under the prefer sample floor (50); paints unboosted · hg-v1439 record: −0.07R net over n=42 (−0.55R over n=14 on the window before that).' },
+    p6fail: { n: 69, gross: 0.121, net: 0.042, action: 'prefer',
+      actionWhy: 'rule says neutral on the 2026-11-05 live read (gross +0.121R, net +0.042R, n=69); PREFER STANDS — leadership is a'
+        + ' census decision, not a re-bake byproduct (hg-v1467/v1468): the prefer bar that admitted it was measured over the full book at'
+        + ' ship time (n=64, net +0.128R at XM), and the fresh 62-day live window is positive on BOTH legs but under the +0.10R bar. One'
+        + ' window does not retire the leader; the forward ledger decides. Named, not hidden.',
+      live: { n: 69, gross: 0.1211, net: 0.042, oosHeld: 1, oosBroke: 2 },
+      why: 'S30 FAILED-BREAK REVERSAL gross +0.12R / net +0.04R at XM (n=69, hg-v1486 re-walk Sep03–Nov05, post floor) — measured fee-survivor; see actionWhy · hg-v1439 record: gross +0.21R / net +0.13R over n=64.' },
+    p9volbar: { n: 48, gross: 0.08, net: 0.013, action: 'neutral',
+      live: { n: 48, gross: 0.0799, net: 0.013, oosHeld: 0, oosBroke: 1 },
+      why: 'S62 VOLUME-BAR SWEEP net +0.01R at XM (n=48, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.08R) — net-positive, so the demote rule no longer fires and the row reads neutral; still under the prefer sample floor (50) and the +0.10R bar, so the rank stays un-boosted.'
+        + ' · hg-v1439 record: PREFER IS DEAD — the baked prefer measured net-negative in BOTH halves on three fresh reads'
+        + ' (−0.226 / −0.231, −0.236/−0.227 by half; the Aug19-Oct21 artifact −0.267, −0.269/−0.265), under the −0.20 suppress bar pre-reject;'
+        + ' post ceiling-reject it read −0.008R (n=50) and shipped demote. The +2 rank boost stayed withdrawn.' },
 
     /* hg-v909: TWO MEASUREMENTS THAT WERE ON DISK AND NEVER REACHED THE DESK.
        Both sit in scripts/gold-scalp-bt-analysis-floor.json byStrategy — the
@@ -2306,15 +2312,16 @@ var HG_GOLD_SETUP_EDGE = {
        a new threshold — the bar is the one above, applied to rows that were
        simply left out of the applied copy. hg-v1439 walk: they are 31 of the
        1,384 settled scalp trades (2.2%) and −4.00R net at XM. */
-    p5drive: { n: 10, gross: 0.264, net: 0.208, action: 'demote',
+    p5drive: { n: 7, gross: 0.43, net: 0.37, action: 'demote',
       actionWhy: 'rule says neutral on the hg-v1439 live read (+0.208R, n=10); the demote STANDS — 10 trades, '
         + 'halves mixed on the fresh book (−0.388/+0.418 pre-reject), and a loosening on a coin-flip sample is '
         + 'the hg-v928/hg-v920 refusal shape. Declared, not hidden.',
-      live: { n: 10, gross: 0.2644, net: 0.208, oosHeld: 0, oosBroke: 0 },
-      why: 'S24 THREE-DRIVE EXHAUSTION gross +0.26R at XM (n=10 on the hg-v1439 re-walk; the prior window read −0.22R over n=17) — paints, never leads (see actionWhy)' },
-    p6comp: { n: 21, gross: -0.231, net: -0.291, action: 'demote',
-      live: { n: 21, gross: -0.2311, net: -0.291, oosHeld: 0, oosBroke: 0 },
-      why: 'S30 SESSION-COMPOSITE PULLBACK net −0.29R at XM (n=21, hg-v1439 re-walk) — negative before fees now too; paints, never leads (the SWING lane measured its own n=17 at −0.29R)' },
+      live: { n: 7, gross: 0.4301, net: 0.37, oosHeld: 0, oosBroke: 0 },
+      why: 'S24 THREE-DRIVE EXHAUSTION gross +0.43R at XM (n=7 on the hg-v1486 re-walk Sep03–Nov05, post floor; the hg-v1439 window read +0.26R over n=10; the prior window read −0.22R over n=17) — paints, never leads (see actionWhy)' },
+    p6comp: { n: 18, gross: -0.045, net: -0.109, action: 'demote',
+      live: { n: 18, gross: -0.0451, net: -0.109, oosHeld: 0, oosBroke: 0 },
+      why: 'S30 SESSION-COMPOSITE PULLBACK net −0.11R at XM (n=18, hg-v1486 re-walk Sep03–Nov05 post floor; gross −0.05R) — negative before fees; paints, never leads'
+        + ' · hg-v1439 record: net −0.29R over n=21 (the SWING lane measured its own n=17 at −0.29R).' },
 
     /* MEASURED, AND CLEARED NO BAR. These rows change nothing about ranking
        or eligibility — that is the point. Until now the applied table simply
@@ -2338,35 +2345,35 @@ var HG_GOLD_SETUP_EDGE = {
        REVERSAL n=11 +0.736, CONTINUATION n=5 +0.422, NY-CONT n=8 -0.135,
        NY-REV n=2 +0.197 — every cell under n=12, so nothing acts on them and
        the split is recorded rather than used. Action stays `neutral`. */
-    sweepob:  { n: 27, gross: 0.295, net: 0.214, action: 'neutral',
-      live: { n: 27, gross: 0.2946, net: 0.214, oosHeld: 0, oosBroke: 0 },
-      why: 'SWEEP→OB PRECURSOR net +0.21R at XM (n=27, hg-v1439 re-walk) — every firing in the walk is a '
-        + 'pre-trigger state, not a confirmed sweep→OB; the confirmed setup has never fired' },
-    p8range:  { n: 68, gross: 0.111, net: 0.03, action: 'neutral',
-      live: { n: 68, gross: 0.1113, net: 0.03, oosHeld: 0, oosBroke: 3 },
-      why: 'S52 RANGE-BAR S0 SWEEP net +0.03R at XM (n=68, hg-v1439 re-walk) — measured flat at the venue, under the prefer bar' },
-    p5vwap:   { n: 8, gross: -1, net: -1.083, action: 'neutral',
+    sweepob:  { n: 30, gross: 0.248, net: 0.165, action: 'neutral',
+      live: { n: 30, gross: 0.2477, net: 0.165, oosHeld: 0, oosBroke: 0 },
+      why: 'SWEEP→OB PRECURSOR net +0.16R at XM (n=30, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.25R) — every firing in the walk is a pre-trigger state, not a confirmed sweep→OB; the confirmed setup has never fired · hg-v1439 record: net +0.21R over n=27.' },
+    p8range:  { n: 57, gross: 0.022, net: -0.055, action: 'demote',
+      live: { n: 57, gross: 0.0223, net: -0.055, oosHeld: 0, oosBroke: 2 },
+      why: 'S52 RANGE-BAR S0 SWEEP net −0.055R at XM (n=57, hg-v1486 re-walk Sep03–Nov05, post floor; gross +0.02R) — net-negative, so the demote rule (net<0) fires and the row reads demote. The rule is applied, not an edge claimed.'
+        + ' · hg-v1439 record: net +0.03R over n=68 — measured flat at the venue, under the prefer bar.' },
+    p5vwap:   { n: 9, gross: -0.621, net: -0.711, action: 'neutral',
       actionWhy: 'rule says demote on the live read; REFUSED at n=6 — the demote bar has no sample floor and this is among the thinnest rows in the table (hg-v928)',
-      live: { n: 8, gross: -1, net: -1.082, oosHeld: 0, oosBroke: 0 },
-      why: 'S22 SESSION VWAP 2σ REVERSION net −1.08R at XM (n=8, hg-v1439 re-walk; the prior window read +0.25R over n=12) — flipped hard, still neutral only because n=8 clears no bar' },
-    p5wyck:   { n: 6, gross: 0.076, net: -0.001, action: 'neutral',
-      actionWhy: 'rule says demote on the hg-v1439 live read (−0.001R, n=6); REFUSED at n=6 — the demote bar '
-        + 'has no sample floor and six settles are not evidence to withhold a setup on (hg-v928\'s own refusal, '
-        + 'same number). Fresh-book halves were mixed (+0.174/−0.352). Declared, not hidden.',
-      live: { n: 6, gross: 0.0757, net: -0.001, oosHeld: 0, oosBroke: 0 },
-      why: 'S19 WYCKOFF SPRING/UPTHRUST net −0.00R at XM (n=6, hg-v1439 re-walk; +0.13R over n=12 prior) — too thin to prefer' },
-    p8vpinbo: { n: 10, gross: -0.185, net: -0.249, action: 'demote',
-      live: { n: 10, gross: -0.1848, net: -0.249, oosHeld: 0, oosBroke: 0 },
-      why: 'S54 VPIN-TIMED CONTRACTION BREAK net −0.25R at XM (n=10, hg-v1439 re-walk; the baked row quoted +0.16R)'
+      live: { n: 9, gross: -0.6213, net: -0.711, oosHeld: 0, oosBroke: 0 },
+      why: 'S22 SESSION VWAP 2σ REVERSION net −0.71R at XM (n=9, hg-v1486 re-walk Sep03–Nov05, post floor; gross −0.62R) — still neutral only because n=9 clears no bar · hg-v1439 record: net −1.08R over n=8; +0.25R over n=12 before that.' },
+    p5wyck:   { n: 5, gross: -0.208, net: -0.285, action: 'neutral',
+      actionWhy: 'rule says demote on the hg-v1486 live read (−0.285R, n=5); REFUSED — the demote bar '
+        + 'has no sample floor and five settles are not evidence to withhold a setup on (the hg-v928 refusal at n=6, same shape; '
+        + 'the hg-v1439 read was −0.001R at n=6, halves mixed +0.174/−0.352). Declared, not hidden.',
+      live: { n: 5, gross: -0.2084, net: -0.285, oosHeld: 0, oosBroke: 0 },
+      why: 'S19 WYCKOFF SPRING/UPTHRUST net −0.29R at XM (n=5, hg-v1486 re-walk Sep03–Nov05, post floor; gross −0.21R) — too thin to prefer · hg-v1439 record: net −0.00R over n=6; +0.13R over n=12 before that.' },
+    p8vpinbo: { n: 12, gross: -0.114, net: -0.184, action: 'demote',
+      live: { n: 12, gross: -0.1135, net: -0.184, oosHeld: 0, oosBroke: 0 },
+      why: 'S54 VPIN-TIMED CONTRACTION BREAK net −0.18R at XM (n=12, hg-v1486 re-walk Sep03–Nov05, post floor; gross −0.11R; the pre-hg-v1439 row quoted +0.16R)'
         + ' · hg-v1439: DEMOTED — the live read flipped gross AND net negative (−0.249R, negative in both halves'
         + ' of the fresh book, −0.203/−0.317); thin at n=10 but the move is a tightening, which thin samples may'
         + ' justify when the sign is consistent (the hg-v928 refusal was for demoting on n<=6).' },
-    p7scalp:  { n: 2,  gross: -1, net: -1.077, action: 'neutral',
+    p7scalp:  { n: 1,  gross: -1, net: -1.078, action: 'neutral',
       actionWhy: 'rule says demote on the hg-v1439 live read (−1.076R, n=2); REFUSED at n=2 — two settles are '
         + 'not evidence to withhold a setup on (the hg-v928 refusals at n=6 and n=1, same shape; the demote bar '
         + 'has no sample floor). If the next walk still reads negative at n>=6 the refusal lapses. Declared.',
-      live: { n: 2, gross: -1, net: -1.076, oosHeld: 0, oosBroke: 0 },
-      why: 'P7 SCALP MODULE net −1.08R at XM (n=2, hg-v1439 re-walk; +0.05R over n=7 prior) — too thin to read either way' },
+      live: { n: 1, gross: -1, net: -1.078, oosHeld: 0, oosBroke: 0 },
+      why: 'P7 SCALP MODULE net −1.08R at XM (n=1 on the hg-v1486 re-walk Sep03–Nov05, post floor) — too thin to read either way · hg-v1439 record: −1.08R over n=2; +0.05R over n=7 before that.' },
     /* Negative, and deliberately NOT demoted: one settled trade is noise, not
        evidence. The swing lane already carries an n>=12 floor on its demote
        bar; the scalp bar as written has none, so acting on n=1 would be this
@@ -2375,9 +2382,9 @@ var HG_GOLD_SETUP_EDGE = {
       actionWhy: 'rule says demote on the live read; REFUSED at n=1 — a single settle is not evidence to withhold a setup on (hg-v928)',
       live: null,
       why: 'VP PLAYBOOK net −0.01R at XM on a SINGLE settle — measured, far too thin to demote on' },
-    adrfade:  { n: 82,  gross: 0.159,   net: 0.076,  action: 'neutral',
-      live: { n: 82, gross: 0.159, net: 0.076, oosHeld: 0, oosBroke: 3 },
-      why: 'ADR FADE +0.08R net at XM over n=82 on the hg-v1439 re-walk (the baked row was a SINGLE +1.41R settle) — positive, under the +0.10R prefer bar; halves mixed (−0.116/+0.309), so it stays neutral' }
+    adrfade:  { n: 81,  gross: 0.096,   net: 0.009,  action: 'neutral',
+      live: { n: 81, gross: 0.0963, net: 0.009, oosHeld: 0, oosBroke: 3 },
+      why: 'ADR FADE +0.01R net at XM over n=81 on the hg-v1486 re-walk Sep03–Nov05, post floor (gross +0.10R; the hg-v1439 read was +0.08R over n=82, halves mixed −0.116/+0.309; the baked row before that was a SINGLE +1.41R settle) — positive, under the +0.10R prefer bar; stays neutral' }
   },
   /* SWING rows (hg-v700): re-baked from the GOLD SWING tab's OWN 4h replay
    * (scripts/backtest-goldswing-results.json, n=244 settled, 140 days,
@@ -3329,13 +3336,20 @@ function hgGoldScalpCostGate(c, rtCostPct, opts){
        liqsweep 45 settled in the main book, suppressed-in-bake, demoted
        in-force). 339 of the replay's 1,617 settles (21%) are trades no card
        is minted from today.
+       hg-v1486 re-walk (Sep03–Nov05, post floor, same pipeline): the same
+       shape holds — the bar still rejects ZERO main-book trades; 87 sub-bar
+       settles remain, all inside the withheld ledger; 341 of the replay's
+       1,553 settles (22%) are trades no card is minted from today. The main
+       book is 1,321 settled; the desk forms 1,212 of them.
 
        Read as the desk forms setups now, the same replay says:
-         quoted everywhere                   n=1384  -0.035R  t=-1.07
-         minus the four suppressed kinds     n=1278  -0.027R  t=-0.81
-         minus this cost reject only         n=1384  -0.035R  t=-1.07
-         both, i.e. what the desk forms      n=1278  -0.027R  t=-0.81
-         the same 1278 BEFORE venue cost     n=1278  +0.050R  t=+1.47
+         quoted everywhere                   n=1321  -0.004R  t=-0.12
+         minus the four suppressed kinds     n=1212  -0.004R  t=-0.10
+         minus this cost reject only         n=1321  -0.004R  t=-0.12
+         both, i.e. what the desk forms      n=1212  -0.004R  t=-0.10
+         the same 1212 BEFORE venue cost     n=1212  +0.076R  t=+2.15
+       (hg-v1439 ladder kept for the record: 1384/1278, -0.035/-0.027, gross
+       +0.050.)
        So this gate no longer separates the book from flat — its work is done
        upstream, by the floor and the ceiling — and the setups themselves are
        gross-positive. That is a weaker and more useful claim than a single

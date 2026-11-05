@@ -76,14 +76,22 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
    scripts/gold-setup-edge.json). Gross-positive-but-cost-eaten kinds stay
    demote (paint, never lead); gross-NEGATIVE kinds with n>=50 are suppress. */
 {
+  /* hg-v1486 re-walk: ob moved demote→neutral (fresh live read +0.151R net /
+     +0.244R gross over n=46 — net-positive, so the demote rule no longer
+     fires; still under the prefer sample floor, so no boost). It paints
+     unboosted now, like sweepob. */
   const demoteKeys = [
     ['bosalign', 'BOS ALIGNMENT'],
     ['asian', 'ASIAN RANGE BREAKOUT'],
-    ['ob', 'ORDER BLOCK RETEST'],
     ['rsidiv', 'MODIFIED RSI 75/25 DIVERGENCE'],
     ['hvn', 'HVN RETEST'],
     ['ribbon', 'EMA RIBBON PULLBACK']
   ];
+  {
+    const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: 'ob', strategy: 'ORDER BLOCK RETEST' };
+    W.hgGoldSetupEdgeApply(c, { scalp: true });
+    ok(!c.dropped && !c.demoted && !(c.edgeBoost >= 2), 'SCALP ob neutral — net-positive on the hg-v1486 re-walk, under the prefer bar; paints unboosted');
+  }
   for (const [key, lab] of demoteKeys){
     const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
     W.hgGoldSetupEdgeApply(c, { scalp: true });
@@ -120,10 +128,14 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
     ok((c.stamps || []).indexOf('EDGE PREFER') >= 0, key + ' EDGE PREFER stamp');
   }
   {
+    /* hg-v1486 re-walk: p9volbar's demote lapsed — the fresh live read is
+       net-positive (+0.013R, n=48), so the row reads neutral (the hg-v1439
+       demote stands in the historical record; the fresh window turned it).
+       Still under the prefer sample floor and the +0.10R bar: no boost. */
     const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: 'p9volbar', strategy: 'S62 VOLUME-BAR S0 SWEEP' };
     W.hgGoldSetupEdgeApply(c, { scalp: true });
-    ok(c.demoted === true && !c.dropped && !(c.edgeBoost >= 2), 'SCALP p9volbar DEMOTED — the hg-v1439 re-walk withdrew the prefer');
-    ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, 'p9volbar EDGE DEMOTE stamp');
+    ok(!c.dropped && !c.demoted && !(c.edgeBoost >= 2), 'SCALP p9volbar NEUTRAL — the hg-v1486 re-walk lapsed the demote (net-positive), still under both bars so unboosted');
+    ok((c.stamps || []).indexOf('EDGE DEMOTE') < 0, 'p9volbar carries no EDGE DEMOTE stamp any more');
   }
   /* sweepob sat one settle short of the prefer bar (n=49) — deliberately NO row */
   {

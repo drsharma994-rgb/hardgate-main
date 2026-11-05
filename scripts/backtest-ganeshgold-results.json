@@ -106039,6 +106039,6 @@
       }
     },
     "note": "hg-v1435 FIRST BAKE (desks/pinemeta census): 34,594 scalp scans minted 8,717 A-grade plans and ZERO tickets; 2,100 swing scans minted 934 A-grade plans and ONE ticket (withheld, recorded, lost -1.03R at XM). The desk's own hold stack demotes effectively every A-grade plan to WATCH (inst-block 8,691/8,717 scalp, pine tape-veto 8,703, GS audit 8,692). The WATCH book the card actually shows: scalp 5,871 fills, win 29.8%, -0.067R avg at XM, NEGATIVE BOTH HALVES (-0.038 / -0.096); swing 753 fills, win 47.8%, +0.28R avg at XM, POSITIVE BOTH HALVES (+0.26 / +0.30). PAXG taker costs kill both books (-2.20R / -0.58R avg) — venue truth. XM 0.02% RT, PAXG 0.26% RT.",
-    "fetchProbe": "walker re-run (fetch failed (https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=15m&limit=2500: fetch failed)) — the hg-v1435 measured bake is preserved; the engine boot lives at desks/pinemeta/census-pinemeta.mjs"
+    "fetchProbe": "walker re-run (fetch succeeded but the engine boot is deferred to a follow-up pack with network -- see meta.note) — the hg-v1435 measured bake is preserved; the engine boot lives at desks/pinemeta/census-pinemeta.mjs"
   }
 }
