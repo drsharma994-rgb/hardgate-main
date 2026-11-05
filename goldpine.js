@@ -842,7 +842,70 @@ function gpRecordLayerSetups(rows, mode, source){
    scalp boards (19%). Both helpers fail open on absent levels (hg-v989), so
    a row nothing can measure still leads. Function declarations hoist; the
    forward references are legal. */
+/* hg-v1492: THE MEASURED BOOK — the GOLD PINE win-rate lab's walk
+   (scripts/goldpine-winrate-lab.mjs over the desk's own scan lanes, 83,624
+   candidates, Sep06-Nov05; the desk's first committed walk artifact lives
+   beside it as goldpine-walk-results.json). The searched config confirmed
+   on the held-out window and its leave-one-out postmortem kept two things:
+   the pin reads the side that loses less, and six labels whose cohorts are
+   negative in EVERY disjoint window stop crowding the pin. The cohorts
+   below are the lab's own arithmetic; the guard re-derives them from the
+   walk artifact. */
+var HG_GP_LAB_LS = 'hg_gp_lab_demote';
+var HG_GP_LAB_DEMOTE = true;
+function hgGpLabDemoteInit(){
+  try{
+    var ovr = (typeof window !== 'undefined') ? window.HG_GP_LAB_DEMOTE : undefined;
+    if (ovr === true || ovr === false){ HG_GP_LAB_DEMOTE = ovr; return HG_GP_LAB_DEMOTE; }
+    var v = null;
+    try { v = localStorage.getItem(HG_GP_LAB_LS); } catch (e){ v = null; }
+    HG_GP_LAB_DEMOTE = !(v === '0' || v === 'false');
+  }catch(e){ HG_GP_LAB_DEMOTE = true; }
+  return HG_GP_LAB_DEMOTE;
+}
+function hgGpSetLabDemote(on){
+  HG_GP_LAB_DEMOTE = (on !== false);
+  try { localStorage.setItem(HG_GP_LAB_LS, HG_GP_LAB_DEMOTE ? '1' : '0'); } catch (e){}
+  return HG_GP_LAB_DEMOTE;
+}
+function hgGpLabDemoteOn(){ return HG_GP_LAB_DEMOTE !== false; }
+/* lane|label -> the measured cohort (net@XM per trade, n, windows-negative) */
+var HG_GP_LAB_BOOK = {
+  'scalp|MSB + OB':            'gross \u22126.91R/trade over n=624, negative in all four disjoint windows',
+  'scalp|Squeeze Mom':         'gross \u22120.42R/trade over n=896, negative in all four disjoint windows',
+  'scalp|Smart Money Flow':    'gross \u22120.38R/trade over n=729, negative in all four disjoint windows',
+  'scalp|Range Filter':        'gross \u22120.32R/trade over n=902, negative in all four disjoint windows',
+  'scalp|HalfTrend':           'gross \u22121.33R/trade over n=410, negative in all four disjoint windows',
+  'swing|MSB + OB':            'gross \u22120.81R/trade over n=31, negative in all four disjoint windows'
+};
+/* the lab's confirmed direction clause: the pin reads the side that loses
+   less. BOTH cohorts are negative on this walk — this is a ranking
+   preference with the measurement named, not a claim that shorts pay. */
+var HG_GP_LAB_LONG = 'the LONG cohort measured \u22120.87R/trade over n=5,489, negative in all four disjoint windows (the short side \u22120.68R over n=7,052 \u2014 also negative; the pin reads the lesser-losing side until the forward ledger measures a paying cohort)';
+function hgGpLabMeasured(s){
+  try{
+    if (!s) return null;
+    var lbl = String(s.layerLabel || s.nativeStrategy || s.strategy || s.kind || 'unlabeled');
+    var key = String(s.mode || '') + '|' + lbl;
+    if (HG_GP_LAB_BOOK[key]) return 'MEASURED LOSING (the hg-v1492 win-rate lab, ' + key.replace('|', ' ') + ': ' + HG_GP_LAB_BOOK[key] + ') \u2014 paints, never the MOST PROBABLE pin. Lever HG_GP_LAB_DEMOTE restores it.';
+    if (String(s.dir || '').toLowerCase() === 'long') return 'MEASURED LOSING DIRECTION (the hg-v1492 win-rate lab: ' + HG_GP_LAB_LONG + ') \u2014 paints, never the MOST PROBABLE pin. Lever HG_GP_LAB_DEMOTE restores two-sided.';
+    return null;
+  }catch(e){ return null; }
+}
+/* stamped at scan time (runGoldPineScan), read by the pin */
+function hgGpLabStamp(list, lane){
+  try{
+    if (!hgGpLabDemoteOn() || !Array.isArray(list)) return;
+    for (var i = 0; i < list.length; i++){
+      var s = list[i];
+      if (!s) continue;
+      var why = hgGpLabMeasured(s);
+      if (why) s.labMeasured = why;
+    }
+  }catch(e){}
+}
 function gpMayLead(s){
+  if (s && s.labMeasured && hgGpLabDemoteOn()) return false;
   return !!(s && !s.recordOnly && !s.pineBlock && !gpHandoffBlock(s) && gpAdmissionFloor(s).ok !== false);
 }
 
@@ -1096,6 +1159,12 @@ function runGoldPineScan(bars, ctx){
   var gpI;
   for (gpI = 0; gpI < swing.length; gpI++) if (swing[gpI]) swing[gpI].goldShut = gpShutSwing;
   for (gpI = 0; gpI < scalp.length; gpI++) if (scalp[gpI]) scalp[gpI].goldShut = gpShutScalp;
+  /* hg-v1492: the measured book's stamps ride the same seam — the walk
+     measured six labels negative in every disjoint window and the LONG side
+     worse than the short; stamped rows still paint and still record, the
+     pin just reads the measurement (gpMayLead). */
+  hgGpLabStamp(swing, 'swing');
+  hgGpLabStamp(scalp, 'scalp');
 
   hgGpRecord(swing, 'swing', bars);
   hgGpRecord(scalp, 'scalp', bars);
@@ -2039,6 +2108,13 @@ W.gpAdmissionFloor = gpAdmissionFloor;
 W.gpMayLead = gpMayLead;
 W.gpBoardPick = gpBoardPick;
 W.gpAttachFts = gpAttachFts;
+/* hg-v1492: the measured book — lever + cohort table exported for the suite */
+W.hgGpSetLabDemote = hgGpSetLabDemote;
+W.hgGpLabDemoteOn = hgGpLabDemoteOn;
+W.hgGpLabDemoteInit = hgGpLabDemoteInit;
+W.HG_GP_LAB_BOOK = HG_GP_LAB_BOOK;
+W.hgGpLabMeasured = hgGpLabMeasured;
+W.hgGpLabStamp = hgGpLabStamp;
 /* hg-v1420: the r2 record-mark helper and seam, exported so the pin suite
    can drive them as units — a guard that cannot reach the rule proves
    nothing. */
