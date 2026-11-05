@@ -53,6 +53,11 @@ function boot(){
      kind; the rule itself is pinned in test-omnigold-most-probable.mjs. */
   ctx.hgFwdPool = function(){ return new Proxy({}, { get: function(){ return { samples: 40, hit: 0.7 }; } }); };
   ctx.hgOmniPoolRead = function(){ return { read: 'has paid', z: 4, bar: 3 }; };
+  /* hg-v1490: the measured direction book is pinned in test-omnigold-lab-v1490;
+     these fixtures pin the pick’s own geometry/tape rules, so the direction
+     clause is off here. */
+  ctx.hgOgSetLabLongDemote(false);
+
   return ctx;
 }
 const W = boot();

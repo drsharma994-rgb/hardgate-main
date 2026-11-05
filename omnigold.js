@@ -399,6 +399,38 @@ terse status, and never launches a first-time scan on a global refresh.
   var OG_VERDICT_SCALP_LO = 0.90;
   var OG_VERDICT_MIN_N = 10;
 
+  /* hg-v1490: THE MEASURED DIRECTION BOOK lever — the OMNIGOLD win-rate lab's
+     held-out finding, shipped as an expectancy filter. scripts/
+     omnigold-winrate-lab-results.json, Phase F (measured, not searched): the
+     LONG book settled gross \u22120.102R/trade over n=4,574 (win 28.3%, negative
+     in three of four disjoint windows of the walk's own span, net@XM
+     \u22120.207R) while the SHORT book paid gross +0.144R over n=4,158
+     (net@XM +0.033R, three of four windows positive). Gross-negative means
+     signal quality, not venue cost — the same direction asymmetry the GOLD
+     SCALP desk's own lab measured independently (hg-v1488) on the same
+     instrument and period. LONG candidates are refused the MOST PROBABLE
+     ticket; they still paint with the measurement on the card. Lever
+     HG_OG_LAB_LONG_DEMOTE (default ON; localStorage hg_og_lab_long_demote=0
+     restores two-sided leading). */
+  var OG_LAB_LONG_LS = 'hg_og_lab_long_demote';
+  var OG_LAB_LONG_DEMOTE = true;
+  function hgOgLabLongDemoteInit(){
+    try{
+      var ovr = (typeof window !== 'undefined') ? window.HG_OG_LAB_LONG_DEMOTE : undefined;
+      if (ovr === true || ovr === false){ OG_LAB_LONG_DEMOTE = ovr; return OG_LAB_LONG_DEMOTE; }
+      var v = null;
+      try { v = localStorage.getItem(OG_LAB_LONG_LS); } catch (e){ v = null; }
+      OG_LAB_LONG_DEMOTE = !(v === '0' || v === 'false');
+    }catch(e){ OG_LAB_LONG_DEMOTE = true; }
+    return OG_LAB_LONG_DEMOTE;
+  }
+  function hgOgSetLabLongDemote(on){
+    OG_LAB_LONG_DEMOTE = (on !== false);
+    try { localStorage.setItem(OG_LAB_LONG_LS, OG_LAB_LONG_DEMOTE ? '1' : '0'); } catch (e){}
+    return OG_LAB_LONG_DEMOTE;
+  }
+  function hgOgLabLongDemoteOn(){ return OG_LAB_LONG_DEMOTE !== false; }
+
   var FWD_MIN_JUDGE = 20;   // settled out-of-sample trades before it can conclude
   var MIN_SAMPLES = 20;
   var EDGE_VETO_Z = -2;
@@ -14275,6 +14307,19 @@ terse status, and never launches a first-time scan on a global refresh.
          pick. Unstamped rows (other callers' lists) are untouched. */
       if (c.fundGate && (c.fundGate.refuse === true || c.fundGate.demote === true)) continue;
       if (c.pineBlock) continue;
+      /* hg-v1490: THE MEASURED DIRECTION BOOK — same shape as the fundGate
+         refusal above, measured not instructed. The lab's Phase F cohort
+         (scripts/omnigold-winrate-lab-results.json): the LONG book is
+         gross-negative in three of four disjoint windows and on the whole
+         walk; a long candidate is not the MOST PROBABLE ticket while that
+         stands. The candidate still paints — the stamp names the measurement
+         and the lever. */
+      if (OG_LAB_LONG_DEMOTE && String(c.dir || '').toLowerCase() === 'long'){
+        c.labLongBook = 'LONG BOOK MEASURED NEGATIVE (the hg-v1486 win-rate lab, direction cohort: gross \u22120.102R/trade over n=4,574, win 28.3%, '
+          + 'negative in three of four disjoint windows, net@XM \u22120.207R; the short book paid +0.144R gross / +0.033R net@XM over n=4,158) '
+          + '\u2014 paints, never the MOST PROBABLE ticket. Lever HG_OG_LAB_LONG_DEMOTE restores two-sided leading.';
+        continue;
+      }
       try {
         var instFn = gfn('hgGoldInstBlocks');
         if (instFn){
@@ -17244,6 +17289,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgXmRunBacktest = hgOgXmRunBacktest;
     window.hgOgConsensusVoters = hgOgConsensusVoters;
     window.hgOgPickFor = hgOgPickFor;
+    window.hgOgSetLabLongDemote = hgOgSetLabLongDemote;   /* hg-v1490 the measured direction book */
+    window.hgOgLabLongDemoteOn = hgOgLabLongDemoteOn;
+    window.hgOgLabLongDemoteInit = hgOgLabLongDemoteInit;
     window.hgOgPickWatchFor = hgOgPickWatchFor;
     window.hgOgWilsonHit = hgOgWilsonHit;
     /* exported so the overlap deflation can be tested on its own: it is

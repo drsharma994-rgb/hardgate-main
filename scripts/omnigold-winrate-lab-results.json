@@ -1,0 +1,726 @@
+{
+ "meta": {
+  "generated": "2026-11-05T11:53:01.390Z",
+  "artifact": "scripts/backtest-omnigold-results.json",
+  "span": [
+   "2026-05-22T13:00:00.000Z",
+   "2026-11-05T03:00:00.000Z"
+  ],
+  "windows": [
+   "W1 2026-05-22..2026-07-03",
+   "W2 2026-07-03..2026-08-13",
+   "W3 2026-08-13..2026-09-24",
+   "W4 2026-09-24..2026-11-05"
+  ],
+  "searchWindows": "W1-W3",
+  "heldOut": "W4",
+  "cost": 0.0026,
+  "evaluated": 1496,
+  "deviations": [
+   "confluence scores are the shipped walk’s own fire-time values (wilson evidence chain frozen)",
+   "the candidate stream is the shipped walk’s: 28755 candidates were skipped on the kind|dir overlap lock and were never priced — a clause that frees slots cannot measure them",
+   "ENGINE picks are absent from this artifact (the grade-gated bridge formed none offline); the source clauses are structural no-ops here"
+  ]
+ },
+ "baseline": {
+  "all": {
+   "n": 8700,
+   "win": 0.3198850574712644,
+   "net": -1.3868818922114816
+  },
+  "description": "geom:plan"
+ },
+ "path": [
+  {
+   "pass": 1,
+   "move": "require:consensus",
+   "description": "require:consensus · geom:plan",
+   "search": {
+    "n": 3183,
+    "win": 0.3283066289663839,
+    "net": -1.2201426042526025
+   },
+   "windows": [
+    {
+     "n": 1047,
+     "win": 0.3123209169054441,
+     "net": -0.9624189776571777
+    },
+    {
+     "n": 980,
+     "win": 0.3377551020408163,
+     "net": -1.3630935108551354
+    },
+    {
+     "n": 1156,
+     "win": 0.33477508650519033,
+     "net": -1.332378545926415
+    }
+   ]
+  },
+  {
+   "pass": 2,
+   "move": "require:structure-shift",
+   "description": "require:consensus · require:structure-shift · geom:plan",
+   "search": {
+    "n": 2091,
+    "win": 0.3500717360114778,
+    "net": -1.1781563431543465
+   },
+   "windows": [
+    {
+     "n": 741,
+     "win": 0.3468286099865047,
+     "net": -0.8391164715492356
+    },
+    {
+     "n": 670,
+     "win": 0.3537313432835821,
+     "net": -1.3875715172014198
+    },
+    {
+     "n": 680,
+     "win": 0.35,
+     "net": -1.341274546460005
+    }
+   ]
+  },
+  {
+   "pass": 3,
+   "move": "kind -SPRING",
+   "description": "kinds -SPRING · require:consensus · require:structure-shift · geom:plan",
+   "search": {
+    "n": 2083,
+    "win": 0.3514162265962554,
+    "net": -1.1732472692280824
+   },
+   "windows": [
+    {
+     "n": 738,
+     "win": 0.34823848238482386,
+     "net": -0.8370070940375585
+    },
+    {
+     "n": 670,
+     "win": 0.3537313432835821,
+     "net": -1.3875715172014198
+    },
+    {
+     "n": 675,
+     "win": 0.35259259259259257,
+     "net": -1.3281331998184094
+    }
+   ]
+  },
+  {
+   "pass": 4,
+   "move": "kind -ADR-FADE",
+   "description": "kinds -SPRING-ADR-FADE · require:consensus · require:structure-shift · geom:plan",
+   "search": {
+    "n": 2042,
+    "win": 0.35210577864838394,
+    "net": -1.169572862803122
+   },
+   "windows": [
+    {
+     "n": 726,
+     "win": 0.349862258953168,
+     "net": -0.8275638817070609
+    },
+    {
+     "n": 653,
+     "win": 0.3537519142419602,
+     "net": -1.3868431372108507
+    },
+    {
+     "n": 663,
+     "win": 0.35294117647058826,
+     "net": -1.3300872385006983
+    }
+   ]
+  },
+  {
+   "pass": 5,
+   "move": "kind -VWAP-REVERT",
+   "description": "kinds -SPRING-VWAP-REVERT-ADR-FADE · require:consensus · require:structure-shift · geom:plan",
+   "search": {
+    "n": 2036,
+    "win": 0.3526522593320236,
+    "net": -1.1684854215419898
+   },
+   "windows": [
+    {
+     "n": 726,
+     "win": 0.349862258953168,
+     "net": -0.8275638817070609
+    },
+    {
+     "n": 651,
+     "win": 0.3548387096774194,
+     "net": -1.383406667395109
+    },
+    {
+     "n": 659,
+     "win": 0.3535660091047041,
+     "net": -1.3317559934232908
+    }
+   ]
+  },
+  {
+   "pass": 6,
+   "move": "kind -UTAD",
+   "description": "kinds -SPRING-VWAP-REVERT-ADR-FADE-UTAD · require:consensus · require:structure-shift · geom:plan",
+   "search": {
+    "n": 2016,
+    "win": 0.3531746031746032,
+    "net": -1.1655328521204777
+   },
+   "windows": [
+    {
+     "n": 720,
+     "win": 0.35,
+     "net": -0.8194892008322572
+    },
+    {
+     "n": 637,
+     "win": 0.3563579277864992,
+     "net": -1.3847014216792926
+    },
+    {
+     "n": 659,
+     "win": 0.3535660091047041,
+     "net": -1.3317559934232908
+    }
+   ]
+  },
+  {
+   "pass": 7,
+   "move": "kind -P5-TURT",
+   "description": "kinds -SPRING-VWAP-REVERT-ADR-FADE-UTAD-P5-TURT · require:consensus · require:structure-shift · geom:plan",
+   "search": {
+    "n": 2015,
+    "win": 0.3533498759305211,
+    "net": -1.165284578808462
+   },
+   "windows": [
+    {
+     "n": 720,
+     "win": 0.35,
+     "net": -0.8194892008322572
+    },
+    {
+     "n": 636,
+     "win": 0.35691823899371067,
+     "net": -1.384259437160184
+    },
+    {
+     "n": 659,
+     "win": 0.3535660091047041,
+     "net": -1.3317559934232908
+    }
+   ]
+  },
+  {
+   "pass": 8,
+   "move": "kind -DONCHIAN-DRIVE",
+   "description": "kinds -SPRING-VWAP-REVERT-ADR-FADE-UTAD-P5-TURT-DONCHIAN-DRIVE · require:consensus · require:structure-shift · geom:plan",
+   "search": {
+    "n": 2015,
+    "win": 0.3533498759305211,
+    "net": -1.165284578808462
+   },
+   "windows": [
+    {
+     "n": 720,
+     "win": 0.35,
+     "net": -0.8194892008322572
+    },
+    {
+     "n": 636,
+     "win": 0.35691823899371067,
+     "net": -1.384259437160184
+    },
+    {
+     "n": 659,
+     "win": 0.3535660091047041,
+     "net": -1.3317559934232908
+    }
+   ]
+  }
+ ],
+ "final": {
+  "config": {
+   "on": {
+    "CCI-EXTREME": true,
+    "VWAP-BAND": true,
+    "P4-LAF": true,
+    "ROUND-MAGNET": true,
+    "STOCHRSI-TURN": true,
+    "RSI-DIVERGE": true,
+    "PIN-REJECT": true,
+    "THREE-BAR": true,
+    "PO3": true,
+    "FIB-618": true,
+    "MFI-SQUAT": true,
+    "P8-RANGE": true,
+    "P9-VOLBAR": true,
+    "P6-FAIL": true,
+    "ENGULF-LEVEL": true,
+    "ER-IGNITION": true,
+    "MMOVE": true,
+    "HA-FLIP": true,
+    "SQUEEZE-FIRE": true,
+    "PIVOT-REJECT": true,
+    "SWEEP-V2": true,
+    "P6-COMP": true,
+    "BOS-RETEST": true,
+    "RIBBON-PULLBACK": true,
+    "FVG-FILL": true,
+    "ICHI-KUMO": true,
+    "INSIDE-BREAK": true,
+    "NR7-BREAK": true,
+    "ORB": true,
+    "PD-EQUILIBRIUM": true,
+    "KZ-JUDAS": true,
+    "WEEKLY-OPEN": true,
+    "P4-ADRX": true,
+    "EQL-SWEEP": true,
+    "SPRING": false,
+    "VALUE": true,
+    "P7-SCALP": true,
+    "P5-WYCK": true,
+    "SWEEP-OB": true,
+    "VWAP-REVERT": false,
+    "STRUCT-BOS": true,
+    "FVG-HVN": true,
+    "ADR-FADE": false,
+    "P5-VWAP": true,
+    "PWL-SWEEP": true,
+    "TREND-RECLAIM": true,
+    "PDL-SWEEP": true,
+    "AVWAP-RECLAIM": true,
+    "OB-RETEST": true,
+    "ASIA-BREAK": true,
+    "EMA50-HOLD": true,
+    "P5-DRIVE": true,
+    "POC-REVERT": true,
+    "VOL-EXPANSION": true,
+    "P8-VPINBO": true,
+    "CUSUM-SHIFT": true,
+    "UTAD": false,
+    "LONDON-FIX": true,
+    "PWH-SWEEP": true,
+    "DI-CROSS": true,
+    "EQH-SWEEP": true,
+    "NY-OPEN-DRIVE": true,
+    "ABSORB": true,
+    "PDH-SWEEP": true,
+    "P6-ZFADE": true,
+    "P5-TURT": false,
+    "DONCHIAN-DRIVE": false,
+    "COMPRESSION-BREAK": true
+   },
+   "dirLong": true,
+   "dirShort": true,
+   "horizons": {
+    "SCALP": true,
+    "SWING": true
+   },
+   "srcEngine": true,
+   "skipEngineAgainstTape": false,
+   "skipEngineLowGrade": false,
+   "tierMin": 0,
+   "confMin": 0,
+   "ticketOnly": false,
+   "gates": {
+    "require:consensus": true,
+    "require:structure-shift": true
+   },
+   "kz": {},
+   "geom": 0
+  },
+  "description": "kinds -SPRING-VWAP-REVERT-ADR-FADE-UTAD-P5-TURT-DONCHIAN-DRIVE · require:consensus · require:structure-shift · geom:plan",
+  "search": {
+   "n": 2015,
+   "win": 0.3533498759305211,
+   "net": -1.165284578808462
+  },
+  "heldOut": {
+   "n": 651,
+   "win": 0.35023041474654376,
+   "net": -1.298551865936197
+  },
+  "heldOutBaseline": {
+   "n": 2227,
+   "win": 0.3480017961383027,
+   "net": -1.5357161152281664
+  },
+  "all": {
+   "n": 2666,
+   "win": 0.35258814703675917,
+   "net": -1.197826590781511
+  },
+  "z": 3.15,
+  "pTwoSided": 0.0016,
+  "confirmed": true
+ },
+ "postmortem": {
+  "note": "leave-one-out on the confirmed config: a variant that BEATS the full config on the held-out window names a clause the search added for its own windows — refused for shipping",
+  "baseline": {
+   "n": 651,
+   "win": 0.35023041474654376,
+   "net": -1.298551865936197
+  },
+  "variants": [
+   {
+    "relax": "both dirs (direction clause off)",
+    "heldOut": {
+     "n": 651,
+     "win": 0.35023041474654376,
+     "net": -1.298551865936197
+    },
+    "windows": [
+     {
+      "n": 720,
+      "win": 0.35,
+      "net": -0.8194892008322572
+     },
+     {
+      "n": 636,
+      "win": 0.35691823899371067,
+      "net": -1.384259437160184
+     },
+     {
+      "n": 659,
+      "win": 0.3535660091047041,
+      "net": -1.3317559934232908
+     },
+     {
+      "n": 651,
+      "win": 0.35023041474654376,
+      "net": -1.298551865936197
+     }
+    ]
+   },
+   {
+    "relax": "drop require:consensus",
+    "heldOut": {
+     "n": 1381,
+     "win": 0.3265749456915279,
+     "net": -1.3360764424279619
+    },
+    "windows": [
+     {
+      "n": 1274,
+      "win": 0.31475667189952905,
+      "net": -0.9199279826535026
+     },
+     {
+      "n": 1367,
+      "win": 0.3394294074615947,
+      "net": -1.3315215037083323
+     },
+     {
+      "n": 1361,
+      "win": 0.3218221895664952,
+      "net": -1.4389359627432439
+     },
+     {
+      "n": 1381,
+      "win": 0.3265749456915279,
+      "net": -1.3360764424279619
+     }
+    ]
+   },
+   {
+    "relax": "drop require:structure-shift",
+    "heldOut": {
+     "n": 1047,
+     "win": 0.38013371537726837,
+     "net": -1.4792470992073672
+    },
+    "windows": [
+     {
+      "n": 1008,
+      "win": 0.3134920634920635,
+      "net": -0.9568458293496513
+     },
+     {
+      "n": 920,
+      "win": 0.3391304347826087,
+      "net": -1.3673192621037284
+     },
+     {
+      "n": 1089,
+      "win": 0.3370064279155188,
+      "net": -1.339217052657389
+     },
+     {
+      "n": 1047,
+      "win": 0.38013371537726837,
+      "net": -1.4792470992073672
+     }
+    ]
+   },
+   {
+    "relax": "+ADR-FADE back in",
+    "heldOut": {
+     "n": 657,
+     "win": 0.3515981735159817,
+     "net": -1.2953691640641418
+    },
+    "windows": [
+     {
+      "n": 732,
+      "win": 0.3483606557377049,
+      "net": -0.8291421883601328
+     },
+     {
+      "n": 653,
+      "win": 0.3568147013782542,
+      "net": -1.3850740428179824
+     },
+     {
+      "n": 671,
+      "win": 0.353204172876304,
+      "net": -1.3297604626190938
+     },
+     {
+      "n": 657,
+      "win": 0.3515981735159817,
+      "net": -1.2953691640641418
+     }
+    ]
+   },
+   {
+    "relax": "+DONCHIAN-DRIVE back in",
+    "heldOut": {
+     "n": 651,
+     "win": 0.35023041474654376,
+     "net": -1.298551865936197
+    },
+    "windows": [
+     {
+      "n": 720,
+      "win": 0.35,
+      "net": -0.8194892008322572
+     },
+     {
+      "n": 636,
+      "win": 0.35691823899371067,
+      "net": -1.384259437160184
+     },
+     {
+      "n": 659,
+      "win": 0.3535660091047041,
+      "net": -1.3317559934232908
+     },
+     {
+      "n": 651,
+      "win": 0.35023041474654376,
+      "net": -1.298551865936197
+     }
+    ]
+   },
+   {
+    "relax": "+P5-TURT back in",
+    "heldOut": {
+     "n": 651,
+     "win": 0.35023041474654376,
+     "net": -1.298551865936197
+    },
+    "windows": [
+     {
+      "n": 720,
+      "win": 0.35,
+      "net": -0.8194892008322572
+     },
+     {
+      "n": 637,
+      "win": 0.3563579277864992,
+      "net": -1.3847014216792926
+     },
+     {
+      "n": 659,
+      "win": 0.3535660091047041,
+      "net": -1.3317559934232908
+     },
+     {
+      "n": 651,
+      "win": 0.35023041474654376,
+      "net": -1.298551865936197
+     }
+    ]
+   },
+   {
+    "relax": "+SPRING back in",
+    "heldOut": {
+     "n": 651,
+     "win": 0.35023041474654376,
+     "net": -1.298551865936197
+    },
+    "windows": [
+     {
+      "n": 723,
+      "win": 0.34854771784232363,
+      "net": -0.8217237823201811
+     },
+     {
+      "n": 636,
+      "win": 0.35691823899371067,
+      "net": -1.384259437160184
+     },
+     {
+      "n": 664,
+      "win": 0.3509036144578313,
+      "net": -1.3451867189477797
+     },
+     {
+      "n": 651,
+      "win": 0.35023041474654376,
+      "net": -1.298551865936197
+     }
+    ]
+   },
+   {
+    "relax": "+UTAD back in",
+    "heldOut": {
+     "n": 658,
+     "win": 0.3541033434650456,
+     "net": -1.284322233139213
+    },
+    "windows": [
+     {
+      "n": 726,
+      "win": 0.349862258953168,
+      "net": -0.8275638817070609
+     },
+     {
+      "n": 650,
+      "win": 0.3553846153846154,
+      "net": -1.382972210612898
+     },
+     {
+      "n": 659,
+      "win": 0.3535660091047041,
+      "net": -1.3317559934232908
+     },
+     {
+      "n": 658,
+      "win": 0.3541033434650456,
+      "net": -1.284322233139213
+     }
+    ]
+   },
+   {
+    "relax": "+VWAP-REVERT back in",
+    "heldOut": {
+     "n": 657,
+     "win": 0.3531202435312024,
+     "net": -1.2828735080723508
+    },
+    "windows": [
+     {
+      "n": 720,
+      "win": 0.35,
+      "net": -0.8194892008322572
+     },
+     {
+      "n": 638,
+      "win": 0.3557993730407524,
+      "net": -1.387774028461358
+     },
+     {
+      "n": 663,
+      "win": 0.35294117647058826,
+      "net": -1.3300872385006983
+     },
+     {
+      "n": 657,
+      "win": 0.3531202435312024,
+      "net": -1.2828735080723508
+     }
+    ]
+   }
+  ],
+  "refused": [
+   "drop require:structure-shift",
+   "+ADR-FADE back in",
+   "+UTAD back in",
+   "+VWAP-REVERT back in"
+  ]
+ },
+ "directionCohort": {
+  "note": "measured, not searched: the per-direction cohort at both cost models, four disjoint calendar windows of the walk’s own span",
+  "xmCostFrac": 0.0002,
+  "paxgCostFrac": 0.0026,
+  "windows": [
+   "W1 2026-05-22..2026-07-03",
+   "W2 2026-07-03..2026-08-13",
+   "W3 2026-08-13..2026-09-24",
+   "W4 2026-09-24..2026-11-05"
+  ],
+  "directions": {
+   "long": {
+    "n": 4574,
+    "win": 0.283,
+    "gross": -0.102,
+    "netXm": -0.207,
+    "netPaxg": -1.46,
+    "windows": [
+     {
+      "n": 1100,
+      "gross": -0.28,
+      "netXm": -0.351
+     },
+     {
+      "n": 1037,
+      "gross": 0.164,
+      "netXm": 0.062
+     },
+     {
+      "n": 1301,
+      "gross": -0.213,
+      "netXm": -0.334
+     },
+     {
+      "n": 1121,
+      "gross": -0.037,
+      "netXm": -0.158
+     }
+    ],
+    "grossPositiveWindows": 1
+   },
+   "short": {
+    "n": 4158,
+    "win": 0.361,
+    "gross": 0.144,
+    "netXm": 0.033,
+    "netPaxg": -1.293,
+    "windows": [
+     {
+      "n": 911,
+      "gross": 0.189,
+      "netXm": 0.105
+     },
+     {
+      "n": 1028,
+      "gross": -0.057,
+      "netXm": -0.174
+     },
+     {
+      "n": 1096,
+      "gross": 0.217,
+      "netXm": 0.105
+     },
+     {
+      "n": 1106,
+      "gross": 0.201,
+      "netXm": 0.074
+     }
+    ],
+    "grossPositiveWindows": 3
+   }
+  }
+ }
+}
