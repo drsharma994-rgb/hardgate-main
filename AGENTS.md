@@ -5,6 +5,12 @@
 # merge commits — the stamp is how the user sees the repo move. Verify with
 # scripts/check-cache-bump.mjs before pushing.
 
+### THE SQUEEZE BOOST MEASURED DEAD — the honest reversal, and the lesson — hg-v1497
+- **The lab's new Phase G (`leadEligibleSqueeze`) measured the population a squeeze rank boost would act on — non-demoted squeeze-ON rows — and found it EMPTY: n=0 over the whole 62-day walk, in every disjoint window.** Every one of the 202 squeeze-ON candidates carries a demote stamp: compression = the chop/conf demotes coincide. The +0.19R cohort lived entirely in trades the desk never takes.
+- **The opt-in boost lever shipped in hg-v1495 is REMOVED.** The record-only stamp stays as disclosure, with the finding named on it (\"the measured squeeze-ON cohort is entirely chop-demoted\").
+- **The lesson, recorded:** an indicator cohort measured on the WHOLE book says nothing about the tradeable book — measure the population the lever acts on. The v1493 sweep's squeeze row was real arithmetic on a real cohort; the cohort just wasn't the desk's. Phase G now runs in every lab refresh, so the next candidate indicator gets its lead-eligible cohort measured BEFORE anything ships.
+- Tests: the v1493 guard extended (the Phase G empty-cohort pin, the dead lever removed, the disclosure stamp still riding through the real ranker).
+- The forward ledger decides.
 ### THE DAILY LAB REFRESH — the cadence split: the lab daily, the artifact at battery cadence — hg-v1496
 - **The GOLD SCALP win-rate lab re-ran on fresh bars (through Nov-06)** — and this pack fixes the CADENCE SPLIT the last two packs exposed: chasing a one-day walk slide through six numeric guards, every single time, is the treadmill. From here: **the LAB (the measurement instrument) refreshes daily; the walk ARTIFACT + the baked literals refresh at battery cadence** — the cohorts were byte-identical between the two walks anyway (direction long 1/4 pos / short 4/4 pos; squeeze-ON +0.134R 3/4 — unchanged).
 - **The fresh indicator sweep re-measured all fifteen clauses**: squeeze-ON stable (**+0.20R search / +0.29R held-out over n=202/73** — the cohort reproduces across runs, which is what a real edge looks like); **skipHvSpike newly marginal** (HV20 > 1.25× its median filter — near-baseline search, thin W4; recorded in the artifact's indicatorSweep, NOT shipped); everything else honest null again.

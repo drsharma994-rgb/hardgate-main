@@ -2955,32 +2955,6 @@ function hgGoldSetLabSqueeze(on){
 }
 function hgGoldLabSqueezeOn(){ return HG_GS_LAB_SQUEEZE !== false; }
 
-/* hg-v1495: THE OPT-IN SQUEEZE RANK BOOST — default OFF. The direct cohort
-   measurement on the lead-eligible book (the hg-v1495 walk artifact carries
-   the catalog stack on every row): squeeze-ON rows settled +0.134R/trade
-   over n=188, positive in three of four disjoint windows — but the held-out
-   window read \u22120.13R, so this does NOT ship imposed (the hg-v1399
-   mirror-bar: a boost needs the held-out window not against it). When the
-   lever is ON, squeeze-ON rows take +2 on the rank tally. The stamp (record
-   disclosure) stays on regardless, under HG_GS_LAB_SQUEEZE. */
-var HG_GS_LAB_SQUEEZE_BOOST_LS = 'hg_gs_lab_squeeze_boost';
-var HG_GS_LAB_SQUEEZE_BOOST = false;
-function hgGoldLabSqueezeBoostInit(){
-  try{
-    var ovr = (typeof window !== 'undefined') ? window.HG_GS_LAB_SQUEEZE_BOOST : undefined;
-    if (ovr === true || ovr === false){ HG_GS_LAB_SQUEEZE_BOOST = ovr; return HG_GS_LAB_SQUEEZE_BOOST; }
-    var v = null;
-    try { v = localStorage.getItem(HG_GS_LAB_SQUEEZE_BOOST_LS); } catch (e){ v = null; }
-    HG_GS_LAB_SQUEEZE_BOOST = (v === '1' || v === 'true');
-  }catch(e){ HG_GS_LAB_SQUEEZE_BOOST = false; }
-  return HG_GS_LAB_SQUEEZE_BOOST;
-}
-function hgGoldSetLabSqueezeBoost(on){
-  HG_GS_LAB_SQUEEZE_BOOST = (on === true);
-  try { localStorage.setItem(HG_GS_LAB_SQUEEZE_BOOST_LS, HG_GS_LAB_SQUEEZE_BOOST ? '1' : '0'); } catch (e){}
-  return HG_GS_LAB_SQUEEZE_BOOST;
-}
-function hgGoldLabSqueezeBoostOn(){ return HG_GS_LAB_SQUEEZE_BOOST === true; }
 
 /* The panel. Every figure comes from the generated literal, so nothing here
    can drift from the walk. '' when the literal is absent — never a
@@ -6700,10 +6674,13 @@ function goldRankSetups(cands, ctx){
              with the catalog loaded in the harness boot (this pack adds that)
              and the re-pin cycle that follows. The stamp rides the card and
              the ledger; the rank arithmetic is untouched. */
-          var __sqPts = hgGoldLabSqueezeBoostOn() ? 2 : 0;
-          parts.push({ label: 'LAB SQUEEZE ON — measured +0.19R search / +0.36R held-out (hg-v1493 indicator sweep; record-only'
-            + (hgGoldLabSqueezeBoostOn() ? '; boost ON' : '') + ')', pts: __sqPts });
-          tally += __sqPts;
+          /* hg-v1497: the boost is MEASURED DEAD, not parked — the lab's Phase G
+             (scripts/goldscalp-winrate-lab-results.json, leadEligibleSqueeze)
+             found the LEAD-ELIGIBLE squeeze-ON cohort EMPTY (n=0 over 62 days):
+             every squeeze-ON candidate carries a demote stamp (compression =
+             the chop/conf demotes coincide), so the +0.19R cohort lived entirely
+             in trades the desk never takes. The stamp stays as disclosure. */
+          parts.push({ label: 'LAB SQUEEZE ON — squeeze state (record-only; the measured squeeze-ON cohort is entirely chop-demoted — see the lab\'s leadEligibleSqueeze)', pts: 0 });
           if (!Array.isArray(c.stamps)) c.stamps = [];
           if (c.stamps.indexOf('LAB SQUEEZE ON') < 0) c.stamps.push('LAB SQUEEZE ON');
         }
@@ -18604,9 +18581,6 @@ W.hgGoldSetLabLongDemote = hgGoldSetLabLongDemote;
 W.hgGoldSetLabSqueeze = hgGoldSetLabSqueeze;   /* hg-v1493 the measured squeeze boost */
 W.hgGoldLabSqueezeOn = hgGoldLabSqueezeOn;
 W.hgGoldLabSqueezeInit = hgGoldLabSqueezeInit;
-W.hgGoldSetLabSqueezeBoost = hgGoldSetLabSqueezeBoost;   /* hg-v1495 the opt-in squeeze rank boost */
-W.hgGoldLabSqueezeBoostOn = hgGoldLabSqueezeBoostOn;
-W.hgGoldLabSqueezeBoostInit = hgGoldLabSqueezeBoostInit;   /* hg-v1488 the measured direction book */
 W.hgGoldLabLongDemoteOn = hgGoldLabLongDemoteOn;
 W.hgGoldLabLongDemoteInit = hgGoldLabLongDemoteInit;
 W.HG_GOLD_EXACT_TWIN = HG_GOLD_EXACT_TWIN;

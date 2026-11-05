@@ -152,24 +152,27 @@ function tape2(trendBars, trendStep, flatBars, flatWick){
   ok((rk3.ranked || []).every(c => (c.stamps || []).indexOf('LAB SQUEEZE ON') < 0),
      'a squeeze-OFF tape (' + (ir2.squeeze || 'unreadable') + '): no stamp — the boost follows the state, not the lever alone');
 
-  /* hg-v1495: the OPT-IN rank boost — default OFF, +2 tally when the user
-     turns it on. The direct cohort (the hg-v1495 artifact measures the
-     catalog stack on every row): squeeze-ON +0.134R over n=188 lead-eligible
-     rows, 3/4 windows — but W4 read \u22120.13R, so the boost does not ship
-     imposed. */
-  ok(typeof W.hgGoldSetLabSqueezeBoost === 'function' && W.hgGoldLabSqueezeBoostOn() === false,
-     'the boost lever exists and defaults OFF (the held-out window read against it)');
-  const base = W.goldRankSetups([mk('long')], ctxR) || { ranked: [] };
-  const baseTally = base.ranked && base.ranked[0] ? base.ranked[0].tally : null;
-  W.hgGoldSetLabSqueezeBoost(true);
-  const boosted = W.goldRankSetups([mk('long')], ctxR) || { ranked: [] };
-  const boostTally = boosted.ranked && boosted.ranked[0] ? boosted.ranked[0].tally : null;
-  ok(boostTally != null && baseTally != null && boostTally - baseTally === 2,
-     'boost ON: the squeeze-ON row takes exactly +2 on the rank tally (' + baseTally + ' -> ' + boostTally + ' — the tally is the sort key)');
-  ok((boosted.ranked[0].stamps || []).indexOf('LAB SQUEEZE ON') >= 0, 'and the stamp stays with it');
-  W.hgGoldSetLabSqueezeBoost(false);
-  const rk4 = W.goldRankSetups([mk('long')], ctxR) || { ranked: [] };
-  ok(rk4.ranked && rk4.ranked[0] && rk4.ranked[0].tally === baseTally, 'boost OFF again: the tally returns to base');
+  /* hg-v1497: the boost is MEASURED DEAD. The lab's Phase G
+     (leadEligibleSqueeze) measured the population a rank boost would act on —
+     non-demoted squeeze-ON rows — and found it EMPTY: n=0 over the whole 62-day
+     walk. Every squeeze-ON candidate carries a demote stamp (compression = the
+     chop/conf demotes coincide), so the +0.19R cohort lived entirely in trades
+     the desk never takes. The lever shipped in hg-v1495 is REMOVED; the stamp
+     stays as disclosure. */
+  const lab2 = JSON.parse(read('scripts/goldscalp-winrate-lab-results.json'));
+  const leadSq = lab2.leadEligibleSqueeze;
+  ok(leadSq && leadSq.overall && leadSq.overall.n === 0,
+     'Phase G: the LEAD-ELIGIBLE squeeze-ON cohort is EMPTY (n=' + (leadSq && leadSq.overall ? leadSq.overall.n : '?') + ' over the whole walk) — the boost had no population to act on');
+  ok(leadSq && (leadSq.windows || []).every(w => w.n === 0),
+     'and it is empty in EVERY disjoint window — not a boundary artifact');
+  ok(!/HG_GS_LAB_SQUEEZE_BOOST/.test(read('goldind.js')), 'the dead boost lever is REMOVED from goldind.js');
+  ok(read('goldind.js').indexOf('the measured squeeze-ON cohort is entirely chop-demoted') >= 0,
+     'and the stamp says why (record-only, the cohort is chop-demoted)');
+  /* the disclosure stamp still fires through the real ranker on a squeeze-ON tape */
+  const rk5 = W.goldRankSetups([mk('long')], ctxR) || { ranked: [] };
+  const withStamp2 = (rk5.ranked || []).filter(c => (c.stamps || []).indexOf('LAB SQUEEZE ON') >= 0);
+  ok(withStamp2.length === (rk5.ranked || []).length,
+     'the disclosure stamp still rides squeeze-ON rows through the real ranker');
 }
 
 console.log('\n' + (fail === 0

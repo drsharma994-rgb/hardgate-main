@@ -546,6 +546,43 @@ if (isMain) (async () => {
       log('  LOO ' + v.relax.padEnd(34) + ' W4: n=' + v.heldOut.n + ' win=' + (v.heldOut.win == null ? '—' : (100 * v.heldOut.win).toFixed(1) + '%') + ' net=' + (v.heldOut.net == null ? '—' : v.heldOut.net.toFixed(3) + 'R'));
     if (postmortem.refused.length) log('  REFUSED for shipping (the held-out window reads BETTER without them): ' + postmortem.refused.join(', '));
   }
+  /* Phase G — the LEAD-ELIGIBLE squeeze cohort on fresh data: the parked
+     rank boost\u2019s promotion test. The v1493 stamp was record-only because
+     the +0.19R cohort was measured over ALL squeeze-ON candidates (longs and
+     demoted rows included) while the boost would act on LEAD-ELIGIBLE rows
+     only — a population never measured. This phase measures exactly that
+     population, per window, on the freshest bars: if the lead-eligible
+     squeeze-ON cohort is net-positive in the held-out window too, the boost\u2019s
+     objection is gone and the promotion is measured, not guessed. */
+  const leadSq = { note: 'the lead-eligible squeeze-ON cohort (non-demoted rows only) \u2014 the population a rank boost would actually act on, measured on fresh bars', windows: [], overall: null };
+  {
+    const baseAll = evalConfig(data, baseConfig(data.records));
+    const sqRows = data.records.filter(r => r.reg && r.reg.sqz === 'ON');
+    const live = new Map(); const trades = [];
+    for (const r of data.records){
+      if (r.reg && r.reg.sqz !== 'ON') continue;
+      if (r.demoted) continue;
+      const key = r.lane + '|' + r.label + '|' + r.dir;
+      if (live.has(key) && r.t < live.get(key)) continue;
+      const ck = r.lane + '|' + r.t + '|' + r.label + '|' + r.dir;
+      const s = data.settled.get(ck + '|0') || (data.settled.set(ck + '|0', settleOne(data.m15, r, GEOMS[0])), data.settled.get(ck + '|0'));
+      live.set(key, s.liveUntil === Infinity ? Infinity : (data.m15[s.liveUntil] ? data.m15[s.liveUntil].t * 1000 : s.liveUntil * 1000));
+      if (s.outcome === 'unfilled' || s.outcome === 'open' || s.outcome === 'unpriced') continue;
+      const risk = Math.abs(r.entry - r.stop);
+      trades.push({ t: r.t, outcome: s.outcome, net: s.rGross - (r.entry * COST_XM_FRAC) / risk });
+    }
+    trades.sort((a, b) => a.t - b.t);
+    leadSq.overall = { n: trades.length, win: trades.length ? +(trades.filter(t => t.outcome === 'win').length / trades.length).toFixed(3) : null, net: trades.length ? +(trades.reduce((s, t) => s + t.net, 0) / trades.length).toFixed(3) : null };
+    for (let w = 0; w < 4; w++){
+      const seg = trades.filter(t => t.t >= winBars[w][0] && t.t < winBars[w][1]);
+      leadSq.windows.push(seg.length ? { n: seg.length, win: +(seg.filter(t => t.outcome === 'win').length / seg.length).toFixed(3), net: +(seg.reduce((s, t) => s + t.net, 0) / seg.length).toFixed(3) } : { n: 0 });
+    }
+    log('Phase G — the LEAD-ELIGIBLE squeeze-ON cohort (the boost\u2019s real population):');
+    log('  overall: n=' + leadSq.overall.n + ' win=' + (leadSq.overall.win == null ? '—' : (100 * leadSq.overall.win).toFixed(1) + '%') + ' net=' + (leadSq.overall.net == null ? '—' : leadSq.overall.net.toFixed(3) + 'R'));
+    leadSq.windows.forEach((w, i) => log('  ' + wName(i) + ': n=' + w.n + ' win=' + (w.win == null ? '—' : (100 * w.win).toFixed(1) + '%') + ' net=' + (w.win == null ? '—' : w.net.toFixed(3) + 'R')));
+    leadSq.bookSameWindows = [0, 1, 2, 3].map(i => windowAgg(baseAll, winBars[i][0], winBars[i][1]));
+  }
+
   const report = {
     meta: { generated: new Date().toISOString(), symbol: SYMBOL, bars: BARS_15M,
       span: [new Date(m15[first].t * 1000).toISOString(), new Date(m15[m15.length - 1].t * 1000).toISOString()],
@@ -555,7 +592,8 @@ if (isMain) (async () => {
     path: history,
     final: { config: cur, description: describe(cur), search: base.searchAll, heldOut: confNew, heldOutBaseline: confBase, all: fAll, z: +z.toFixed(2), pTwoSided: +zP.toFixed(4), confirmed },
     postmortem,
-    indicatorSweep
+    indicatorSweep,
+    leadEligibleSqueeze: leadSq
   };
   fs.writeFileSync(LAB_OUT, JSON.stringify(report, (k, v) => (k === 'trades' ? undefined : v), 1));
 

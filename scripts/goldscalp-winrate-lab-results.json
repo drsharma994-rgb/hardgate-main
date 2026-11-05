@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-11-05T20:35:56.124Z",
+  "generated": "2026-11-05T20:43:57.487Z",
   "symbol": "PAXGUSDT",
   "bars": 6000,
   "span": [
@@ -796,5 +796,49 @@
    },
    "improves": true
   }
- ]
+ ],
+ "leadEligibleSqueeze": {
+  "note": "the lead-eligible squeeze-ON cohort (non-demoted rows only) — the population a rank boost would actually act on, measured on fresh bars",
+  "windows": [
+   {
+    "n": 0
+   },
+   {
+    "n": 0
+   },
+   {
+    "n": 0
+   },
+   {
+    "n": 0
+   }
+  ],
+  "overall": {
+   "n": 0,
+   "win": null,
+   "net": null
+  },
+  "bookSameWindows": [
+   {
+    "n": 341,
+    "win": 0.4340175953079179,
+    "net": 0.009388593919877637
+   },
+   {
+    "n": 341,
+    "win": 0.4046920821114369,
+    "net": -0.05033231903882418
+   },
+   {
+    "n": 331,
+    "win": 0.41389728096676737,
+    "net": -0.012739881922592717
+   },
+   {
+    "n": 335,
+    "win": 0.4208955223880597,
+    "net": 0.015320577429401358
+   }
+  ]
+ }
 }
