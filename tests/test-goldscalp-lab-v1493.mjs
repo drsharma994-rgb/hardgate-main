@@ -150,6 +150,25 @@ function tape2(trendBars, trendStep, flatBars, flatWick){
   const rk3 = W.goldRankSetups([mk('long')], ctxT) || { ranked: [] };
   ok((rk3.ranked || []).every(c => (c.stamps || []).indexOf('LAB SQUEEZE ON') < 0),
      'a squeeze-OFF tape (' + (ir2.squeeze || 'unreadable') + '): no stamp — the boost follows the state, not the lever alone');
+
+  /* hg-v1495: the OPT-IN rank boost — default OFF, +2 tally when the user
+     turns it on. The direct cohort (the hg-v1495 artifact measures the
+     catalog stack on every row): squeeze-ON +0.134R over n=188 lead-eligible
+     rows, 3/4 windows — but W4 read \u22120.13R, so the boost does not ship
+     imposed. */
+  ok(typeof W.hgGoldSetLabSqueezeBoost === 'function' && W.hgGoldLabSqueezeBoostOn() === false,
+     'the boost lever exists and defaults OFF (the held-out window read against it)');
+  const base = W.goldRankSetups([mk('long')], ctxR) || { ranked: [] };
+  const baseTally = base.ranked && base.ranked[0] ? base.ranked[0].tally : null;
+  W.hgGoldSetLabSqueezeBoost(true);
+  const boosted = W.goldRankSetups([mk('long')], ctxR) || { ranked: [] };
+  const boostTally = boosted.ranked && boosted.ranked[0] ? boosted.ranked[0].tally : null;
+  ok(boostTally != null && baseTally != null && boostTally - baseTally === 2,
+     'boost ON: the squeeze-ON row takes exactly +2 on the rank tally (' + baseTally + ' -> ' + boostTally + ' — the tally is the sort key)');
+  ok((boosted.ranked[0].stamps || []).indexOf('LAB SQUEEZE ON') >= 0, 'and the stamp stays with it');
+  W.hgGoldSetLabSqueezeBoost(false);
+  const rk4 = W.goldRankSetups([mk('long')], ctxR) || { ranked: [] };
+  ok(rk4.ranked && rk4.ranked[0] && rk4.ranked[0].tally === baseTally, 'boost OFF again: the tally returns to base');
 }
 
 console.log('\n' + (fail === 0

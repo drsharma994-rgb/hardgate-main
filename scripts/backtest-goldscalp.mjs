@@ -309,6 +309,10 @@ function settleRecord(tr, rows, counters, results){
     grade: tr.grade || null, tally: isFinite(tr.tally) ? tr.tally : null,
     demoted: !!tr.demoted, mp: !!tr.mp,
     stamps: tr.stamps && tr.stamps.length ? tr.stamps : undefined,
+    /* hg-v1495: the gold-catalog indicator-stack marks ride the artifact row
+       (the hg-v1493 fidelity fix loaded the catalog into this walk; the mint
+       copied them, this record builder was still dropping them). */
+    freeReads: (tr.freeReads && typeof tr.freeReads === 'object') ? tr.freeReads : undefined,
     killzone: tr.killzone || null,
     killzoneWeight: isFinite(tr.killzoneWeight) ? tr.killzoneWeight : 0,
     utcHour: new Date(rows[tr.sigIdx].t * 1000).getUTCHours(),
@@ -431,6 +435,11 @@ function walk(W, m15, h1, h4, d1){
            because a record that silently drops the decisive one is worse
            than a longer record. */
         stamps: Array.isArray(c.stamps) ? c.stamps.slice(0, 24) : [],
+        /* hg-v1495: the gold-catalog indicator-stack marks ride the trade, so
+           the artifact can measure every latest-indicator cohort directly
+           (the hg-v1493 fidelity fix loaded the catalog into this walk; the
+           marks were still being dropped at this mint until now). */
+        freeReads: (c.freeReads && typeof c.freeReads === 'object') ? c.freeReads : undefined,
         killzone: c.killzone || null, killzoneWeight: c.killzoneWeight,
         rr: c.rr, stopAtr: (isFinite(c.atr) && c.atr > 0) ? Math.abs(entry - stop) / c.atr : NaN,
         entry, stop, t1,
