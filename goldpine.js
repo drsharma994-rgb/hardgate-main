@@ -876,7 +876,7 @@ var HG_GP_LAB_BOOK = {
   'scalp|Squeeze Mom':         'gross \u22120.42R/trade over n=896, negative in all four disjoint windows',
   'scalp|Smart Money Flow':    'gross \u22120.38R/trade over n=729, negative in all four disjoint windows',
   'scalp|Range Filter':        'gross \u22120.32R/trade over n=902, negative in all four disjoint windows',
-  'scalp|HalfTrend':           'gross \u22121.33R/trade over n=410, negative in all four disjoint windows',
+  'scalp|HalfTrend':           'gross \u22120.76R/trade over n=406, negative in all four disjoint windows',
   'swing|MSB + OB':            'gross \u22120.81R/trade over n=31, negative in all four disjoint windows'
 };
 /* the lab's confirmed direction clause: the pin reads the side that loses

@@ -11,6 +11,11 @@
 - Phase H runs in every lab refresh — the next \"add this strategy\" request gets its cohort measured in one command, before any wiring.
 - Tests: the v1493 guard pins Phase H (≥20 layers measured, none clears). Boot-split lesson recorded: the main lab boot must match the live tab's script set EXACTLY — a dependency added \"just to measure\" changes the pipeline it measures.
 - The forward ledger decides.
+### GOLD PINE daily lab refresh — the measured book re-confirmed on fresh bars — hg-v1500
+- **The GOLD PINE lab re-ran on fresh bars (83,690 candidates through Nov-06)** — and the measured book RE-CONFIRMED: the six-label family (scalp MSB+OB / Squeeze Mom / Smart Money Flow / HalfTrend / Range Filter + swing MSB+OB) all **LOO-sustained again** (backing each out worsens the held-out window), the **short-only pin held** (LOO: both-dirs reads W4 37.0%/−0.33R vs 40.1%/−0.24R with it), and HalfTrend's cohort re-derived at **−0.76R/trade over n=406** (still negative in all four windows — the demotion stands; the numbers refreshed in goldpine.js + the guard).
+- **The pine-only clause measured and REFUSED**: dropping the native lanes from the pine board entered the confirmed config this run — and the held-out window REFUSED it (the LOO reads W4 43.6% WITH the native lanes vs 40.1% without). The native lanes belong on the pine board; recorded, not shipped. This is the second clause the held-out window has vetoed on this desk (the first: skip-demoted, hg-v1492).
+- The record-only layers stay record-only (the hg-v1498 scalp-lane measurement stands; the pine-lane cohorts are in the fresh walk artifact for the next release check).
+- The forward ledger decides.
 ### THE SQUEEZE BOOST MEASURED DEAD — the honest reversal, and the lesson — hg-v1497
 - **The lab's new Phase G (`leadEligibleSqueeze`) measured the population a squeeze rank boost would act on — non-demoted squeeze-ON rows — and found it EMPTY: n=0 over the whole 62-day walk, in every disjoint window.** Every one of the 202 squeeze-ON candidates carries a demote stamp: compression = the chop/conf demotes coincide. The +0.19R cohort lived entirely in trades the desk never takes.
 - **The opt-in boost lever shipped in hg-v1495 is REMOVED.** The record-only stamp stays as disclosure, with the finding named on it (\"the measured squeeze-ON cohort is entirely chop-demoted\").

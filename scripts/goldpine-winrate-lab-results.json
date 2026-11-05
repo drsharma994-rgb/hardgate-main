@@ -1,11 +1,11 @@
 {
  "meta": {
-  "generated": "2026-11-05T12:32:55.276Z",
+  "generated": "2026-11-05T21:10:08.903Z",
   "symbol": "PAXGUSDT",
   "bars": 6000,
   "span": [
-   "2026-09-06T12:15:00.000Z",
-   "2026-11-05T12:15:00.000Z"
+   "2026-09-06T20:30:00.000Z",
+   "2026-11-05T20:30:00.000Z"
   ],
   "windows": [
    "W1 2026-09-06..2026-09-21",
@@ -19,231 +19,231 @@
    "xm": 0.00019999999999999998,
    "paxg": 0.0026
   },
-  "evaluated": 864,
+  "evaluated": 856,
   "walkArtifact": "scripts/goldpine-walk-results.json"
  },
  "baseline": {
   "all": {
-   "n": 12539,
-   "win": 0.35281920408326023,
-   "net": -0.7612107294052335
+   "n": 12544,
+   "win": 0.34933035714285715,
+   "net": -0.731010586701254
   },
   "description": "geom:plan"
  },
  "path": [
   {
    "pass": 1,
-   "move": "short only",
-   "description": "short only · geom:plan",
+   "move": "label -scalp|MSB + OB",
+   "description": "1 labels off: scalp|MSB + OB · geom:plan",
    "search": {
-    "n": 5415,
-    "win": 0.3717451523545706,
-    "net": -0.7851163224585863
+    "n": 9017,
+    "win": 0.34390595541754465,
+    "net": -0.4511887293974186
    },
    "windows": [
     {
-     "n": 1757,
-     "win": 0.34490608992601024,
-     "net": -0.3819061017452393
+     "n": 3027,
+     "win": 0.3313511727783284,
+     "net": -0.4819975531009975
     },
     {
-     "n": 1943,
-     "win": 0.3921770458054555,
-     "net": -0.5075414407945875
+     "n": 2965,
+     "win": 0.35952782462057337,
+     "net": -0.35463057226966516
     },
     {
-     "n": 1715,
-     "win": 0.3760932944606414,
-     "net": -1.5126780442466332
+     "n": 3025,
+     "win": 0.34115702479338844,
+     "net": -0.5150024902347924
     }
    ]
   },
   {
    "pass": 2,
-   "move": "label -scalp|MSB + OB",
-   "description": "1 labels off: scalp|MSB + OB · short only · geom:plan",
+   "move": "label -scalp|Squeeze Mom",
+   "description": "2 labels off: scalp|MSB + OB,scalp|Squeeze Mom · geom:plan",
    "search": {
-    "n": 5135,
-    "win": 0.3750730282375852,
-    "net": -0.30174273271885543
+    "n": 8328,
+    "win": 0.3482228626320845,
+    "net": -0.44839085410085927
    },
    "windows": [
     {
-     "n": 1701,
-     "win": 0.3474426807760141,
-     "net": -0.30780380112375116
+     "n": 2791,
+     "win": 0.3346470798996775,
+     "net": -0.48453791062142165
     },
     {
-     "n": 1829,
-     "win": 0.39748496446145437,
-     "net": -0.24709991307654644
+     "n": 2731,
+     "win": 0.36580007323324787,
+     "net": -0.34098181937689354
     },
     {
-     "n": 1605,
-     "win": 0.37881619937694705,
-     "net": -0.35758811575253496
+     "n": 2806,
+     "win": 0.34461867426942266,
+     "net": -0.5169751873447155
     }
    ]
   },
   {
    "pass": 3,
-   "move": "skip demoted",
-   "description": "1 labels off: scalp|MSB + OB · short only · skip demoted · geom:plan",
+   "move": "label -scalp|Smart Money Flow",
+   "description": "3 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow · geom:plan",
    "search": {
-    "n": 2864,
-    "win": 0.3823324022346369,
-    "net": -0.24668458465044577
+    "n": 7764,
+    "win": 0.35239567233384855,
+    "net": -0.44644842486690206
    },
    "windows": [
     {
-     "n": 938,
-     "win": 0.35074626865671643,
-     "net": -0.237074832909168
+     "n": 2605,
+     "win": 0.33589251439539347,
+     "net": -0.4933462102061001
     },
     {
-     "n": 1008,
-     "win": 0.40773809523809523,
-     "net": -0.19767312312640312
+     "n": 2538,
+     "win": 0.3731284475965327,
+     "net": -0.3247596589803859
     },
     {
-     "n": 918,
-     "win": 0.3867102396514161,
-     "net": -0.31032020594625565
+     "n": 2621,
+     "win": 0.34872186188477683,
+     "net": -0.517672139865516
     }
    ]
   },
   {
    "pass": 4,
-   "move": "label -scalp|Smart Money Flow",
-   "description": "2 labels off: scalp|MSB + OB,scalp|Smart Money Flow · short only · skip demoted · geom:plan",
+   "move": "label -scalp|HalfTrend",
+   "description": "4 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|HalfTrend · geom:plan",
    "search": {
-    "n": 2587,
-    "win": 0.3896405102435253,
-    "net": -0.2373823210968645
+    "n": 7473,
+    "win": 0.3566171550916633,
+    "net": -0.43670727267945547
    },
    "windows": [
     {
-     "n": 850,
-     "win": 0.35411764705882354,
-     "net": -0.2320290654784189
+     "n": 2500,
+     "win": 0.3404,
+     "net": -0.4940747891068231
     },
     {
-     "n": 908,
-     "win": 0.41519823788546256,
-     "net": -0.1955180627345134
+     "n": 2453,
+     "win": 0.37749694251936405,
+     "net": -0.3258754922636363
     },
     {
-     "n": 829,
-     "win": 0.39806996381182147,
-     "net": -0.2887249192496914
+     "n": 2520,
+     "win": 0.3523809523809524,
+     "net": -0.48768011644595766
     }
    ]
   },
   {
    "pass": 5,
-   "move": "label -scalp|Squeeze Mom",
-   "description": "3 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow · short only · skip demoted · geom:plan",
+   "move": "pine only",
+   "description": "4 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|HalfTrend · pine only · geom:plan",
    "search": {
-    "n": 2228,
-    "win": 0.3985637342908438,
-    "net": -0.22296376950478458
+    "n": 3156,
+    "win": 0.36755386565272496,
+    "net": -0.3779357948566678
    },
    "windows": [
     {
-     "n": 734,
-     "win": 0.35967302452316074,
-     "net": -0.22351025539428823
+     "n": 1072,
+     "win": 0.34048507462686567,
+     "net": -0.35597348934171213
     },
     {
-     "n": 786,
-     "win": 0.4223918575063613,
-     "net": -0.18880637678509374
+     "n": 1019,
+     "win": 0.3837095191364082,
+     "net": -0.30342257174050463
     },
     {
-     "n": 708,
-     "win": 0.4124293785310734,
-     "net": -0.2603177102318768
+     "n": 1065,
+     "win": 0.37934272300469485,
+     "net": -0.47133726515469854
     }
    ]
   },
   {
    "pass": 6,
-   "move": "label -scalp|Range Filter",
-   "description": "4 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|Range Filter · short only · skip demoted · geom:plan",
+   "move": "short only",
+   "description": "4 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|HalfTrend · short only · pine only · geom:plan",
    "search": {
-    "n": 1789,
-    "win": 0.4108440469536054,
-    "net": -0.22118102976475598
+    "n": 1889,
+    "win": 0.39809422975119113,
+    "net": -0.24694300136380862
    },
    "windows": [
     {
-     "n": 572,
-     "win": 0.3688811188811189,
-     "net": -0.1823886292842518
+     "n": 609,
+     "win": 0.3448275862068966,
+     "net": -0.26678863693549837
     },
     {
-     "n": 637,
-     "win": 0.42857142857142855,
-     "net": -0.21947390613772774
+     "n": 677,
+     "win": 0.4298375184638109,
+     "net": -0.17823032169460656
     },
     {
-     "n": 580,
-     "win": 0.43275862068965515,
-     "net": -0.2613132553255583
+     "n": 603,
+     "win": 0.41625207296849087,
+     "net": -0.3040449782674416
     }
    ]
   },
   {
    "pass": 7,
-   "move": "label -swing|MSB + OB",
-   "description": "5 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|Range Filter… · short only · skip demoted · geom:plan",
+   "move": "label -scalp|Range Filter",
+   "description": "5 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|HalfTrend… · short only · pine only · geom:plan",
    "search": {
-    "n": 1771,
-    "win": 0.4150197628458498,
-    "net": -0.21401317693673758
+    "n": 1448,
+    "win": 0.4164364640883978,
+    "net": -0.24420293919426087
    },
    "windows": [
     {
-     "n": 568,
-     "win": 0.3714788732394366,
-     "net": -0.18010108246114914
+     "n": 451,
+     "win": 0.3614190687361419,
+     "net": -0.20295805396058123
     },
     {
-     "n": 629,
-     "win": 0.43402225755166934,
-     "net": -0.20906944411849496
+     "n": 529,
+     "win": 0.43856332703213613,
+     "net": -0.2138540228747077
     },
     {
-     "n": 574,
-     "win": 0.4372822299651568,
-     "net": -0.252988225028739
+     "n": 468,
+     "win": 0.4444444444444444,
+     "net": -0.31825426392381884
     }
    ]
   },
   {
    "pass": 8,
-   "move": "label -scalp|HalfTrend",
-   "description": "6 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|HalfTrend… · short only · skip demoted · geom:plan",
+   "move": "label -swing|MSB + OB",
+   "description": "6 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|HalfTrend… · short only · pine only · geom:plan",
    "search": {
-    "n": 1623,
-    "win": 0.425754775107825,
-    "net": -0.2134832941875299
+    "n": 1429,
+    "win": 0.4212736179146256,
+    "net": -0.2371580881364717
    },
    "windows": [
     {
-     "n": 519,
-     "win": 0.37957610789980734,
-     "net": -0.17771497813279255
+     "n": 447,
+     "win": 0.36465324384787473,
+     "net": -0.2002353494934291
     },
     {
-     "n": 582,
-     "win": 0.4415807560137457,
-     "net": -0.22368357576801126
+     "n": 521,
+     "win": 0.44529750479846447,
+     "net": -0.2012064879875644
     },
     {
-     "n": 522,
-     "win": 0.4540229885057471,
-     "net": -0.23767331746831258
+     "n": 461,
+     "win": 0.4490238611713666,
+     "net": -0.31359029605625643
     }
    ]
   }
@@ -259,80 +259,78 @@
     "scalp|HalfTrend": false,
     "scalp|SMC Core": true,
     "scalp|Range Filter": false,
-    "scalp|EMA 8/21 + RSI50": true,
-    "scalp|Heikin Ashi Flip": true,
-    "scalp|Session VWAP": true,
-    "scalp|Kaufman Efficiency": true,
-    "scalp|OTE 0.705": true,
-    "scalp|Fisher Transform": true,
-    "scalp|FVG FILL": true,
-    "scalp|Supertrend 10x3": true,
-    "scalp|MACD Cross": true,
     "scalp|Weekly AVWAP": true,
-    "scalp|Williams %R Re-entry": true,
-    "scalp|London opening range": true,
-    "scalp|Stochastic Cross": true,
-    "scalp|QQE": true,
-    "scalp|Chandelier Exit": true,
-    "scalp|CCI Re-entry": true,
-    "scalp|HVN / VOLUME NODE RETEST": true,
-    "scalp|Ichimoku TK Cross": true,
-    "scalp|Parabolic SAR Flip": true,
-    "scalp|NY VOLUME EXHAUSTION": true,
-    "scalp|P7 SCALP MODULE (15m SEPARATED)": true,
-    "scalp|Hull MA Turn": true,
-    "scalp|EMA RIBBON PULLBACK": true,
-    "scalp|Aroon Cross": true,
-    "scalp|Donchian 20/10": true,
-    "scalp|OPENING RANGE BREAKOUT": true,
-    "scalp|BOS ALIGNMENT ENTRY": true,
+    "scalp|Kaufman Efficiency": true,
     "scalp|ASIAN RANGE BREAKOUT": true,
-    "scalp|NW Envelope": true,
-    "scalp|S30 SESSION-COMPOSITE PULLBACK": true,
-    "scalp|ADX + DI": true,
-    "scalp|LIQUIDITY SWEEP REVERSAL": true,
-    "scalp|GOLD LIQUIDITY SWEEP": true,
-    "scalp|SWEEP→OB (MSS + FRESH OB/FVG)": true,
-    "scalp|S37 FAILED-SWEEP CONTINUATION": true,
+    "scalp|OPENING RANGE BREAKOUT": true,
+    "scalp|London opening range": true,
+    "scalp|Heikin Ashi Flip": true,
     "scalp|Balanced Price Range": true,
+    "scalp|Hull MA Turn": true,
+    "scalp|HVN / VOLUME NODE RETEST": true,
+    "scalp|Williams %R Re-entry": true,
+    "scalp|GOLD LIQUIDITY SWEEP": true,
+    "scalp|NY VOLUME EXHAUSTION": true,
+    "scalp|EMA RIBBON PULLBACK": true,
+    "scalp|NW Envelope": true,
+    "scalp|Chandelier Exit": true,
+    "scalp|Parabolic SAR Flip": true,
+    "scalp|Fisher Transform": true,
     "scalp|TTM Squeeze": true,
     "scalp|S17 LOOK-ABOVE-AND-FAIL": true,
     "scalp|S62 VOLUME-BAR S0 SWEEP": true,
+    "scalp|LIQUIDITY SWEEP REVERSAL": true,
+    "scalp|EMA 8/21 + RSI50": true,
+    "scalp|Aroon Cross": true,
+    "scalp|Session VWAP": true,
+    "scalp|Stochastic Cross": true,
     "scalp|Prior-day raid": true,
     "scalp|SESSION VWAP BOUNCE / REJECTION": true,
+    "scalp|CCI Re-entry": true,
+    "scalp|OTE 0.705": true,
+    "scalp|MACD Cross": true,
+    "scalp|QQE": true,
+    "scalp|Supertrend 10x3": true,
+    "scalp|Donchian 20/10": true,
+    "scalp|ADX + DI": true,
+    "scalp|BOS ALIGNMENT ENTRY": true,
     "scalp|S24 THREE-DRIVE EXHAUSTION": true,
+    "scalp|Ichimoku TK Cross": true,
     "scalp|S14 ADR EXHAUSTION FADE (PART4)": true,
+    "scalp|FVG FILL": true,
     "scalp|ADR EXHAUSTION FADE": true,
     "scalp|ORDER BLOCK / BREAKER RETEST": true,
     "scalp|S52 RANGE-BAR S0 SWEEP": true,
+    "scalp|SWEEP→OB (MSS + FRESH OB/FVG)": true,
     "scalp|TRIX Zero Cross": true,
     "scalp|Keltner Pullback": true,
     "scalp|PRIOR-DAY LIQUIDITY RAID": true,
     "scalp|S22 SESSION VWAP 2σ REVERSION": true,
     "scalp|LONDON JUDAS RECLAIM": true,
     "scalp|London Judas reclaim": true,
+    "scalp|S37 FAILED-SWEEP CONTINUATION": true,
     "scalp|SESSION SILVER BULLET (ASIA→LONDON)": true,
     "scalp|RSI 75/25 DIVERGENCE": true,
     "scalp|S54 VPIN-TIMED CONTRACTION BREAK": true,
     "scalp|VWAP BAND MEAN-REVERSION": true,
+    "scalp|S30 SESSION-COMPOSITE PULLBACK": true,
     "scalp|S19 WYCKOFF SPRING/UPTHRUST TEST": true,
     "swing|confluence": true,
     "swing|HTF Bias": true,
     "swing|MSB + OB": false,
     "swing|Squeeze Mom": true,
-    "swing|Smart Money Flow": true,
     "swing|HalfTrend": true,
     "swing|SMC Core": true,
     "swing|Range Filter": true,
-    "swing|Session VWAP": true,
-    "swing|Kaufman Efficiency": true,
     "swing|Aroon Cross": true,
     "swing|Weekly AVWAP": true,
     "swing|TRIX Zero Cross": true,
+    "swing|Session VWAP": true,
     "swing|Supertrend 10x3": true,
     "swing|Williams %R Re-entry": true,
     "swing|CCI Re-entry": true,
     "swing|Heikin Ashi Flip": true,
+    "swing|Smart Money Flow": true,
     "swing|Hull MA Turn": true,
     "swing|Fisher Transform": true,
     "swing|TTM Squeeze": true,
@@ -342,6 +340,7 @@
     "swing|Stochastic Cross": true,
     "swing|Parabolic SAR Flip": true,
     "swing|ADX + DI": true,
+    "swing|Kaufman Efficiency": true,
     "swing|NW Envelope": true,
     "swing|Chandelier Exit": true,
     "swing|EMA 8/21 + RSI50": true,
@@ -356,288 +355,288 @@
     "scalp": true,
     "swing": true
    },
-   "pineOnly": false,
+   "pineOnly": true,
    "nativeOnly": false,
    "admitRecordOnly": false,
-   "skipDemoted": true,
+   "skipDemoted": false,
    "geom": 0
   },
-  "description": "6 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|HalfTrend… · short only · skip demoted · geom:plan",
+  "description": "6 labels off: scalp|MSB + OB,scalp|Squeeze Mom,scalp|Smart Money Flow,scalp|HalfTrend… · short only · pine only · geom:plan",
   "search": {
-   "n": 1623,
-   "win": 0.425754775107825,
-   "net": -0.2134832941875299
+   "n": 1429,
+   "win": 0.4212736179146256,
+   "net": -0.2371580881364717
   },
   "heldOut": {
-   "n": 539,
-   "win": 0.3877551020408163,
-   "net": -0.2470119704761
+   "n": 471,
+   "win": 0.4012738853503185,
+   "net": -0.2447178099568087
   },
   "heldOutBaseline": {
-   "n": 3028,
-   "win": 0.38011889035667107,
-   "net": -0.3476263942362799
+   "n": 3023,
+   "win": 0.37743962950711213,
+   "net": -0.3552386824160771
   },
   "all": {
-   "n": 2162,
-   "win": 0.4162812210915819,
-   "net": -0.22184220099582785
+   "n": 1900,
+   "win": 0.4163157894736842,
+   "net": -0.23903210338772435
   },
-  "z": 5.67,
+  "z": 5.68,
   "pTwoSided": 0,
   "confirmed": true
  },
  "postmortem": {
   "note": "leave-one-out on the confirmed config: a variant that BEATS the full config on the held-out window names a clause the search added for its own windows — refused for shipping",
   "baseline": {
-   "n": 539,
-   "win": 0.3877551020408163,
-   "net": -0.2470119704761
+   "n": 471,
+   "win": 0.4012738853503185,
+   "net": -0.2447178099568087
   },
   "variants": [
    {
     "relax": "both dirs (direction clause off)",
     "heldOut": {
-     "n": 935,
-     "win": 0.3572192513368984,
-     "net": -0.3277791455908784
+     "n": 813,
+     "win": 0.37023370233702335,
+     "net": -0.3278104017012365
     },
     "windows": [
      {
-      "n": 967,
-      "win": 0.3578076525336091,
-      "net": -0.5521546147401974
+      "n": 829,
+      "win": 0.35826296743063935,
+      "net": -0.3199201937878447
      },
      {
-      "n": 911,
-      "win": 0.38309549945115257,
-      "net": -0.33371768673486973
+      "n": 793,
+      "win": 0.39344262295081966,
+      "net": -0.3085033966369909
      },
      {
-      "n": 930,
-      "win": 0.4043010752688172,
-      "net": -0.40799954097555685
+      "n": 819,
+      "win": 0.4017094017094017,
+      "net": -0.47580810328188605
      },
      {
-      "n": 935,
-      "win": 0.3572192513368984,
-      "net": -0.3277791455908784
+      "n": 813,
+      "win": 0.37023370233702335,
+      "net": -0.3278104017012365
      }
     ]
    },
    {
-    "relax": "keep demoted rows",
+    "relax": "native back in",
     "heldOut": {
-     "n": 1203,
-     "win": 0.43640897755610975,
-     "net": -0.16430950950897932
+     "n": 1168,
+     "win": 0.4357876712328767,
+     "net": -0.1695772375585316
     },
     "windows": [
      {
-      "n": 1279,
-      "win": 0.35809225957779517,
-      "net": -0.3071304365602783
+      "n": 1247,
+      "win": 0.3392141138732959,
+      "net": -0.33982338828563236
      },
      {
-      "n": 1401,
-      "win": 0.40827980014275517,
-      "net": -0.27330627261034074
+      "n": 1400,
+      "win": 0.41214285714285714,
+      "net": -0.25896107372700833
      },
      {
-      "n": 1208,
-      "win": 0.4056291390728477,
-      "net": -0.3409096931541778
+      "n": 1239,
+      "win": 0.4043583535108959,
+      "net": -0.3402267639639812
      },
      {
-      "n": 1203,
-      "win": 0.43640897755610975,
-      "net": -0.16430950950897932
+      "n": 1168,
+      "win": 0.4357876712328767,
+      "net": -0.1695772375585316
      }
     ]
    },
    {
     "relax": "+scalp|HalfTrend back in",
     "heldOut": {
-     "n": 600,
-     "win": 0.37666666666666665,
-     "net": -0.3625245294459349
+     "n": 533,
+     "win": 0.38649155722326456,
+     "net": -0.3764692111141132
     },
     "windows": [
      {
-      "n": 568,
-      "win": 0.3714788732394366,
-      "net": -0.18010108246114914
+      "n": 494,
+      "win": 0.3562753036437247,
+      "net": -0.20199544369551298
      },
      {
-      "n": 629,
-      "win": 0.43402225755166934,
-      "net": -0.20906944411849496
+      "n": 569,
+      "win": 0.437609841827768,
+      "net": -0.1832165970991068
      },
      {
-      "n": 574,
-      "win": 0.4372822299651568,
-      "net": -0.252988225028739
+      "n": 512,
+      "win": 0.431640625,
+      "net": -0.3215356215142968
      },
      {
-      "n": 600,
-      "win": 0.37666666666666665,
-      "net": -0.3625245294459349
+      "n": 533,
+      "win": 0.38649155722326456,
+      "net": -0.3764692111141132
      }
     ]
    },
    {
     "relax": "+scalp|MSB + OB back in",
     "heldOut": {
-     "n": 607,
-     "win": 0.38385502471169686,
-     "net": -0.519090347559268
+     "n": 541,
+     "win": 0.3974121996303142,
+     "net": -0.54233163009444
     },
     "windows": [
      {
-      "n": 575,
-      "win": 0.36869565217391304,
-      "net": -0.4168153542709613
+      "n": 506,
+      "win": 0.35177865612648224,
+      "net": -0.47944668538862306
      },
      {
-      "n": 696,
-      "win": 0.41954022988505746,
-      "net": -0.9545849418733638
+      "n": 635,
+      "win": 0.4188976377952756,
+      "net": -1.0109887190873117
      },
      {
-      "n": 632,
-      "win": 0.43354430379746833,
-      "net": -3.393005366801602
+      "n": 571,
+      "win": 0.4273204903677758,
+      "net": -3.7917325170236573
      },
      {
-      "n": 607,
-      "win": 0.38385502471169686,
-      "net": -0.519090347559268
+      "n": 541,
+      "win": 0.3974121996303142,
+      "net": -0.54233163009444
      }
     ]
    },
    {
     "relax": "+scalp|Range Filter back in",
     "heldOut": {
-     "n": 662,
-     "win": 0.3851963746223565,
-     "net": -0.24171129473106745
+     "n": 587,
+     "win": 0.3969335604770017,
+     "net": -0.23932306284741123
     },
     "windows": [
      {
-      "n": 681,
-      "win": 0.3671071953010279,
-      "net": -0.22314875941223894
+      "n": 605,
+      "win": 0.34710743801652894,
+      "net": -0.26519900624968457
      },
      {
-      "n": 731,
-      "win": 0.4322845417236662,
-      "net": -0.189850581450525
+      "n": 669,
+      "win": 0.4349775784753363,
+      "net": -0.1679547532556791
      },
      {
-      "n": 650,
-      "win": 0.4276923076923077,
-      "net": -0.24124418842123646
+      "n": 596,
+      "win": 0.41946308724832215,
+      "net": -0.300270558491366
      },
      {
-      "n": 662,
-      "win": 0.3851963746223565,
-      "net": -0.24171129473106745
+      "n": 587,
+      "win": 0.3969335604770017,
+      "net": -0.23932306284741123
      }
     ]
    },
    {
     "relax": "+scalp|Smart Money Flow back in",
     "heldOut": {
-     "n": 611,
-     "win": 0.3862520458265139,
-     "net": -0.22348002878496645
+     "n": 544,
+     "win": 0.39705882352941174,
+     "net": -0.2200033715240966
     },
     "windows": [
      {
-      "n": 607,
-      "win": 0.37067545304777594,
-      "net": -0.1933864271220145
+      "n": 534,
+      "win": 0.352059925093633,
+      "net": -0.22721510768926736
      },
      {
-      "n": 682,
-      "win": 0.42668621700879766,
-      "net": -0.22273892704612708
+      "n": 622,
+      "win": 0.42765273311897106,
+      "net": -0.20525468350437423
      },
      {
-      "n": 611,
-      "win": 0.4288052373158756,
-      "net": -0.2775555854650194
+      "n": 549,
+      "win": 0.4207650273224044,
+      "net": -0.34967388039359926
      },
      {
-      "n": 611,
-      "win": 0.3862520458265139,
-      "net": -0.22348002878496645
+      "n": 544,
+      "win": 0.39705882352941174,
+      "net": -0.2200033715240966
      }
     ]
    },
    {
     "relax": "+scalp|Squeeze Mom back in",
     "heldOut": {
-     "n": 639,
-     "win": 0.37402190923317685,
-     "net": -0.2568132942914137
+     "n": 573,
+     "win": 0.3856893542757417,
+     "net": -0.24830997064572286
     },
     "windows": [
      {
-      "n": 635,
-      "win": 0.36850393700787404,
-      "net": -0.19748386117821662
+      "n": 562,
+      "win": 0.3469750889679715,
+      "net": -0.23945163276109058
      },
      {
-      "n": 704,
-      "win": 0.4289772727272727,
-      "net": -0.22629606520857515
+      "n": 644,
+      "win": 0.4301242236024845,
+      "net": -0.20984389503117756
      },
      {
-      "n": 643,
-      "win": 0.4276827371695179,
-      "net": -0.27855908387602585
+      "n": 581,
+      "win": 0.42168674698795183,
+      "net": -0.34166767041339086
      },
      {
-      "n": 639,
-      "win": 0.37402190923317685,
-      "net": -0.2568132942914137
+      "n": 573,
+      "win": 0.3856893542757417,
+      "net": -0.24830997064572286
      }
     ]
    },
    {
     "relax": "+swing|MSB + OB back in",
     "heldOut": {
-     "n": 542,
-     "win": 0.3874538745387454,
-     "net": -0.24603784299639264
+     "n": 473,
+     "win": 0.39957716701902746,
+     "net": -0.2482954021035908
     },
     "windows": [
      {
-      "n": 523,
-      "win": 0.37667304015296366,
-      "net": -0.18023509515024594
+      "n": 451,
+      "win": 0.3614190687361419,
+      "net": -0.20295805396058123
      },
      {
-      "n": 590,
-      "win": 0.43559322033898307,
-      "net": -0.2347187100952236
+      "n": 529,
+      "win": 0.43856332703213613,
+      "net": -0.2138540228747077
      },
      {
-      "n": 528,
-      "win": 0.44886363636363635,
-      "net": -0.24699227015300526
+      "n": 468,
+      "win": 0.4444444444444444,
+      "net": -0.31825426392381884
      },
      {
-      "n": 542,
-      "win": 0.3874538745387454,
-      "net": -0.24603784299639264
+      "n": 473,
+      "win": 0.39957716701902746,
+      "net": -0.2482954021035908
      }
     ]
    }
   ],
   "refused": [
-   "keep demoted rows"
+   "native back in"
   ]
  },
  "directionCohort": {
@@ -646,56 +645,56 @@
   "paxgCostFrac": 0.0026,
   "directions": {
    "long": {
-    "n": 5489,
-    "win": 0.317,
-    "netXm": -0.868,
+    "n": 5530,
+    "win": 0.315,
+    "netXm": -0.784,
     "windows": [
      {
-      "n": 1480,
-      "win": 0.332,
-      "netXm": -1.545
+      "n": 1470,
+      "win": 0.333,
+      "netXm": -1.233
      },
      {
-      "n": 1156,
-      "win": 0.287,
-      "netXm": -0.696
+      "n": 1190,
+      "win": 0.291,
+      "netXm": -0.674
      },
      {
-      "n": 1460,
-      "win": 0.299,
-      "netXm": -0.787
+      "n": 1447,
+      "win": 0.293,
+      "netXm": -0.811
      },
      {
-      "n": 1391,
-      "win": 0.344,
-      "netXm": -0.376
+      "n": 1423,
+      "win": 0.34,
+      "netXm": -0.386
      }
     ]
    },
    "short": {
-    "n": 7052,
-    "win": 0.381,
-    "netXm": -0.678,
+    "n": 7014,
+    "win": 0.376,
+    "netXm": -0.689,
     "windows": [
      {
-      "n": 1757,
-      "win": 0.345,
-      "netXm": -0.382
+      "n": 1719,
+      "win": 0.323,
+      "netXm": -0.428
      },
      {
-      "n": 1943,
-      "win": 0.392,
-      "netXm": -0.508
+      "n": 1944,
+      "win": 0.395,
+      "netXm": -0.498
      },
      {
-      "n": 1715,
+      "n": 1751,
       "win": 0.376,
-      "netXm": -1.513
+      "netXm": -1.487
      },
      {
-      "n": 1637,
+      "n": 1600,
       "win": 0.411,
-      "netXm": -0.323
+      "netXm": -0.328
      }
     ]
    }

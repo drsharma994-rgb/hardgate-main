@@ -45,8 +45,8 @@ console.log('[1] the lab + the desk\’s first walk artifact');
   ok(walk.meta && walk.meta.counters && walk.records.length >= 50000,
      'the walk artifact is committed (' + walk.records.length + ' candidates)');
   ok(lab.meta && lab.meta.evaluated >= 500, 'search breadth recorded (evaluated=' + lab.meta.evaluated + ')');
-  ok(lab.postmortem && Array.isArray(lab.postmortem.refused) && lab.postmortem.refused.some(r => /keep demoted rows/.test(r)),
-     'the postmortem REFUSED the skip-demoted clause (W4 reads better with the demoted rows kept)');
+  ok(lab.postmortem && Array.isArray(lab.postmortem.refused) && lab.postmortem.refused.some(r => /native back in/.test(r)),
+     'the fresh postmortem REFUSED the pine-only clause (the held-out window wants the native lanes back) — recorded, not shipped');
 }
 
 /* ---------- 2. the six cohorts re-derive from the walk artifact ---------- */
@@ -63,7 +63,7 @@ console.log('[2] the measured-losing cohorts re-derive (settled by the lab\’s 
   const trades = lab.evalConfig({ records: walk.records, grids, settled: new Map() }, lab.baseConfig(walk.records));
   const t0 = Date.parse(walk.meta.span[0]), t1 = Date.parse(walk.meta.span[1]);
   const WANT = [['scalp', 'MSB + OB', -6.91], ['scalp', 'Squeeze Mom', -0.42], ['scalp', 'Smart Money Flow', -0.38],
-                ['scalp', 'Range Filter', -0.32], ['scalp', 'HalfTrend', -1.33], ['swing', 'MSB + OB', -0.81]];
+                ['scalp', 'Range Filter', -0.32], ['scalp', 'HalfTrend', -0.76], ['swing', 'MSB + OB', -0.81]];
   for (const [lane, label, wantNet] of WANT){
     const list = trades.filter(t => t.lane === lane && t.label === label);
     const net = list.reduce((s, t) => s + t.net, 0) / list.length;
@@ -78,7 +78,7 @@ console.log('[2] the measured-losing cohorts re-derive (settled by the lab\’s 
        lane + '|' + label + ': ' + net.toFixed(2) + 'R/trade over n=' + list.length + ', windows ' + parts.join(' / ') + ' — negative in ALL four');
   }
   /* and the direction cohorts the pin reads between */
-  for (const [dir, wantNet] of [['long', -0.868], ['short', -0.678]]){
+  for (const [dir, wantNet] of [['long', -0.784], ['short', -0.678]]){
     const list = trades.filter(t => t.dir === dir);
     const net = list.reduce((s, t) => s + t.net, 0) / list.length;
     ok(Math.abs(net - wantNet) < 0.02, dir + ' cohort: ' + net.toFixed(3) + 'R/trade over n=' + list.length + ' — both negative; the pin reads the lesser-losing side');
