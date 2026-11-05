@@ -229,6 +229,7 @@ console.log('== 4) the borrower census, DERIVED from source ==');
     'omnigold.js': 'OMNIGOLD engine bridge -- fed hg-v974',
     'startradertab.js': 'STAR TRADER gold lane -- fed hg-v974',
     'scripts/backtest-goldscalp.mjs': 'replay harness: passes the closed bar cutoff as now (hg-v953)',
+    'scripts/goldscalp-winrate-lab.mjs': 'the win-rate lab: records every candidate the pipeline forms, same feed depths + cutoff as the harness (hg-v1486)',
     'scripts/backtest-goldswing.mjs': 'replay harness (hg-v953)',
     'scripts/backtest-omnigold.mjs': 'replay harness (hg-v953)'
   };

@@ -64,6 +64,9 @@ const ctx = { Math, isFinite, isNaN, Number, String, Array, Object, JSON, Date, 
 ctx.window = ctx; vm.createContext(ctx);
 for (const f of ['indicators.js', 'indicators2.js', 'goldind.js'])
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+/* hg-v1488: the measured direction book has its own guard; this file pins the
+   table’s transcription semantics on long-side probes, so the clause is off. */
+ctx.hgGoldSetLabLongDemote(false);
 const APPLY = ctx.hgGoldSetupEdgeApply;
 
 function run(stratKey, swing){

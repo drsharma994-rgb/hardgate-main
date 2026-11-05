@@ -32,6 +32,10 @@ const src = readFileSync(join(ROOT, 'goldind.js'), 'utf8');
 const W = {};
 const ctx = vm.createContext({ window: W, self: W, globalThis: W, console, Math, Date, JSON, isFinite, parseFloat, parseInt, Array, Object, String, Number });
 try { vm.runInContext(src, ctx, { timeout: 20000 }); } catch (e) { /* the module guards its own env */ }
+/* hg-v1488: the measured direction book is pinned in test-goldscalp-lab-v1488;
+   this file’s probes drive the table + note machinery on long-side candidates,
+   so the direction clause is off here. */
+try { W.hgGoldSetLabLongDemote(false); } catch (eL) { /* boot failures are reported below */ }
 const TABLE = W.HG_GOLD_SETUP_EDGE;
 const NOTE = W.hgGoldEdgeLiveNote;
 const APPLY = W.hgGoldSetupEdgeApply;
@@ -118,14 +122,14 @@ console.log('2. the book figure, as quoted and as the desk forms it');
    main 1,321 settled at −0.004R, withheld 232, the desk forms 1,212; the cost
    reject STILL binds zero main-book trades (87 sub-bar settles, all withheld). */
 const b = measured.book;
-eq(b.quoted.n, 1553, 'the quoted book is 1553 settled (main 1321 + withheld ledger 232)');
-eq(b.quoted.net, -0.028, 'the quoted book is -0.028R');
+eq(b.quoted.n, 1552, 'the quoted book is 1552 settled (main 1321 + withheld ledger 231)');
+eq(b.quoted.net, -0.027, 'the quoted book is -0.027R');
 eq(b.today.n, 1212, 'the desk forms 1212 of them');
 eq(b.today.net, -0.004, 'as formed, the book is -0.004R');
-eq(b.noLongerFormed, 341, '341 are no longer formed');
-eq(b.droppedByCost, 87, '87 under the cost reject (all inside the withheld ledger — the floor+ceiling era binds every main-book stop)');
-eq(b.droppedBySuppress, 341, '341 from suppressed kinds');
-eq(b.droppedByBoth, 87, '87 are both');
+eq(b.noLongerFormed, 340, '340 are no longer formed');
+eq(b.droppedByCost, 86, '86 under the cost reject (all inside the withheld ledger — the floor+ceiling era binds every main-book stop)');
+eq(b.droppedBySuppress, 340, '340 from suppressed kinds');
+eq(b.droppedByBoth, 86, '86 are both');
 eq(b.droppedByCost + b.droppedBySuppress - b.droppedByBoth, b.noLongerFormed, 'the union arithmetic closes');
 ok(Math.round(b.noLongerFormed / b.quoted.n * 100) === 22, 'that is 22% of the quoted book');
 /* The five-line ladder in the cost-gate comment is the thing a reader will
@@ -164,7 +168,7 @@ LADDER.forEach(([re, wantN, wantR], i) => {
   eq(Number(m[2]), Math.round(avg * 1000) / 1000, 'ladder line ' + (i + 1) + ' R matches the replay');
   eq(Number(m[2]), wantR, 'ladder line ' + (i + 1) + ' R is the pinned value');
 });
-for (const n of ['1,384', '339', '1,617', '80', '21%', '1,553', '341', '22%', '1,321', '1,212']){
+for (const n of ['1,384', '339', '1,617', '80', '21%', '1,552', '340', '22%', '1,321', '1,212']){
   ok(src.includes(n), 'goldind.js states ' + n);
 }
 

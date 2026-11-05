@@ -1,0 +1,590 @@
+{
+ "meta": {
+  "generated": "2026-11-05T08:09:19.353Z",
+  "symbol": "PAXGUSDT",
+  "bars": 6000,
+  "span": [
+   "2026-09-06T05:00:00.000Z",
+   "2026-11-05T05:00:00.000Z"
+  ],
+  "windows": [
+   "W1 2026-09-06..2026-09-21",
+   "W2 2026-09-21..2026-10-06",
+   "W3 2026-10-06..2026-10-21",
+   "W4 2026-10-21..2026-11-05"
+  ],
+  "searchWindows": "W1-W3",
+  "heldOut": "W4",
+  "cost": 0.00019999999999999998,
+  "evaluated": 512,
+  "geoms": [
+   "plan",
+   "stop0.75x t1 1.5R",
+   "stop0.75x t1 2R",
+   "stop0.75x t1 2.5R",
+   "stop0.75x t1 3R",
+   "stop1x t1 1.5R",
+   "stop1x t1 2R",
+   "stop1x t1 2.5R",
+   "stop1x t1 3R",
+   "stop1.25x t1 1.5R",
+   "stop1.25x t1 2R",
+   "stop1.25x t1 2.5R",
+   "stop1.25x t1 3R",
+   "stop1.5x t1 1.5R",
+   "stop1.5x t1 2R",
+   "stop1.5x t1 2.5R",
+   "stop1.5x t1 3R"
+  ]
+ },
+ "baseline": {
+  "all": {
+   "n": 1329,
+   "win": 0.4236267870579383,
+   "net": 0.002699894263908256
+  },
+  "description": "geom:plan"
+ },
+ "path": [
+  {
+   "pass": 1,
+   "move": "short only",
+   "description": "short only · geom:plan",
+   "search": {
+    "n": 608,
+    "win": 0.43914473684210525,
+    "net": 0.04631586086412511
+   },
+   "windows": [
+    {
+     "n": 194,
+     "win": 0.4484536082474227,
+     "net": 0.06293076933139183
+    },
+    {
+     "n": 219,
+     "win": 0.4155251141552511,
+     "net": -0.03188242758031625
+    },
+    {
+     "n": 195,
+     "win": 0.4564102564102564,
+     "net": 0.11760885023172982
+    }
+   ]
+  },
+  {
+   "pass": 2,
+   "move": "skip OFF-SESSION",
+   "description": "short only · skip OFF-SESSION · geom:plan",
+   "search": {
+    "n": 326,
+    "win": 0.48466257668711654,
+    "net": 0.1605746168466033
+   },
+   "windows": [
+    {
+     "n": 100,
+     "win": 0.48,
+     "net": 0.10660176105669471
+    },
+    {
+     "n": 124,
+     "win": 0.4274193548387097,
+     "net": 0.04608681089208997
+    },
+    {
+     "n": 102,
+     "win": 0.5588235294117647,
+     "net": 0.3526704356441573
+    }
+   ]
+  },
+  {
+   "pass": 3,
+   "move": "strat -ribbon",
+   "description": "strats -ribbon · short only · skip OFF-SESSION · geom:plan",
+   "search": {
+    "n": 302,
+    "win": 0.4966887417218543,
+    "net": 0.19019404704569776
+   },
+   "windows": [
+    {
+     "n": 92,
+     "win": 0.4891304347826087,
+     "net": 0.12798269419859495
+    },
+    {
+     "n": 115,
+     "win": 0.4434782608695652,
+     "net": 0.08970145509953932
+    },
+    {
+     "n": 95,
+     "win": 0.5684210526315789,
+     "net": 0.37208975794824173
+    }
+   ]
+  },
+  {
+   "pass": 4,
+   "move": "strat -p6fail",
+   "description": "strats -ribbon-p6fail · short only · skip OFF-SESSION · geom:plan",
+   "search": {
+    "n": 277,
+    "win": 0.5090252707581228,
+    "net": 0.21911786974002304
+   },
+   "windows": [
+    {
+     "n": 85,
+     "win": 0.49411764705882355,
+     "net": 0.13756052722641243
+    },
+    {
+     "n": 102,
+     "win": 0.46078431372549017,
+     "net": 0.12776447606771626
+    },
+    {
+     "n": 90,
+     "win": 0.5777777777777777,
+     "net": 0.3996780949426029
+    }
+   ]
+  },
+  {
+   "pass": 5,
+   "move": "strat -hvn",
+   "description": "strats -hvn-ribbon-p6fail · short only · skip OFF-SESSION · geom:plan",
+   "search": {
+    "n": 222,
+    "win": 0.5225225225225225,
+    "net": 0.26104473707959974
+   },
+   "windows": [
+    {
+     "n": 64,
+     "win": 0.5,
+     "net": 0.14889790355890148
+    },
+    {
+     "n": 84,
+     "win": 0.4642857142857143,
+     "net": 0.14870211896780705
+    },
+    {
+     "n": 74,
+     "win": 0.6081081081081081,
+     "net": 0.4855606460892657
+    }
+   ]
+  },
+  {
+   "pass": 6,
+   "move": "strat -rsidiv",
+   "description": "strats -hvn-ribbon-rsidiv-p6fail · short only · skip OFF-SESSION · geom:plan",
+   "search": {
+    "n": 215,
+    "win": 0.5302325581395348,
+    "net": 0.280675363376434
+   },
+   "windows": [
+    {
+     "n": 62,
+     "win": 0.5,
+     "net": 0.14721844967435732
+    },
+    {
+     "n": 84,
+     "win": 0.4642857142857143,
+     "net": 0.14870211896780705
+    },
+    {
+     "n": 69,
+     "win": 0.6376811594202898,
+     "net": 0.5612562500409763
+    }
+   ]
+  },
+  {
+   "pass": 7,
+   "move": "strat -openrange",
+   "description": "strats -hvn-openrange-ribbon-rsidiv-p6fail · short only · skip OFF-SESSION · geom:plan",
+   "search": {
+    "n": 157,
+    "win": 0.5732484076433121,
+    "net": 0.3796721804648926
+   },
+   "windows": [
+    {
+     "n": 45,
+     "win": 0.5555555555555556,
+     "net": 0.2728328793997628
+    },
+    {
+     "n": 62,
+     "win": 0.532258064516129,
+     "net": 0.2890104037920154
+    },
+    {
+     "n": 50,
+     "win": 0.64,
+     "net": 0.588248154497877
+    }
+   ]
+  },
+  {
+   "pass": 8,
+   "move": "strat -p6comp",
+   "description": "strats -hvn-openrange-ribbon-rsidiv-p6fail-p6comp · short only · skip OFF-SESSION · geom:plan",
+   "search": {
+    "n": 151,
+    "win": 0.5827814569536424,
+    "net": 0.4038873969683543
+   },
+   "windows": [
+    {
+     "n": 43,
+     "win": 0.5581395348837209,
+     "net": 0.27610908839928705
+    },
+    {
+     "n": 60,
+     "win": 0.55,
+     "net": 0.3344473743264127
+    },
+    {
+     "n": 48,
+     "win": 0.6458333333333334,
+     "net": 0.6051554933639042
+    }
+   ]
+  }
+ ],
+ "final": {
+  "config": {
+   "on": {
+    "p4laf": true,
+    "p9volbar": true,
+    "bosalign": true,
+    "p5drive": true,
+    "p4adrx": true,
+    "hvn": false,
+    "adrfade": true,
+    "ob": true,
+    "openrange": false,
+    "p8range": true,
+    "ribbon": false,
+    "liqsweep": true,
+    "nyexh": true,
+    "sweepob": true,
+    "rsidiv": false,
+    "p6fail": false,
+    "silverb": true,
+    "p8vpinbo": true,
+    "asian": true,
+    "p6comp": false,
+    "p5vwap": true,
+    "p5wyck": true,
+    "p7scalp": true
+   },
+   "sup": {},
+   "dirLong": false,
+   "dirShort": true,
+   "kz": {},
+   "onlyLondonNy": false,
+   "skipGoldShut": false,
+   "stamps": {
+    "skip OFF-SESSION": true
+   },
+   "reg": {},
+   "mpOnly": false,
+   "minStopAtr": 0,
+   "maxStopAtr": 0,
+   "minRR": 0,
+   "geom": 0
+  },
+  "description": "strats -hvn-openrange-ribbon-rsidiv-p6fail-p6comp · short only · skip OFF-SESSION · geom:plan",
+  "search": {
+   "n": 151,
+   "win": 0.5827814569536424,
+   "net": 0.4038873969683543
+  },
+  "heldOut": {
+   "n": 43,
+   "win": 0.5348837209302325,
+   "net": 0.3679224971358713
+  },
+  "heldOutBaseline": {
+   "n": 341,
+   "win": 0.4340175953079179,
+   "net": 0.05063097300460955
+  },
+  "all": {
+   "n": 194,
+   "win": 0.5721649484536082,
+   "net": 0.39591579545909267
+  },
+  "z": 3.89,
+  "pTwoSided": 0.0001,
+  "confirmed": true
+ },
+ "postmortem": {
+  "note": "leave-one-out on the confirmed config: a variant that BEATS the full config on the held-out window names a clause the search added for its own windows — refused for shipping",
+  "baseline": {
+   "n": 43,
+   "win": 0.5348837209302325,
+   "net": 0.3679224971358713
+  },
+  "variants": [
+   {
+    "relax": "both dirs (direction clause off)",
+    "windows": [
+     {
+      "n": 73,
+      "win": 0.4794520547945205,
+      "net": 0.12043416438778952
+     },
+     {
+      "n": 94,
+      "win": 0.46808510638297873,
+      "net": 0.13528260169766032
+     },
+     {
+      "n": 78,
+      "win": 0.5128205128205128,
+      "net": 0.24971605552885576
+     },
+     {
+      "n": 105,
+      "win": 0.47619047619047616,
+      "net": 0.19154954494510207
+     }
+    ],
+    "heldOut": {
+     "n": 105,
+     "win": 0.47619047619047616,
+     "net": 0.19154954494510207
+    }
+   },
+   {
+    "relax": "keep skip OFF-SESSION",
+    "windows": [
+     {
+      "n": 87,
+      "win": 0.45977011494252873,
+      "net": 0.09539702844104421
+     },
+     {
+      "n": 116,
+      "win": 0.4827586206896552,
+      "net": 0.11491589319771144
+     },
+     {
+      "n": 98,
+      "win": 0.46938775510204084,
+      "net": 0.1583894385859818
+     },
+     {
+      "n": 79,
+      "win": 0.4177215189873418,
+      "net": 0.013194778949485972
+     }
+    ],
+    "heldOut": {
+     "n": 79,
+     "win": 0.4177215189873418,
+     "net": 0.013194778949485972
+    }
+   },
+   {
+    "relax": "+hvn back in",
+    "windows": [
+     {
+      "n": 64,
+      "win": 0.53125,
+      "net": 0.2193104654319486
+     },
+     {
+      "n": 78,
+      "win": 0.5256410256410257,
+      "net": 0.26420309006661563
+     },
+     {
+      "n": 64,
+      "win": 0.59375,
+      "net": 0.4544844439952501
+     },
+     {
+      "n": 62,
+      "win": 0.5161290322580645,
+      "net": 0.2832981561124197
+     }
+    ],
+    "heldOut": {
+     "n": 62,
+     "win": 0.5161290322580645,
+     "net": 0.2832981561124197
+    }
+   },
+   {
+    "relax": "+openrange back in",
+    "windows": [
+     {
+      "n": 60,
+      "win": 0.5,
+      "net": 0.14537925179983624
+     },
+     {
+      "n": 82,
+      "win": 0.47560975609756095,
+      "net": 0.17852652948506822
+     },
+     {
+      "n": 67,
+      "win": 0.6417910447761194,
+      "net": 0.5725632419313571
+     },
+     {
+      "n": 63,
+      "win": 0.49206349206349204,
+      "net": 0.25551817116537223
+     }
+    ],
+    "heldOut": {
+     "n": 63,
+     "win": 0.49206349206349204,
+     "net": 0.25551817116537223
+    }
+   },
+   {
+    "relax": "+ribbon back in",
+    "windows": [
+     {
+      "n": 51,
+      "win": 0.5294117647058824,
+      "net": 0.21095017726604057
+     },
+     {
+      "n": 69,
+      "win": 0.5072463768115942,
+      "net": 0.22414405324285344
+     },
+     {
+      "n": 55,
+      "win": 0.6181818181818182,
+      "net": 0.5394785656743359
+     },
+     {
+      "n": 49,
+      "win": 0.5510204081632653,
+      "net": 0.3938728575929121
+     }
+    ],
+    "heldOut": {
+     "n": 49,
+     "win": 0.5510204081632653,
+     "net": 0.3938728575929121
+    }
+   },
+   {
+    "relax": "+rsidiv back in",
+    "windows": [
+     {
+      "n": 45,
+      "win": 0.5555555555555556,
+      "net": 0.27276917220286395
+     },
+     {
+      "n": 60,
+      "win": 0.55,
+      "net": 0.3344473743264127
+     },
+     {
+      "n": 53,
+      "win": 0.6037735849056604,
+      "net": 0.4953258535706734
+     },
+     {
+      "n": 44,
+      "win": 0.5454545454545454,
+      "net": 0.3912789602465368
+     }
+    ],
+    "heldOut": {
+     "n": 44,
+     "win": 0.5454545454545454,
+     "net": 0.3912789602465368
+    }
+   },
+   {
+    "relax": "+p6fail back in",
+    "windows": [
+     {
+      "n": 50,
+      "win": 0.54,
+      "net": 0.2390890770639004
+     },
+     {
+      "n": 73,
+      "win": 0.5068493150684932,
+      "net": 0.2376785374948592
+     },
+     {
+      "n": 53,
+      "win": 0.6226415094339622,
+      "net": 0.5363200404097378
+     },
+     {
+      "n": 49,
+      "win": 0.5510204081632653,
+      "net": 0.3954001935261429
+     }
+    ],
+    "heldOut": {
+     "n": 49,
+     "win": 0.5510204081632653,
+     "net": 0.3954001935261429
+    }
+   },
+   {
+    "relax": "+p6comp back in",
+    "windows": [
+     {
+      "n": 45,
+      "win": 0.5555555555555556,
+      "net": 0.2728328793997628
+     },
+     {
+      "n": 62,
+      "win": 0.532258064516129,
+      "net": 0.2890104037920154
+     },
+     {
+      "n": 50,
+      "win": 0.64,
+      "net": 0.588248154497877
+     },
+     {
+      "n": 46,
+      "win": 0.5434782608695652,
+      "net": 0.42361161417995064
+     }
+    ],
+    "heldOut": {
+     "n": 46,
+     "win": 0.5434782608695652,
+     "net": 0.42361161417995064
+    }
+   }
+  ],
+  "refused": [
+   "+ribbon back in",
+   "+rsidiv back in",
+   "+p6fail back in",
+   "+p6comp back in"
+  ]
+ }
+}

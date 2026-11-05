@@ -2025,10 +2025,10 @@ function hgGoldEdgeRetuneNote(){
    inventing one would be the fitted-number mistake this desk keeps refusing.
    It reports the age and what the walk cannot have seen. The reader decides. */
 var HG_GOLD_EDGE_WALK = {
-  from: '2026-09-03T16:45:00.000Z',
-  to: '2026-11-05T04:15:00.000Z',
-  generated: '2026-11-05T04:35:22.063Z',
-  trades: 1917,
+  from: '2026-09-03T20:30:00.000Z',
+  to: '2026-11-05T08:00:00.000Z',
+  generated: '2026-11-05T08:18:13.079Z',
+  trades: 1913,
   src: 'scripts/backtest-goldscalp-results-floor.json'
 };
 
@@ -2828,19 +2828,19 @@ function hgGoldEdgeLiveNote(row, desk){
    needs BOTH bounds unanimous AND agreeing — nothing here has one. */
   var HG_GOLD_SESSION_SEP = {
     windows: 4,
-    coverage: { n: 2605, off: 1156, offPct: 44.4,
-                offDemoted: 1156, offDemotedPct: 100,
-                sole: 6, solePctOfOff: 0.5, solePctOfBook: 0.2,
-                coTop: [["CONF NO TRADE",1504],["EDGE DEMOTE",784],["ASIA SESSION",567],["MTF BIAS",386],["S56 BALANCE",223]],
-                led: 111, ledOff: 0, ledOffPct: 0 },
+    coverage: { n: 1913, off: 632, offPct: 33,
+                offDemoted: 632, offDemotedPct: 100,
+                sole: 0, solePctOfOff: 0, solePctOfBook: 0,
+                coTop: [["CONF NO TRADE",1188],["MTF BIAS",481],["ASIA SESSION",380],["EDGE DEMOTE",220],["S60 HALF",209]],
+                led: 0, ledOff: 0, ledOffPct: 0 },
     splits: {
-    offSession: { dWin: [0.4, 0.8], dGross: [0.0287, 0.0396], dNet: [0.0212, 0.0321], windows: ['2/4', '2/4'], verdict: null },
-    kzAny: { dWin: [-0.4, -0.8], dGross: [-0.0287, -0.0396], dNet: [-0.0212, -0.0321], windows: ['2/4', '2/4'], verdict: null },
-    kzMax: { dWin: [-0.6, -0.1], dGross: [-0.0647, -0.0512], dNet: [-0.0444, -0.0309], windows: ['1/4', '1/4'], verdict: null },
-    overlap: { dWin: [-0.6, -0.1], dGross: [-0.0647, -0.0512], dNet: [-0.0444, -0.0309], windows: ['1/4', '1/4'], verdict: null },
-    london: { dWin: [2, 2.5], dGross: [0.0654, 0.0774], dNet: [0.0593, 0.0712], windows: ['1/4', '1/4'], verdict: null },
-    nyAm: { dWin: [-1.6, -3.4], dGross: [-0.0225, -0.0683], dNet: [-0.0297, -0.0755], windows: ['2/4', '2/4'], verdict: null },
-    asian: { dWin: [-0.4, -0.3], dGross: [0.0171, 0.0203], dNet: [0.0118, 0.0151], windows: ['1/4', '1/4'], verdict: null },
+    offSession: { dWin: [-3.2, -4.1], dGross: [-0.1184, -0.1416], dNet: [-0.127, -0.1502], windows: ['1/4', '1/4'], verdict: null },
+    kzAny: { dWin: [3.2, 4.1], dGross: [0.1184, 0.1416], dNet: [0.127, 0.1502], windows: ['3/4', '3/4'], verdict: null },
+    kzMax: { dWin: [-4.1, -3.5], dGross: [-0.0862, -0.072], dNet: [-0.0668, -0.0526], windows: ['1/4', '1/4'], verdict: null },
+    overlap: { dWin: [-4.1, -3.5], dGross: [-0.0862, -0.072], dNet: [-0.0668, -0.0526], windows: ['1/4', '1/4'], verdict: null },
+    london: { dWin: [5.6, 6], dGross: [0.1543, 0.1662], dNet: [0.1447, 0.1566], windows: ['2/4', '2/4'], verdict: null },
+    nyAm: { dWin: [7.4, 7.9], dGross: [0.2188, 0.231], dNet: [0.2141, 0.2263], windows: ['3/4', '3/4'], verdict: null },
+    asian: { dWin: [-0.3, -1.5], dGross: [-0.0232, -0.053], dNet: [-0.033, -0.0628], windows: ['1/4', '1/4'], verdict: null },
     },
     anyVerdict: false
   };
@@ -2895,6 +2895,36 @@ function hgGoldSetOffSessionDemote(on){
   return HG_GOLD_OFFSESSION_DEMOTE;
 }
 function hgGoldOffSessionDemoteOn(){ return HG_GOLD_OFFSESSION_DEMOTE !== false; }
+
+/* hg-v1488: THE MEASURED DIRECTION BOOK lever — the GOLD SCALP win-rate lab's
+   held-out finding, shipped as an expectancy filter (the hg-v1399 shape: a
+   cohort measured negative in every window stops leading). scripts/
+   goldscalp-winrate-lab-results.json: the scalp LONG book settled negative in
+   ALL FOUR disjoint windows of the 62-day walk (-0.04 / -0.08 / -0.18 / -0.03R
+   net@XM, n=1,275 settled) while the whole shipped book read -0.004R (fee-flat)
+   and the SHORT book paid in three of four. The lab's SEARCHED clauses
+   (killzone families, stamp skips, strategy subsets) did NOT survive the
+   leave-one-out on the held-out window and are REFUSED — recorded in the
+   artifact's postmortem. This lever is the direct cohort measurement. */
+var HG_GS_LAB_LONG_LS = 'hg_gs_lab_long_demote';
+var HG_GS_LAB_LONG_DEMOTE = true;
+function hgGoldLabLongDemoteInit(){
+  try{
+    var W2 = (typeof window !== 'undefined') ? window : null;
+    var ovr = W2 ? W2.HG_GS_LAB_LONG_DEMOTE : undefined;
+    if (ovr === true || ovr === false){ HG_GS_LAB_LONG_DEMOTE = ovr; return HG_GS_LAB_LONG_DEMOTE; }
+    var v = null;
+    try { v = localStorage.getItem(HG_GS_LAB_LONG_LS); } catch (e){ v = null; }
+    HG_GS_LAB_LONG_DEMOTE = !(v === '0' || v === 'false');
+  }catch(e){ HG_GS_LAB_LONG_DEMOTE = true; }
+  return HG_GS_LAB_LONG_DEMOTE;
+}
+function hgGoldSetLabLongDemote(on){
+  HG_GS_LAB_LONG_DEMOTE = (on !== false);
+  try { localStorage.setItem(HG_GS_LAB_LONG_LS, HG_GS_LAB_LONG_DEMOTE ? '1' : '0'); } catch (e){}
+  return HG_GS_LAB_LONG_DEMOTE;
+}
+function hgGoldLabLongDemoteOn(){ return HG_GS_LAB_LONG_DEMOTE !== false; }
 
 /* The panel. Every figure comes from the generated literal, so nothing here
    can drift from the walk. '' when the literal is absent — never a
@@ -3197,6 +3227,23 @@ function hgGoldSetupEdgeApply(cand, opts){
          a bare 'suppressed' reason cannot tell them apart. */
       return cand;
     }
+    /* hg-v1488: THE MEASURED DIRECTION BOOK — an expectancy filter on the
+       direction axis, measured (not searched). The scalp LONG book settled
+       negative in ALL FOUR disjoint windows of the lab walk while the short
+       book paid in three of four; a suppressed row is already dropped above
+       regardless of side, so this only ever DEMOTES a row the table would
+       otherwise have let paint or boost. Lever: HG_GS_LAB_LONG_DEMOTE. */
+    if (!opts.swing && HG_GS_LAB_LONG_DEMOTE && String(cand.dir || '').toLowerCase() === 'long'){
+      cand.demoted = true;
+      if (cand.stamps.indexOf('LAB LONG BOOK') < 0) cand.stamps.push('LAB LONG BOOK');
+      cand.edge.labWhy = 'LONG BOOK MEASURED NEGATIVE (hg-v1486 re-walk, the direction cohort: \u22120.101R/trade over n=569, win 40.9%, '
+        + 'negative in three of four disjoint windows (+0.015 / \u22120.078 / \u22120.154 / \u22120.153) while the short book paid +0.069R over n=752, '
+        + 'positive in three of four) \u2014 paints, never leads. Lever HG_GS_LAB_LONG_DEMOTE restores two-sided leading.';
+      var gnL = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gnL.push(cand.edge.labWhy);
+      cand.gateNotes = gnL;
+      return cand;
+    }
     if (act === 'demote'){
       cand.demoted = true;
       if (cand.stamps.indexOf('EDGE DEMOTE') < 0) cand.stamps.push('EDGE DEMOTE');
@@ -3337,10 +3384,12 @@ function hgGoldScalpCostGate(c, rtCostPct, opts){
        in-force). 339 of the replay's 1,617 settles (21%) are trades no card
        is minted from today.
        hg-v1486 re-walk (Sep03–Nov05, post floor, same pipeline): the same
-       shape holds — the bar still rejects ZERO main-book trades; 87 sub-bar
-       settles remain, all inside the withheld ledger; 341 of the replay's
-       1,553 settles (22%) are trades no card is minted from today. The main
-       book is 1,321 settled; the desk forms 1,212 of them.
+       shape holds — the bar still rejects ZERO main-book trades; 86 sub-bar
+       settles remain, all inside the withheld ledger; 340 of the replay's
+       1,552 settles (22%) are trades no card is minted from today. The main
+       book is 1,321 settled; the desk forms 1,212 of them. (hg-v1488: the
+       measured direction book's demote re-ranks the crown tier and one
+       shadow settle dropped out — the main book is byte-identical.)
 
        Read as the desk forms setups now, the same replay says:
          quoted everywhere                   n=1321  -0.004R  t=-0.12
@@ -18472,6 +18521,9 @@ W.hgGoldSessionSepPanelHtml = hgGoldSessionSepPanelHtml;
 W.hgGoldSetOffSessionDemote = hgGoldSetOffSessionDemote;
 W.hgGoldOffSessionDemoteOn = hgGoldOffSessionDemoteOn;
 W.hgGoldOffSessionDemoteInit = hgGoldOffSessionDemoteInit;
+W.hgGoldSetLabLongDemote = hgGoldSetLabLongDemote;   /* hg-v1488 the measured direction book */
+W.hgGoldLabLongDemoteOn = hgGoldLabLongDemoteOn;
+W.hgGoldLabLongDemoteInit = hgGoldLabLongDemoteInit;
 W.HG_GOLD_EXACT_TWIN = HG_GOLD_EXACT_TWIN;
 W.HG_GOLD_TWIN_BE = HG_GOLD_TWIN_BE;
 W.HG_GOLD_TWIN_VETO_Z = HG_GOLD_TWIN_VETO_Z;

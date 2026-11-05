@@ -24,6 +24,11 @@ function loadGoldind(){
   if (typeof globalThis.window.hgGoldSetEdgeRetune !== 'function')
     throw new Error('FAIL: goldind.js did not export hgGoldSetEdgeRetune');
   globalThis.window.hgGoldSetEdgeRetune(false);
+  /* hg-v1488: the MEASURED DIRECTION BOOK is a separate feature with its own
+     guard (test-goldscalp-lab-v1488). This file pins the TABLE’s own bake
+     contract on long-side probes, so the direction clause is off here —
+     exactly like the retune overlay above. */
+  globalThis.window.hgGoldSetLabLongDemote(false);
   return globalThis.window;
 }
 

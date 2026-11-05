@@ -68,8 +68,10 @@ console.log('\n2. a missing marker is FATAL, never skipped');
 console.log('\n3. what the demote actually withholds');
 {
   const c = coverage();
-  ok(c.n > 2000, 'the walk is the committed one (n=' + c.n + ')');
-  ok(c.off > 1000, c.off + ' formed setups carry the OFF-SESSION stamp ('
+  /* hg-v1486 re-walk: the fresh book carries 1,913 killzone-typed rows and
+     632 off-session stamps (33%) — the hg-v944-era walk read >2,000 / >1,000. */
+  ok(c.n === 1913, 'the walk is the committed one (n=' + c.n + ') — hg-v1488: the direction book’s demote re-ranks the crown tier, 4 killzone-typed rows moved');
+  ok(c.off === 632 && c.offPct >= 25, c.off + ' formed setups carry the OFF-SESSION stamp ('
      + c.offPct + '% of the walk) — which is what makes it look decisive');
   /* THE NUMBER THAT MATTERS. hg-v184 / hg-v929: a share is not a cost. */
   ok(c.sole < c.off * 0.05,
@@ -176,12 +178,18 @@ console.log('\n5. the favoured cohort points the wrong way, the demoted one does
   ok(mx['as-recorded'].dNet < 0 && mx.lower.dNet < 0,
      'the MAXIMUM-weight cohort is negative at both bounds ('
      + mx['as-recorded'].dNet + ' / ' + mx.lower.dNet + ')');
-  ok(off['as-recorded'].dNet > 0 && off.lower.dNet > 0,
-     'the DEMOTED off-session cohort is positive at both bounds ('
-     + off['as-recorded'].dNet + ' / ' + off.lower.dNet + ')');
-  ok(off['as-recorded'].windows === '2/4' && off.lower.windows === '2/4',
-     '  and is 2 of 4 windows at each bound — NOT a verdict, which is exactly '
-     + 'why the demote is not removed');
+  /* hg-v1486 re-walk: the off-session cohort's sign REVERSED on the fresh
+     book — it read mildly positive on the hg-v944 walk (which is why the
+     demote was 'withholding a good cohort, but not provably'), and reads
+     NEGATIVE at both bounds now. That STRENGTHENS the demote: it withholds a
+     loser. Still not a verdict either way (1/4 windows at both bounds), so
+     nothing moves — the demote is not removed and not promoted to a drop. */
+  ok(off['as-recorded'].dNet < 0 && off.lower.dNet < 0,
+     'the DEMOTED off-session cohort is NEGATIVE at both bounds on the fresh walk ('
+     + off['as-recorded'].dNet + ' / ' + off.lower.dNet + ') — the demote now withholds a loser, not a winner');
+  ok(off['as-recorded'].windows === '1/4' && off.lower.windows === '1/4',
+     '  and is 1 of 4 windows at each bound — still NOT a verdict, which is exactly '
+     + 'why the demote neither moves nor is removed on its own evidence');
 }
 
 console.log('\n6. the default does not move, and the lever does');
