@@ -820,11 +820,19 @@ function gpRecordLayerSetups(rows, mode, source){
       if (!it || !it.recordOnly) continue;
       var s = setupFromUniverseItem(it, mode, source);
       if (!s) continue;
-      s.recordOnly = true;
-      s.recordLayer = it.recordLayer || null;
-      s.recordTwin = it.recordTwin || null;
-      s.demoted = true;
-      s.demotedWhy = it.demotedWhy || ('RECORD ONLY \u2014 ' + hgGpKind(s) + ' has no measured record on this desk');
+      /* hg-v1502: the MEASURED RELEASE — a layer whose own-lane cohort the
+         walk measured paying clears record-only and forms like the primary
+         layers (the desk's own release rule, satisfied with backtest
+         evidence). The measurement rides the row. */
+      if (HG_GP_LAB_RELEASE && HG_GP_LAB_RELEASED[lane + '|' + (it.layerLabel || it.label || it.kind || '')]){
+        s.releasedByMeasurement = 'RELEASED — ' + (HG_GP_LAB_RELEASED[lane + '|' + (it.layerLabel || it.label || it.kind || '')]) + ' Lever HG_GP_LAB_RELEASE.';
+      } else {
+        s.recordOnly = true;
+        s.recordLayer = it.recordLayer || null;
+        s.recordTwin = it.recordTwin || null;
+        s.demoted = true;
+        s.demotedWhy = it.demotedWhy || ('RECORD ONLY — ' + hgGpKind(s) + ' has no measured record on this desk');
+      }
       gpRecordLayerJudge(s, mode);
       out.push(s);
     }
@@ -869,6 +877,35 @@ function hgGpSetLabDemote(on){
   return HG_GP_LAB_DEMOTE;
 }
 function hgGpLabDemoteOn(){ return HG_GP_LAB_DEMOTE !== false; }
+
+/* hg-v1502: THE MEASURED RELEASE — the backtest release the record-only
+   layers were waiting for. The goldpine lab's Phase I record-only-release
+   check (scripts/goldpine-winrate-lab-results.json) measured every withheld
+   layer on its OWN lane; swing|Williams %R Re-entry cleared the bar:
+   +0.178R/trade over n=44 settled, positive in three of four disjoint
+   windows (0.47 / 0.15 / −0.25 / 0.66). A layer in this set forms like the
+   primary layers and may lead — the desk's own release rule (measured and
+   paying at the sample floor), satisfied with the walk's evidence. Lever
+   HG_GP_LAB_RELEASE (default ON). */
+var HG_GP_LAB_RELEASE_LS = 'hg_gp_lab_release';
+var HG_GP_LAB_RELEASE = true;
+var HG_GP_LAB_RELEASED = { 'swing|Williams %R Re-entry': '+0.18R/trade over n=44, 3/4 windows positive (the hg-v1502 lab, Phase I)' };
+function hgGpLabReleaseInit(){
+  try{
+    var ovr = (typeof window !== 'undefined') ? window.HG_GP_LAB_RELEASE : undefined;
+    if (ovr === true || ovr === false){ HG_GP_LAB_RELEASE = ovr; return HG_GP_LAB_RELEASE; }
+    var v = null;
+    try { v = localStorage.getItem(HG_GP_LAB_RELEASE_LS); } catch (e){ v = null; }
+    HG_GP_LAB_RELEASE = !(v === '0' || v === 'false');
+  }catch(e){ HG_GP_LAB_RELEASE = true; }
+  return HG_GP_LAB_RELEASE;
+}
+function hgGpSetLabRelease(on){
+  HG_GP_LAB_RELEASE = (on !== false);
+  try { localStorage.setItem(HG_GP_LAB_RELEASE_LS, HG_GP_LAB_RELEASE ? '1' : '0'); } catch (e){}
+  return HG_GP_LAB_RELEASE;
+}
+function hgGpLabReleaseOn(){ return HG_GP_LAB_RELEASE !== false; }
 /* (goldpine's lever above; the SCALP squeeze lever lives beside its scalp siblings) */
 /* lane|label -> the measured cohort (net@XM per trade, n, windows-negative) */
 var HG_GP_LAB_BOOK = {

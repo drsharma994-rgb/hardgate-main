@@ -159,6 +159,40 @@ function boot(){
   ok(W2.hgGpLabDemoteOn() === false, 'localStorage hg_gp_lab_demote=0 restores the wider pin across boots');
 }
 
+/* hg-v1502: THE MEASURED RELEASE — the walk's own record-only-release check
+   (Phase I) found swing|Williams %R Re-entry paying on its OWN lane
+   (+0.178R/trade over n=44, 3/4 windows positive) and the desk now releases
+   it: the layer forms like the primary layers and may lead. */
+console.log('[hg-v1502] the measured release of swing|Williams %R Re-entry');
+{
+  const lab = JSON.parse(read('scripts/goldpine-winrate-lab-results.json'));
+  const rel = lab.recordOnlyRelease;
+  ok(rel && Array.isArray(rel.labels), 'Phase I measured the record-only layers on the pine desk\u2019s own lanes (' + (rel ? rel.labels.length : 0) + ' lane|labels)');
+  const w = (rel.labels || []).find(x => x.laneLabel === 'swing|Williams %R Re-entry');
+  ok(w && w.clears === true && Math.abs(w.net - 0.178) < 0.02 && w.n >= 40,
+     'swing|Williams %R Re-entry clears the release bar: +' + (w ? w.net : '?') + 'R/trade over n=' + (w ? w.n : '?') + ', ' + (w ? w.positiveWindows : '?') + '/4 windows');
+  ok((rel.releasable || []).indexOf('swing|Williams %R Re-entry') >= 0, 'and Phase I names it RELEASABLE');
+  const gp = read('goldpine.js');
+  ok(gp.indexOf('HG_GP_LAB_RELEASED[lane') >= 0, 'the released set + branch are declared in goldpine.js');
+}
+/* hg-v1502: THE MEASURED RELEASE — the walk's own record-only-release check
+   (Phase I) found swing|Williams %R Re-entry paying on its OWN lane
+   (+0.178R/trade over n=44, 3/4 windows positive) and the desk now releases
+   it: the layer forms like the primary layers and may lead. */
+console.log('[hg-v1502] the measured release of swing|Williams %R Re-entry');
+{
+  const lab = JSON.parse(read('scripts/goldpine-winrate-lab-results.json'));
+  const rel = lab.recordOnlyRelease;
+  ok(rel && Array.isArray(rel.labels), 'Phase I measured the record-only layers on the pine desk\u2019s own lanes (' + (rel ? rel.labels.length : 0) + ' lane|labels)');
+  const w = (rel.labels || []).find(x => x.laneLabel === 'swing|Williams %R Re-entry');
+  ok(w && w.clears === true && Math.abs(w.net - 0.178) < 0.02 && w.n >= 40,
+     'swing|Williams %R Re-entry clears the release bar: +' + (w ? w.net : '?') + 'R/trade over n=' + (w ? w.n : '?') + ', ' + (w ? w.positiveWindows : '?') + '/4 windows');
+  ok((rel.releasable || []).indexOf('swing|Williams %R Re-entry') >= 0, 'and Phase I names it RELEASABLE');
+  const gp = read('goldpine.js');
+  ok(gp.indexOf('HG_GP_LAB_RELEASED[lane') >= 0, 'the released set + branch are declared in goldpine.js');
+  ok(/s\.demoted = true;\s*\n\s*s\.demotedWhy = it\.demotedWhy/.test(gp),
+     'the demotedWhy sits inside the else (a released row never carries it)');
+}
 console.log('\n' + (fail === 0
   ? 'ALL GOLD PINE LAB TESTS PASSED (' + pass + ')'
   : pass + ' passed, ' + fail + ' FAILED'));

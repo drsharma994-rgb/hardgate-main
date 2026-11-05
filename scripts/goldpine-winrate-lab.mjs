@@ -555,6 +555,58 @@ if (isMain) (async () => {
     }
   }
 
+  /* Phase I — THE GEOMETRY LADDER + the record-only release check, on the
+     pine book: (a) every stop/target rung settled on the whole book — the
+     trading-style axis measured, not assumed; (b) the record-only layers on
+     the pine desk's OWN lanes (the release question the hg-v1498 scalp-lane
+     measurement did not cover). Both recorded in the artifact. */
+  const geometryLadder = { note: 'every stop/target rung on the whole pine book (net@XM per trade)', rungs: [] };
+  for (let g = 0; g < GEOMS.length; g++){
+    const cfgG = JSON.parse(JSON.stringify(cur));
+    cfgG.geom = g;
+    const trades = evalConfig(data, cfgG);
+    if (!trades.length) continue;
+    geometryLadder.rungs.push({ geom: GEOMS[g].label, n: trades.length,
+      win: +(trades.filter(t => t.outcome === 'win').length / trades.length).toFixed(3),
+      net: +(trades.reduce((a, t) => a + t.net, 0) / trades.length).toFixed(3) });
+  }
+  geometryLadder.best = geometryLadder.rungs.slice().sort((a, b) => b.net - a.net)[0] || null;
+  log('Phase I — the geometry ladder (best rung: ' + (geometryLadder.best ? geometryLadder.best.geom + ' ' + geometryLadder.best.net.toFixed(3) + 'R' : 'none') + '):');
+  for (const r of geometryLadder.rungs) log('  ' + r.geom.padEnd(16) + ' n=' + r.n + ' win=' + (100 * r.win).toFixed(1) + '% net=' + r.net.toFixed(3) + 'R');
+
+  const recOnlyRelease = { note: 'the record-only layers on the pine desk\'s OWN lanes — the release question', labels: [], releasable: [] };
+  {
+    const recOnly = walked.records.filter(r => r.recordOnly);
+    const byKL = {};
+    for (const r of recOnly){ const k = r.lane + '|' + r.label; (byKL[k] = byKL[k] || []).push(r); }
+    const spanT0 = walked.records.length ? walked.records[0].t : 0;
+    const spanT1 = m15[m15.length - 1].t * 1000;
+    for (const [k, list] of Object.entries(byKL)){
+      const settled = [];
+      for (const r of list){
+        const st = settleOne(grids, r, GEOMS[0]);
+        if (st.outcome === 'unfilled' || st.outcome === 'open' || st.outcome === 'unpriced') continue;
+        settled.push({ t: r.t, net: st.rGross - (r.entry * COST_XM_FRAC) / Math.abs(r.entry - r.stop) });
+      }
+      if (settled.length < 20){ recOnlyRelease.labels.push({ laneLabel: k, settled: settled.length, thin: true }); continue; }
+      const net = settled.reduce((a, t) => a + t.net, 0) / settled.length;
+      const parts = []; let pos = 0;
+      for (let w = 0; w < 4; w++){
+        const a = spanT0 + (spanT1 - spanT0) * w / 4, b = spanT0 + (spanT1 - spanT0) * (w + 1) / 4;
+        const seg = settled.filter(t => t.t >= a && t.t < b);
+        if (!seg.length){ parts.push(null); continue; }
+        const wn = seg.reduce((x, y) => x + y.net, 0) / seg.length;
+        parts.push(+wn.toFixed(3)); if (wn > 0) pos++;
+      }
+      const rec2 = { laneLabel: k, n: settled.length, net: +net.toFixed(3), positiveWindows: pos, windows: parts };
+      rec2.clears = (net > 0 && pos >= 3);
+      recOnlyRelease.labels.push(rec2);
+      if (rec2.clears) recOnlyRelease.releasable.push(k);
+    }
+    log('Phase I — the record-only release check: ' + recOnlyRelease.labels.length + ' lane|labels measured, '
+      + (recOnlyRelease.releasable.length ? 'RELEASABLE: ' + recOnlyRelease.releasable.join(', ') : 'NONE releasable (all negative-in-windows or too thin)'));
+  }
+
   const report = {
     meta: { generated: new Date().toISOString(), symbol: SYMBOL, bars: BARS_15M,
       span: [new Date(m15[walked.first15].t * 1000).toISOString(), new Date(m15[m15.length - 1].t * 1000).toISOString()],
@@ -566,7 +618,9 @@ if (isMain) (async () => {
     final: { config: cur, description: describe(cur), search: base.searchAll, heldOut: confNew, heldOutBaseline: confBase, all: fAll, z: +z.toFixed(2), pTwoSided: +zP.toFixed(4), confirmed },
     postmortem,
     directionCohort: dirCohort,
-    indicatorSweep
+    indicatorSweep,
+    geometryLadder,
+    recordOnlyRelease: recOnlyRelease
   };
   fs.writeFileSync(LAB_OUT, JSON.stringify(report, null, 1));
 
