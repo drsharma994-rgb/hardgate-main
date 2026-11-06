@@ -986,17 +986,20 @@ function hgGpLabReleaseOn(){ return HG_GP_LAB_RELEASE !== false; }
 /* (goldpine's lever above; the SCALP squeeze lever lives beside its scalp siblings) */
 /* lane|label -> the measured cohort (net@XM per trade, n, windows-negative) */
 var HG_GP_LAB_BOOK = {
-  'scalp|MSB + OB':            'gross \u22126.91R/trade over n=624, negative in all four disjoint windows',
+  /* hg-v1508: the cohorts re-derived on the fresh walk (66,435 candidates,
+     Sep06-Nov05 20:30, net@XM) — every demotion re-confirmed, 0/4 windows
+     positive on all six. */
+  'scalp|MSB + OB':            'gross \u22126.85R/trade over n=630, negative in all four disjoint windows',
   'scalp|Squeeze Mom':         'gross \u22120.42R/trade over n=896, negative in all four disjoint windows',
-  'scalp|Smart Money Flow':    'gross \u22120.38R/trade over n=729, negative in all four disjoint windows',
-  'scalp|Range Filter':        'gross \u22120.32R/trade over n=902, negative in all four disjoint windows',
+  'scalp|Smart Money Flow':    'gross \u22120.39R/trade over n=730, negative in all four disjoint windows',
+  'scalp|Range Filter':        'gross \u22120.33R/trade over n=903, negative in all four disjoint windows',
   'scalp|HalfTrend':           'gross \u22120.76R/trade over n=406, negative in all four disjoint windows',
-  'swing|MSB + OB':            'gross \u22120.81R/trade over n=31, negative in all four disjoint windows'
+  'swing|MSB + OB':            'gross \u22120.79R/trade over n=29, negative in all four disjoint windows'
 };
 /* the lab's confirmed direction clause: the pin reads the side that loses
    less. BOTH cohorts are negative on this walk — this is a ranking
    preference with the measurement named, not a claim that shorts pay. */
-var HG_GP_LAB_LONG = 'the LONG cohort measured \u22120.87R/trade over n=5,489, negative in all four disjoint windows (the short side \u22120.68R over n=7,052 \u2014 also negative; the pin reads the lesser-losing side until the forward ledger measures a paying cohort)';
+var HG_GP_LAB_LONG = 'the LONG cohort measured \u22120.78R/trade over n=5,530, negative in all four disjoint windows (the short side \u22120.69R over n=7,014 \u2014 also negative; the pin reads the lesser-losing side until the forward ledger measures a paying cohort \u2014 hg-v1508 fresh-walk refresh)';
 function hgGpLabMeasured(s){
   try{
     if (!s) return null;
