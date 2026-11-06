@@ -593,6 +593,29 @@ function gpSolidityGood(s){
   var t = String(g.grade || g.tier || '').toUpperCase();
   return t === 'PRIME' || t === 'SOLID' || t === 'GOOD';
 }
+/* hg-v1506: THE OKAY-AND-ABOVE-GOOD BAR. The user set the lane bar higher:
+   a trade is only MADE and SHOWN when BOTH reads clear it.
+   • FUNDAMENTAL OKAY — the trade's own hgFundamentalGate read ran, the
+     board actually READ at least one directional leg (regime.checked >= 1;
+     a dark board is unread, and unread is not okay), and it neither
+     refused nor demoted the direction. The verdict rides the row as
+     s.fundOk, stamped at the scan seam and on the accurate-pack row.
+   • SOLIDITY MORE THAN GOOD — PRIME or SOLID on the letter grade. GOOD no
+     longer clears the lane. The ONE exemption is a row the forward ledger
+     RELEASED (s.recordReleased): it is above-good by record — the desk's
+     own measured edge — and hiding it would bury the layer the ledger
+     promoted. gpSolidityGood (PRIME/SOLID/GOOD) stays for everything that
+     is not the lane bar. */
+function gpSolidityAboveGood(s){
+  var g = s && s.solidity;
+  if (!g || g.killed === true) return false;
+  if (s.recordReleased === true) return true;
+  var t = String(g.grade || g.tier || '').toUpperCase();
+  return t === 'PRIME' || t === 'SOLID';
+}
+function gpFundOk(s){
+  return !!(s && s.fundOk === true);
+}
 function gpFtsNearOk(s){
   var h = s && s.stack && s.stack.tierHint;
   return h === 'near' || h === 'clean';
@@ -601,7 +624,7 @@ function gpBoardBarOn(){
   return typeof W.hgSolidityGrade === 'function' && typeof W.hgSetupStackForPineSig === 'function';
 }
 function gpBoardPick(s){
-  return !!(s && gpSolidityGood(s) && gpFtsNearOk(s));
+  return !!(s && gpSolidityAboveGood(s) && gpFtsNearOk(s) && gpFundOk(s));
 }
 function gpAttachFts(list){
   if (!Array.isArray(list) || typeof W.hgSetupStackForPineSig !== 'function') return;
@@ -1040,6 +1063,12 @@ function gpAccuratePack(bars, nowMs){
         }
       }catch(eFund){ fund = null; }
     }
+    /* hg-v1506: the OKAY stamp on the accurate-pack row — the same rule as
+       the scan seam: the board read at least one directional leg and did
+       not stand against this direction. A row the tape already demoted
+       never ran the gate, so it is not okay either. */
+    s.fundOk = !!(fund && fund.refuse !== true && fund.demote !== true
+      && fund.regime && fund.regime.checked >= 1);
     if (s.notes == null) s.notes = [];
     s.notes.push('Sentiment is a lagged read. It does not choose this side.');
     if (fund && fund.chips && fund.chips.length) s.notes.push(fund.chips.join(' · '));
@@ -1275,6 +1304,33 @@ function runGoldPineScan(bars, ctx){
       scalp = sortSetups(scalp);
     }
   }catch(eFS){}
+  /* hg-v1506: the OKAY stamp — the lane bar asks the trade's OWN
+     fundamental read to be okay, so the desk stamps the verdict on every
+     row (s.fundOk). TRUE only when hgFundamentalGate ran, the board READ
+     at least one directional leg (checked >= 1 — a dark board is unread,
+     and unread is not okay), and it neither refused nor demoted the
+     direction. The shared scan-cands pass only writes s.fundGate on a
+     failure or a chip, so this per-row pass is what makes the CLEAN pass
+     distinguishable from the unread board. */
+  try{
+    var fgStamp = gfn('hgFundamentalGate');
+    if (fgStamp){
+      var gpFundStamp = function(list){
+        for (var fi = 0; fi < list.length; fi++){
+          var fr = list[fi];
+          if (!fr || !fr.dir) continue;
+          if (fr.fundGate && (fr.fundGate.refuse === true || fr.fundGate.demote === true)){ fr.fundOk = false; continue; }
+          try{
+            var fg2 = fgStamp('XAUUSD', fr.dir, { scanner: 'goldpine' });
+            fr.fundOk = !!(fg2 && fg2.refuse !== true && fg2.demote !== true
+              && fg2.regime && fg2.regime.checked >= 1);
+          }catch(eF2){ fr.fundOk = false; }
+        }
+      };
+      gpFundStamp(swing);
+      gpFundStamp(scalp);
+    }
+  }catch(eFStamp){}
   try{
     var blk = gfn('pineGoldBlocksLead'), formHold = gfn('pineGoldFormHold'), htfHold = gfn('pineGoldHtfHold'), stFn = gfn('pineGoldLayerStates'), tape = gfn('pineGoldTapeVeto');
     function holdPine(list, rows, mode, otherRows){
@@ -1840,7 +1896,7 @@ function mount(el){
     + '<div class="panel">'
     + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
     + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
-    + 'plus native GOLD SWING/SCALP candidates. The swing and scalp lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS tier is near or OK. '
+    + 'plus native GOLD SWING/SCALP candidates. hg-v1506 raises the lane bar: a trade is only MADE and SHOWN when its fundamental read is OKAY (the board actually read it and did not stand against the direction), its solidity is MORE THAN GOOD (PRIME or SOLID — a ledger-released row is above-good by record), and its FTS tier is near or OK. '
     + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
     + 'A scalp primary does not pass in premium or discount without a sweep, during the London fix (London local time), or when it fades an Asian range that already expanded. '
     + 'A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. '
@@ -1956,7 +2012,11 @@ function mount(el){
         : gpAccuratePack(bars, t0);
       if (accPack.scalp) scalpTop = [accPack.scalp].concat(scalpTop.filter(function(s){ return !(s && accPack.scalp && s.id === accPack.scalp.id); }));
       if (accPack.swing) swingTop = [accPack.swing].concat(swingTop.filter(function(s){ return !(s && accPack.swing && s.id === accPack.swing.id); }));
-      if (accPack.lead && gpMayLead(accPack.lead) && !accPack.lead.tapeHeld){
+      /* hg-v1506: the failed-sweep lead answers to the SAME bar the lanes
+         do when the board bar is on — okay fundamentals, above-good
+         solidity, near-or-OK FTS — or it cannot make the trade either. */
+      if (accPack.lead && gpMayLead(accPack.lead) && !accPack.lead.tapeHeld
+          && (!boardBar || gpBoardPick(accPack.lead))){
         if (!mpList.length) mpList = [accPack.lead];
         else accPack.notes.push('A measured Pine lane already leads. The failed-sweep prints and does not replace it.');
       }
@@ -1994,8 +2054,8 @@ function mount(el){
       var fitNote = '';
       if (boardBar){
         var heldN = (result.swing.length - swingFit.length) + (result.scalp.length - scalpFit.length);
-        fitNote = '<div class="note">These lanes show a setup only when its solidity is PRIME, SOLID or GOOD and its FTS tier is near or OK.'
-          + (heldN ? (' ' + heldN + ' formation' + (heldN === 1 ? '' : 's') + ' on this scan did not clear that.') : '')
+        fitNote = '<div class="note">These lanes show a trade only when its fundamental read is OKAY, its solidity is MORE THAN GOOD (PRIME or SOLID — a ledger-released row is above-good by record), and its FTS tier is near or OK.'
+          + (heldN ? (' ' + heldN + ' formation' + (heldN === 1 ? '' : 's') + ' on this scan did not clear that bar.') : '')
           + '</div>';
       }
       /* Pack 907: GOLD PINE draws four legs and moved its numbers on a
@@ -2049,7 +2109,7 @@ function mount(el){
           ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1) + '<div class="gp-mp-banner" id="gp-mp-banner"></div>')
           : ('<div class="gp-eye">NO LEAD</div><div class="note">'
             + (boardBar
-              ? 'No setup is both good solidity and near or OK on FTS, so nothing leads.'
+              ? 'No setup clears the bar \u2014 fundamental read OKAY, solidity PRIME or SOLID, FTS near or OK \u2014 so nothing leads.'
               : 'Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.')
             + '</div>'))
         + accNote
@@ -2057,12 +2117,12 @@ function mount(el){
         + fitNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           boardBar
-            ? 'No swing setup has good solidity and a near or OK FTS tier.'
+            ? 'No swing setup has an OKAY fundamental read, more-than-good solidity (PRIME/SOLID) and a near or OK FTS tier.'
             : 'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: boardBar ? swingFit.length : result.swing.length })
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
           boardBar
-            ? 'No scalp setup has good solidity and a near or OK FTS tier.'
+            ? 'No scalp setup has an OKAY fundamental read, more-than-good solidity (PRIME/SOLID) and a near or OK FTS tier.'
             : 'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
           { total: boardBar ? scalpFit.length : result.scalp.length })
         + recordSection
@@ -2175,6 +2235,9 @@ W.gpWeekendVerdict = gpWeekendVerdict;
 W.gpAdmissionFloor = gpAdmissionFloor;
 W.gpMayLead = gpMayLead;
 W.gpBoardPick = gpBoardPick;
+/* hg-v1506: the two halves of the raised lane bar, exported for the suite */
+W.gpFundOk = gpFundOk;
+W.gpSolidityAboveGood = gpSolidityAboveGood;
 W.gpAttachFts = gpAttachFts;
 /* hg-v1492: the measured book — lever + cohort table exported for the suite */
 W.hgGpSetLabDemote = hgGpSetLabDemote;
