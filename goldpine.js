@@ -593,19 +593,30 @@ function gpSolidityGood(s){
   var t = String(g.grade || g.tier || '').toUpperCase();
   return t === 'PRIME' || t === 'SOLID' || t === 'GOOD';
 }
-/* hg-v1506: THE OKAY-AND-ABOVE-GOOD BAR. The user set the lane bar higher:
-   a trade is only MADE and SHOWN when BOTH reads clear it.
-   • FUNDAMENTAL OKAY — the trade's own hgFundamentalGate read ran, the
-     board actually READ at least one directional leg (regime.checked >= 1;
-     a dark board is unread, and unread is not okay), and it neither
-     refused nor demoted the direction. The verdict rides the row as
-     s.fundOk, stamped at the scan seam and on the accurate-pack row.
-   • SOLIDITY MORE THAN GOOD — PRIME or SOLID on the letter grade. GOOD no
-     longer clears the lane. The ONE exemption is a row the forward ledger
-     RELEASED (s.recordReleased): it is above-good by record — the desk's
-     own measured edge — and hiding it would bury the layer the ledger
-     promoted. gpSolidityGood (PRIME/SOLID/GOOD) stays for everything that
-     is not the lane bar. */
+/* hg-v1506 → hg-v1507: THE OKAY-AND-ABOVE-GOOD BAR, revised at the user's
+   instruction. v1506 raised the bar and the desk went BLIND on the tapes it
+   was built for: every formed row graded MIXED (the pine-stack holds drag
+   the 7-gate grade down) so the lanes emptied, and a cold fundamental cache
+   hid rows whose fundamentals had never spoken against them. The revision
+   keeps the bar STRICT on the TRADE and fails open only on ABSENT reads:
+
+   • THE TRADE BAR (gpBoardPick — the pin and the handoff) is unchanged:
+     fundamental with no case against the direction + solidity PRIME or
+     SOLID + FTS near or OK. A row below it never leads and never gets a
+     handoff button.
+   • THE VISIBILITY BAR (gpLaneShow — what the lanes paint) shows every
+     formed, non-killed row; the below-bar rows paint MARKED (BELOW BAR
+     chip + the named reason + the withheld handoff) instead of vanishing.
+     The user asked to SEE the short the scan forms; hiding it behind a
+     silent empty state was the v1506 mistake.
+   • FUNDAMENTAL OKAY means NO CASE AGAINST (hg-v1507): a completed
+     hgFundamentalGate read that neither refused nor demoted the direction.
+     A DARK board is unread, and the house doctrine is a dark board blocks
+     nothing — the card carries the FUNDAMENTAL UNREAD note instead. Only
+     an explicit refuse/demote fails the leg (s.fundOk === false).
+   • SOLIDITY MORE THAN GOOD — PRIME or SOLID on the letter grade when the
+     grade EXISTS. The ONE exemption stays: a row the forward ledger
+     RELEASED (s.recordReleased) is above-good by record. */
 function gpSolidityAboveGood(s){
   var g = s && s.solidity;
   if (!g || g.killed === true) return false;
@@ -613,8 +624,11 @@ function gpSolidityAboveGood(s){
   var t = String(g.grade || g.tier || '').toUpperCase();
   return t === 'PRIME' || t === 'SOLID';
 }
+/* No case against: TRUE (clean read) and undefined (gate absent or errored)
+   both pass; only an explicit refuse/demote fails. The stamp is written by
+   the scan seam and the accurate-pack row. */
 function gpFundOk(s){
-  return !!(s && s.fundOk === true);
+  return !(s && s.fundOk === false);
 }
 function gpFtsNearOk(s){
   var h = s && s.stack && s.stack.tierHint;
@@ -625,6 +639,37 @@ function gpBoardBarOn(){
 }
 function gpBoardPick(s){
   return !!(s && gpSolidityAboveGood(s) && gpFtsNearOk(s) && gpFundOk(s));
+}
+/* hg-v1507: the legs of the trade bar a row FAILED, named for the card and
+   the audit line. Absent reads are not failures — they pass fail-open — so
+   only present-but-below grades and explicit fundamental refusals list. */
+function gpBarWhy(s){
+  var why = [];
+  if (!s) return why;
+  if (!gpSolidityAboveGood(s)) why.push('solidity ' + String((s.solidity && s.solidity.grade) || 'UNGRADED') + ' \u2014 bar is PRIME/SOLID');
+  if (!gpFtsNearOk(s)) why.push('FTS ' + String((s.stack && s.stack.tierHint) || 'UNREAD') + ' \u2014 bar is near/OK');
+  if (s.fundOk === false) why.push('fundamental against');
+  return why;
+}
+/* hg-v1507: the visibility bar — what the LANES paint. Everything formed
+   and not killed shows; the trade bar still decides who leads and who gets
+   the handoff. */
+function gpLaneShow(s){
+  if (!s) return false;
+  var g = s.solidity;
+  if (g && g.killed === true) return false;
+  return true;
+}
+/* hg-v1507: the below-bar head chip — names the bar in one word, carries
+   the reasons in the tooltip. Silent on picked rows and record-only rows
+   (record-only has its own chip and its own note). */
+function gpBarChipHtml(s){
+  try{
+    if (!s || s.recordOnly || !gpBoardBarOn() || gpBoardPick(s)) return '';
+    var why = gpBarWhy(s);
+    if (!why.length) why.push('below the trade bar');
+    return ' <span class="gpip" title="' + esc('below the trade bar (hg-v1506): ' + why.join(' · ') + ' — shown to be read, the handoff opens when it clears') + '">BELOW BAR</span>';
+  }catch(eB){ return ''; }
 }
 function gpAttachFts(list){
   if (!Array.isArray(list) || typeof W.hgSetupStackForPineSig !== 'function') return;
@@ -1063,12 +1108,10 @@ function gpAccuratePack(bars, nowMs){
         }
       }catch(eFund){ fund = null; }
     }
-    /* hg-v1506: the OKAY stamp on the accurate-pack row — the same rule as
-       the scan seam: the board read at least one directional leg and did
-       not stand against this direction. A row the tape already demoted
-       never ran the gate, so it is not okay either. */
-    s.fundOk = !!(fund && fund.refuse !== true && fund.demote !== true
-      && fund.regime && fund.regime.checked >= 1);
+    /* hg-v1507: NO CASE AGAINST on the accurate-pack row — same rule as the
+       scan seam: an explicit refuse/demote fails the leg; a gate that never
+       ran or errored does not (a dark board blocks nothing). */
+    s.fundOk = !(fund && (fund.refuse === true || fund.demote === true));
     if (s.notes == null) s.notes = [];
     s.notes.push('Sentiment is a lagged read. It does not choose this side.');
     if (fund && fund.chips && fund.chips.length) s.notes.push(fund.chips.join(' · '));
@@ -1304,14 +1347,15 @@ function runGoldPineScan(bars, ctx){
       scalp = sortSetups(scalp);
     }
   }catch(eFS){}
-  /* hg-v1506: the OKAY stamp — the lane bar asks the trade's OWN
-     fundamental read to be okay, so the desk stamps the verdict on every
-     row (s.fundOk). TRUE only when hgFundamentalGate ran, the board READ
-     at least one directional leg (checked >= 1 — a dark board is unread,
-     and unread is not okay), and it neither refused nor demoted the
-     direction. The shared scan-cands pass only writes s.fundGate on a
-     failure or a chip, so this per-row pass is what makes the CLEAN pass
-     distinguishable from the unread board. */
+  /* hg-v1507: the NO-CASE-AGAINST stamp — the trade bar asks the trade's
+     OWN fundamental read to have no case against the direction, so the
+     desk stamps the verdict on every row (s.fundOk). FALSE only on an
+     explicit refuse/demote; a completed clean read stamps TRUE (whatever
+     the leg count — hg-v1507 dropped the checked>=1 requirement that
+     blanked the desk when the macro cache ran cold); a gate that errored
+     leaves the stamp undefined and the row paints fail-open. The shared
+     scan-cands pass only writes s.fundGate on a failure or a chip, so
+     this per-row pass is what carries the verdict the bar reads. */
   try{
     var fgStamp = gfn('hgFundamentalGate');
     if (fgStamp){
@@ -1322,9 +1366,13 @@ function runGoldPineScan(bars, ctx){
           if (fr.fundGate && (fr.fundGate.refuse === true || fr.fundGate.demote === true)){ fr.fundOk = false; continue; }
           try{
             var fg2 = fgStamp('XAUUSD', fr.dir, { scanner: 'goldpine' });
-            fr.fundOk = !!(fg2 && fg2.refuse !== true && fg2.demote !== true
-              && fg2.regime && fg2.regime.checked >= 1);
-          }catch(eF2){ fr.fundOk = false; }
+            /* hg-v1507: NO CASE AGAINST — a completed read that neither
+               refused nor demoted is okay, whatever the leg count. A dark
+               board is unread, and unread blocks nothing (house doctrine);
+               the card carries the unread note instead of the row vanishing. */
+            fr.fundOk = !(fg2 && (fg2.refuse === true || fg2.demote === true)) ? true : false;
+          }catch(eF2){ /* the gate errored — leave undefined: fail-open, the
+                          row paints with the unread note */ }
         }
       };
       gpFundStamp(swing);
@@ -1813,8 +1861,16 @@ function cardHTML(s, rank){
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(eSmcC){ smcChip = ''; }
   var block = gpHandoffBlock(s);
   var adm = gpAdmissionFloor(s);   /* hg-v1400: the measured floor, beside the R:R floor */
+  /* hg-v1507: BELOW THE TRADE BAR — the row paints (the v1506 silent-lane
+     mistake) but the handoff stays withheld until it clears the bar. Named
+     first in the fork so the reason, not the floor, is what the user reads. */
+  var barWhy = (gpBoardBarOn() && !gpBoardPick(s) && !s.recordOnly) ? gpBarWhy(s) : null;
   var actions = s.recordOnly
     ? gpRecordNoteHtml(s)   /* hg-v1164: record-only withholds both handoffs */
+    : (barWhy && barWhy.length)
+    ? ('<div class="note warn" style="margin-top:8px">BELOW THE TRADE BAR (hg-v1506, revised hg-v1507): '
+       + esc(barWhy.join(' · ')) + '. The setup is shown to be read; the handoff opens when it clears '
+       + 'solidity PRIME/SOLID, near-or-OK FTS and an okay fundamental read.</div>')
     : (adm.ok === false)
     ? ('<div class="note warn" style="margin-top:8px">NO TRADE HANDOFF — ADMISSION FLOOR: '
        + esc(adm.why) + '. The levels are shown to be read, not sent.</div>')
@@ -1835,7 +1891,7 @@ function cardHTML(s, rank){
 
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
-    + rankBadge + badge + gpTapeChipHtml(s) + gpMintMarkChipHtml(s) + gpRecordChipHtml(s) + gpFundChipHtml(s)
+    + rankBadge + badge + gpTapeChipHtml(s) + gpMintMarkChipHtml(s) + gpRecordChipHtml(s) + gpFundChipHtml(s) + gpBarChipHtml(s)
     + ((typeof W.hgBookStampChip === 'function')
       ? W.hgBookStampChip('XAUUSD', s.dir, { scanner: 'goldpine', strategy: s.mode || 'goldpine', klass: 'metals', fund: 'gold' })
       : '')
@@ -1896,7 +1952,8 @@ function mount(el){
     + '<div class="panel">'
     + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
     + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
-    + 'plus native GOLD SWING/SCALP candidates. hg-v1506 raises the lane bar: a trade is only MADE and SHOWN when its fundamental read is OKAY (the board actually read it and did not stand against the direction), its solidity is MORE THAN GOOD (PRIME or SOLID — a ledger-released row is above-good by record), and its FTS tier is near or OK. '
+    + 'plus native GOLD SWING/SCALP candidates. hg-v1507 TRADE BAR: a trade is only MADE — pinned, handed off — when its fundamental read has no case against the direction (an explicit headwind or blackout fails it; an unread board does not, the card says so), its solidity is MORE THAN GOOD (PRIME or SOLID — a ledger-released row is above-good by record), and its FTS tier is near or OK. '
+    + 'Every formed row still paints: the ones below the bar are marked BELOW BAR with the named reason, shown to be read, not sent. '
     + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
     + 'A scalp primary does not pass in premium or discount without a sweep, during the London fix (London local time), or when it fades an Asian range that already expanded. '
     + 'A continuation does not pass once the day has used its average range. Gold RSI divergence against the trade does not pass. '
@@ -1982,9 +2039,17 @@ function mount(el){
       var swingTop = result.swing.slice(0, TOP_SETUPS);
       var scalpTop = result.scalp.slice(0, TOP_SETUPS);
       var boardBar = gpBoardBarOn();
-      var swingFit = boardBar ? result.swing.filter(gpBoardPick) : null;
-      var scalpFit = boardBar ? result.scalp.filter(gpBoardPick) : null;
+      /* hg-v1507: the lanes SHOW every formed, non-killed row (gpLaneShow);
+         the TRADE bar (gpBoardPick) decides who leads and who gets the
+         handoff. Below-bar rows paint MARKED — the v1506 silent-lane
+         mistake is gone: the short the scan forms is visible, named, and
+         stamped BELOW BAR with the reason it is not tradeable yet. Picks
+         sort first (stable), so the bar still owns the top of the lane. */
+      var swingFit = boardBar ? result.swing.filter(gpLaneShow) : null;
+      var scalpFit = boardBar ? result.scalp.filter(gpLaneShow) : null;
       if (boardBar){
+        swingFit.sort(function(a, b){ var pa = gpBoardPick(a), pb = gpBoardPick(b); return pa === pb ? 0 : (pa ? -1 : 1); });
+        scalpFit.sort(function(a, b){ var pa = gpBoardPick(a), pb = gpBoardPick(b); return pa === pb ? 0 : (pa ? -1 : 1); });
         swingTop = swingFit.slice(0, 6);
         scalpTop = scalpFit.slice(0, 6);
       }
@@ -2006,7 +2071,9 @@ function mount(el){
          empties a ranked list the panel says so rather than vanishing —
          a silent desk is the thing this family keeps having to fix. */
       /* hg-v1164: a record-only layer never leads; it is counted and named */
-      var mpList = gpTapeAligned(swingTop.concat(scalpTop).filter(gpMayLead));
+      /* hg-v1507: the pin answers to the TRADE bar, not the visibility bar —
+         a below-bar row can paint but never lead. */
+      var mpList = gpTapeAligned(swingTop.concat(scalpTop).filter(function(s){ return gpMayLead(s) && (!boardBar || gpBoardPick(s)); }));
       var accPack = (result && result.fundBlackout)
         ? { scalp: null, swing: null, lead: null, notes: ['EVENT BLACKOUT — no fresh accuracy structure'] }
         : gpAccuratePack(bars, t0);
@@ -2023,6 +2090,10 @@ function mount(el){
       var accNote = (accPack.notes && accPack.notes.length)
         ? ('<div class="note">' + esc(accPack.notes.join(' · ')) + '</div>')
         : '';
+      /* hg-v1507: two counts — how many rows are pin-eligible BEFORE the
+         tape filter (for the held note) and how many clear the trade bar
+         at all (for the audit). */
+      var barRanked = swingTop.concat(scalpTop).filter(function(s){ return gpMayLead(s) && (!boardBar || gpBoardPick(s)); }).length;
       var ranked = swingTop.filter(gpMayLead).length + scalpTop.filter(gpMayLead).length;
       var recordRows = result.swing.concat(result.scalp).filter(function(s){ return s && s.recordOnly; });
       var releasedRows = result.swing.concat(result.scalp).filter(function(s){ return s && s.recordReleased; });
@@ -2045,17 +2116,31 @@ function mount(el){
           + ' fired this scan \u00b7 recorded under GOLDPINE \u00b7 not led, not sent until measured</span></h2></div>'
           + recordShown.map(function(s){ return cardHTML(s, 0); }).join('');
       }
-      var heldNote = (ranked && !mpList.length)
+      var heldNote = (ranked && !mpList.length && barRanked)
         ? ('<div class="note warn">MOST PROBABLE stands empty \u2014 every ranked formation on this scan '
            + 'points against the gold tape (4H ' + esc(tapeSwing || 'unread')
            + ' \u00b7 15m ' + esc(tapeScalp || 'unread') + '). '
            + 'The cards below still print their levels, stamped AGAINST GOLD TAPE \u00b7 HELD.</div>')
+        : (ranked && !mpList.length && !barRanked && boardBar)
+        ? ('<div class="note warn">MOST PROBABLE stands empty \u2014 nothing on this scan clears the trade bar '
+           + '(fundamental OKAY \u00b7 solidity PRIME/SOLID \u00b7 FTS near/OK). The strongest formed rows paint below, '
+           + 'marked BELOW BAR with the reason — shown to be read, not sent.</div>')
         : '';
       var fitNote = '';
       if (boardBar){
-        var heldN = (result.swing.length - swingFit.length) + (result.scalp.length - scalpFit.length);
-        fitNote = '<div class="note">These lanes show a trade only when its fundamental read is OKAY, its solidity is MORE THAN GOOD (PRIME or SOLID — a ledger-released row is above-good by record), and its FTS tier is near or OK.'
-          + (heldN ? (' ' + heldN + ' formation' + (heldN === 1 ? '' : 's') + ' on this scan did not clear that bar.') : '')
+        /* hg-v1507: the bar audit — the lanes no longer hide the held rows,
+           so the note names what the trade bar held and why, per leg. */
+        var heldAll = swingFit.concat(scalpFit).filter(function(s){ return s && !gpBoardPick(s); });
+        var legSolid = heldAll.filter(function(s){ return !gpSolidityAboveGood(s); }).length;
+        var legFts = heldAll.filter(function(s){ return gpSolidityAboveGood(s) && !gpFtsNearOk(s); }).length;
+        var legFund = heldAll.filter(function(s){ return gpSolidityAboveGood(s) && gpFtsNearOk(s) && s.fundOk === false; }).length;
+        var pickN = heldAll.length ? (swingFit.length + scalpFit.length - heldAll.length) : (swingFit.length + scalpFit.length);
+        fitNote = '<div class="note">TRADE BAR — fundamental OKAY (no case against the direction) \u00b7 solidity MORE THAN GOOD (PRIME/SOLID; a ledger-released row is above-good by record) \u00b7 FTS near or OK. '
+          + 'Rows that clear it carry the handoff; the rest paint marked BELOW BAR with the reason — shown to be read, not sent. '
+          + (heldAll.length
+              ? ('This scan: ' + pickN + ' tradeable \u00b7 ' + heldAll.length + ' held below the bar (solidity below \u00d7' + legSolid
+                 + ' \u00b7 FTS \u00d7' + legFts + ' \u00b7 fundamental against \u00d7' + legFund + ').')
+              : ('All ' + pickN + ' formed rows clear the bar.'))
           + '</div>';
       }
       /* Pack 907: GOLD PINE draws four legs and moved its numbers on a
@@ -2109,7 +2194,7 @@ function mount(el){
           ? ('<div class="gp-eye">MOST PROBABLE</div>' + cardHTML(mpList[0], 1) + '<div class="gp-mp-banner" id="gp-mp-banner"></div>')
           : ('<div class="gp-eye">NO LEAD</div><div class="note">'
             + (boardBar
-              ? 'No setup clears the bar \u2014 fundamental read OKAY, solidity PRIME or SOLID, FTS near or OK \u2014 so nothing leads.'
+              ? 'Nothing on this scan clears the trade bar \u2014 fundamental OKAY, solidity PRIME/SOLID, FTS near or OK \u2014 so nothing leads. The formed rows paint below, marked.'
               : 'Nothing on this scan is eligible to lead. A held or against-tape card stays on the board and is not promoted.')
             + '</div>'))
         + accNote
@@ -2117,12 +2202,12 @@ function mount(el){
         + fitNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           boardBar
-            ? 'No swing setup has an OKAY fundamental read, more-than-good solidity (PRIME/SOLID) and a near or OK FTS tier.'
+            ? 'No swing formation cleared even the visibility bar (everything formed is killed) — nothing to show.'
             : 'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: boardBar ? swingFit.length : result.swing.length })
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
           boardBar
-            ? 'No scalp setup has an OKAY fundamental read, more-than-good solidity (PRIME/SOLID) and a near or OK FTS tier.'
+            ? 'No scalp formation cleared even the visibility bar (everything formed is killed) — nothing to show.'
             : 'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
           { total: boardBar ? scalpFit.length : result.scalp.length })
         + recordSection
@@ -2238,6 +2323,9 @@ W.gpBoardPick = gpBoardPick;
 /* hg-v1506: the two halves of the raised lane bar, exported for the suite */
 W.gpFundOk = gpFundOk;
 W.gpSolidityAboveGood = gpSolidityAboveGood;
+W.gpBarWhy = gpBarWhy;
+W.gpLaneShow = gpLaneShow;
+W.gpBarChipHtml = gpBarChipHtml;
 W.gpAttachFts = gpAttachFts;
 /* hg-v1492: the measured book — lever + cohort table exported for the suite */
 W.hgGpSetLabDemote = hgGpSetLabDemote;
