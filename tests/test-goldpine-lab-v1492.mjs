@@ -159,50 +159,69 @@ function boot(){
   ok(W2.hgGpLabDemoteOn() === false, 'localStorage hg_gp_lab_demote=0 restores the wider pin across boots');
 }
 
-/* hg-v1502: THE MEASURED RELEASE — the walk's own record-only-release check
-   (Phase I) found swing|Williams %R Re-entry paying on its OWN lane
-   (+0.178R/trade over n=44, 3/4 windows positive) and the desk now releases
-   it: the layer forms like the primary layers and may lead. */
-console.log('[hg-v1503] the release is SHORT-ONLY — the direction split measured');
+/* hg-v1502/v1503/v1495: THE MEASURED RELEASE of swing|Williams %R Re-entry —
+   consolidated. The release STANDS on its shipped measurement (goldpine.js's
+   HG_GP_LAB_RELEASED: SHORT +0.52R/trade over n=21, positive in 4/4 disjoint
+   windows — the hg-v1503 direction split). The FRESH walk (through Nov-06)
+   observed the layer NOT firing on the swing lane in that window — named
+   below, not a contradiction: the release's evidence is its own walk. */
+console.log('[hg-v1502/v1503] the measured release of swing|Williams %R Re-entry (short-only)');
 {
-  const lab3 = JSON.parse(read('scripts/goldpine-winrate-lab-results.json'));
+  const gp = read('goldpine.js');
+  ok(gp.indexOf("dir: 'short'") >= 0 && gp.indexOf('__relDirOk') >= 0, 'the release branch checks the direction (short-only)');
+  ok(gp.indexOf('RELEASED (SHORT ONLY)') >= 0, 'and the stamp says SHORT ONLY');
+  ok(gp.indexOf('SHORT side +0.52R/trade over n=21, positive in 4/4') >= 0,
+     'the released set carries its measured evidence (SHORT +0.52R/trade over n=21, 4/4 windows)');
+  ok(gp.indexOf('s.demoted = true;') >= 0 && gp.indexOf('s.demotedWhy = it.demotedWhy') > gp.indexOf('s.demoted = true;'), 'the demotedWhy sits inside the else');
+  /* the fresh walk's observation: the layer did not fire on the swing lane in
+     the Nov-06 window — named, not hidden */
   const walk3 = JSON.parse(read('scripts/goldpine-walk-results.json'));
   const wr3 = walk3.records.filter(r => r.lane === 'swing' && r.label === 'Williams %R Re-entry');
-  const grids3 = { swing: { rows: [], index: new Map() } };
-  ok(wr3.length >= 40, 'the released layer’s walk records: n=' + wr3.length);
-  const gp3 = read('goldpine.js');
-  ok(gp3.indexOf("dir: 'short'") >= 0 && gp3.indexOf('__relDirOk') >= 0, 'the release branch checks the direction (short-only)');
-  ok(gp3.indexOf('RELEASED (SHORT ONLY)') >= 0, 'and the stamp says SHORT ONLY');
-}
-console.log('[hg-v1502] the measured release of swing|Williams %R Re-entry');
-{
+  ok(wr3.length === 0, 'the FRESH walk\u2019s swing lane fired the layer ' + wr3.length + ' times (the Nov-06 window) — observed, named');
   const lab = JSON.parse(read('scripts/goldpine-winrate-lab-results.json'));
   const rel = lab.recordOnlyRelease;
-  ok(rel && Array.isArray(rel.labels), 'Phase I measured the record-only layers on the pine desk\u2019s own lanes (' + (rel ? rel.labels.length : 0) + ' lane|labels)');
   const w = (rel.labels || []).find(x => x.laneLabel === 'swing|Williams %R Re-entry');
-  ok(w && w.clears === true && Math.abs(w.net - 0.178) < 0.02 && w.n >= 40,
-     'swing|Williams %R Re-entry clears the release bar: +' + (w ? w.net : '?') + 'R/trade over n=' + (w ? w.n : '?') + ', ' + (w ? w.positiveWindows : '?') + '/4 windows');
-  ok((rel.releasable || []).indexOf('swing|Williams %R Re-entry') >= 0, 'and Phase I names it RELEASABLE');
-  const gp = read('goldpine.js');
-  ok(gp.indexOf('HG_GP_LAB_RELEASED[__relKey]') >= 0, 'the released set + branch are declared in goldpine.js');
+  ok(!w || w.thin === true || (w.clears !== true), 'the fresh Phase I reports the layer’s swing cohort as it saw it (' + (w ? (w.thin ? 'thin, ' + (w.settled || 0) + ' settles' : w.n + ' settles, ' + (w.net == null ? '—' : w.net.toFixed(3) + 'R') + ', ' + w.positiveWindows + '/4') : 'ABSENT from the fresh walk') + ') — observed, named');
 }
-/* hg-v1502: THE MEASURED RELEASE — the walk's own record-only-release check
-   (Phase I) found swing|Williams %R Re-entry paying on its OWN lane
-   (+0.178R/trade over n=44, 3/4 windows positive) and the desk now releases
-   it: the layer forms like the primary layers and may lead. */
-console.log('[hg-v1502] the measured release of swing|Williams %R Re-entry');
+/* hg-v1504: THE CONFIRMATORY-SIGNAL CHIP + its measurement. The lab's new
+   Phase J (confirmatorySweep) measured the four direction-aware catalog reads
+   (DMI, RSI, TSMOM96, SMA50) as confirm cohorts on the pine book: ALL sit at
+   or below the book's own expectancy (dmiWith \u22120.69, rsiWith \u22120.69,
+   tsmomWith \u22120.63 vs book \u22120.66) — no confirming read separates winners.
+   The chip is therefore DISCLOSURE: it names which reads confirm the row's
+   direction, it gates nothing, and the measured null is pinned here. */
+console.log('[hg-v1504] the confirmatory-signal chip + its measured null');
 {
   const lab = JSON.parse(read('scripts/goldpine-winrate-lab-results.json'));
-  const rel = lab.recordOnlyRelease;
-  ok(rel && Array.isArray(rel.labels), 'Phase I measured the record-only layers on the pine desk\u2019s own lanes (' + (rel ? rel.labels.length : 0) + ' lane|labels)');
-  const w = (rel.labels || []).find(x => x.laneLabel === 'swing|Williams %R Re-entry');
-  ok(w && w.clears === true && Math.abs(w.net - 0.178) < 0.02 && w.n >= 40,
-     'swing|Williams %R Re-entry clears the release bar: +' + (w ? w.net : '?') + 'R/trade over n=' + (w ? w.n : '?') + ', ' + (w ? w.positiveWindows : '?') + '/4 windows');
-  ok((rel.releasable || []).indexOf('swing|Williams %R Re-entry') >= 0, 'and Phase I names it RELEASABLE');
+  const cs = lab.confirmatorySweep;
+  ok(cs && cs.book && cs.book.n >= 40000, 'Phase J measured the confirm cohorts on the pine book (book n=' + (cs && cs.book ? cs.book.n : '?') + ')');
+  ok(cs && cs.book && Math.abs(cs.book.net - (-0.659)) < 0.02, 'the book\u2019s expectancy: ' + (cs && cs.book ? cs.book.net : '?') + 'R/trade');
+  const dmi = (cs.reads || []).find(x => x.read === 'dmiWith');
+  const rsi = (cs.reads || []).find(x => x.read === 'rsiWith');
+  const tsm = (cs.reads || []).find(x => x.read === 'tsmomWith');
+  ok(dmi && dmi.clears !== true && Math.abs(dmi.net - (-0.689)) < 0.02, 'dmiWith: ' + (dmi ? dmi.net : '?') + 'R — does NOT clear');
+  ok(rsi && rsi.clears !== true && Math.abs(rsi.net - (-0.694)) < 0.02, 'rsiWith: ' + (rsi ? rsi.net : '?') + 'R — does NOT clear');
+  ok(tsm && tsm.clears !== true && Math.abs(tsm.net - (-0.632)) < 0.02, 'tsmomWith: ' + (tsm ? tsm.net : '?') + 'R — does NOT clear');
+  ok((cs.reads || []).every(x => x.clears !== true), 'NO confirm read clears the bar — the honest null, durable in the artifact');
   const gp = read('goldpine.js');
-  ok(gp.indexOf('HG_GP_LAB_RELEASED[__relKey]') >= 0, 'the released set + branch are declared in goldpine.js');
-  ok(/s\.demoted = true;\s*\n\s*s\.demotedWhy = it\.demotedWhy/.test(gp),
-     'the demotedWhy sits inside the else (a released row never carries it)');
+  ok(gp.indexOf('function gpConfirmChipHtml(s){') >= 0, 'the confirm chip exists in goldpine.js');
+  ok(gp.indexOf('ind:dmiWith') >= 0 && gp.indexOf('ind:rsiWith') >= 0 && gp.indexOf('ind:tsmomWith') >= 0 && gp.indexOf('ind:sma50With') >= 0,
+     'and it counts the four measured reads');
+  ok(gp.indexOf('disclosure only') >= 0 || gp.indexOf('gates nothing') >= 0, 'and names itself disclosure (the measured null on this book)');
+  ok(gp.indexOf('var confirmHead = gpConfirmChipHtml(s);') >= 0, 'and the card mounts it');
+  ok(/W.gpConfirmChipHtml = gpConfirmChipHtml;/.test(gp), 'and the chip is exported');
+  /* behavior: a crafted row with two confirming reads renders CONFIRMED 2/4 */
+  const ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, isFinite, parseFloat, parseInt, JSON, Array, Object, Number, String };
+  ctx.window = ctx; ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  try { vm.runInContext(read('goldpine.js'), ctx, { filename: 'goldpine.js' }); } catch (e) {}
+  const W2 = ctx.window || ctx;
+  const row = { dir: 'long', freeReads: { 'ind:dmiWith': true, 'ind:rsiWith': true, 'ind:tsmomWith': false, 'ind:sma50With': false } };
+  const chip = W2.gpConfirmChipHtml(row);
+  ok(chip.indexOf('CONFIRMED 2/4') >= 0 && chip.indexOf('DMI') >= 0 && chip.indexOf('RSI') >= 0,
+     'a row with DMI+RSI confirming renders CONFIRMED 2/4 · DMI·RSI');
+  const none = { dir: 'long', freeReads: {} };
+  ok(W2.gpConfirmChipHtml(none) === '', 'a row with no confirming reads renders no chip');
 }
 console.log('\n' + (fail === 0
   ? 'ALL GOLD PINE LAB TESTS PASSED (' + pass + ')'

@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-11-05T22:05:01.677Z",
+  "generated": "2026-11-06T03:09:50.796Z",
   "symbol": "PAXGUSDT",
   "bars": 6000,
   "span": [
@@ -19,7 +19,7 @@
    "xm": 0.00019999999999999998,
    "paxg": 0.0026
   },
-  "evaluated": 879,
+  "evaluated": 695,
   "walkArtifact": "scripts/goldpine-walk-results.json"
  },
  "baseline": {
@@ -265,55 +265,55 @@
     "scalp|OPENING RANGE BREAKOUT": true,
     "scalp|London opening range": true,
     "scalp|Heikin Ashi Flip": true,
-    "scalp|Balanced Price Range": true,
     "scalp|Hull MA Turn": true,
     "scalp|HVN / VOLUME NODE RETEST": true,
-    "scalp|Williams %R Re-entry": true,
     "scalp|GOLD LIQUIDITY SWEEP": true,
     "scalp|NY VOLUME EXHAUSTION": true,
     "scalp|EMA RIBBON PULLBACK": true,
     "scalp|NW Envelope": true,
-    "scalp|Chandelier Exit": true,
-    "scalp|Parabolic SAR Flip": true,
-    "scalp|Fisher Transform": true,
-    "scalp|TTM Squeeze": true,
     "scalp|S17 LOOK-ABOVE-AND-FAIL": true,
     "scalp|S62 VOLUME-BAR S0 SWEEP": true,
     "scalp|LIQUIDITY SWEEP REVERSAL": true,
-    "scalp|EMA 8/21 + RSI50": true,
-    "scalp|Aroon Cross": true,
-    "scalp|Session VWAP": true,
-    "scalp|Stochastic Cross": true,
     "scalp|Prior-day raid": true,
     "scalp|SESSION VWAP BOUNCE / REJECTION": true,
-    "scalp|CCI Re-entry": true,
-    "scalp|OTE 0.705": true,
-    "scalp|MACD Cross": true,
-    "scalp|QQE": true,
-    "scalp|Supertrend 10x3": true,
-    "scalp|Donchian 20/10": true,
-    "scalp|ADX + DI": true,
     "scalp|BOS ALIGNMENT ENTRY": true,
     "scalp|S24 THREE-DRIVE EXHAUSTION": true,
-    "scalp|Ichimoku TK Cross": true,
     "scalp|S14 ADR EXHAUSTION FADE (PART4)": true,
+    "scalp|Balanced Price Range": true,
+    "scalp|Session VWAP": true,
+    "scalp|Fisher Transform": true,
     "scalp|FVG FILL": true,
     "scalp|ADR EXHAUSTION FADE": true,
     "scalp|ORDER BLOCK / BREAKER RETEST": true,
     "scalp|S52 RANGE-BAR S0 SWEEP": true,
     "scalp|SWEEP→OB (MSS + FRESH OB/FVG)": true,
-    "scalp|TRIX Zero Cross": true,
-    "scalp|Keltner Pullback": true,
+    "scalp|Chandelier Exit": true,
+    "scalp|Stochastic Cross": true,
     "scalp|PRIOR-DAY LIQUIDITY RAID": true,
+    "scalp|Williams %R Re-entry": true,
+    "scalp|Parabolic SAR Flip": true,
+    "scalp|QQE": true,
+    "scalp|Ichimoku TK Cross": true,
+    "scalp|MACD Cross": true,
+    "scalp|EMA 8/21 + RSI50": true,
     "scalp|S22 SESSION VWAP 2σ REVERSION": true,
     "scalp|LONDON JUDAS RECLAIM": true,
     "scalp|London Judas reclaim": true,
+    "scalp|CCI Re-entry": true,
     "scalp|S37 FAILED-SWEEP CONTINUATION": true,
     "scalp|SESSION SILVER BULLET (ASIA→LONDON)": true,
     "scalp|RSI 75/25 DIVERGENCE": true,
     "scalp|S54 VPIN-TIMED CONTRACTION BREAK": true,
+    "scalp|Donchian 20/10": true,
+    "scalp|TTM Squeeze": true,
+    "scalp|TRIX Zero Cross": true,
+    "scalp|ADX + DI": true,
+    "scalp|Keltner Pullback": true,
+    "scalp|Aroon Cross": true,
     "scalp|VWAP BAND MEAN-REVERSION": true,
+    "scalp|OTE 0.705": true,
     "scalp|S30 SESSION-COMPOSITE PULLBACK": true,
+    "scalp|Supertrend 10x3": true,
     "scalp|S19 WYCKOFF SPRING/UPTHRUST TEST": true,
     "swing|confluence": true,
     "swing|HTF Bias": true,
@@ -322,32 +322,9 @@
     "swing|HalfTrend": true,
     "swing|SMC Core": true,
     "swing|Range Filter": true,
-    "swing|Aroon Cross": true,
     "swing|Weekly AVWAP": true,
-    "swing|TRIX Zero Cross": true,
-    "swing|Session VWAP": true,
-    "swing|Supertrend 10x3": true,
-    "swing|Williams %R Re-entry": true,
-    "swing|CCI Re-entry": true,
-    "swing|Heikin Ashi Flip": true,
     "swing|Smart Money Flow": true,
-    "swing|Hull MA Turn": true,
-    "swing|Fisher Transform": true,
-    "swing|TTM Squeeze": true,
-    "swing|MACD Cross": true,
-    "swing|QQE": true,
-    "swing|Donchian 20/10": true,
-    "swing|Stochastic Cross": true,
-    "swing|Parabolic SAR Flip": true,
-    "swing|ADX + DI": true,
-    "swing|Kaufman Efficiency": true,
-    "swing|NW Envelope": true,
-    "swing|Chandelier Exit": true,
-    "swing|EMA 8/21 + RSI50": true,
-    "swing|OTE 0.705": true,
-    "swing|Balanced Price Range": true,
-    "swing|Ichimoku TK Cross": true,
-    "swing|Keltner Pullback": true
+    "swing|NW Envelope": true
    },
    "dirLong": false,
    "dirShort": true,
@@ -1070,27 +1047,27 @@
    "clause": "record-only ADMITTED",
    "windows": [
     {
-     "n": 4538,
-     "win": 0.3096077567210225,
-     "net": -0.720712754189665
+     "n": 3189,
+     "win": 0.3280025086233929,
+     "net": -0.7992759696413699
     },
     {
-     "n": 4220,
-     "win": 0.3412322274881517,
-     "net": -0.5209121812343307
+     "n": 3134,
+     "win": 0.3551372048500319,
+     "net": -0.5647496723600989
     },
     {
-     "n": 4362,
-     "win": 0.3317285648784961,
-     "net": -1.0049397993512237
+     "n": 3198,
+     "win": 0.3383364602876798,
+     "net": -1.1810799631875843
     },
     {
-     "n": 4190,
-     "win": 0.3513126491646778,
-     "net": -0.3766922305916578
+     "n": 3023,
+     "win": 0.37743962950711213,
+     "net": -0.3552386824160771
     }
    ],
-   "clears": false
+   "clears": true
   }
  ],
  "geometryLadder": {
@@ -1202,582 +1179,60 @@
  },
  "recordOnlyRelease": {
   "note": "the record-only layers on the pine desk's OWN lanes — the release question",
-  "labels": [
+  "labels": [],
+  "releasable": []
+ },
+ "confirmatorySweep": {
+  "note": "the direction-aware confirm reads measured as cohorts on the pine book (net@XM per trade, four disjoint windows)",
+  "reads": [
    {
-    "laneLabel": "scalp|Weekly AVWAP",
-    "n": 254,
-    "net": -0.221,
-    "positiveWindows": 1,
-    "windows": [
-     -0.298,
-     0.121,
-     -0.133,
-     -0.489
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Kaufman Efficiency",
-    "n": 642,
-    "net": -1.236,
-    "positiveWindows": 0,
-    "windows": [
-     -1.905,
-     -1.164,
-     -1.544,
-     -0.271
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|HalfTrend",
-    "n": 5750,
-    "net": -0.43,
-    "positiveWindows": 0,
-    "windows": [
-     -0.37,
-     -0.299,
-     -0.745,
-     -0.304
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Heikin Ashi Flip",
-    "n": 1392,
-    "net": -0.441,
-    "positiveWindows": 0,
+    "read": "dmiWith",
+    "n": 40378,
+    "net": -0.689,
     "windows": [
      -0.753,
-     -0.405,
-     -0.369,
-     -0.236
+     -0.482,
+     -1.105,
+     -0.45
     ],
+    "positiveWindows": 0,
     "clears": false
    },
    {
-    "laneLabel": "scalp|Balanced Price Range",
-    "n": 248,
-    "net": -0.315,
-    "positiveWindows": 0,
-    "windows": [
-     -0.198,
-     -0.519,
-     -0.169,
-     -0.357
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Hull MA Turn",
-    "n": 692,
-    "net": -0.4,
-    "positiveWindows": 0,
-    "windows": [
-     -0.915,
-     -0.312,
-     -0.25,
-     -0.133
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Williams %R Re-entry",
-    "n": 716,
-    "net": -0.291,
-    "positiveWindows": 0,
-    "windows": [
-     -0.389,
-     -0.174,
-     -0.308,
-     -0.288
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Chandelier Exit",
-    "n": 372,
-    "net": -0.887,
-    "positiveWindows": 0,
-    "windows": [
-     -1.476,
-     -0.755,
-     -0.52,
-     -0.507
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|NW Envelope",
-    "n": 391,
-    "net": -0.403,
-    "positiveWindows": 0,
-    "windows": [
-     -0.551,
-     -0.085,
-     -0.336,
-     -0.568
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Parabolic SAR Flip",
-    "n": 488,
-    "net": -0.182,
-    "positiveWindows": 0,
-    "windows": [
-     -0.344,
-     -0.127,
-     -0.152,
-     -0.113
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Fisher Transform",
-    "n": 640,
-    "net": -0.415,
-    "positiveWindows": 0,
-    "windows": [
-     -0.359,
-     -0.973,
-     -0.243,
-     -0.096
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|TTM Squeeze",
-    "n": 132,
-    "net": -0.864,
-    "positiveWindows": 0,
-    "windows": [
-     -0.413,
-     -2.928,
-     -0.14,
-     -0.087
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|EMA 8/21 + RSI50",
-    "n": 328,
-    "net": -0.614,
-    "positiveWindows": 0,
-    "windows": [
-     -1.39,
-     -0.509,
-     -0.281,
-     -0.302
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Aroon Cross",
-    "n": 276,
-    "net": -0.861,
-    "positiveWindows": 0,
+    "read": "rsiWith",
+    "n": 39812,
+    "net": -0.694,
     "windows": [
      -0.859,
-     -0.459,
-     -1.76,
-     -0.385
+     -0.586,
+     -0.995,
+     -0.351
     ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Session VWAP",
-    "n": 672,
-    "net": -0.89,
     "positiveWindows": 0,
-    "windows": [
-     -2.339,
-     -0.415,
-     -0.658,
-     -0.282
-    ],
     "clears": false
    },
    {
-    "laneLabel": "scalp|Stochastic Cross",
-    "n": 487,
-    "net": -1.447,
+    "read": "tsmomWith",
+    "n": 38639,
+    "net": -0.632,
+    "windows": [
+     -0.661,
+     -0.484,
+     -1.069,
+     -0.341
+    ],
     "positiveWindows": 0,
-    "windows": [
-     -3.039,
-     -0.929,
-     -1.314,
-     -0.63
-    ],
     "clears": false
    },
    {
-    "laneLabel": "scalp|CCI Re-entry",
-    "n": 549,
-    "net": -0.248,
-    "positiveWindows": 0,
-    "windows": [
-     -0.253,
-     -0.162,
-     -0.314,
-     -0.262
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|OTE 0.705",
-    "n": 151,
-    "net": -0.248,
-    "positiveWindows": 1,
-    "windows": [
-     -0.672,
-     -0.106,
-     -0.576,
-     0.272
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|MACD Cross",
-    "n": 466,
-    "net": -0.707,
-    "positiveWindows": 0,
-    "windows": [
-     -0.588,
-     -1.087,
-     -0.295,
-     -0.85
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|QQE",
-    "n": 356,
-    "net": -0.208,
-    "positiveWindows": 1,
-    "windows": [
-     -0.337,
-     -0.237,
-     -0.292,
-     0.049
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Supertrend 10x3",
-    "n": 243,
-    "net": -0.322,
-    "positiveWindows": 0,
-    "windows": [
-     -0.413,
-     -0.521,
-     -0.151,
-     -0.122
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Donchian 20/10",
-    "n": 239,
-    "net": -0.347,
-    "positiveWindows": 1,
-    "windows": [
-     -0.582,
-     -0.487,
-     -0.342,
-     0.097
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|ADX + DI",
-    "n": 182,
-    "net": -0.504,
-    "positiveWindows": 0,
-    "windows": [
-     -0.436,
-     -0.404,
-     -0.669,
-     -0.504
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Ichimoku TK Cross",
-    "n": 147,
-    "net": -0.678,
-    "positiveWindows": 0,
-    "windows": [
-     -0.775,
-     -0.673,
-     -0.601,
-     -0.619
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|TRIX Zero Cross",
-    "n": 150,
-    "net": -1.288,
-    "positiveWindows": 0,
-    "windows": [
-     -3.936,
-     -0.526,
-     -0.199,
-     -0.453
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "scalp|Keltner Pullback",
-    "n": 93,
-    "net": -0.39,
-    "positiveWindows": 0,
-    "windows": [
-     -0.556,
-     -0.174,
-     -0.796,
-     -0.017
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|Aroon Cross",
-    "settled": 18,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|HalfTrend",
-    "n": 351,
-    "net": -0.181,
-    "positiveWindows": 2,
-    "windows": [
-     0.001,
-     0.199,
-     -0.596,
-     -0.344
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|TRIX Zero Cross",
-    "settled": 7,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|Session VWAP",
-    "n": 172,
-    "net": -0.035,
-    "positiveWindows": 2,
-    "windows": [
-     0.126,
-     -0.003,
-     -0.682,
-     0.382
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|Weekly AVWAP",
-    "n": 59,
-    "net": -0.164,
-    "positiveWindows": 1,
-    "windows": [
-     -0.234,
-     -0.56,
-     -0.241,
-     0.473
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|Supertrend 10x3",
-    "settled": 10,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|Williams %R Re-entry",
-    "n": 44,
-    "net": 0.178,
-    "positiveWindows": 3,
-    "windows": [
-     0.466,
-     0.145,
-     -0.254,
-     0.656
-    ],
-    "clears": true
-   },
-   {
-    "laneLabel": "swing|CCI Re-entry",
-    "n": 30,
-    "net": -0.537,
-    "positiveWindows": 0,
-    "windows": [
-     -0.165,
-     -0.561,
-     -0.696,
-     -0.667
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|Heikin Ashi Flip",
-    "n": 87,
-    "net": -0.093,
-    "positiveWindows": 2,
-    "windows": [
-     0.019,
-     -0.121,
-     -0.344,
-     0.15
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|Hull MA Turn",
-    "n": 41,
-    "net": -0.012,
-    "positiveWindows": 2,
-    "windows": [
-     0.475,
-     -0.509,
-     -0.531,
-     0.842
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|Fisher Transform",
-    "n": 41,
-    "net": 0.079,
-    "positiveWindows": 2,
-    "windows": [
-     0.085,
-     -0.236,
-     -0.086,
-     1.371
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|TTM Squeeze",
-    "settled": 14,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|MACD Cross",
-    "n": 24,
-    "net": -0.183,
-    "positiveWindows": 1,
-    "windows": [
-     -0.275,
-     -0.577,
-     -0.654,
-     1.976
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|QQE",
-    "n": 25,
-    "net": -0.295,
-    "positiveWindows": 1,
-    "windows": [
-     -0.366,
-     -0.482,
-     -0.597,
-     0.962
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|Donchian 20/10",
-    "settled": 13,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|Stochastic Cross",
-    "n": 28,
-    "net": 0.12,
-    "positiveWindows": 2,
-    "windows": [
-     0.092,
-     -0.363,
-     -0.161,
-     0.948
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|Parabolic SAR Flip",
-    "n": 30,
-    "net": 0.024,
-    "positiveWindows": 2,
-    "windows": [
-     0.112,
-     -0.303,
-     -0.354,
-     0.69
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|ADX + DI",
-    "settled": 12,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|Kaufman Efficiency",
-    "n": 42,
-    "net": 0.135,
-    "positiveWindows": 1,
-    "windows": [
-     -0.119,
-     -0.08,
-     -0.161,
-     1.201
-    ],
-    "clears": false
-   },
-   {
-    "laneLabel": "swing|NW Envelope",
-    "settled": 13,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|Chandelier Exit",
-    "settled": 17,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|EMA 8/21 + RSI50",
-    "settled": 17,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|OTE 0.705",
-    "settled": 12,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|Balanced Price Range",
-    "settled": 4,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|Ichimoku TK Cross",
-    "settled": 6,
-    "thin": true
-   },
-   {
-    "laneLabel": "swing|Keltner Pullback",
-    "settled": 7,
+    "read": "sma50With",
+    "n": 0,
     "thin": true
    }
   ],
-  "releasable": [
-   "swing|Williams %R Re-entry"
-  ]
+  "book": {
+   "n": 62362,
+   "net": -0.659
+  }
  }
 }

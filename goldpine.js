@@ -1406,6 +1406,25 @@ function gpTapeStamp(list, tape){
 }
 
 /** Same two chips GOLD SCALP and GOLD SWING print, on the same wording. */
+/* hg-v1504: THE CONFIRMATORY SIGNAL chip — the four measured confirm reads
+   (DMI, RSI, TSMOM96, SMA50 — each direction-aware, from the catalog stack's
+   marks in s.freeReads) counted against the row's direction. The lab's
+   confirmatorySweep measured these cohorts on the pine book and found NO
+   separation (the confirming reads ≈ the book: −0.63R — hg-v1504) — so the
+   chip is DISCLOSURE: it names which reads confirm, it gates nothing. */
+function gpConfirmChipHtml(s){
+  try{
+    if (!s || !s.freeReads || typeof s.freeReads !== 'object') return '';
+    var names = [], n = 0;
+    if (s.freeReads['ind:dmiWith'] === true){ names.push('DMI'); n++; }
+    if (s.freeReads['ind:rsiWith'] === true){ names.push('RSI'); n++; }
+    if (s.freeReads['ind:tsmomWith'] === true){ names.push('TSMOM'); n++; }
+    if (s.freeReads['ind:sma50With'] === true){ names.push('SMA50'); n++; }
+    if (!n) return '';
+    return '<span class="stamp pass" title="confirmatory reads agreeing with the direction — disclosure only: the hg-v1504 sweep measured these cohorts at the book\'s own expectancy on this desk">CONFIRMED ' + n + '/4 · ' + names.join('·') + '</span>';
+  }catch(eCc){ return ''; }
+}
+
 function gpTapeChipHtml(s){
   var t = String((s && s.goldTape) || '').toLowerCase();
   var d = String((s && s.dir) || '').toLowerCase();
@@ -1701,6 +1720,8 @@ function cardHTML(s, rank){
     }catch(eSmcP){}
     var tapeHead = gpTapeChipHtml(s);
     if (tapeHead) html = html.replace('</h2>', ' ' + tapeHead + '</h2>');
+    var confirmHead = gpConfirmChipHtml(s);
+    if (confirmHead) html = html.replace('</h2>', ' ' + confirmHead + '</h2>');
     /* hg-v1162: the read lines, inside the shared panel */
     var sharedReads = gpReadsHtml(s);
     if (sharedReads) html = html.replace(/<\/div>\s*$/, sharedReads + '</div>');
@@ -2167,6 +2188,7 @@ W.hgGpLabStamp = hgGpLabStamp;
    nothing. */
 W.gpR2Marks = gpR2Marks;
 W.gpR2MarkReads = gpR2MarkReads;
+W.gpConfirmChipHtml = gpConfirmChipHtml;   /* hg-v1504 the confirmatory-signal chip */
 /* hg-v1438: the r3 clause-attribution mark helper and seam, exported so the
    pin suite can drive them as units. */
 W.gpHoldMarks = gpHoldMarks;

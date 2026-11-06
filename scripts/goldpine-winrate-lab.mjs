@@ -607,6 +607,46 @@ if (isMain) (async () => {
       + (recOnlyRelease.releasable.length ? 'RELEASABLE: ' + recOnlyRelease.releasable.join(', ') : 'NONE releasable (all negative-in-windows or too thin)'));
   }
 
+  /* Phase J — the CONFIRMATORY-SIGNAL sweep: the four direction-aware catalog
+     reads (DMI, RSI, TSMOM96, SMA50) measured as confirm cohorts on the pine
+     book. This is the measurement behind the confirm chip — and the honest
+     answer it produced: no confirming read separates winners on this book. */
+  const confirmatorySweep = { note: 'the direction-aware confirm reads measured as cohorts on the pine book (net@XM per trade, four disjoint windows)', reads: [] };
+  {
+    const CONFIRMS = {
+      dmiWith:   function(dir, reg){ return dir === 'long' ? (reg.pdi > reg.mdi) : (reg.mdi > reg.pdi); },
+      rsiWith:   function(dir, reg){ return dir === 'long' ? reg.rsi > 50 : reg.rsi < 50; },
+      tsmomWith: function(dir, reg){ return dir === 'long' ? reg.tsmom > 0 : reg.tsmom < 0; },
+      sma50With: function(dir, reg){ return dir === 'long' ? reg.entry > reg.sma50 : reg.entry < reg.sma50; }
+    };
+    const settledBook = [];
+    for (const r of data.records){
+      const ck = r.idxKey || (r.idxKey = r.lane + '|' + r.t + '|' + r.label + '|' + r.dir);
+      const st = data.settled.get(ck + '|0') || (data.settled.set(ck + '|0', settleOne(data.grids, r, GEOMS[0])), data.settled.get(ck + '|0'));
+      if (!st || st.outcome === 'unfilled' || st.outcome === 'open' || st.outcome === 'unpriced') continue;
+      settledBook.push({ t: r.t, dir: r.dir, reg: r.reg, net: st.rGross - (r.entry * COST_XM_FRAC) / Math.abs(r.entry - r.stop) });
+    }
+    const bookNet = settledBook.length ? settledBook.reduce(function(a, x){ return a + x.net; }, 0) / settledBook.length : NaN;
+    confirmatorySweep.book = { n: settledBook.length, net: +bookNet.toFixed(3) };
+    for (const name of Object.keys(CONFIRMS)){
+      const cohort = settledBook.filter(function(x){ try { return CONFIRMS[name](x.dir, x.reg); } catch (e) { return false; } });
+      if (cohort.length < 40){ confirmatorySweep.reads.push({ read: name, n: cohort.length, thin: true }); continue; }
+      const net = cohort.reduce(function(a, x){ return a + x.net; }, 0) / cohort.length;
+      const parts = []; var pos = 0;
+      for (var w = 0; w < 4; w++){
+        var a = winBars[w][0], b = winBars[w][1];
+        var seg = cohort.filter(function(x){ return x.t >= a && x.t < b; });
+        if (!seg.length){ parts.push(null); continue; }
+        var wn = seg.reduce(function(acc, x){ return acc + x.net; }, 0) / seg.length;
+        parts.push(+wn.toFixed(3)); if (wn > 0) pos++;
+      }
+      confirmatorySweep.reads.push({ read: name, n: cohort.length, net: +net.toFixed(3), windows: parts, positiveWindows: pos, clears: (net > 0 && pos >= 3) });
+    }
+    log('Phase J — the confirmatory-signal sweep (the pine book, net@XM ' + bookNet.toFixed(3) + 'R):');
+    for (const rd of confirmatorySweep.reads)
+      log('  ' + rd.read.padEnd(10) + ' n=' + rd.n + ' net=' + (rd.net == null ? '—' : rd.net.toFixed(3) + 'R') + ' windows ' + (rd.windows || []).map(function(x){ return x == null ? '—' : x.toFixed(2); }).join('/') + (rd.clears ? '  <-- CLEARS' : ''));
+  }
+
   const report = {
     meta: { generated: new Date().toISOString(), symbol: SYMBOL, bars: BARS_15M,
       span: [new Date(m15[walked.first15].t * 1000).toISOString(), new Date(m15[m15.length - 1].t * 1000).toISOString()],
@@ -620,7 +660,8 @@ if (isMain) (async () => {
     directionCohort: dirCohort,
     indicatorSweep,
     geometryLadder,
-    recordOnlyRelease: recOnlyRelease
+    recordOnlyRelease: recOnlyRelease,
+    confirmatorySweep
   };
   fs.writeFileSync(LAB_OUT, JSON.stringify(report, null, 1));
 
