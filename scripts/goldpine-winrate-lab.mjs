@@ -79,9 +79,21 @@ async function cachedKlines(interval, target){
     if (j && j.target >= target && Array.isArray(j.rows) && j.rows.length >= target) return j.rows.slice(-target);
   }
   console.log('  fetching ' + SYMBOL + ' ' + interval + ' x' + target + ' — ' + klinesRouteNote());
+  /* hg-v1509: THE TRUNCATING-TAPE FIX. The old loop broke on ANY short
+     batch — a rate-limited or partially-served middle page ended the walk
+     silently days before the present, and the lab then "re-confirmed" the
+     measured book on a tape that was missing the last five days (the
+     Nov-06 flush to 3905, the Nov-09 gap-and-go to 4134, the Nov-10
+     100-point reversal — every one of them absent). Now: break only on an
+     EMPTY batch (history exhausted — endTime keeps advancing, so the next
+     page is always older), keep going through short pages, cap the loop,
+     and REFUSE to measure a stale tape. A walk whose last bar is not near
+     the present is a wrong measurement, not an old one. */
   const rows = [];
   let end = null;
-  while (rows.length < target){
+  const IV_MS = { '15m': 900000, '1h': 3600000, '4h': 14400000, '1d': 86400000 };
+  const ivMs = IV_MS[interval] || 900000;
+  for (let pages = 0; rows.length < target && pages < 40; pages++){
     const { klinesUrl } = await import('../lib/klines-source.mjs');
     const params = { symbol: SYMBOL, interval, limit: Math.min(1000, target - rows.length) };
     if (end) params.endTime = end;
@@ -91,8 +103,12 @@ async function cachedKlines(interval, target){
     if (!Array.isArray(batch) || !batch.length) break;
     rows.unshift(...batch.map(b => ({ t: Math.floor(b[0] / 1000), o: +b[1], h: +b[2], l: +b[3], c: +b[4], v: +b[5] })));
     end = batch[0][0] - 1;
-    if (batch.length < params.limit) break;
+    /* a short page is NOT the end of history — endTime advances, keep going */
   }
+  const staleMs = Date.now() - rows[rows.length - 1].t * 1000 - ivMs;
+  if (staleMs > 3 * ivMs) throw new Error('tape truncated: the newest ' + interval
+    + ' bar closes ' + Math.round(staleMs / 3600000) + 'h ago (fresh bars exist but the fetch stopped early)'
+    + ' — refusing to measure a stale tape; delete the ' + interval + ' cache and re-run');
   fs.writeFileSync(file, JSON.stringify({ target, rows }));
   return rows.slice(-target);
 }

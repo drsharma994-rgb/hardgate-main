@@ -173,8 +173,16 @@ async function fetchKlines(symbol, interval, target){
     if (!Array.isArray(batch) || !batch.length) break;
     out = batch.concat(out);
     endTime = batch[0][0] - 1;
-    if (batch.length < lim) break;
+    /* hg-v1509: a short page is NOT the end of history — endTime advances,
+       keep going. (A short middle page used to truncate the tape silently.) */
     await new Promise(r => setTimeout(r, 250));
+  }
+  if (out.length){
+    /* out[0] is the newest bar's raw kline — its close time is k[0] + interval */
+    const newest = Math.max(...out.map(k => k[0] + IV_SEC[interval] * 1000));
+    const staleMs = Date.now() - newest;
+    if (staleMs > 3 * IV_SEC[interval] * 1000) throw new Error('tape truncated: the newest ' + interval
+      + ' bar closes ' + Math.round(staleMs / 3600000) + 'h ago — refusing to walk a stale tape; delete the cache and re-run');
   }
   const seen = new Set();
   const rows = out

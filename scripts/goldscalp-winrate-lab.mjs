@@ -111,7 +111,15 @@ async function cachedKlines(symbol, interval, target){
     if (!Array.isArray(batch) || !batch.length) break;
     rows.unshift(...batch.map(b => ({ t: Math.floor(b[0] / 1000), o: +b[1], h: +b[2], l: +b[3], c: +b[4], v: +b[5] })));
     end = batch[0][0] - 1;
-    if (batch.length < params.limit) break;
+    /* hg-v1509: a short page is NOT the end of history — endTime advances,
+       keep going. (A short middle page used to end the walk silently days
+       before the present; the freshness gate below now refuses that.) */
+  }
+  if (rows.length){
+    const ivMs = ({ '15m': 900000, '1h': 3600000, '4h': 14400000, '1d': 86400000 })[interval] || 900000;
+    const staleMs = Date.now() - rows[rows.length - 1].t * 1000 - ivMs;
+    if (staleMs > 3 * ivMs) throw new Error('tape truncated: the newest ' + interval
+      + ' bar closes ' + Math.round(staleMs / 3600000) + 'h ago — refusing to measure a stale tape; delete the cache and re-run');
   }
   fs.writeFileSync(file, JSON.stringify({ target, rows }));
   return rows.slice(-target);
