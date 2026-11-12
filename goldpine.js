@@ -986,24 +986,21 @@ function hgGpLabReleaseOn(){ return HG_GP_LAB_RELEASE !== false; }
 /* (goldpine's lever above; the SCALP squeeze lever lives beside its scalp siblings) */
 /* lane|label -> the measured cohort (net@XM per trade, n, windows-negative) */
 var HG_GP_LAB_BOOK = {
-  /* hg-v1509: the cohorts re-derived on the FIRST WHOLE walk (66,434
-     candidates, Sep09-Nov10, net@XM — the truncating-tape fix finally
-     let the walk see the Nov-06 flush, the Nov-09 gap-and-go and the
-     Nov-10 100-point reversal). Four of six demotions are 0/4 windows
-     negative; HalfTrend and swing MSB+OB each ticked ONE window positive
-     on the whipsaw and still lose decisively — the demotion stands on
-     the net, stated with the split named. */
-  'scalp|MSB + OB':            'gross \u22127.19R/trade over n=639, negative in all four disjoint windows',
-  'scalp|Squeeze Mom':         'gross \u22120.44R/trade over n=890, negative in all four disjoint windows',
-  'scalp|Smart Money Flow':    'gross \u22120.45R/trade over n=734, negative in all four disjoint windows',
-  'scalp|Range Filter':        'gross \u22120.33R/trade over n=889, negative in all four disjoint windows',
-  'scalp|HalfTrend':           'gross \u22120.70R/trade over n=403, negative in 3 of 4 disjoint windows (the whipsaw window ticked +0.04 — the cohort still loses)',
-  'swing|MSB + OB':            'gross \u22120.76R/trade over n=26, negative in 3 of 4 disjoint windows (one window ticked positive on a thin n=26 — the cohort still loses)'
+  /* hg-v1510: the cohorts re-derived on the whole walk through the FLUSH
+     (Sep10-Nov12, net@XM — gold fell 4134→3952 in three days). Five of six
+     demotions 0/4 windows negative; HalfTrend keeps its one whipsaw window
+     and still loses −0.78R. The demotions stand on the net. */
+  'scalp|MSB + OB':            'gross \u22125.87R/trade over n=626, negative in all four disjoint windows',
+  'scalp|Squeeze Mom':         'gross \u22120.40R/trade over n=891, negative in all four disjoint windows',
+  'scalp|Smart Money Flow':    'gross \u22120.41R/trade over n=737, negative in all four disjoint windows',
+  'scalp|Range Filter':        'gross \u22120.28R/trade over n=886, negative in all four disjoint windows',
+  'scalp|HalfTrend':           'gross \u22120.78R/trade over n=408, negative in 3 of 4 disjoint windows (one whipsaw window ticked positive — the cohort still loses)',
+  'swing|MSB + OB':            'gross \u22120.61R/trade over n=37, negative in all four disjoint windows'
 };
 /* the lab's confirmed direction clause: the pin reads the side that loses
    less. BOTH cohorts are negative on this walk — this is a ranking
    preference with the measurement named, not a claim that shorts pay. */
-var HG_GP_LAB_LONG = 'the LONG cohort measured \u22120.85R/trade over n=5,597, negative in all four disjoint windows (the short side \u22120.69R over n=6,856 \u2014 also negative; the pin reads the lesser-losing side until the forward ledger measures a paying cohort \u2014 hg-v1509 whole-walk refresh: the long side got WORSE once the Nov-06 flush and the Nov-09 gap were in the tape)';
+var HG_GP_LAB_LONG = 'the LONG cohort measured \u22120.65R/trade over n=5,565, negative in all four disjoint windows (the short side \u22120.64R over n=6,913 \u2014 also negative; the pin reads the lesser-losing side until the forward ledger measures a paying cohort \u2014 hg-v1510 flush-tape refresh: the two cohorts CONVERGED to a 0.01R margin, the flush punishing shorts almost as hard as longs; the short-only pin holds because it is still the better side, stated with the margin named)';
 function hgGpLabMeasured(s){
   try{
     if (!s) return null;

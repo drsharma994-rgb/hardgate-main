@@ -76,7 +76,17 @@ async function cachedKlines(interval, target){
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   if (fs.existsSync(file)){
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (j && j.target >= target && Array.isArray(j.rows) && j.rows.length >= target) return j.rows.slice(-target);
+    if (j && j.target >= target && Array.isArray(j.rows) && j.rows.length >= target){
+      /* hg-v1510: the CACHE answers the freshness gate too — a tape that met
+         the bar count two days ago is a stale tape, and re-serving it is the
+         same silent truncation one layer up (the Nov-10 cache re-measured
+         through Nov-10 on Nov-12 without a word). PAXG trades 24/7, so a
+         fresh tape is always available; a stale cache is refetched, not used. */
+      const ivMs = ({ '15m': 900000, '1h': 3600000, '4h': 14400000, '1d': 86400000 })[interval] || 900000;
+      const staleMs = Date.now() - j.rows[j.rows.length - 1].t * 1000 - ivMs;
+      if (staleMs <= 3 * ivMs) return j.rows.slice(-target);
+      console.log('  cache is STALE (newest ' + interval + ' bar closes ' + Math.round(staleMs / 3600000) + 'h ago) — refetching');
+    }
   }
   console.log('  fetching ' + SYMBOL + ' ' + interval + ' x' + target + ' — ' + klinesRouteNote());
   /* hg-v1509: THE TRUNCATING-TAPE FIX. The old loop broke on ANY short
