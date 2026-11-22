@@ -667,9 +667,17 @@
       "ago": 8,
       "crossDay": "2026-10-14",
       "expired": true
+    },
+    "MMT": {
+      "at": "2026-11-22T09:19:42.271Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 1,
+      "crossDay": "2026-11-20",
+      "expired": true
     }
   },
-  "lastRunAt": "2026-11-22T07:29:17.833Z",
+  "lastRunAt": "2026-11-22T09:20:04.343Z",
   "scanned": 504,
   "cards": 0
 }
