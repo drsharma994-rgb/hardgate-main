@@ -669,7 +669,7 @@
       "expired": true
     },
     "MMT": {
-      "at": "2026-11-24T14:50:15.917Z",
+      "at": "2026-11-24T16:40:56.627Z",
       "score": 5,
       "fresh": true,
       "ago": 3,
@@ -677,7 +677,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-11-24T14:50:30.644Z",
+  "lastRunAt": "2026-11-24T16:41:12.630Z",
   "scanned": 504,
   "cards": 0
 }
