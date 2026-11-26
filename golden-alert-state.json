@@ -669,15 +669,15 @@
       "expired": true
     },
     "MMT": {
-      "at": "2026-11-25T22:12:55.793Z",
+      "at": "2026-11-26T00:03:46.980Z",
       "score": 5,
       "fresh": true,
-      "ago": 4,
+      "ago": 5,
       "crossDay": "2026-11-20",
       "expired": true
     }
   },
-  "lastRunAt": "2026-11-25T22:13:17.427Z",
+  "lastRunAt": "2026-11-26T00:04:08.399Z",
   "scanned": 504,
   "cards": 0
 }
